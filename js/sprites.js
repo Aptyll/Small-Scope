@@ -134,6 +134,27 @@
     '.......bb.......',
   ]);
 
+  // ---------------------------------------------------------------- raider
+  // Player-like night raider: same body grids, hostile palette.
+  const RDPAL = {
+    '.': null,
+    'o': '#1c1826', // outline
+    't': '#3c3450', // hood dark
+    'T': '#544a70', // hood light
+    'm': '#8f8ba0', // wraps gray
+    'M': '#6e6a80', // wraps shade
+    'k': '#b8c2d2', // pale skin
+    'K': '#8c99b0', // skin shade
+    'e': '#ff5555', // eyes red
+    'x': '#8c99b0', // no blush
+    'r': '#3f3a52', // cloak
+    'R': '#555070', // cloak light
+    'd': '#2c2840', // cloak dark
+    'p': '#242032', // pants
+    'b': '#3a3040', // boots
+    'B': '#241c28', // boots dark
+  };
+
   // ---------------------------------------------------------------- trees
   const TPAL = {
     '.': null,
@@ -251,6 +272,85 @@
     '..oyyvvvvvvvo...',
     '...ovvvvvvvo....',
     '....sssssss.....',
+  ];
+
+  // ---------------------------------------------------------------- gold ore
+  const GOPAL = {
+    '.': null,
+    'o': '#3a3f52',
+    'y': '#8b93a8',
+    'Y': '#a8b0c4',
+    'v': '#666d84',
+    'w': '#eef4fb',
+    'W': '#ffffff',
+    's': '#c9dcee',
+    'n': '#d8a850', // gold
+    'N': '#f2cc6a', // gold bright
+  };
+  const goldOre = [
+    '................',
+    '......oWwo......',
+    '....owwwwwso....',
+    '...oYwwnNYyo....',
+    '..oYYwYyNnyvo...',
+    '..oYYnNyyvnvo...',
+    '..oYynvyNyvvo...',
+    '..oyyvnNvyvvo...',
+    '...ovvvnvvvo....',
+    '....sssssss.....',
+  ];
+
+  // ---------------------------------------------------------------- gold mine (32x32, occupies 2x2 tiles)
+  const MIPAL = {
+    '.': null,
+    'o': '#2c2c3c', // outline
+    'y': '#8b93a8', // rock mid
+    'Y': '#a8b0c4', // rock light
+    'v': '#666d84', // rock dark
+    'V': '#4e5266', // rock deep
+    'k': '#0c0f1e', // shaft black
+    'K': '#1d2438', // shaft edge
+    'u': '#8a6142', // timber
+    'U': '#a3794f', // timber light
+    'n': '#d8a850', // gold vein
+    'N': '#f2cc6a', // gold bright
+    'w': '#eef4fb', // snow
+    'W': '#ffffff',
+    's': '#c9dcee', // snow shade
+  };
+  const mine = [
+    '..............WWw...............',
+    '............owwwwwo.............',
+    '...........owwwwwwyo............',
+    '..........oYwwwwYyyvo...........',
+    '.........oYYwwwYYyyyvo..........',
+    '........oYYYwwYYyyyyvvo.........',
+    '.......oYYYYYYYyyyyvvvvo........',
+    '......oYYYYnYYyyyyyvvvvvo.......',
+    '.....oYYYYNnYyyyyyyvvvvvvo......',
+    '....oYYYYYnYyyyyyyyyvvvvVVo.....',
+    '...oYYYwwYYyyyyNnyyyvvvVVVVo....',
+    '..oYYYwwwYyyyyyNyyyyvvvvVVVVo...',
+    '..oYYYYYyyyyyyyyyyyyvvvvVVVVo...',
+    '.oYYYYYyyyoKKKKKKKKovyvvVVVVVo..',
+    '.oYYYnNyyoKkkkkkkkkKovvvVVVVVo..',
+    '.oYYYYnyyoUuuuuuuuuUovvVVVVVVo..',
+    '.oYYYyyyyoUukkkkkkuUovvvVVVVVo..',
+    'oYYYyyyyyoUukkkkkkuUoyvvVVVVVVo.',
+    'oYYyyyyyyoUukkkkkkuUovvvVVVVVVo.',
+    'oYyyyNnyyoUukkkkkkuUovvVvVVVVVo.',
+    'oYyyyynyyoUukkkkkkuUovvvVVVVVVo.',
+    'oYyyyyyyyoUukkkkkkuUovvVVVVVVVo.',
+    'oyyyyyyyyoUukkkkkkuUonvVVVVVVVo.',
+    'oyyyynyyyoUukkkkkkuUoNnVVVVVVVo.',
+    'oyyyyyyyyoUukkkkkkuUovvVVVVVVVo.',
+    'oyyyyyyyyoUukkkkkkuUovvVVVVVVVo.',
+    '.oyyyyyyyoUukkkkkkuUovvVVVVVVo..',
+    '.oyyyyyyyoUukkkkkkuUovvVVVVVo...',
+    '..ooyyyyyoUukkkkkkuUovvVVVoo....',
+    '....ooooooooskkkksoooooooo......',
+    '.....ssssssssssssssssssss.......',
+    '................................',
   ];
 
   // ---------------------------------------------------------------- bush
@@ -525,6 +625,9 @@
     'R': '#f2707a',
     'g': '#3a6b52',
     'O': '#3a3f52',
+    'n': '#d8a850', // gold
+    'N': '#f2cc6a', // gold bright
+    'h': '#fff2c0', // gold shine
   };
 
   const itemWood = [
@@ -555,6 +658,16 @@
     '.orrRro.',
     '..orro..',
     '...oo...',
+    '........',
+  ];
+  const itemGold = [
+    '........',
+    '..oooo..',
+    '.onNNno.',
+    'onNhNnno',
+    'onNNnno.',
+    '.onnno..',
+    '..ooo...',
     '........',
   ];
 
@@ -624,9 +737,17 @@
       right: [bake(playerSideIdle, PPAL), bake(playerSideA, PPAL), bake(playerSideB, PPAL)],
       left: [flipH(bake(playerSideIdle, PPAL)), flipH(bake(playerSideA, PPAL)), flipH(bake(playerSideB, PPAL))],
     },
+    raider: {
+      down: [bake(playerDownIdle, RDPAL), bake(playerDownA, RDPAL), bake(playerDownB, RDPAL)],
+      up: [bake(playerUpIdle, RDPAL), bake(playerUpA, RDPAL), bake(playerUpB, RDPAL)],
+      right: [bake(playerSideIdle, RDPAL), bake(playerSideA, RDPAL), bake(playerSideB, RDPAL)],
+      left: [flipH(bake(playerSideIdle, RDPAL)), flipH(bake(playerSideA, RDPAL)), flipH(bake(playerSideB, RDPAL))],
+    },
     tree: [bake(tree1, TPAL), bake(tree2, TPAL)],
     stump: bake(stump, TPAL),
     rock: [bake(rock1, RPAL), bake(rock2, RPAL)],
+    goldOre: bake(goldOre, GOPAL),
+    mine: bake(mine, MIPAL),
     bush: bake(bush, BPAL),
     bushEmpty: bake(bushEmpty, BPAL),
     imp: [bake(imp1, IPAL), bake(imp2, IPAL)],
@@ -637,6 +758,7 @@
     itemWood: bake(itemWood, ITPAL),
     itemStone: bake(itemStone, ITPAL),
     itemBerry: bake(itemBerry, ITPAL),
+    itemGold: bake(itemGold, ITPAL),
     itemAxe: bake(itemAxe, AXPAL),
     heartFull: bake(heartFull, HPAL),
     heartHalf: bake(heartHalf, HEPAL),
