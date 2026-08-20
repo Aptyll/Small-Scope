@@ -4,7 +4,8 @@
 
   // ------------------------------------------------------------ constants
   const TILE = 16;
-  const WORLD = 96;                 // tiles per side
+  const WORLD = 192;                // tiles per side
+  const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
   const VIEW_W = 480, VIEW_H = 270; // internal resolution
   const DAY_LEN = 110, NIGHT_LEN = 55;
   const CYCLE = DAY_LEN + NIGHT_LEN;
@@ -43,6 +44,15 @@
   scratch.width = 32; scratch.height = 32;
   const sctx = scratch.getContext('2d');
 
+  // offscreen minimap canvas (1px per world tile)
+  const MM_R = 24;                 // minimap radius in px (1px = 1 tile)
+  const MM_CX = VIEW_W - 32;       // minimap center
+  const MM_CY = 40;
+  const mmCv = document.createElement('canvas');
+  mmCv.width = WORLD; mmCv.height = WORLD;
+  const mmCtx = mmCv.getContext('2d');
+  const mmImg = mmCtx.createImageData(WORLD, WORLD);
+
   // ------------------------------------------------------------ rng
   function mulberry32(a) {
     return function () {
@@ -60,6 +70,7 @@
   const state = {
     mode: 'title', // title | play | dead
     time: DAY_LEN * 0.25, // start mid-morning
+    elapsed: 0,
     day: 1,
     darkness: 0,
     shake: 0,
@@ -67,6 +78,7 @@
     msg: null, msgT: 0,
     hints: { build: false, dusk: false, imps: false },
     paused: false,
+    mapOpen: false,
   };
 
   const player = {
@@ -101,7 +113,9 @@
     if (state.mode !== 'play') return;
     if (e.key >= '1' && e.key <= '5') hotbar = +e.key - 1;
     if (e.key.toLowerCase() === 'q') eatBerry();
-    if (e.key.toLowerCase() === 'm') SFX.toggleMute();
+    if (e.key.toLowerCase() === 'm') state.mapOpen = !state.mapOpen;
+    if (e.key.toLowerCase() === 'escape' && state.mapOpen) state.mapOpen = false;
+    if (e.key.toLowerCase() === 'n') SFX.toggleMute();
     if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
@@ -115,6 +129,7 @@
     if (e.button !== 0) return;
     if (state.mode === 'title') { startGame(); return; }
     if (state.mode !== 'play') return;
+    if (state.mapOpen) return;
     mouse.down = true;
     clickAction();
   });
@@ -122,8 +137,9 @@
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('wheel', (e) => {
     if (state.mode !== 'play') return;
-    hotbar = (hotbar + (e.deltaY > 0 ? 1 : 4)) % 5;
     e.preventDefault();
+    if (state.mapOpen) return;
+    hotbar = (hotbar + (e.deltaY > 0 ? 1 : 4)) % 5;
   }, { passive: false });
 
   // ------------------------------------------------------------ world
@@ -149,17 +165,38 @@
 
   const cx = WORLD / 2, cy = WORLD / 2;
 
+  // depth of the forest boundary at a given tile: smooth irregular inner edge,
+  // always solid from the world edge inward (variation eats into the interior)
+  function borderDepth(tx, ty) {
+    let n = vnoise(tx / 22, ty / 22) * 0.65 + vnoise(tx / 9 + 40, ty / 9 + 40) * 0.35;
+    n = Math.max(0, Math.min(1, (n - 0.5) * 1.6 + 0.5)); // stretch toward full range
+    return BORDER_MIN + (BORDER_MAX - BORDER_MIN) * n;
+  }
+
   function genWorld() {
-    // frozen ponds
-    for (let l = 0; l < 5; l++) {
-      let px = randi(12, WORLD - 12), py = randi(12, WORLD - 12);
-      if (Math.hypot(px - cx, py - cy) < 16) { l--; continue; }
+    // solid irregular forest boundary - players carve their base out of this
+    for (let ty = 0; ty < WORLD; ty++) {
+      for (let tx = 0; tx < WORLD; tx++) {
+        const d = Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty);
+        if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1) });
+      }
+    }
+
+    // frozen ponds - carved only into the open interior
+    for (let l = 0; l < 7; l++) {
+      let px = 0, py = 0, ok = false;
+      for (let tries = 0; tries < 40 && !ok; tries++) {
+        px = randi(BORDER_MIN + 6, WORLD - 1 - BORDER_MIN - 6);
+        py = randi(BORDER_MIN + 6, WORLD - 1 - BORDER_MIN - 6);
+        ok = !objects[idx(px, py)] && Math.hypot(px - cx, py - cy) > 16;
+      }
+      if (!ok) continue;
       let n = randi(50, 110);
       let wx = px, wy = py;
       while (n-- > 0) {
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           const tx = wx + dx, ty = wy + dy;
-          if (inWorld(tx, ty) && Math.hypot(tx - cx, ty - cy) > 10) ground[idx(tx, ty)] = 1;
+          if (inWorld(tx, ty) && !objects[idx(tx, ty)] && Math.hypot(tx - cx, ty - cy) > 10) ground[idx(tx, ty)] = 1;
         }
         wx += randi(-1, 1); wy += randi(-1, 1);
         wx = Math.max(4, Math.min(WORLD - 5, wx));
@@ -172,20 +209,9 @@
     }
     function distSpawn(tx, ty) { return Math.hypot(tx - cx, ty - cy); }
 
-    // dense treeline border
-    for (let t = 0; t < WORLD; t++) {
-      for (let d = 0; d < 4; d++) {
-        const spots = [[t, d], [t, WORLD - 1 - d], [d, t], [WORLD - 1 - d, t]];
-        for (const [tx, ty] of spots) {
-          const p = d < 2 ? 0.95 : d === 2 ? 0.5 : 0.22;
-          if (rng() < p && free(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1) });
-        }
-      }
-    }
-
-    // tree clusters
-    for (let c = 0; c < 60; c++) {
-      const ox = randi(6, WORLD - 7), oy = randi(6, WORLD - 7);
+    // tree clusters (attempts landing inside the boundary forest just no-op)
+    for (let c = 0; c < 110; c++) {
+      const ox = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), oy = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       const n = randi(3, 9);
       for (let i = 0; i < n; i++) {
         const tx = ox + Math.round(rand(-3.2, 3.2));
@@ -194,8 +220,8 @@
       }
     }
     // rocks
-    for (let c = 0; c < 30; c++) {
-      const ox = randi(6, WORLD - 7), oy = randi(6, WORLD - 7);
+    for (let c = 0; c < 55; c++) {
+      const ox = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), oy = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       const n = randi(1, 4);
       for (let i = 0; i < n; i++) {
         const tx = ox + Math.round(rand(-1.6, 1.6));
@@ -204,8 +230,8 @@
       }
     }
     // berry bushes
-    for (let c = 0; c < 26; c++) {
-      const tx = randi(6, WORLD - 7), ty = randi(6, WORLD - 7);
+    for (let c = 0; c < 48; c++) {
+      const tx = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), ty = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       if (free(tx, ty) && distSpawn(tx, ty) > 8) placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
     }
 
@@ -649,6 +675,7 @@
 
   function die() {
     state.mode = 'dead';
+    state.mapOpen = false;
     state.deadTimer = 0;
     inv.wood = Math.ceil(inv.wood * 0.6);
     inv.stone = Math.ceil(inv.stone * 0.6);
@@ -695,6 +722,7 @@
     // time
     if (state.mode === 'play') {
       state.time += dt;
+      state.elapsed += dt;
       if (state.time >= CYCLE) {
         state.time -= CYCLE;
         state.day++;
@@ -744,7 +772,7 @@
       if (state.deadTimer > 2.6) respawn();
     }
 
-    if (state.mode === 'play' && !state.paused) updatePlay(dt);
+    if (state.mode === 'play' && !state.paused && !state.mapOpen) updatePlay(dt);
 
     // camera
     const lookX = (mouse.x - VIEW_W / 2) * 0.12;
@@ -1073,6 +1101,7 @@
     renderVignettes();
     renderUI(now);
 
+    if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
     if (state.mode === 'title') renderTitle(now);
     if (state.mode === 'dead') renderDead();
   }
@@ -1265,6 +1294,326 @@
   }
 
   // ------------------------------------------------------------ UI
+  function updateMinimap() {
+    const d = mmImg.data;
+    for (let i = 0; i < WORLD * WORLD; i++) {
+      let r, g, b;
+      const o = objects[i];
+      if (o) {
+        if (o.type === 'tree') { r = 52; g = 100; b = 82; }
+        else if (o.type === 'rock') { r = 122; g = 131; b = 153; }
+        else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
+        else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
+        else if (o.type === 'fire') { r = 255; g = 160; b = 70; }
+        else if (o.type === 'torch') { r = 255; g = 217; b = 92; }
+        else if (o.type === 'spike') { r = 168; g = 178; b = 200; }
+        else { r = 188; g = 200; b = 218; } // stump
+      } else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
+      else { r = 205; g = 216; b = 232; } // snow
+      const j = i * 4;
+      d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+    }
+    mmCtx.putImageData(mmImg, 0, 0);
+  }
+
+  function renderMinimap(now) {
+    updateMinimap();
+    const ptx = player.x / TILE, pty = player.y / TILE;
+
+    // backing disc (covers ring + map)
+    ctx.fillStyle = 'rgba(12,18,42,0.85)';
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 6, 0, Math.PI * 2); ctx.fill();
+
+    // circular-clipped map view centered on the player
+    ctx.save();
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R, 0, Math.PI * 2); ctx.clip();
+    ctx.drawImage(mmCv, ptx - MM_R, pty - MM_R, MM_R * 2, MM_R * 2,
+      MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
+    // imps prowling in the dark
+    if (state.darkness > 0.4) {
+      ctx.fillStyle = '#41e8e0';
+      for (const m of imps) {
+        const mx = MM_CX + m.x / TILE - ptx, my = MM_CY + m.y / TILE - pty;
+        if (Math.hypot(mx - MM_CX, my - MM_CY) < MM_R - 1) ctx.fillRect(Math.round(mx) - 1, Math.round(my) - 1, 2, 2);
+      }
+    }
+    // player dot
+    ctx.fillStyle = 'rgba(15,22,50,0.9)';
+    ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
+    ctx.restore();
+
+    // map edge
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(15,22,50,0.9)';
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 0.5, 0, Math.PI * 2); ctx.stroke();
+
+    // day/night cycle ring
+    const prog = state.time / CYCLE;
+    const dayFrac = DAY_LEN / CYCLE;
+    const a0 = -Math.PI / 2; // start at 12 o'clock
+    const ringR = MM_R + 3.5;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#2a3358'; // track
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, 0, Math.PI * 2); ctx.stroke();
+    // day portion of elapsed time
+    ctx.strokeStyle = '#ffd95c';
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, a0, a0 + Math.min(prog, dayFrac) * Math.PI * 2); ctx.stroke();
+    // night portion of elapsed time
+    if (prog > dayFrac) {
+      ctx.strokeStyle = '#7a90d8';
+      ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, a0 + dayFrac * Math.PI * 2, a0 + prog * Math.PI * 2); ctx.stroke();
+    }
+    // dusk boundary tick
+    const ba = a0 + dayFrac * Math.PI * 2;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#8f9cc4';
+    ctx.beginPath();
+    ctx.moveTo(MM_CX + Math.cos(ba) * (ringR - 2.5), MM_CY + Math.sin(ba) * (ringR - 2.5));
+    ctx.lineTo(MM_CX + Math.cos(ba) * (ringR + 2.5), MM_CY + Math.sin(ba) * (ringR + 2.5));
+    ctx.stroke();
+    // progress tip
+    const ta = a0 + prog * Math.PI * 2;
+    const pulse = state.darkness > 0.5 ? (Math.sin(now * 6) * 0.15 + 0.85) : 1;
+    ctx.fillStyle = state.darkness > 0.5 ? '#cfd8f2' : '#fff2b0';
+    ctx.globalAlpha = pulse;
+    ctx.beginPath(); ctx.arc(MM_CX + Math.cos(ta) * ringR, MM_CY + Math.sin(ta) * ringR, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // elapsed play-time, centered above the minimap
+    const mins = Math.floor(state.elapsed / 60);
+    const secs = Math.floor(state.elapsed % 60);
+    const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    drawPixelTextShadow(ctx, clock, Math.round(MM_CX - pixelTextWidth(clock) / 2), MM_CY - MM_R - 14,
+      '#f4f7ff', 'rgba(15,22,50,0.8)');
+
+    // imps remaining at night, centered under the minimap
+    if (nightActive && (imps.length > 0 || toSpawn > 0)) {
+      const t = 'IMPS ' + (imps.length + toSpawn);
+      drawPixelTextShadow(ctx, t, Math.round(MM_CX - pixelTextWidth(t) / 2), MM_CY + MM_R + 8, '#8fe6e0', 'rgba(15,22,50,0.8)');
+    }
+  }
+
+  // ------------------------------------------------------------ world map (M)
+  const PANEL_W = 308, PANEL_H = 226;
+  const PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);
+  const PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
+  const MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;   // 192x192 map area
+  const COL_CX = PANEL_X + 254;                        // right column center
+
+  const mapCv = document.createElement('canvas');
+  mapCv.width = WORLD; mapCv.height = WORLD;
+  const mapCtx = mapCv.getContext('2d');
+  const mapImg = mapCtx.createImageData(WORLD, WORLD);
+
+  const panelCv = document.createElement('canvas');
+  panelCv.width = PANEL_W; panelCv.height = PANEL_H;
+
+  function buildMapPanel() {
+    const g = panelCv.getContext('2d');
+    const cham = (x, y, w, h) => { // rect with 2px chamfered corners
+      g.fillRect(x + 2, y, w - 4, h);
+      g.fillRect(x, y + 2, w, h - 4);
+      g.fillRect(x + 1, y + 1, w - 2, h - 2);
+    };
+    // dark leather outline, then parchment
+    g.fillStyle = '#241a10'; cham(0, 0, PANEL_W, PANEL_H);
+    g.fillStyle = '#d3c39b'; cham(1, 1, PANEL_W - 2, PANEL_H - 2);
+    // parchment mottling
+    for (let y = 3; y < PANEL_H - 3; y += 3) {
+      for (let x = 3; x < PANEL_W - 3; x += 3) {
+        const h = hash2(x * 13 + 1, y * 17 + 9);
+        if (h > 0.82) { g.fillStyle = '#dccfae'; g.fillRect(x, y, 3, 3); }
+        else if (h < 0.18) { g.fillStyle = '#c9b78d'; g.fillRect(x, y, 3, 3); }
+      }
+    }
+    // worn darker rim
+    g.fillStyle = 'rgba(120,90,50,0.16)';
+    g.fillRect(2, 2, PANEL_W - 4, 3); g.fillRect(2, PANEL_H - 5, PANEL_W - 4, 3);
+    g.fillRect(2, 2, 3, PANEL_H - 4); g.fillRect(PANEL_W - 5, 2, 3, PANEL_H - 4);
+    // stitched trim
+    g.fillStyle = '#8a6a45';
+    for (let x = 8; x < PANEL_W - 10; x += 6) { g.fillRect(x, 5, 3, 1); g.fillRect(x, PANEL_H - 6, 3, 1); }
+    for (let y = 8; y < PANEL_H - 10; y += 6) { g.fillRect(5, y, 1, 3); g.fillRect(PANEL_W - 6, y, 1, 3); }
+    // corner studs
+    g.fillStyle = '#5a4028';
+    for (const [sx, sy] of [[4, 4], [PANEL_W - 7, 4], [4, PANEL_H - 7], [PANEL_W - 7, PANEL_H - 7]]) {
+      g.fillRect(sx, sy + 1, 3, 1); g.fillRect(sx + 1, sy, 1, 3);
+    }
+    // title with ornament dashes
+    const title = 'THE FROSTLANDS';
+    const tw = pixelTextWidth(title, 2);
+    const tx0 = Math.round((PANEL_W - tw) / 2);
+    drawPixelTextShadow(g, title, tx0, 8, '#4a3322', 'rgba(120,92,58,0.45)', 2);
+    g.fillStyle = '#8a6a45';
+    g.fillRect(tx0 - 26, 13, 18, 1); g.fillRect(tx0 + tw + 8, 13, 18, 1);
+    g.fillRect(tx0 - 30, 12, 2, 3); g.fillRect(tx0 + tw + 28, 12, 2, 3);
+    // map mat: highlight line, dark frame (map itself drawn dynamically inside)
+    g.fillStyle = '#b5a37e';
+    g.fillRect(7, 21, 198, 1); g.fillRect(7, 218, 198, 1);
+    g.fillRect(7, 21, 1, 198); g.fillRect(204, 21, 1, 198);
+    g.fillStyle = '#241a10';
+    g.fillRect(8, 22, 196, 196);
+    // column divider
+    g.fillStyle = '#b5a37e'; g.fillRect(209, 24, 1, 192);
+    // compass rose, center (254,49)
+    g.fillStyle = '#4a3322';
+    g.fillRect(253, 39, 2, 10);            // N arm (lower half)
+    g.fillRect(253, 49, 2, 12);            // S arm
+    g.fillRect(242, 48, 12, 2);            // W arm
+    g.fillRect(254, 48, 12, 2);            // E arm
+    g.fillRect(248, 43, 2, 2); g.fillRect(258, 43, 2, 2); // NW/NE ticks
+    g.fillRect(248, 54, 2, 2); g.fillRect(258, 54, 2, 2); // SW/SE ticks
+    g.fillStyle = '#a84438';               // red north tip
+    g.fillRect(252, 37, 4, 2); g.fillRect(253, 35, 2, 2);
+    g.fillStyle = '#d3c39b'; g.fillRect(253, 48, 2, 2);   // center pip
+    drawPixelText(g, 'N', Math.round(254 - pixelTextWidth('N') / 2), 26, '#4a3322');
+    // legend
+    const legend = [
+      ['FOREST', '#3c5840'], ['ROCKS', '#686c76'], ['BERRIES', '#aa4850'],
+      ['FIRES', '#ec9240'],
+    ];
+    let ly = 72;
+    for (const [name, col] of legend) {
+      g.fillStyle = '#241a10'; g.fillRect(218, ly, 5, 5);
+      g.fillStyle = col; g.fillRect(219, ly + 1, 3, 3);
+      drawPixelText(g, name, 228, ly - 1, '#4a3322');
+      ly += 12;
+    }
+    // YOU entry uses the actual diamond marker glyph
+    g.fillStyle = '#241a10';
+    g.fillRect(218, ly + 1, 5, 3); g.fillRect(219, ly, 3, 5);
+    g.fillStyle = '#e05548';
+    g.fillRect(219, ly + 2, 3, 1); g.fillRect(220, ly + 1, 1, 3);
+    drawPixelText(g, 'YOU', 228, ly - 1, '#4a3322');
+    // close hint
+    const hint = 'M CLOSE';
+    drawPixelText(g, hint, Math.round(254 - pixelTextWidth(hint) / 2), 206, '#7a6647');
+  }
+
+  function buildWorldMapImg() {
+    const d = mapImg.data;
+    for (let ty = 0; ty < WORLD; ty++) {
+      for (let tx = 0; tx < WORLD; tx++) {
+        const i = ty * WORLD + tx;
+        const o = objects[i];
+        const h = hash2(tx * 7 + 13, ty * 11 + 5);
+        let r, g, b;
+        if (o && o.type === 'tree') {
+          const up = ty > 0 ? objects[i - WORLD] : o;
+          if (!up || up.type !== 'tree') { r = 116; g = 144; b = 104; } // lit canopy rim
+          else if (h > 0.86) { r = 44; g = 66; b = 50; }                // deep shade
+          else if (h > 0.45) { r = 60; g = 88; b = 64; }
+          else { r = 74; g = 102; b = 74; }
+        }
+        else if (o && o.type === 'rock') { r = 104; g = 108; b = 118; }
+        else if (o && o.type === 'bush') {
+          if (o.berries > 0) { r = 170; g = 72; b = 80; } else { r = 118; g = 128; b = 98; }
+        }
+        else if (o && o.type === 'stump') { r = 172; g = 138; b = 92; }
+        else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
+        else if (o && o.type === 'spike') { r = 140; g = 142; b = 152; }
+        else if (o && o.type === 'fire') { r = 236; g = 146; b = 64; }
+        else if (o && o.type === 'torch') { r = 230; g = 192; b = 88; }
+        else if (ground[i] === 1) {
+          // inked pond with darker shoreline
+          const edge =
+            (tx > 0 && ground[i - 1] === 0) || (tx < WORLD - 1 && ground[i + 1] === 0) ||
+            (ty > 0 && ground[i - WORLD] === 0) || (ty < WORLD - 1 && ground[i + WORLD] === 0);
+          if (edge) { r = 88; g = 120; b = 142; }
+          else if (h > 0.7) { r = 158; g = 190; b = 206; }
+          else { r = 122; g = 156; b = 176; }
+        }
+        else {
+          // open ground on parchment; tree to the north casts a soft shadow
+          const up = ty > 0 ? objects[i - WORLD] : null;
+          if (up && up.type === 'tree') { r = 192; g = 176; b = 138; }
+          else if (h > 0.9) { r = 205; g = 188; b = 148; }
+          else if (h < 0.05) { r = 198; g = 180; b = 140; }
+          else { r = 216; g = 201; b = 163; }
+        }
+        const j = i * 4;
+        d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
+      }
+    }
+  }
+
+  function renderWorldMap(now) {
+    // dim the world behind the map
+    ctx.fillStyle = 'rgba(6,10,24,0.72)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    ctx.drawImage(panelCv, PANEL_X, PANEL_Y);
+
+    // terrain
+    buildWorldMapImg();
+    mapCtx.putImageData(mapImg, 0, 0);
+    ctx.drawImage(mapCv, MAP_X, MAP_Y);
+
+    // faint surveyor's grid
+    ctx.globalAlpha = 0.07;
+    ctx.fillStyle = '#3a2c1c';
+    for (let gx = 24; gx < WORLD; gx += 24) ctx.fillRect(MAP_X + gx, MAP_Y, 1, WORLD);
+    for (let gy = 24; gy < WORLD; gy += 24) ctx.fillRect(MAP_X, MAP_Y + gy, WORLD, 1);
+    ctx.globalAlpha = 1;
+
+    // night falls over the chart too
+    if (state.darkness > 0.01) {
+      ctx.globalAlpha = state.darkness * 0.22;
+      ctx.fillStyle = '#2c3c6e';
+      ctx.fillRect(MAP_X, MAP_Y, WORLD, WORLD);
+      ctx.globalAlpha = 1;
+    }
+
+    // fire & torch glows
+    ctx.globalCompositeOperation = 'lighter';
+    for (const L of lights) {
+      const mx = MAP_X + L.x / TILE, my = MAP_Y + L.y / TILE;
+      const rr = (L.warm > 60 ? 5 : 3) * (1 + Math.sin(now * 7 + L.x) * 0.15);
+      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, rr);
+      grd.addColorStop(0, 'rgba(255,170,70,0.55)');
+      grd.addColorStop(1, 'rgba(255,150,50,0)');
+      ctx.fillStyle = grd;
+      ctx.fillRect(mx - rr, my - rr, rr * 2, rr * 2);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    // current camera view
+    ctx.strokeStyle = 'rgba(58,44,28,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(MAP_X + camX / TILE + 0.5, MAP_Y + camY / TILE + 0.5,
+      VIEW_W / TILE - 1, VIEW_H / TILE - 1);
+
+    // imps prowl the chart at night
+    if (state.darkness > 0.4 && ((now * 3) | 0) % 2 === 0) {
+      ctx.fillStyle = '#41e8e0';
+      for (const m of imps) ctx.fillRect(MAP_X + Math.round(m.x / TILE), MAP_Y + Math.round(m.y / TILE), 1, 1);
+    }
+
+    // player marker: inked diamond + pulsing ring
+    const pmx = MAP_X + Math.round(player.x / TILE);
+    const pmy = MAP_Y + Math.round(player.y / TILE);
+    const ph = (now * 0.9) % 1;
+    ctx.globalAlpha = (1 - ph) * 0.5;
+    ctx.strokeStyle = '#d84040';
+    ctx.beginPath(); ctx.arc(pmx, pmy, 2 + ph * 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#241a10';
+    ctx.fillRect(pmx - 2, pmy - 1, 5, 3); ctx.fillRect(pmx - 1, pmy - 2, 3, 5);
+    ctx.fillStyle = '#e05548';
+    ctx.fillRect(pmx - 1, pmy, 3, 1); ctx.fillRect(pmx, pmy - 1, 1, 3);
+
+    // day & elapsed time, inked into the right column
+    const dayT = 'DAY ' + state.day;
+    drawPixelTextShadow(ctx, dayT, Math.round(COL_CX - pixelTextWidth(dayT) / 2), PANEL_Y + 168,
+      '#4a3322', 'rgba(120,92,58,0.45)');
+    const mins = Math.floor(state.elapsed / 60);
+    const secs = Math.floor(state.elapsed % 60);
+    const clk = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    drawPixelTextShadow(ctx, clk, Math.round(COL_CX - pixelTextWidth(clk) / 2), PANEL_Y + 179,
+      '#6a5436', 'rgba(120,92,58,0.35)');
+  }
+
   function renderUI(now) {
     if (state.mode === 'title') return;
 
@@ -1289,54 +1638,34 @@
       drawPixelTextShadow(ctx, player.cold >= 100 ? 'FREEZING!' : 'COLD', 70, 14, '#a8dcff', 'rgba(15,22,50,0.8)');
     }
 
-    // resources
+    // resources - horizontal row, left of the minimap
     const res = [
       ['itemWood', inv.wood],
       ['itemStone', inv.stone],
       ['itemBerry', inv.berry],
     ];
-    let ry = 24;
+    const resGap = 7;
+    let resW = 0;
     for (const [spr, n] of res) {
-      ctx.drawImage(SPRITES[spr], 4, ry);
-      drawPixelTextShadow(ctx, String(n), 14, ry + 2, '#f4f7ff', 'rgba(15,22,50,0.8)');
+      resW += 10 + pixelTextWidth(String(n));
+      if (spr === 'itemBerry' && n > 0) resW += 2 + pixelTextWidth('(Q)');
+    }
+    resW += resGap * (res.length - 1);
+    let rx = MM_CX - MM_R - 10 - resW;
+    const ryTop = 5;
+    for (const [spr, n] of res) {
+      ctx.drawImage(SPRITES[spr], rx, ryTop);
+      drawPixelTextShadow(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', 'rgba(15,22,50,0.8)');
+      rx += 10 + pixelTextWidth(String(n));
       if (spr === 'itemBerry' && n > 0) {
-        drawPixelTextShadow(ctx, '(Q)', 26, ry + 2, '#9fb6d8', 'rgba(15,22,50,0.8)');
+        drawPixelTextShadow(ctx, '(Q)', rx + 2, ryTop + 2, '#9fb6d8', 'rgba(15,22,50,0.8)');
+        rx += 2 + pixelTextWidth('(Q)');
       }
-      ry += 10;
+      rx += resGap;
     }
 
-    // day + clock
-    const label = 'DAY ' + state.day;
-    const lw = pixelTextWidth(label);
-    drawPixelTextShadow(ctx, label, VIEW_W - lw - 22, 6, '#f4f7ff', 'rgba(15,22,50,0.8)');
-    // sun/moon icon
-    const isNight = state.darkness > 0.5;
-    const ix = VIEW_W - 14, iy = 5;
-    if (isNight) {
-      ctx.fillStyle = '#cfd8f2';
-      ctx.fillRect(ix + 1, iy, 4, 6); ctx.fillRect(ix, iy + 1, 6, 4);
-      ctx.fillStyle = '#8f9cc4';
-      ctx.fillRect(ix + 3, iy + 1, 2, 2); ctx.fillRect(ix + 1, iy + 3, 1, 1);
-    } else {
-      ctx.fillStyle = '#ffd95c';
-      ctx.fillRect(ix + 1, iy, 4, 6); ctx.fillRect(ix, iy + 1, 6, 4);
-      ctx.fillStyle = '#fff2b0';
-      ctx.fillRect(ix + 2, iy + 1, 2, 2);
-    }
-    // time-of-day progress pips
-    const prog = state.time / CYCLE;
-    ctx.fillStyle = 'rgba(15,22,50,0.7)';
-    ctx.fillRect(VIEW_W - 60, 14, 56, 3);
-    ctx.fillStyle = state.darkness > 0.5 ? '#7a90d8' : '#ffd95c';
-    ctx.fillRect(VIEW_W - 60, 14, Math.round(56 * prog), 3);
-    ctx.fillStyle = '#4a5480';
-    ctx.fillRect(VIEW_W - 60 + Math.round(56 * DAY_LEN / CYCLE), 13, 1, 5);
-
-    // imps remaining at night
-    if (nightActive && (imps.length > 0 || toSpawn > 0)) {
-      const t = 'IMPS ' + (imps.length + toSpawn);
-      drawPixelTextShadow(ctx, t, VIEW_W - pixelTextWidth(t) - 4, 22, '#8fe6e0', 'rgba(15,22,50,0.8)');
-    }
+    // minimap with day/night ring
+    renderMinimap(now);
 
     // hotbar
     const slotW = 20, gap = 3;
@@ -1409,7 +1738,7 @@
       'WASD  MOVE',
       'CLICK CHOP / FIGHT / PLACE',
       '1-5   TOOLS AND BUILDING',
-      'Q EAT BERRY   M MUTE   P PAUSE',
+      'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
     let ly = 130;
     for (const l of lines) {
@@ -1443,6 +1772,7 @@
 
   genWorld();
   renderGround();
+  buildMapPanel();
   rebuildLights();
   camX = player.x - VIEW_W / 2;
   camY = player.y - VIEW_H / 2;
