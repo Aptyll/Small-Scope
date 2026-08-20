@@ -3,13 +3,14 @@
   let ctx = null;
   let master = null;
   let muted = false;
+  let volume = 0.5;
   let windGain = null;
 
   function ensure() {
     if (!ctx) {
       ctx = new (window.AudioContext || window.webkitAudioContext)();
       master = ctx.createGain();
-      master.gain.value = 0.5;
+      master.gain.value = muted ? 0 : volume;
       master.connect(ctx.destination);
       startWind();
     }
@@ -83,9 +84,19 @@
     unlock() { ensure(); },
     toggleMute() {
       muted = !muted;
-      if (master) master.gain.value = muted ? 0 : 0.5;
+      if (master) master.gain.value = muted ? 0 : volume;
       return muted;
     },
+    setMuted(m) {
+      muted = !!m;
+      if (master) master.gain.value = muted ? 0 : volume;
+    },
+    isMuted() { return muted; },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(1, v));
+      if (master && !muted) master.gain.value = volume;
+    },
+    getVolume() { return volume; },
     chop() { noise(0.08, 0.3, 900); tone(180, 0.06, 'triangle', 0.12, -60); },
     mine() { noise(0.06, 0.25, 2200); tone(320, 0.05, 'square', 0.06, -80); },
     pickup() { tone(660, 0.07, 'square', 0.08); tone(990, 0.09, 'square', 0.08, 0, 0.06); },

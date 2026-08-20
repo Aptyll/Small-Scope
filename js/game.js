@@ -45,9 +45,9 @@
   const sctx = scratch.getContext('2d');
 
   // offscreen minimap canvas (1px per world tile)
-  const MM_R = 24;                 // minimap radius in px (1px = 1 tile)
-  const MM_CX = VIEW_W - 32;       // minimap center
-  const MM_CY = 40;
+  let MM_R = 24;                   // minimap radius in px (1px = 1 tile)
+  let MM_CX = VIEW_W - 32;         // minimap center
+  let MM_CY = 40;
   const mmCv = document.createElement('canvas');
   mmCv.width = WORLD; mmCv.height = WORLD;
   const mmCtx = mmCv.getContext('2d');
@@ -79,7 +79,25 @@
     hints: { build: false, dusk: false, imps: false },
     paused: false,
     mapOpen: false,
+    settingsOpen: false,
   };
+
+  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false };
+
+  function saveSettings() {
+    try { localStorage.setItem('emberfrost.settings', JSON.stringify(settings)); } catch (e) { }
+  }
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem('emberfrost.settings'));
+      if (s) Object.assign(settings, s);
+    } catch (e) { }
+  }
+  function applyMinimapSize() {
+    MM_R = settings.mmR;
+    MM_CX = VIEW_W - MM_R - 8;
+    MM_CY = MM_R + 16;
+  }
 
   const player = {
     x: (WORLD / 2 + 0.5) * TILE, y: (WORLD / 2 + 0.5) * TILE,
@@ -113,9 +131,12 @@
     if (state.mode !== 'play') return;
     if (e.key >= '1' && e.key <= '5') hotbar = +e.key - 1;
     if (e.key.toLowerCase() === 'q') eatBerry();
-    if (e.key.toLowerCase() === 'm') state.mapOpen = !state.mapOpen;
-    if (e.key.toLowerCase() === 'escape' && state.mapOpen) state.mapOpen = false;
-    if (e.key.toLowerCase() === 'n') SFX.toggleMute();
+    if (e.key.toLowerCase() === 'm' && !state.settingsOpen) state.mapOpen = !state.mapOpen;
+    if (e.key.toLowerCase() === 'escape') {
+      if (state.mapOpen) state.mapOpen = false;
+      else { state.settingsOpen = !state.settingsOpen; dragSlider = null; }
+    }
+    if (e.key.toLowerCase() === 'n') { settings.muted = SFX.toggleMute(); saveSettings(); }
     if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
@@ -129,11 +150,16 @@
     if (e.button !== 0) return;
     if (state.mode === 'title') { startGame(); return; }
     if (state.mode !== 'play') return;
+    if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
     mouse.down = true;
     clickAction();
   });
-  window.addEventListener('mouseup', () => { mouse.down = false; });
+  window.addEventListener('mouseup', () => {
+    if (dragSlider) { saveSettings(); SFX.pickup(); }
+    mouse.down = false;
+    dragSlider = null;
+  });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('wheel', (e) => {
     if (state.mode !== 'play') return;
@@ -676,6 +702,7 @@
   function die() {
     state.mode = 'dead';
     state.mapOpen = false;
+    state.settingsOpen = false;
     state.deadTimer = 0;
     inv.wood = Math.ceil(inv.wood * 0.6);
     inv.stone = Math.ceil(inv.stone * 0.6);
@@ -772,7 +799,7 @@
       if (state.deadTimer > 2.6) respawn();
     }
 
-    if (state.mode === 'play' && !state.paused && !state.mapOpen) updatePlay(dt);
+    if (state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen) updatePlay(dt);
 
     // camera
     const lookX = (mouse.x - VIEW_W / 2) * 0.12;
@@ -966,8 +993,8 @@
 
   function render() {
     const now = performance.now() / 1000;
-    const shx = state.shake > 0.2 ? Math.round(rand(-state.shake, state.shake)) : 0;
-    const shy = state.shake > 0.2 ? Math.round(rand(-state.shake, state.shake)) : 0;
+    const shx = settings.shake && state.shake > 0.2 ? Math.round(rand(-state.shake, state.shake)) : 0;
+    const shy = settings.shake && state.shake > 0.2 ? Math.round(rand(-state.shake, state.shake)) : 0;
     const ox = Math.round(camX) + shx;
     const oy = Math.round(camY) + shy;
 
@@ -1102,6 +1129,7 @@
     renderUI(now);
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
+    if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title') renderTitle(now);
     if (state.mode === 'dead') renderDead();
   }
@@ -1614,6 +1642,151 @@
       '#6a5436', 'rgba(120,92,58,0.35)');
   }
 
+  // ------------------------------------------------------------ settings menu (ESC)
+  const SET_W = 240, SET_H = 170;
+  const SET_X = Math.round((VIEW_W - SET_W) / 2);
+  const SET_Y = Math.round((VIEW_H - SET_H) / 2);
+  const SL_X = SET_X + 112, SL_W = 66;  // slider track
+  const ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76;
+  let dragSlider = null;
+
+  const setPanelCv = document.createElement('canvas');
+  setPanelCv.width = SET_W; setPanelCv.height = SET_H;
+
+  function buildSettingsPanel() {
+    const g = setPanelCv.getContext('2d');
+    const cham = (x, y, w, h) => {
+      g.fillRect(x + 2, y, w - 4, h);
+      g.fillRect(x, y + 2, w, h - 4);
+      g.fillRect(x + 1, y + 1, w - 2, h - 2);
+    };
+    // dark frost slab
+    g.fillStyle = '#0a0e23'; cham(0, 0, SET_W, SET_H);
+    g.fillStyle = '#141c3c'; cham(1, 1, SET_W - 2, SET_H - 2);
+    // subtle mottling
+    for (let y = 3; y < SET_H - 3; y += 3) {
+      for (let x = 3; x < SET_W - 3; x += 3) {
+        const h = hash2(x * 11 + 3, y * 7 + 19);
+        if (h > 0.86) { g.fillStyle = '#182148'; g.fillRect(x, y, 3, 3); }
+        else if (h < 0.10) { g.fillStyle = '#111834'; g.fillRect(x, y, 3, 3); }
+      }
+    }
+    // bevel: icy top light, deep bottom shade
+    g.fillStyle = '#35426e';
+    g.fillRect(2, 1, SET_W - 4, 1); g.fillRect(1, 2, 1, SET_H - 4);
+    g.fillStyle = '#080c1c';
+    g.fillRect(2, SET_H - 2, SET_W - 4, 1); g.fillRect(SET_W - 2, 2, 1, SET_H - 4);
+    // ice-crystal corner accents
+    g.fillStyle = '#5a7fb8';
+    for (const [cx2, cy2] of [[7, 7], [SET_W - 8, 7], [7, SET_H - 8], [SET_W - 8, SET_H - 8]]) {
+      g.fillRect(cx2 - 2, cy2, 5, 1); g.fillRect(cx2, cy2 - 2, 1, 5);
+      g.fillRect(cx2 - 1, cy2 - 1, 3, 3);
+    }
+    g.fillStyle = '#a8c8e8';
+    for (const [cx2, cy2] of [[7, 7], [SET_W - 8, 7], [7, SET_H - 8], [SET_W - 8, SET_H - 8]]) {
+      g.fillRect(cx2, cy2, 1, 1);
+    }
+    // title with dashes
+    const title = 'SETTINGS';
+    const tw = pixelTextWidth(title);
+    const tx0 = Math.round((SET_W - tw) / 2);
+    drawPixelTextShadow(g, title, tx0, 8, '#ffd95c', 'rgba(8,12,28,0.9)');
+    g.fillStyle = '#4a5480';
+    g.fillRect(tx0 - 26, 11, 18, 1); g.fillRect(tx0 + tw + 8, 11, 18, 1);
+    g.fillRect(tx0 - 30, 10, 2, 3); g.fillRect(tx0 + tw + 28, 10, 2, 3);
+    // row labels
+    const L = '#cfe0ff';
+    drawPixelText(g, 'VOLUME', 14, ROW_SOUND - SET_Y, L);
+    drawPixelText(g, 'MUTE SOUND', 14, ROW_MUTE - SET_Y, L);
+    drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
+    drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
+    // controls divider
+    const ct = 'CONTROLS';
+    const cw = pixelTextWidth(ct);
+    const cx0 = Math.round((SET_W - cw) / 2);
+    drawPixelText(g, ct, cx0, 94, '#7a8bb8');
+    g.fillStyle = '#2c3a68';
+    g.fillRect(14, 97, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 97, SET_W - cx0 - cw - 22, 1);
+    // hotkey listing, two columns
+    const cols = [
+      [['WASD', 'MOVE'], ['CLICK', 'CHOP/FIGHT'], ['1-5', 'TOOLS'], ['Q', 'EAT BERRY']],
+      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
+    ];
+    for (let c = 0; c < 2; c++) {
+      let y = 108;
+      const x0 = c === 0 ? 16 : 128;
+      for (const [k, desc] of cols[c]) {
+        drawPixelText(g, k, x0, y, '#ffd95c');
+        drawPixelText(g, desc, x0 + (c === 0 ? 36 : 26), y, '#7a8bb8');
+        y += 10;
+      }
+    }
+    // close hint
+    const hint = 'ESC CLOSE';
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 156, '#5a6690');
+  }
+
+  function applySliderDrag() {
+    const t = Math.max(0, Math.min(1, (mouse.x - SL_X) / SL_W));
+    if (dragSlider === 'vol') {
+      settings.volume = Math.round(t * 20) / 20;
+      SFX.setVolume(settings.volume);
+    } else if (dragSlider === 'map') {
+      settings.mmR = Math.round(16 + t * 18);
+      applyMinimapSize();
+    }
+  }
+
+  function settingsMouseDown() {
+    SFX.unlock();
+    const mx = mouse.x, my = mouse.y;
+    const inRow = (y) => my >= y - 4 && my <= y + 11;
+    const onWidget = mx >= SL_X - 4 && mx <= SL_X + SL_W + 6;
+    if (inRow(ROW_SOUND) && onWidget) { dragSlider = 'vol'; applySliderDrag(); return; }
+    if (inRow(ROW_MAP) && onWidget) { dragSlider = 'map'; applySliderDrag(); return; }
+    if (inRow(ROW_MUTE) && onWidget) {
+      settings.muted = SFX.toggleMute();
+      SFX.pickup();
+      saveSettings();
+      return;
+    }
+    if (inRow(ROW_SHAKE) && onWidget) {
+      settings.shake = !settings.shake;
+      SFX.pickup();
+      saveSettings();
+    }
+  }
+
+  function drawSliderRow(y, t, txt) {
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X - 1, y + 1, SL_W + 2, 5);
+    ctx.fillStyle = '#2c3a68'; ctx.fillRect(SL_X, y + 2, SL_W, 3);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(SL_X, y + 2, Math.round(t * SL_W), 3);
+    const kx = SL_X + Math.round(t * SL_W);
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, y - 1, 5, 9);
+    ctx.fillStyle = '#f4f7ff'; ctx.fillRect(kx - 1, y, 3, 7);
+    drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
+  }
+
+  function drawToggleRow(y, on) {
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X, y - 1, 9, 9);
+    ctx.fillStyle = '#121a3a'; ctx.fillRect(SL_X + 1, y, 7, 7);
+    if (on) { ctx.fillStyle = '#ffd95c'; ctx.fillRect(SL_X + 2, y + 1, 5, 5); }
+    drawPixelTextShadow(ctx, on ? 'ON' : 'OFF', SL_X + 14, y, on ? '#cfe0ff' : '#7a8bb8', 'rgba(8,12,28,0.9)');
+  }
+
+  function renderSettings(now) {
+    if (dragSlider && mouse.down) applySliderDrag();
+    ctx.fillStyle = 'rgba(6,10,24,0.6)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // live minimap preview while resizing
+    renderMinimap(now);
+    ctx.drawImage(setPanelCv, SET_X, SET_Y);
+    drawSliderRow(ROW_SOUND, settings.volume, String(Math.round(settings.volume * 100)));
+    drawToggleRow(ROW_MUTE, SFX.isMuted());
+    drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
+    drawToggleRow(ROW_SHAKE, settings.shake);
+  }
+
   function renderUI(now) {
     if (state.mode === 'title') return;
 
@@ -1770,9 +1943,14 @@
     showMsg('GATHER WOOD - CLICK ON TREES TO CHOP', 6);
   }
 
+  loadSettings();
+  applyMinimapSize();
+  SFX.setVolume(settings.volume);
+  SFX.setMuted(settings.muted);
   genWorld();
   renderGround();
   buildMapPanel();
+  buildSettingsPanel();
   rebuildLights();
   camX = player.x - VIEW_W / 2;
   camY = player.y - VIEW_H / 2;
