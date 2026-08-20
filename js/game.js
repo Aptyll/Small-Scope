@@ -27,7 +27,13 @@
 
   let scale = 2;
   function fitCanvas() {
-    scale = Math.max(1, Math.floor(Math.min(window.innerWidth / VIEW_W, window.innerHeight / VIEW_H)));
+    // pick an integer scale in DEVICE pixels, not CSS pixels: on fractional
+    // display scaling (125%/150% Windows) a CSS-integer scale lands game pixels
+    // on fractional device pixels, which smears and shimmers during scrolling.
+    const dpr = window.devicePixelRatio || 1;
+    const dev = Math.max(1, Math.floor(Math.min(
+      window.innerWidth * dpr / VIEW_W, window.innerHeight * dpr / VIEW_H)));
+    scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
     canvas.style.width = (VIEW_W * scale) + 'px';
     canvas.style.height = (VIEW_H * scale) + 'px';
   }
@@ -90,7 +96,11 @@
     settingsOpen: false,
   };
 
-  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false };
+  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false };
+
+  // performance monitor: fps averaged over half-second windows from raw
+  // (unclamped) frame deltas, so sim clamping can't mask slow frames
+  const perf = { fps: 0, frames: 0, acc: 0 };
 
   function saveSettings() {
     try { localStorage.setItem('emberfrost.settings', JSON.stringify(settings)); } catch (e) { }
@@ -122,6 +132,7 @@
   let hotbar = 0;
 
   const raiders = [];
+  const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const drops = [];
   const particles = [];
   const floaters = [];
@@ -549,6 +560,19 @@
         hitSomething = true;
       }
     }
+    for (const a of animals) {
+      if (Math.hypot(a.x - reachX, a.y - reachY) < 13) {
+        a.hp -= 10;
+        a.flash = 0.12;
+        a.fleeT = a.kind === 'rabbit' ? 1.4 : 2.2;
+        const kb = 70;
+        a.kbx = Math.cos(player.swingDir) * kb;
+        a.kby = Math.sin(player.swingDir) * kb;
+        burst(a.x, a.y - 4, a.kind === 'rabbit' ? '#eef2fa' : '#a5825a', 6, 40, 0.4);
+        SFX.hit();
+        hitSomething = true;
+      }
+    }
     if (hitSomething) return;
 
     // 2) resources / structures: check tiles near reach point
@@ -689,6 +713,136 @@
       if (!o) continue;
       if (o.type === 'fire') lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 6, r: 92, warm: 88, o });
       if (o.type === 'torch') lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 2, r: 54, warm: 46, o });
+    }
+  }
+
+  // ------------------------------------------------------------ animals
+  function makeAnimal(kind, x, y) {
+    const hp = kind === 'rabbit' ? 8 : 24;
+    return {
+      kind, x, y, hp, maxHp: hp,
+      dir: rng() < 0.5 ? 'left' : 'right',
+      moveT: 0, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
+      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, fleeT: 0, jinkA: 0,
+      dead: false,
+    };
+  }
+
+  function spawnAnimals() {
+    const bushes = [];
+    for (const o of objects) if (o && o.type === 'bush') bushes.push(o);
+    const freeSpot = (tx, ty) =>
+      inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] !== 2 &&
+      Math.hypot(tx - cx, ty - cy) > 14;
+    const place = (kind, nearBushes) => {
+      for (let tries = 0; tries < 40; tries++) {
+        let tx, ty;
+        if (nearBushes && bushes.length && rng() < 0.7) {
+          const b = bushes[randi(0, bushes.length - 1)];
+          tx = b.tx + randi(-4, 4); ty = b.ty + randi(-4, 4);
+        } else {
+          tx = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
+          ty = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
+        }
+        if (!freeSpot(tx, ty)) continue;
+        animals.push(makeAnimal(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE));
+        return;
+      }
+    };
+    for (let i = 0; i < 8; i++) place('rabbit', true);
+    for (let i = 0; i < 5; i++) place('deer', false);
+  }
+
+  function nearestBerryBush(x, y, rTiles) {
+    const ctx0 = Math.floor(x / TILE), cty = Math.floor(y / TILE);
+    let best = null, bd = 1e9;
+    for (let ty = cty - rTiles; ty <= cty + rTiles; ty++) {
+      for (let tx = ctx0 - rTiles; tx <= ctx0 + rTiles; tx++) {
+        const o = objAt(tx, ty);
+        if (o && o.type === 'bush' && o.berries > 0) {
+          const d = Math.hypot(tx * TILE + 8 - x, ty * TILE + 8 - y);
+          if (d < bd) { bd = d; best = o; }
+        }
+      }
+    }
+    return best;
+  }
+
+  function updateAnimal(a, dt) {
+    a.flash = Math.max(0, a.flash - dt);
+    a.kbx *= Math.pow(0.02, dt);
+    a.kby *= Math.pow(0.02, dt);
+    const rabbit = a.kind === 'rabbit';
+    const r = rabbit ? 2.5 : 5;
+
+    // rabbits are skittish: a player closing in sends them bolting
+    if (rabbit && a.fleeT <= 0 && Math.hypot(player.x - a.x, player.y - a.y) < 26) {
+      a.fleeT = rand(0.6, 1.1);
+    }
+
+    let moving = false;
+    if (a.fleeT > 0) {
+      a.fleeT -= dt;
+      let dx = a.x - player.x, dy = a.y - player.y;
+      const d = Math.hypot(dx, dy) || 1;
+      dx /= d; dy /= d;
+      if (a.jinkA) { // slight zig-zag so the flight path reads alive
+        const ca = Math.cos(a.jinkA), sa = Math.sin(a.jinkA);
+        const nx = dx * ca - dy * sa; dy = dx * sa + dy * ca; dx = nx;
+      }
+      a.mvx = dx; a.mvy = dy;
+      moving = true;
+      const spd = rabbit ? 80 : 92;
+      const mv = moveEntity(a, (dx * spd + a.kbx) * dt, (dy * spd + a.kby) * dt, r);
+      if (mv.blockedX || mv.blockedY) a.jinkA = rand(-1.2, 1.2);
+      if (a.fleeT <= 0) { a.jinkA = 0; a.idleT = rand(0.4, 1); a.moveT = 0; }
+    } else if (a.moveT > 0) {
+      a.moveT -= dt;
+      moving = true;
+      const spd = rabbit ? 42 : 26;
+      const mv = moveEntity(a, (a.mvx * spd + a.kbx) * dt, (a.mvy * spd + a.kby) * dt, r);
+      if (mv.blockedX || mv.blockedY) a.moveT = 0;
+      if (a.moveT <= 0) a.idleT = rabbit ? rand(0.8, 2.2) : rand(1.6, 4);
+    } else {
+      a.idleT -= dt;
+      if (a.idleT <= 0) {
+        // pick a new wander; rabbits drift toward the nearest berry bush
+        let ang = rng() * Math.PI * 2;
+        if (rabbit) {
+          const b = nearestBerryBush(a.x, a.y, 7);
+          if (b) {
+            const bx = b.tx * TILE + 8, by = b.ty * TILE + 8;
+            const bd = Math.hypot(bx - a.x, by - a.y);
+            if (bd > 22) ang = Math.atan2(by - a.y, bx - a.x) + rand(-0.5, 0.5);
+            else { a.idleT = rand(1.5, 3); return; } // nibbling by the bush
+          }
+        }
+        a.mvx = Math.cos(ang); a.mvy = Math.sin(ang);
+        a.moveT = rabbit ? rand(0.5, 1.1) : rand(1.0, 2.4);
+      }
+    }
+
+    if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
+    a.animT += dt * (moving ? (rabbit ? 10 : 7) : 0);
+    a.moving = moving;
+
+    a.x = Math.max(8, Math.min(WORLD * TILE - 8, a.x));
+    a.y = Math.max(8, Math.min(WORLD * TILE - 8, a.y));
+
+    if (a.hp <= 0 && !a.dead) {
+      a.dead = true;
+      SFX.monsterDie();
+      if (rabbit) {
+        burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
+        burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
+        spawnDrop(a.x, a.y, 'berry');
+      } else {
+        burst(a.x, a.y - 5, '#8a6847', 12, 50, 0.55);
+        burst(a.x, a.y - 5, '#f2cc6a', 8, 45, 0.5);
+        const n = randi(2, 3);
+        for (let i = 0; i < n; i++) spawnDrop(a.x, a.y, 'gold');
+        addFloater(a.x, a.y - 14, 'GOLD!', '#f2cc6a');
+      }
     }
   }
 
@@ -1011,6 +1165,10 @@
     for (const m of raiders) updateRaider(m, dt);
     for (let i = raiders.length - 1; i >= 0; i--) if (raiders[i].dead) raiders.splice(i, 1);
 
+    // wildlife
+    for (const a of animals) updateAnimal(a, dt);
+    for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
+
     // drops
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i];
@@ -1113,6 +1271,13 @@
     const shy = settings.shake && state.shake > 0.2 ? Math.round(rand(-state.shake, state.shake)) : 0;
     const ox = Math.round(camX) + shx;
     const oy = Math.round(camY) + shy;
+    // exact (unrounded) camera for MOVING entities. Screen pos must be
+    // round(world - camera) with a single rounding: rounding the camera and the
+    // entity separately makes their boundary crossings disagree, and the sprite
+    // vibrates +/-1px against the background while walking - reads as motion
+    // blur / ghosting at high refresh rates. Tiles keep the rounded ox/oy.
+    const ex = camX + shx;
+    const ey = camY + shy;
 
     // ground
     ctx.drawImage(groundCv, ox, oy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
@@ -1166,8 +1331,8 @@
         d.type === 'gold' ? SPRITES.itemGold : SPRITES.itemBerry;
       // shadow
       ctx.fillStyle = 'rgba(120,140,175,0.35)';
-      ctx.fillRect(Math.round(d.x - ox) - 2, Math.round(d.y - oy) + 2, 4, 2);
-      ctx.drawImage(spr, Math.round(d.x - ox) - 4, Math.round(d.y - d.z - oy) - 4);
+      ctx.fillRect(Math.round(d.x - ex) - 2, Math.round(d.y - ey) + 2, 4, 2);
+      ctx.drawImage(spr, Math.round(d.x - ex) - 4, Math.round(d.y - d.z - ey) - 4);
     }
 
     // y-sorted entities
@@ -1186,11 +1351,13 @@
     }
     draws.push({ y: player.y + 8, player: true });
     for (const m of raiders) draws.push({ y: m.y + 6, m });
+    for (const a of animals) draws.push({ y: a.y + 4, a });
     draws.sort((a, b) => a.y - b.y);
 
     for (const d of draws) {
-      if (d.player) { drawPlayer(ox, oy, now); continue; }
-      if (d.m) { drawRaider(d.m, ox, oy, now); continue; }
+      if (d.player) { drawPlayer(ex, ey, now); continue; }
+      if (d.m) { drawRaider(d.m, ex, ey, now); continue; }
+      if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
       const o = d.o;
       const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
       const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
@@ -1224,7 +1391,7 @@
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5));
       ctx.fillStyle = p.color;
-      ctx.fillRect(Math.round(p.x - ox), Math.round(p.y - oy), p.size, p.size);
+      ctx.fillRect(Math.round(p.x - ex), Math.round(p.y - ey), p.size, p.size);
     }
     ctx.globalAlpha = 1;
 
@@ -1237,8 +1404,8 @@
         const a = a0 - i * 0.22;
         const rr = 13 - i;
         ctx.fillRect(
-          Math.round(player.x + Math.cos(a) * rr - ox),
-          Math.round(player.y - 2 + Math.sin(a) * rr - oy), 2, 2);
+          Math.round(player.x + Math.cos(a) * rr - ex),
+          Math.round(player.y - 2 + Math.sin(a) * rr - ey), 2, 2);
       }
     }
 
@@ -1246,7 +1413,7 @@
     for (const f of floaters) {
       const a = 1 - f.t / 0.9;
       ctx.globalAlpha = a;
-      drawPixelTextShadow(ctx, f.txt, Math.round(f.x - ox - pixelTextWidth(f.txt) / 2), Math.round(f.y - oy - f.t * 14), f.color, 'rgba(20,20,40,0.8)');
+      drawPixelTextShadow(ctx, f.txt, Math.round(f.x - ex - pixelTextWidth(f.txt) / 2), Math.round(f.y - ey - f.t * 14), f.color, 'rgba(20,20,40,0.8)');
       ctx.globalAlpha = 1;
     }
 
@@ -1259,13 +1426,47 @@
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title') renderTitle(now);
     if (state.mode === 'dead') renderDead();
+    if (settings.fps) drawFps();
     drawSeedTag();
+  }
+
+  // fps readout, very top-right corner, above every overlay
+  function drawFps() {
+    const t = 'FPS ' + perf.fps;
+    drawPixelTextShadow(ctx, t, VIEW_W - pixelTextWidth(t) - 3, 2,
+      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', 'rgba(15,22,50,0.85)');
   }
 
   // run seed, bottom-right corner - identifies the world and can be replayed via ?seed=N
   function drawSeedTag() {
     drawPixelTextShadow(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
       '#9fb6d8', 'rgba(15,22,50,0.85)');
+  }
+
+  // small overhead bar shared by every living unit; color shifts as hp drains
+  function drawHealthBar(cxp, topY, hp, maxHp, w) {
+    const x = Math.round(cxp - w / 2), y = Math.round(topY);
+    const frac = Math.max(0, Math.min(1, hp / maxHp));
+    ctx.fillStyle = 'rgba(12,18,42,0.78)';
+    ctx.fillRect(x - 1, y - 1, w + 2, 4);
+    ctx.fillStyle = '#3a3448';
+    ctx.fillRect(x, y, w, 2);
+    ctx.fillStyle = frac > 0.55 ? '#7ce87a' : frac > 0.25 ? '#f2cc6a' : '#ff6a5a';
+    ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
+  }
+
+  function drawAnimal(a, ox, oy, now) {
+    const rabbit = a.kind === 'rabbit';
+    const set = SPRITES[a.kind][a.dir];
+    const frame = a.moving ? 1 + (Math.floor(a.animT) % 2) : 0;
+    const spr = set[frame];
+    const px = Math.round(a.x - spr.width / 2 - ox);
+    const py = Math.round(a.y + 4 - spr.height - oy);
+    ctx.fillStyle = 'rgba(110,130,170,0.35)';
+    if (rabbit) ctx.fillRect(Math.round(a.x - ox) - 4, Math.round(a.y + 2 - oy), 8, 2);
+    else ctx.fillRect(Math.round(a.x - ox) - 7, Math.round(a.y + 2 - oy), 14, 2);
+    drawSpriteFlash(spr, px, py, a.flash);
+    drawHealthBar(a.x - ox, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : 16);
   }
 
   function drawPlayer(ox, oy, now) {
@@ -1281,6 +1482,7 @@
     if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
     drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
     ctx.globalAlpha = 1;
+    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 3, player.hp, player.maxHp, 14);
   }
 
   function drawRaider(m, ox, oy, now) {
@@ -1293,13 +1495,7 @@
     if (m.spawnT > 0) ctx.globalAlpha = Math.max(0.15, 1 - m.spawnT / 0.6);
     drawSpriteFlash(spr, px, py, m.flash);
     ctx.globalAlpha = 1;
-    // hp sliver
-    if (m.hp < m.maxHp) {
-      ctx.fillStyle = 'rgba(20,25,50,0.7)';
-      ctx.fillRect(px + 3, py - 2, 10, 2);
-      ctx.fillStyle = '#ff7a6a';
-      ctx.fillRect(px + 3, py - 2, Math.max(1, Math.round(10 * m.hp / m.maxHp)), 2);
-    }
+    drawHealthBar(m.x - ox, py - 3, m.hp, m.maxHp, 12);
   }
 
   function renderLighting(ox, oy, now) {
@@ -1546,18 +1742,16 @@
     ctx.beginPath(); ctx.arc(MM_CX + Math.cos(ta) * ringR, MM_CY + Math.sin(ta) * ringR, 2, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
 
-    // elapsed play-time, centered above the minimap
+    // elapsed play-time, centered above the minimap; nudged left of the fps
+    // readout when that shares the top-right corner
     const mins = Math.floor(state.elapsed / 60);
     const secs = Math.floor(state.elapsed % 60);
     const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
-    drawPixelTextShadow(ctx, clock, Math.round(MM_CX - pixelTextWidth(clock) / 2), MM_CY - MM_R - 14,
-      '#f4f7ff', 'rgba(15,22,50,0.8)');
-
-    // raiders remaining at night, centered under the minimap
-    if (nightActive && (raiders.length > 0 || toSpawn > 0)) {
-      const t = 'RAIDERS ' + (raiders.length + toSpawn);
-      drawPixelTextShadow(ctx, t, Math.round(MM_CX - pixelTextWidth(t) / 2), MM_CY + MM_R + 8, '#ff9a8a', 'rgba(15,22,50,0.8)');
+    let ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
+    if (settings.fps) {
+      ccx = Math.min(ccx, VIEW_W - 3 - pixelTextWidth('FPS 999') - 6 - pixelTextWidth(clock));
     }
+    drawPixelTextShadow(ctx, clock, ccx, MM_CY - MM_R - 14, '#f4f7ff', 'rgba(15,22,50,0.8)');
   }
 
   // ------------------------------------------------------------ world map (M)
@@ -1787,11 +1981,12 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 170;
+  const SET_W = 240, SET_H = 186;
   const SET_X = Math.round((VIEW_W - SET_W) / 2);
   const SET_Y = Math.round((VIEW_H - SET_H) / 2);
   const SL_X = SET_X + 112, SL_W = 66;  // slider track
-  const ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76;
+  const ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
+    ROW_FPS = SET_Y + 92;
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -1844,20 +2039,21 @@
     drawPixelText(g, 'MUTE SOUND', 14, ROW_MUTE - SET_Y, L);
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
+    drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 94, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 110, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 97, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 97, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 113, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 113, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['CLICK', 'CHOP/FIGHT'], ['1-5', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 108;
+      let y = 124;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -1867,7 +2063,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 156, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 172, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -1896,6 +2092,12 @@
     }
     if (inRow(ROW_SHAKE) && onWidget) {
       settings.shake = !settings.shake;
+      SFX.pickup();
+      saveSettings();
+      return;
+    }
+    if (inRow(ROW_FPS) && onWidget) {
+      settings.fps = !settings.fps;
       SFX.pickup();
       saveSettings();
     }
@@ -1929,6 +2131,7 @@
     drawToggleRow(ROW_MUTE, SFX.isMuted());
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
+    drawToggleRow(ROW_FPS, settings.fps);
   }
 
   function renderUI(now) {
@@ -2093,6 +2296,7 @@
   SFX.setVolume(settings.volume);
   SFX.setMuted(settings.muted);
   genWorld();
+  spawnAnimals();
   player.x = (playerSpawn.tx + 0.5) * TILE;
   player.y = (playerSpawn.ty + 0.5) * TILE;
   renderGround();
@@ -2104,9 +2308,10 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, player, inv, raiders, objects, lights, mouse, keys, drops, footprints,
-    treeRare,
+    SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
+    settings, perf, treeRare,
     placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, tryPlace,
+    spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     setHotbar: (i) => { hotbar = i; },
     getHotbar: () => hotbar,
     cam: () => ({ x: camX, y: camY }),
@@ -2116,8 +2321,16 @@
 
   let last = performance.now();
   function loop(nowMs) {
-    const dt = Math.min(0.05, (nowMs - last) / 1000);
+    const rawDt = (nowMs - last) / 1000;
+    const dt = Math.min(0.05, rawDt);
     last = nowMs;
+    perf.frames++;
+    perf.acc += rawDt;
+    if (perf.acc >= 0.5) {
+      perf.fps = Math.round(perf.frames / perf.acc);
+      perf.frames = 0;
+      perf.acc = 0;
+    }
     if (!window.DBG.freeze) {
       update(dt);
       render();
