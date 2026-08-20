@@ -2033,7 +2033,7 @@
     if (state.mode === 'title') renderTitle(now);
     if (state.mode === 'dead') renderDead();
     if (settings.fps) drawFps();
-    drawSeedTag();
+    if (!window.DBG.hideUI) drawSeedTag();
   }
 
   // fps readout, very top-right corner, above every overlay
@@ -2937,7 +2937,7 @@
   }
 
   function renderUI(now) {
-    if (state.mode === 'title') return;
+    if (state.mode === 'title' || window.DBG.hideUI) return;
 
     // berries: consumable indicator, top-left (health lives on the in-world bar)
     if (inv.berry > 0) {
@@ -3100,6 +3100,7 @@
     getTool: () => tool,
     cam: () => ({ x: camX, y: camY }),
     startGame,
+    hideUI: false,
     step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },
   };
 

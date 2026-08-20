@@ -1,35 +1,58 @@
-# Emberfrost
+<p align="center">
+  <img src="docs/media/hero.png" alt="A snowy pine clearing — the survivor, two deer, and a rabbit at the forest edge" width="920">
+</p>
 
-A cozy winter survival game. Gather by day, build your camp, keep the fire
-burning — frost imps prowl the dark, and so does the cold.
+<h1 align="center">EMBERFROST</h1>
 
-## Run
+<p align="center"><strong>A tiny winter survival arcade.</strong></p>
 
-```
-node serve.js
-```
+<p align="center">
+  Daylight is for the forest. Night is for the mine.<br>
+  Chop. Hunt. Raise a camp on every stump you leave behind.<br>
+  Then see if it still stands at dawn.
+</p>
 
-Then open http://localhost:8471 (any static file server works; there is no
-build step and there are no dependencies).
+---
 
-## How to play
+<table>
+<tr>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/player.png" alt="The survivor standing in a clearing with an axe"><br>
+<strong>YOU</strong>
+<p>One hunter in a generated snowfield. Health over your head. Two rolls left in the ice. The woods are bigger than you.</p>
+</td>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/axe.png" alt="Chopping a snow-loaded pine with the axe"><br>
+<strong>THE AXE</strong>
+<p>The forest is locked. Pines take the axe. Rock and gold take the pick. Wrong tool — no bite, no wood, no stump.</p>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/bow.png" alt="Full bow draw aimed at a deer"><br>
+<strong>THE BOW</strong>
+<p>Hold the draw. The meter goes white, then gold. Power scales with the wait. A full pull drops a deer. A panic tap just makes it run.</p>
+</td>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/rabbits.png" alt="Three rabbits around a berry bush"><br>
+<strong>RABBITS</strong>
+<p>White on white, until they move. They nibble the berry bushes at the treeline and bolt when you close in. Catch one — it pays in berries.</p>
+</td>
+</tr>
+<tr>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/deer.png" alt="Two deer at the edge of the pines"><br>
+<strong>DEER</strong>
+<p>Heavier. Gold in the drop. They wander the clearings with a full bar over their antlers. Miss the shot and the whole pair is gone.</p>
+</td>
+<td align="center" valign="top" width="50%">
+<img src="docs/media/building.png" alt="Radial build wheel hovering over a stump, turret selected"><br>
+<strong>BUILD</strong>
+<p>Every fallen pine leaves a stump. Stumps are the only sites. Wall. Turret. Generator. Spawner. Wood today, stone when you can, gold when you must.</p>
+</td>
+</tr>
+</table>
 
-- **WASD / arrows** — move
-- **Click** — chop trees, mine rocks, pick berries, fight imps (slot 1),
-  or place the selected building (slots 2–5)
-- **1–5 / mouse wheel** — select axe, wall, spikes, torch, campfire
-- **Q** — eat a berry (+20 hp)
-- **M** — mute, **P** — pause
-
-Survive the night: darkness brings frost imps and creeping cold. Firelight
-keeps the cold away and slowly heals you. Walls hold imps back, spikes hurt
-them, and every night is a little harder than the last. If you fall, you wake
-by your campfire, minus a share of your supplies.
-
-## Code layout
-
-- `js/sprites.js` — every sprite as a hand-editable character grid, baked to
-  canvases at load
-- `js/font.js` — 3×5 bitmap pixel font
-- `js/audio.js` — WebAudio synth sound effects + wind ambience
-- `js/game.js` — world gen, day/night cycle, combat, building, lighting, UI
+<p align="center">
+  <em>When the mine opens, raiders come for the gold.<br>Your camp is the answer.</em>
+</p>
