@@ -1,18 +1,9 @@
+<h1 align="center">Project: Emberfrost</h1>
+<p align="center">A cozy survival game</p>
+
 <p align="center">
   <img src="docs/media/hero.png" alt="A snowy pine clearing — the survivor, two deer, and a rabbit at the forest edge" width="920">
 </p>
-
-<h1 align="center">EMBERFROST</h1>
-
-<p align="center"><strong>A tiny winter survival arcade.</strong></p>
-
-<p align="center">
-  Daylight is for the forest. Night is for the mine.<br>
-  Chop. Hunt. Raise a camp on every stump you leave behind.<br>
-  Then see if it still stands at dawn.
-</p>
-
----
 
 <table>
 <tr>
@@ -46,13 +37,9 @@
 <p>Heavier. Gold in the drop. They wander the clearings with a full bar over their antlers. Miss the shot and the whole pair is gone.</p>
 </td>
 <td align="center" valign="top" width="50%">
-<img src="docs/media/building.png" alt="Radial build wheel hovering over a stump, turret selected"><br>
-<strong>BUILD</strong>
-<p>Every fallen pine leaves a stump. Stumps are the only sites. Wall. Turret. Generator. Spawner. Wood today, stone when you can, gold when you must.</p>
+<img src="docs/media/map.png" alt="The Frostlands world map on parchment"><br>
+<strong>MAP</strong>
+<p>The whole winter on one parchment. Forest, rocks, gold, and you — inked in red at the edge of the pines.</p>
 </td>
 </tr>
 </table>
-
-<p align="center">
-  <em>When the mine opens, raiders come for the gold.<br>Your camp is the answer.</em>
-</p>
