@@ -995,6 +995,28 @@
     '..oo....',
   ];
 
+  // bow + pickaxe tool icons, same palette as the axe (y/Y double as string/steel)
+  const itemBow = [
+    '...ou...',
+    '..ou.y..',
+    '.oU..y..',
+    '.oU..y..',
+    '.oU..y..',
+    '.oU..y..',
+    '..ou.y..',
+    '...ou...',
+  ];
+  const itemPick = [
+    '..oooo..',
+    '.oYyyYo.',
+    'oYouuoYo',
+    '.o.uu.o.',
+    '..ouuo..',
+    '..ouuo..',
+    '..ouuo..',
+    '...oo...',
+  ];
+
   window.SPRITES = {
     player: {
       down: [bake(playerDownIdle, PPAL), bake(playerDownA, PPAL), bake(playerDownB, PPAL)],
@@ -1038,6 +1060,8 @@
     itemBerry: bake(itemBerry, ITPAL),
     itemGold: bake(itemGold, ITPAL),
     itemAxe: bake(itemAxe, AXPAL),
+    itemBow: bake(itemBow, AXPAL),
+    itemPick: bake(itemPick, AXPAL),
     heartFull: bake(heartFull, HPAL),
     heartHalf: bake(heartHalf, HEPAL),
     heartEmpty: bake(heartEmpty, HEPAL),

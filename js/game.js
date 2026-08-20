@@ -12,12 +12,18 @@
   const PLAYER_SPEED = 72;
   const PLAYER_R = 4.5;
 
-  const BUILDS = [
-    null, // slot 0 = axe
-    { key: 'spike', name: 'SPIKES', cost: { wood: 2, stone: 2 }, hp: 14 },
-    { key: 'torch', name: 'TORCH', cost: { wood: 2 }, hp: 20 },
-    { key: 'fire',  name: 'CAMPFIRE', cost: { wood: 8, stone: 4 }, hp: 90 },
+  // the three infinite tools; the bar is keys 1-3 or scroll wheel
+  const TOOLS = [
+    { key: 'bow',  name: 'BOW',     icon: 'itemBow' },
+    { key: 'axe',  name: 'AXE',     icon: 'itemAxe' },
+    { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
   ];
+  const BOW_CHARGE = 0.9;   // seconds to a full draw
+  const MELEE_DMG = 6;      // axe/pick vs raiders & animals (bow is the real weapon)
+  const DODGE_T = 0.28;     // roll duration (s)
+  const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
+  const DODGE_CHARGES = 2;
+  const DODGE_CD = 3.5;     // seconds to refill one charge
 
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
@@ -116,7 +122,8 @@
     shake: 0,
     deadTimer: 0,
     msg: null, msgT: 0,
-    hints: { build: false, dusk: false, raiders: false, stump: false },
+    toolMsgT: 0, // tool name flash above the bar after switching
+    hints: { dusk: false, raiders: false, stump: false },
     paused: false,
     mapOpen: false,
     settingsOpen: false,
@@ -149,20 +156,23 @@
     vx: 0, vy: 0,
     dir: 'down', moving: false, animT: 0,
     hp: 100, maxHp: 100,
-    cold: 0,
+    charging: false, chargeT: 0, // bow draw state
+    dodgeT: 0, dodgeVX: 0, dodgeVY: 0, dodgeDustT: 0, // active roll
+    dodgeCharges: 2, dodgeRegenT: 0,
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
     hurtT: 0, invuln: 0,
     footT: 0, footSide: 0,
   };
 
   const inv = { wood: 0, stone: 0, berry: 0, gold: 0 };
-  let hotbar = 0;
+  let tool = 1; // selected TOOLS index, axe by default
 
   const raiders = [];
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
   const robots = []; // spawner-owned wooden units
   const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
+  const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
   const drops = [];
   const particles = [];
   const floaters = [];
@@ -178,7 +188,8 @@
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode !== 'play') return;
-    if (e.key >= '1' && e.key <= '4') hotbar = +e.key - 1;
+    if (e.key >= '1' && e.key <= '3') selectTool(+e.key - 1);
+    if (e.key === ' ') tryDodge();
     if (e.key.toLowerCase() === 'q') eatBerry();
     if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
@@ -219,6 +230,11 @@
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 2 && state.wheel) { resolveWheel(); state.wheel = null; return; }
+    if (e.button === 0 && player.charging) {
+      player.charging = false;
+      if (state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen && !state.wheel) fireArrow();
+      player.chargeT = 0;
+    }
     if (dragSlider) { saveSettings(); SFX.pickup(); }
     mouse.down = false;
     dragSlider = null;
@@ -229,8 +245,15 @@
     e.preventDefault();
     if (state.mapOpen) return;
     if (state.wheel) return;
-    hotbar = (hotbar + (e.deltaY > 0 ? 1 : 3)) % 4;
+    selectTool((tool + (e.deltaY > 0 ? 1 : TOOLS.length - 1)) % TOOLS.length);
   }, { passive: false });
+
+  function selectTool(i) {
+    if (i === tool) return;
+    if (player.charging) { player.charging = false; player.chargeT = 0; } // swapping drops the draw
+    tool = i;
+    state.toolMsgT = 1.4;
+  }
 
   // ------------------------------------------------------------ world
   const ground = new Uint8Array(WORLD * WORLD); // 0 snow, 1 ice
@@ -244,7 +267,7 @@
     if (!inWorld(tx, ty)) return true;
     const o = objects[idx(tx, ty)];
     if (!o) return false;
-    return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' || o.type === 'fire' ||
+    return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' ||
       o.type === 'mine' || o.type === 'goldore' ||
       o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
   }
@@ -507,6 +530,19 @@
     floaters.push({ x, y, txt, color: color || '#ffffff', t: 0 });
   }
 
+  // combat damage numbers: gold for damage the player's side deals, red '-N'
+  // for damage taken. Heavy hits (10+) render at 2x; a little random drift
+  // keeps rapid repeat hits from stacking into one unreadable pile.
+  function addDmgFloater(x, y, amount, taken) {
+    const n = Math.max(1, Math.round(amount));
+    floaters.push({
+      x: x + rand(-3, 3), y,
+      txt: taken ? '-' + n : String(n),
+      color: taken ? '#ff6a5a' : '#ffd95c',
+      t: 0, vx: rand(-9, 9), scale: n >= 10 ? 2 : 1, rise: 20,
+    });
+  }
+
   function burst(x, y, color, n, spd, life, grav) {
     for (let i = 0; i < n; i++) {
       const a = rng() * Math.PI * 2, s = rand(0.3, 1) * (spd || 40);
@@ -572,11 +608,56 @@
   // ------------------------------------------------------------ actions
   function clickAction() {
     SFX.unlock();
-    if (hotbar === 0) {
-      trySwing();
+    if (TOOLS[tool].key === 'bow') {
+      if (!player.charging) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
     } else {
-      tryPlace();
+      trySwing();
     }
+  }
+
+  // dodge roll: dash with i-frames in the held movement direction (8-way),
+  // falling back to the facing direction when no key is down
+  function tryDodge() {
+    if (state.paused || state.mapOpen || state.settingsOpen || state.wheel) return;
+    if (player.dodgeT > 0 || player.dodgeCharges <= 0) return;
+    let dx = 0, dy = 0;
+    if (keys['w'] || keys['arrowup']) dy -= 1;
+    if (keys['s'] || keys['arrowdown']) dy += 1;
+    if (keys['a'] || keys['arrowleft']) dx -= 1;
+    if (keys['d'] || keys['arrowright']) dx += 1;
+    if (!dx && !dy) {
+      dx = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
+      dy = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
+    }
+    const d = Math.hypot(dx, dy) || 1;
+    player.dodgeVX = dx / d * DODGE_SPEED;
+    player.dodgeVY = dy / d * DODGE_SPEED;
+    player.dodgeT = DODGE_T;
+    player.dodgeDustT = 0;
+    player.dodgeCharges--;
+    if (player.dodgeRegenT <= 0) player.dodgeRegenT = DODGE_CD;
+    player.invuln = Math.max(player.invuln, DODGE_T + 0.05);
+    player.kbx = player.kby = 0;
+    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
+    else if (dy !== 0) player.dir = dy > 0 ? 'down' : 'up';
+    burst(player.x, player.y + 4, '#dfe8f4', 6, 40, 0.35, true);
+    SFX.dodge();
+  }
+
+  function fireArrow() {
+    const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
+    const dx = mouse.x + camX - player.x;
+    const dy = mouse.y + camY - player.y;
+    const d = Math.hypot(dx, dy) || 1;
+    const spd = 170 + 190 * p;
+    arrows.push({
+      x: player.x, y: player.y - 6,
+      vx: dx / d * spd, vy: dy / d * spd,
+      t: 0, life: 0.85, dmg: Math.round(4 + 9 * p), pow: p,
+    });
+    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
+    else player.dir = dy > 0 ? 'down' : 'up';
+    SFX.arrow();
   }
 
   function trySwing() {
@@ -600,12 +681,13 @@
     let hitSomething = false;
     for (const m of raiders) {
       if (Math.hypot(m.x - reachX, m.y - reachY) < 13) {
-        m.hp -= 10;
+        m.hp -= MELEE_DMG;
         m.flash = 0.12;
         m.squash = 0.2;
         const kb = 90;
         m.kbx = Math.cos(player.swingDir) * kb;
         m.kby = Math.sin(player.swingDir) * kb;
+        addDmgFloater(m.x, m.y - 16, MELEE_DMG);
         burst(m.x, m.y - 4, '#c6ecf4', 7, 45, 0.4);
         SFX.hit();
         hitSomething = true;
@@ -613,8 +695,9 @@
     }
     for (const a of animals) {
       if (Math.hypot(a.x - reachX, a.y - reachY) < 13) {
-        a.hp -= 10;
+        a.hp -= MELEE_DMG;
         a.flash = 0.12;
+        addDmgFloater(a.x, a.y - 12, MELEE_DMG);
         a.fleeT = a.kind === 'rabbit' ? 1.4 : 2.2;
         const kb = 70;
         a.kbx = Math.cos(player.swingDir) * kb;
@@ -642,6 +725,14 @@
 
   function hitObject(o) {
     const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+    // hard tool gating: the wrong tool bounces off instead of harvesting
+    const k = TOOLS[tool].key;
+    if ((o.type === 'tree' && k !== 'axe') ||
+        ((o.type === 'rock' || o.type === 'goldore') && k !== 'pick')) {
+      SFX.deny();
+      addFloater(ox, oy - 14, o.type === 'tree' ? 'NEEDS AXE' : 'NEEDS PICKAXE', '#9fb6d8');
+      return;
+    }
     o.flash = 0.1;
     o.shake = 0.22;
     if (o.type === 'tree') {
@@ -706,7 +797,7 @@
       } else {
         SFX.swing();
       }
-    } else if (STRUCTS[o.type] || o.type === 'torch' || o.type === 'fire' || o.type === 'spike') {
+    } else if (STRUCTS[o.type]) {
       o.hp -= 10;
       SFX.hit();
       burst(ox, oy - 4, '#a3794f', 5, 40, 0.4, true);
@@ -721,51 +812,12 @@
     SFX.break_();
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
-    if (refund) {
-      if (STRUCTS[o.type]) {
-        // 50% of everything paid across tiers, raider kills refund nothing
-        const c = cumulativeCost(o.type, o.tier);
-        for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
-      } else {
-        const b = BUILDS.find(b => b && b.key === o.type);
-        if (b) {
-          for (let i = 0; i < Math.floor((b.cost.wood || 0) / 2); i++) spawnDrop(ox, oy, 'wood');
-          for (let i = 0; i < Math.floor((b.cost.stone || 0) / 2); i++) spawnDrop(ox, oy, 'stone');
-        }
-      }
+    if (refund && STRUCTS[o.type]) {
+      // 50% of everything paid across tiers, raider kills refund nothing
+      const c = cumulativeCost(o.type, o.tier);
+      for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
     }
     rebuildLights();
-  }
-
-  function tryPlace() {
-    const b = BUILDS[hotbar];
-    const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
-    if (!placementValid(tx, ty)) { SFX.deny(); return; }
-    if (!canAfford(b.cost)) {
-      SFX.deny();
-      showMsg('NOT ENOUGH RESOURCES', 1.6);
-      return;
-    }
-    pay(b.cost);
-    const o = placeObj(tx, ty, b.key, { hp: b.hp, maxHp: b.hp });
-    if (b.key === 'fire') { o.anim = rng() * 3; state.lastFire = o; }
-    if (b.key === 'torch') o.anim = rng() * 2;
-    SFX.place();
-    burst(tx * TILE + 8, ty * TILE + 8, '#eef4fb', 8, 40, 0.4, true);
-    rebuildLights();
-  }
-
-  function placementValid(tx, ty) {
-    if (!inWorld(tx, ty)) return false;
-    if (objects[idx(tx, ty)]) return false;
-    const cxp = tx * TILE + 8, cyp = ty * TILE + 8;
-    if (Math.hypot(cxp - player.x, cyp - player.y) > 60) return false;
-    // don't trap yourself: block placing solid on player's tile
-    const b = BUILDS[hotbar];
-    if (b && b.key === 'fire') {
-      if (Math.abs(cxp - player.x) < 8 + PLAYER_R && Math.abs(cyp - player.y) < 8 + PLAYER_R) return false;
-    }
-    return true;
   }
 
   // ------------------------------------------------------------ stump structures
@@ -845,13 +897,9 @@
   }
 
   function rebuildLights() {
+    // nothing currently emits light (campfires/torches went with the old hotbar);
+    // kept as the single rebuild point for any future glowing object type
     lights.length = 0;
-    for (let i = 0; i < objects.length; i++) {
-      const o = objects[i];
-      if (!o) continue;
-      if (o.type === 'fire') lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 6, r: 92, warm: 88, o });
-      if (o.type === 'torch') lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 2, r: 54, warm: 46, o });
-    }
   }
 
   // ------------------------------------------------------------ animals
@@ -1036,6 +1084,7 @@
             o.cd = t.rate;
             tgt.hp -= t.dmg;
             tgt.flash = 0.12;
+            addDmgFloater(tgt.x, tgt.y - 16, t.dmg);
             const d = bd || 1;
             tgt.kbx += (tgt.x - ox) / d * 30;
             tgt.kby += (tgt.y - oy) / d * 30;
@@ -1210,6 +1259,7 @@
           b.atkCd = 0.7;
           tgt.hp -= 5;
           tgt.flash = 0.12;
+          addDmgFloater(tgt.x, tgt.y - 16, 5);
           const kn = d || 1;
           tgt.kbx += (tgt.x - b.x) / kn * 50;
           tgt.kby += (tgt.y - b.y) / kn * 50;
@@ -1333,7 +1383,7 @@
         x, y, hp: 24 + (n - 1) * 7, maxHp: 24 + (n - 1) * 7,
         speed: rand(27, 34) + Math.min(16, n * 1.5),
         t: rng() * 10, attackCd: 0, flash: 0, squash: 0,
-        kbx: 0, kby: 0, jitterT: 0, jitterA: 0, spikeCd: 0, spawnT: 0.6,
+        kbx: 0, kby: 0, jitterT: 0, jitterA: 0, spawnT: 0.6,
         dir: 'down', animT: rng() * 2,
       });
       burst(x, y, '#55506e', 10, 40, 0.5);
@@ -1346,7 +1396,6 @@
     m.flash = Math.max(0, m.flash - dt);
     m.squash = Math.max(0, m.squash - dt);
     m.attackCd = Math.max(0, m.attackCd - dt);
-    m.spikeCd = Math.max(0, m.spikeCd - dt);
     if (m.spawnT > 0) { m.spawnT -= dt; return; }
 
     // knockback decay
@@ -1377,7 +1426,7 @@
       const ftx = Math.floor((m.x + dx * 7) / TILE);
       const fty = Math.floor((m.y + dy * 7) / TILE);
       const o = objAt(ftx, fty);
-      if (o && (STRUCTS[o.type] || o.type === 'fire' || o.type === 'torch')) {
+      if (o && STRUCTS[o.type]) {
         o.hp -= 7;
         o.flash = 0.12; o.shake = 0.2;
         m.attackCd = 0.95;
@@ -1392,20 +1441,6 @@
         m.jitterT = rand(0.4, 0.9);
         m.jitterA = (rng() < 0.5 ? 1 : -1) * rand(0.6, 1.3);
       }
-    }
-
-    // spikes
-    const stx = Math.floor(m.x / TILE), sty = Math.floor(m.y / TILE);
-    const so = objAt(stx, sty);
-    if (so && so.type === 'spike' && m.spikeCd <= 0) {
-      m.hp -= 7;
-      m.flash = 0.12;
-      m.spikeCd = 0.55;
-      so.hp -= 1;
-      m.kbx = -dx * 70; m.kby = -dy * 70;
-      burst(m.x, m.y - 4, '#c6ecf4', 5, 40, 0.35);
-      SFX.hit();
-      if (so.hp <= 0) destroyStructure(so, false);
     }
 
     // touch player
@@ -1424,6 +1459,7 @@
           m.attackCd = 0.9;
           b.hp -= 8 + state.day;
           b.flash = 0.12;
+          addDmgFloater(b.x, b.y - 14, 8 + state.day, true);
           const kn = bd || 1;
           b.kbx = (b.x - m.x) / kn * 70; b.kby = (b.y - m.y) / kn * 70;
           SFX.hit();
@@ -1447,6 +1483,7 @@
     player.invuln = 0.7;
     player.kbx = dx * 110; player.kby = dy * 110;
     state.shake = Math.max(state.shake, 3);
+    addDmgFloater(player.x, player.y - 18, dmg, true);
     SFX.hurt();
     burst(player.x, player.y - 6, '#e04a54', 8, 50, 0.45);
     if (player.hp <= 0) die();
@@ -1454,6 +1491,9 @@
 
   function die() {
     state.mode = 'dead';
+    player.charging = false;
+    player.chargeT = 0;
+    player.dodgeT = 0;
     state.mapOpen = false;
     state.settingsOpen = false;
     state.wheel = null;
@@ -1465,40 +1505,21 @@
   }
 
   function respawn() {
-    // nearest surviving campfire, else world center
-    let best = null, bd = 1e9;
-    for (const o of objects) {
-      if (o && o.type === 'fire') {
-        const d = Math.hypot(o.tx * TILE - player.x, o.ty * TILE - player.y);
-        if (d < bd) { bd = d; best = o; }
-      }
-    }
-    if (best) {
-      player.x = best.tx * TILE + 8 + 18;
-      player.y = best.ty * TILE + 8 + 10;
-    } else {
-      player.x = (playerSpawn.tx + 0.5) * TILE;
-      player.y = (playerSpawn.ty + 0.5) * TILE;
-    }
+    // back at the original camp pocket, never the raider-spewing world center
+    player.x = (playerSpawn.tx + 0.5) * TILE;
+    player.y = (playerSpawn.ty + 0.5) * TILE;
     player.hp = player.maxHp;
-    player.cold = 0;
     player.invuln = 3;
     player.kbx = player.kby = 0;
+    player.dodgeT = 0;
+    player.dodgeCharges = DODGE_CHARGES;
+    player.dodgeRegenT = 0;
     state.mode = 'play';
-    showMsg('YOU WOKE BY THE FIRE  -  SOME SUPPLIES LOST', 4);
+    showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
   }
 
   // ------------------------------------------------------------ update
   let camX = 0, camY = 0;
-
-  function warmthAt(x, y) {
-    let w = 0;
-    for (const L of lights) {
-      const d = Math.hypot(L.x - x, L.y - y);
-      if (d < L.warm) w = Math.max(w, 1 - d / L.warm);
-    }
-    return w;
-  }
 
   function update(dt) {
     // time
@@ -1572,6 +1593,7 @@
 
     state.shake = Math.max(0, state.shake - dt * 12);
     state.msgT = Math.max(0, state.msgT - dt);
+    state.toolMsgT = Math.max(0, state.toolMsgT - dt);
 
     updateFx(dt);
   }
@@ -1596,14 +1618,36 @@
     player.kbx = (player.kbx || 0) * Math.pow(0.01, dt);
     player.kby = (player.kby || 0) * Math.pow(0.01, dt);
 
-    moveEntity(player,
-      (mx * PLAYER_SPEED + player.kbx) * dt,
-      (my * PLAYER_SPEED + player.kby) * dt, PLAYER_R);
+    if (player.dodgeT > 0) {
+      // rolling: the dash owns movement; input is ignored until it ends
+      player.dodgeT -= dt;
+      moveEntity(player, player.dodgeVX * dt, player.dodgeVY * dt, PLAYER_R);
+      player.dodgeDustT -= dt;
+      if (player.dodgeDustT <= 0) {
+        player.dodgeDustT = 0.05;
+        burst(player.x, player.y + 5, '#dfe8f4', 2, 22, 0.3, true);
+      }
+      if (player.dodgeT <= 0) burst(player.x, player.y + 4, '#cfd8e8', 4, 30, 0.3, true);
+    } else {
+      const spd = player.charging ? PLAYER_SPEED * 0.55 : PLAYER_SPEED; // drawn bow slows you
+      moveEntity(player,
+        (mx * spd + player.kbx) * dt,
+        (my * spd + player.kby) * dt, PLAYER_R);
+    }
 
     player.x = Math.max(8, Math.min(WORLD * TILE - 8, player.x));
     player.y = Math.max(8, Math.min(WORLD * TILE - 8, player.y));
 
-    if (player.moving) {
+    // dodge charges refill one at a time
+    if (player.dodgeCharges < DODGE_CHARGES) {
+      player.dodgeRegenT -= dt;
+      if (player.dodgeRegenT <= 0) {
+        player.dodgeCharges++;
+        player.dodgeRegenT = player.dodgeCharges < DODGE_CHARGES ? DODGE_CD : 0;
+      }
+    }
+
+    if (player.moving && player.dodgeT <= 0) {
       player.animT += dt * 9;
       player.footT -= dt;
       if (player.footT <= 0) {
@@ -1628,27 +1672,66 @@
         swingHit();
       }
     }
-    if (mouse.down && hotbar === 0 && player.swingCd <= 0) trySwing();
+    if (mouse.down && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
+
+    // bow draw: charge up and keep facing the mouse
+    if (player.charging) {
+      player.chargeT = Math.min(BOW_CHARGE, player.chargeT + dt);
+      const adx = mouse.x + camX - player.x, ady = mouse.y + camY - player.y;
+      if (Math.abs(adx) > Math.abs(ady)) player.dir = adx > 0 ? 'right' : 'left';
+      else player.dir = ady > 0 ? 'down' : 'up';
+    }
 
     player.hurtT = Math.max(0, player.hurtT - dt);
     player.invuln = Math.max(0, player.invuln - dt);
 
-    // warmth & cold
-    const warm = warmthAt(player.x, player.y);
-    if (state.darkness > 0.5 && warm < 0.15) {
-      player.cold = Math.min(100, player.cold + dt * 7);
-    } else {
-      const rate = warm > 0.15 ? 40 : 14;
-      player.cold = Math.max(0, player.cold - dt * rate);
+    // gentle regen in daylight
+    if (player.hp < player.maxHp && state.darkness < 0.3) {
+      player.hp = Math.min(player.maxHp, player.hp + dt * 0.6);
     }
-    if (player.cold >= 100) {
-      player.hp -= dt * 3.5;
-      if (player.hp <= 0) { die(); return; }
-    }
-    // gentle regen near fire / in daylight
-    if (player.hp < player.maxHp) {
-      if (warm > 0.3) player.hp = Math.min(player.maxHp, player.hp + dt * 2.2);
-      else if (state.darkness < 0.3) player.hp = Math.min(player.maxHp, player.hp + dt * 0.6);
+
+    // arrows in flight
+    for (let i = arrows.length - 1; i >= 0; i--) {
+      const a = arrows[i];
+      a.t += dt;
+      a.x += a.vx * dt; a.y += a.vy * dt;
+      let dead = a.t > a.life;
+      if (!dead && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
+        dead = true;
+        burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
+      }
+      if (!dead) {
+        const vd = Math.hypot(a.vx, a.vy) || 1;
+        for (const m of raiders) {
+          if (m.spawnT > 0) continue;
+          if (Math.hypot(m.x - a.x, m.y - 4 - a.y) < 8) {
+            m.hp -= a.dmg;
+            m.flash = 0.12; m.squash = 0.2;
+            const kb = 30 + 60 * a.pow;
+            m.kbx = a.vx / vd * kb; m.kby = a.vy / vd * kb;
+            addDmgFloater(m.x, m.y - 16, a.dmg);
+            burst(m.x, m.y - 4, '#c6ecf4', 6, 45, 0.4);
+            SFX.hit();
+            dead = true;
+            break;
+          }
+        }
+        if (!dead) for (const an of animals) {
+          if (Math.hypot(an.x - a.x, an.y - 3 - a.y) < 8) {
+            an.hp -= a.dmg;
+            an.flash = 0.12;
+            an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
+            addDmgFloater(an.x, an.y - 12, a.dmg);
+            const kb = 25 + 45 * a.pow;
+            an.kbx = a.vx / vd * kb; an.kby = a.vy / vd * kb;
+            burst(an.x, an.y - 4, an.kind === 'rabbit' ? '#eef2fa' : '#a5825a', 6, 40, 0.4);
+            SFX.hit();
+            dead = true;
+            break;
+          }
+        }
+      }
+      if (dead) arrows.splice(i, 1);
     }
 
     // raiders
@@ -1684,10 +1767,6 @@
           d.type === 'wood' ? '#c9a06a' : d.type === 'stone' ? '#b8c0d4' : d.type === 'gold' ? '#f2cc6a' : '#f2707a');
         SFX.pickup();
         drops.splice(i, 1);
-        if (!state.hints.build && inv.wood >= 8) {
-          state.hints.build = true;
-          showMsg('PRESS 2-4 TO BUILD  -  A CAMPFIRE KEEPS YOU WARM AT NIGHT', 6);
-        }
       }
     }
 
@@ -1705,7 +1784,7 @@
     // dusk warning
     if (!state.hints.dusk && state.darkness > 0.15 && state.darkness < 0.5) {
       state.hints.dusk = true;
-      showMsg('NIGHT IS COMING - BUILD A CAMPFIRE AND STAY WARM', 5);
+      showMsg('NIGHT IS COMING - GET BEHIND YOUR DEFENSES', 5);
     }
   }
 
@@ -1754,7 +1833,7 @@
       sctx.globalCompositeOperation = 'source-over';
       sctx.drawImage(spr, 0, 0);
       sctx.globalCompositeOperation = 'source-in';
-      sctx.fillStyle = 'rgba(255,255,255,0.55)';
+      sctx.fillStyle = 'rgba(255,255,255,0.8)';
       sctx.fillRect(0, 0, 32, 32);
       ctx.drawImage(scratch, 0, 0, spr.width, spr.height, x, y, spr.width, spr.height);
     }
@@ -1790,34 +1869,15 @@
     const tx1 = Math.min(WORLD - 1, Math.ceil((ox + VIEW_W) / TILE) + 1);
     const ty1 = Math.min(WORLD - 1, Math.ceil((oy + VIEW_H) / TILE) + 2);
 
-    // flat objects first (spikes, stumps)
+    // flat objects first (stumps)
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         const o = objects[idx(tx, ty)];
         if (!o) continue;
         const px = tx * TILE - ox, py = ty * TILE - oy;
-        if (o.type === 'spike') drawSpriteFlash(SPRITES.spikes, px, py, o.flash);
         // +4 like rocks and bushes - any lower and the canopy of a tree on the tile below buries it
-        else if (o.type === 'stump') ctx.drawImage(SPRITES.stump, px, py + 4);
+        if (o.type === 'stump') ctx.drawImage(SPRITES.stump, px, py + 4);
       }
-    }
-
-    // ghost placement
-    if (state.mode === 'play' && hotbar > 0) {
-      const gtx = Math.floor((mouse.x + camX) / TILE);
-      const gty = Math.floor((mouse.y + camY) / TILE);
-      const ok = placementValid(gtx, gty) && canAfford(BUILDS[hotbar].cost);
-      const px = gtx * TILE - ox, py = gty * TILE - oy;
-      ctx.globalAlpha = 0.25;
-      ctx.fillStyle = ok ? '#7ce88a' : '#e85a5a';
-      ctx.fillRect(px, py, TILE, TILE);
-      ctx.globalAlpha = 0.55;
-      const key = BUILDS[hotbar].key;
-      const spr = key === 'spike' ? SPRITES.spikes :
-        key === 'torch' ? SPRITES.torch[0] : SPRITES.fire[0];
-      if (key === 'torch') ctx.drawImage(spr, px + 4, py + 1);
-      else ctx.drawImage(spr, px, py);
-      ctx.globalAlpha = 1;
     }
 
     // drops (under entities)
@@ -1835,7 +1895,7 @@
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         const o = objects[idx(tx, ty)];
-        if (!o || o.type === 'spike' || o.type === 'stump') continue;
+        if (!o || o.type === 'stump') continue;
         if (o.type === 'mine') {
           if (o.part !== 0) continue;
           draws.push({ y: ty * TILE + 32, o, tx, ty }); // sorts by its 2-tile base
@@ -1885,12 +1945,6 @@
             ctx.fillRect(px + 10, py + 3, 1, 4); ctx.fillRect(px + 11, py + 7, 1, 2);
           }
         }
-      } else if (o.type === 'fire') {
-        const f = ((now * 8 + (o.anim || 0)) | 0) % 3;
-        drawSpriteFlash(SPRITES.fire[f], px, py, o.flash);
-      } else if (o.type === 'torch') {
-        const f = ((now * 7 + (o.anim || 0)) | 0) % 2;
-        drawSpriteFlash(SPRITES.torch[f], px + 4, py + 1, o.flash);
       }
     }
 
@@ -1915,6 +1969,21 @@
       ctx.fillRect(Math.round(p.x - ex), Math.round(p.y - ey), p.size, p.size);
     }
     ctx.globalAlpha = 1;
+
+    // arrows: short shaft trailing the velocity, bright tip
+    for (const a of arrows) {
+      const vd = Math.hypot(a.vx, a.vy) || 1;
+      const nx = a.vx / vd, ny = a.vy / vd;
+      const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
+      ctx.strokeStyle = '#d8c8a0';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(hx - nx * 5 + 0.5, hy - ny * 5 + 0.5);
+      ctx.lineTo(hx + 0.5, hy + 0.5);
+      ctx.stroke();
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(hx, hy, 1, 1);
+    }
 
     // turret tracers
     for (const t of tracers) {
@@ -1942,11 +2011,14 @@
       }
     }
 
-    // floaters
+    // floaters (damage numbers drift sideways, rise faster, and can be 2x)
     for (const f of floaters) {
       const a = 1 - f.t / 0.9;
       ctx.globalAlpha = a;
-      drawPixelTextShadow(ctx, f.txt, Math.round(f.x - ex - pixelTextWidth(f.txt) / 2), Math.round(f.y - ey - f.t * 14), f.color, 'rgba(20,20,40,0.8)');
+      const s = f.scale || 1;
+      drawPixelTextShadow(ctx, f.txt,
+        Math.round(f.x + (f.vx || 0) * f.t - ex - pixelTextWidth(f.txt, s) / 2),
+        Math.round(f.y - ey - f.t * (f.rise || 14)), f.color, 'rgba(20,20,40,0.8)', s);
       ctx.globalAlpha = 1;
     }
 
@@ -2126,10 +2198,119 @@
     // shadow
     ctx.fillStyle = 'rgba(110,130,170,0.4)';
     ctx.fillRect(px + 5, py + 15, 6, 2);
-    if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
-    drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
-    ctx.globalAlpha = 1;
+
+    if (player.dodgeT > 0) {
+      // dodge roll: full spin over the roll, trailing two afterimage ghosts.
+      // Spin sign follows horizontal intent so side rolls tumble forward.
+      const prog = 1 - player.dodgeT / DODGE_T;
+      const sgn = player.dodgeVX < 0 ? -1 : player.dodgeVX > 0 ? 1 :
+        player.dodgeVY < 0 ? -1 : 1;
+      const vd = Math.hypot(player.dodgeVX, player.dodgeVY) || 1;
+      const nx = player.dodgeVX / vd, ny = player.dodgeVY / vd;
+      const rollSpr = SPRITES.player[player.dir][0];
+      const spin = (a, gx, gy) => {
+        ctx.save();
+        ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
+        ctx.rotate(a);
+        ctx.drawImage(rollSpr, -8, -8);
+        ctx.restore();
+      };
+      ctx.globalAlpha = 0.12; spin(sgn * (prog - 0.14) * Math.PI * 2, -nx * 11, -ny * 11);
+      ctx.globalAlpha = 0.28; spin(sgn * (prog - 0.07) * Math.PI * 2, -nx * 6, -ny * 6);
+      ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
+    } else {
+      // held tool: behind the body when facing away, in the hand otherwise
+      const held = state.mode === 'play';
+      const toolBehind = held && player.dir === 'up' && !player.charging && player.swingT <= 0;
+      if (toolBehind) drawHeldTool(px, py);
+      if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
+      drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
+      ctx.globalAlpha = 1;
+      if (held && !toolBehind) drawHeldTool(px, py);
+    }
+
     if (state.mode === 'play') drawHealthBar(player.x - ox, py - 3, player.hp, player.maxHp, 14);
+    // dodge charges: two pips tucked under the health bar; the recharging
+    // slot fills left-to-right as its cooldown runs
+    if (state.mode === 'play') {
+      const bx = Math.round(player.x - ox) - 7, by = py;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bx - 1, by - 1, 16, 4);
+      for (let i = 0; i < DODGE_CHARGES; i++) {
+        const x = bx + i * 8;
+        ctx.fillStyle = '#3a3448';
+        ctx.fillRect(x, by, 6, 2);
+        if (i < player.dodgeCharges) {
+          ctx.fillStyle = '#8ad8ff';
+          ctx.fillRect(x, by, 6, 2);
+        } else if (i === player.dodgeCharges) {
+          const p = 1 - player.dodgeRegenT / DODGE_CD;
+          ctx.fillStyle = '#48708e';
+          ctx.fillRect(x, by, Math.max(0, Math.round(6 * p)), 2);
+        }
+      }
+    }
+    // bow draw meter, just above the health bar; gold when fully drawn
+    if (player.charging && state.mode === 'play') {
+      const frac = player.chargeT / BOW_CHARGE;
+      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 8);
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(x - 1, y - 1, 16, 4);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(x, y, 14, 2);
+      ctx.fillStyle = frac >= 1 ? '#ffd95c' : '#cfe0ff';
+      ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
+    }
+  }
+
+  // the selected tool, drawn on the player: carried at the hand while idle or
+  // walking, swept along the arc during a melee swing, aimed at the mouse while
+  // the bow is drawn. px/py are the player sprite's top-left in screen space.
+  function drawHeldTool(px, py) {
+    const t = TOOLS[tool];
+    const icon = SPRITES[t.icon];
+    const cxp = px + 8, cyp = py + 10; // roughly the hands
+
+    // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
+    // rotating by a + PI points the arc at the target
+    if (t.key === 'bow' && player.charging) {
+      const a = Math.atan2(mouse.y + camY - player.y, mouse.x + camX - player.x);
+      ctx.save();
+      ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
+      ctx.rotate(a + Math.PI);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+      return;
+    }
+
+    // melee swing: sweep with the same arc the swing effect uses; the icons
+    // point up, so + PI/2 aligns the head with the sweep direction
+    if (t.key !== 'bow' && player.swingT > 0) {
+      const prog = 1 - player.swingT / 0.18;
+      const a = player.swingDir - 1.1 + prog * 2.2;
+      ctx.save();
+      ctx.translate(Math.round(cxp + Math.cos(a) * 9), Math.round(cyp - 2 + Math.sin(a) * 9));
+      ctx.rotate(a + Math.PI / 2);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+      return;
+    }
+
+    // carried: sits in the leading hand, with a 1px walk bob
+    const bob = player.moving ? Math.floor(player.animT) % 2 : 0;
+    if (player.dir === 'left') {
+      ctx.save();
+      ctx.translate(px + 2, cyp - 2 + bob);
+      ctx.scale(-1, 1);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+    } else if (player.dir === 'right') {
+      ctx.drawImage(icon, px + 10, cyp - 6 + bob);
+    } else if (player.dir === 'down') {
+      ctx.drawImage(icon, px + 10, cyp - 5 + bob);
+    } else { // up: far hand, occluded by the body (caller draws us first)
+      ctx.drawImage(icon, px - 2, cyp - 5 + bob);
+    }
   }
 
   function drawRaider(m, ox, oy, now) {
@@ -2190,14 +2371,15 @@
       lctx.fillStyle = grd;
       lctx.fillRect(lx - r, ly - r, r * 2, r * 2);
     }
-    // small personal glow so it's never pitch black around you
+    // personal glow so it's never pitch black around you - with no placeable
+    // fires it is the only night light, so it reaches a bit further
     {
       const lx = player.x - ox, ly = player.y - 4 - oy;
-      const grd = lctx.createRadialGradient(lx, ly, 1, lx, ly, 30);
-      grd.addColorStop(0, 'rgba(255,255,255,0.55)');
+      const grd = lctx.createRadialGradient(lx, ly, 1, lx, ly, 44);
+      grd.addColorStop(0, 'rgba(255,255,255,0.6)');
       grd.addColorStop(1, 'rgba(255,255,255,0)');
       lctx.fillStyle = grd;
-      lctx.fillRect(lx - 30, ly - 30, 60, 60);
+      lctx.fillRect(lx - 44, ly - 44, 88, 88);
     }
 
     ctx.drawImage(lightCv, 0, 0);
@@ -2272,17 +2454,6 @@
   }
 
   function renderVignettes() {
-    // cold vignette
-    if (player.cold > 1) {
-      const c = player.cold / 100;
-      ctx.globalAlpha = c * 0.45;
-      const grd = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.32, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.75);
-      grd.addColorStop(0, 'rgba(80,140,220,0)');
-      grd.addColorStop(1, 'rgba(80,140,220,1)');
-      ctx.fillStyle = grd;
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-      ctx.globalAlpha = 1;
-    }
     // hurt flash
     if (player.hurtT > 0) {
       ctx.globalAlpha = player.hurtT * 0.9;
@@ -2309,9 +2480,6 @@
         else if (o.type === 'rock') { r = 122; g = 131; b = 153; }
         else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
-        else if (o.type === 'fire') { r = 255; g = 160; b = 70; }
-        else if (o.type === 'torch') { r = 255; g = 217; b = 92; }
-        else if (o.type === 'spike') { r = 168; g = 178; b = 200; }
         else if (o.type === 'goldore') { r = 226; g = 178; b = 82; }
         else if (o.type === 'mine') { r = 74; g = 70; b = 92; }
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
@@ -2392,16 +2560,13 @@
     ctx.beginPath(); ctx.arc(MM_CX + Math.cos(ta) * ringR, MM_CY + Math.sin(ta) * ringR, 2, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
 
-    // elapsed play-time, centered above the minimap; nudged left of the fps
-    // readout when that shares the top-right corner
+    // elapsed play-time, centered beneath the minimap (clear of the fps
+    // readout, which owns the extreme top-right corner)
     const mins = Math.floor(state.elapsed / 60);
     const secs = Math.floor(state.elapsed % 60);
     const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
-    let ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
-    if (settings.fps) {
-      ccx = Math.min(ccx, VIEW_W - 3 - pixelTextWidth('FPS 999') - 6 - pixelTextWidth(clock));
-    }
-    drawPixelTextShadow(ctx, clock, ccx, MM_CY - MM_R - 14, '#f4f7ff', 'rgba(15,22,50,0.8)');
+    const ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
+    drawPixelTextShadow(ctx, clock, ccx, MM_CY + MM_R + 9, '#f4f7ff', 'rgba(15,22,50,0.8)');
   }
 
   // ------------------------------------------------------------ world map (M)
@@ -2522,9 +2687,6 @@
         }
         else if (o && o.type === 'stump') { r = 172; g = 138; b = 92; }
         else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
-        else if (o && o.type === 'spike') { r = 140; g = 142; b = 152; }
-        else if (o && o.type === 'fire') { r = 236; g = 146; b = 64; }
-        else if (o && o.type === 'torch') { r = 230; g = 192; b = 88; }
         else if (o && o.type === 'goldore') { r = 214; g = 168; b = 74; }
         else if (o && o.type === 'mine') { r = 52; g = 48; b = 62; }
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
@@ -2583,19 +2745,6 @@
       ctx.fillRect(MAP_X, MAP_Y, WORLD, WORLD);
       ctx.globalAlpha = 1;
     }
-
-    // fire & torch glows
-    ctx.globalCompositeOperation = 'lighter';
-    for (const L of lights) {
-      const mx = MAP_X + L.x / TILE, my = MAP_Y + L.y / TILE;
-      const rr = (L.warm > 60 ? 5 : 3) * (1 + Math.sin(now * 7 + L.x) * 0.15);
-      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, rr);
-      grd.addColorStop(0, 'rgba(255,170,70,0.55)');
-      grd.addColorStop(1, 'rgba(255,150,50,0)');
-      ctx.fillStyle = grd;
-      ctx.fillRect(mx - rr, my - rr, rr * 2, rr * 2);
-    }
-    ctx.globalCompositeOperation = 'source-over';
 
     // current camera view
     ctx.strokeStyle = 'rgba(58,44,28,0.5)';
@@ -2702,7 +2851,7 @@
     g.fillRect(14, 113, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 113, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
-      [['WASD', 'MOVE'], ['CLICK', 'CHOP/FIGHT'], ['1-5', 'TOOLS'], ['Q', 'EAT BERRY']],
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
     ];
     for (let c = 0; c < 2; c++) {
@@ -2790,32 +2939,11 @@
   function renderUI(now) {
     if (state.mode === 'title') return;
 
-    // hearts
-    for (let i = 0; i < 10; i++) {
-      const hx = 5 + i * 9, hy = 5;
-      const th = (i + 1) * 10;
-      let spr = SPRITES.heartEmpty;
-      if (player.hp >= th) spr = SPRITES.heartFull;
-      else if (player.hp >= th - 5) spr = SPRITES.heartHalf;
-      ctx.drawImage(spr, hx, hy);
-    }
-
-    // cold meter
-    if (player.cold > 1) {
-      const w = 60;
-      ctx.fillStyle = 'rgba(15,22,50,0.75)';
-      ctx.fillRect(5, 14, w + 2, 5);
-      const pulse = player.cold >= 100 ? (Math.sin(now * 10) * 0.3 + 0.7) : 1;
-      ctx.fillStyle = 'rgba(' + Math.round(120 * pulse + 60) + ',' + Math.round(190 * pulse + 30) + ',255,0.95)';
-      ctx.fillRect(6, 15, Math.round(w * player.cold / 100), 3);
-      drawPixelTextShadow(ctx, player.cold >= 100 ? 'FREEZING!' : 'COLD', 70, 14, '#a8dcff', 'rgba(15,22,50,0.8)');
-    }
-
-    // berries: consumable indicator by the hearts, not a core resource
+    // berries: consumable indicator, top-left (health lives on the in-world bar)
     if (inv.berry > 0) {
-      ctx.drawImage(SPRITES.itemBerry, 5, 22);
-      drawPixelTextShadow(ctx, String(inv.berry), 15, 24, '#f4f7ff', 'rgba(15,22,50,0.8)');
-      drawPixelTextShadow(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 24, '#9fb6d8', 'rgba(15,22,50,0.8)');
+      ctx.drawImage(SPRITES.itemBerry, 5, 5);
+      drawPixelTextShadow(ctx, String(inv.berry), 15, 7, '#f4f7ff', 'rgba(15,22,50,0.8)');
+      drawPixelTextShadow(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', 'rgba(15,22,50,0.8)');
     }
 
     // core resources - horizontal row, left of the minimap
@@ -2841,42 +2969,30 @@
     // minimap with day/night ring
     renderMinimap(now);
 
-    // hotbar
+    // tool bar: three infinite tools, keys 1-3 / scroll wheel
     const slotW = 20, gap = 3;
-    const totalW = 4 * slotW + 3 * gap;
+    const totalW = TOOLS.length * slotW + (TOOLS.length - 1) * gap;
     const hx0 = (VIEW_W - totalW) / 2;
     const hy0 = VIEW_H - 26;
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < TOOLS.length; i++) {
       const x = hx0 + i * (slotW + gap);
-      const sel = hotbar === i;
+      const sel = tool === i;
       ctx.fillStyle = sel ? 'rgba(38,48,90,0.9)' : 'rgba(18,24,52,0.8)';
       ctx.fillRect(x, hy0, slotW, slotW);
       ctx.strokeStyle = sel ? '#ffd95c' : '#4a5480';
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, hy0 + 0.5, slotW - 1, slotW - 1);
-      // icon
-      let icon = null;
-      if (i === 0) icon = SPRITES.itemAxe;
-      if (i === 1) icon = SPRITES.spikes;
-      if (i === 2) icon = SPRITES.torch[0];
-      if (i === 3) icon = SPRITES.fire[0];
-      if (i === 0) ctx.drawImage(icon, x + 6, hy0 + 6);
-      else if (i === 2) ctx.drawImage(icon, x + 6, hy0 + 3);
-      else ctx.drawImage(icon, 0, 0, 16, 16, x + 2, hy0 + 2, 16, 16);
-      drawPixelText(ctx, String(i + 1), x + 2, hy0 + 2, sel ? '#ffd95c' : '#8f9cc4');
-      // affordability dot
-      if (i > 0 && !canAfford(BUILDS[i].cost)) {
-        ctx.fillStyle = 'rgba(18,24,52,0.55)';
-        ctx.fillRect(x + 1, hy0 + 1, slotW - 2, slotW - 2);
-      }
+      // 8x8 icons drawn at a crisp 2x so they fill the slot
+      ctx.drawImage(SPRITES[TOOLS[i].icon], x + 2, hy0 + 2, 16, 16);
+      drawPixelTextShadow(ctx, String(i + 1), x + 2, hy0 + 2, sel ? '#ffd95c' : '#8f9cc4', 'rgba(15,22,50,0.8)');
     }
-    // selected build cost
-    if (hotbar > 0) {
-      const b = BUILDS[hotbar];
-      const costTxt = b.name + ': ' + costText(b.cost);
-      const cw = pixelTextWidth(costTxt);
-      drawPixelTextShadow(ctx, costTxt, (VIEW_W - cw) / 2, hy0 - 8,
-        canAfford(b.cost) ? '#cfe0ff' : '#e87a7a', 'rgba(15,22,50,0.8)');
+    // tool name flashes briefly above the bar after switching
+    if (state.toolMsgT > 0) {
+      const name = TOOLS[tool].name;
+      ctx.globalAlpha = Math.min(1, state.toolMsgT * 2);
+      drawPixelTextShadow(ctx, name, (VIEW_W - pixelTextWidth(name)) / 2, hy0 - 8,
+        '#cfe0ff', 'rgba(15,22,50,0.8)');
+      ctx.globalAlpha = 1;
     }
 
     // message
@@ -2906,9 +3022,10 @@
     drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, 96 + bob, '#cfe0ff', 'rgba(15,22,50,0.9)');
 
     const lines = [
-      'WASD  MOVE',
-      'CLICK CHOP / FIGHT / PLACE',
-      '1-4   TOOLS AND BUILDING',
+      'WASD MOVE - SPACE DODGE ROLL',
+      'AXE TREES - PICKAXE STONE AND GOLD',
+      'HOLD CLICK TO DRAW THE BOW',
+      '1-3 OR SCROLL TO SWAP TOOLS',
       'RIGHT CLICK A STUMP TO BUILD',
       'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
@@ -2939,7 +3056,7 @@
   function startGame() {
     SFX.unlock();
     state.mode = 'play';
-    showMsg('GATHER WOOD - CLICK ON TREES TO CHOP', 6);
+    showMsg('GATHER WOOD - CHOP TREES WITH THE AXE', 6);
   }
 
   loadSettings();
@@ -2961,8 +3078,8 @@
   window.DBG = {
     SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
     settings, perf, treeRare,
-    structures, robots, tracers, STRUCTS,
-    placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, tryPlace,
+    structures, robots, tracers, arrows, STRUCTS, TOOLS,
+    placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {
@@ -2979,8 +3096,8 @@
       return o;
     },
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
-    setHotbar: (i) => { hotbar = i; },
-    getHotbar: () => hotbar,
+    setTool: (i) => { tool = i; },
+    getTool: () => tool,
     cam: () => ({ x: camX, y: camY }),
     startGame,
     step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },
