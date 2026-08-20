@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Emberfrost — a browser canvas pixel-art winter survival game. Gather by day, build a camp, keep
-fires lit; raiders pour out of the central gold mine each night, and every night is harder.
+Emberfrost — a browser canvas pixel-art winter survival game. Gather by day with three
+tool-gated tools (bow, axe, pickaxe) and build defenses on stumps; raiders pour out of the
+central gold mine each night, and every night is harder.
 
 ## Keeping this file current
 
@@ -16,7 +17,7 @@ add a new one only when the change introduces a genuinely new subsystem.
 
 Changes worth recording include: a new object type, buildable, ground type, resource, or enemy;
 new or rebound keys and input handling; new state on `state`/`settings`/`player`; a new render
-pass, overlay, or offscreen canvas; a change to the day/night, cold, lighting, or difficulty
+pass, overlay, or offscreen canvas; a change to the day/night, lighting, tool, or difficulty
 formulas; anything that adds a cross-file invariant like `rebuildLights()`; and any change to how
 the game is run or verified. Balance tweaks to existing numbers, sprite pixel edits, and pure
 refactors that preserve the described structure do not need an entry.
@@ -44,11 +45,11 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 Three dev affordances exist for driving the game from outside the browser:
 
 - `window.DBG` (end of [js/game.js](js/game.js)) exposes the live `SEED`, `state`, `player`,
-  `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `objects`, `lights`, `mouse`,
-  `keys`, `settings`, `perf`, `STRUCTS` plus `placeObj`, `spawnRaider`,
+  `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
+  `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`, `spawnRaider`,
   `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
-  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setHotbar`, `clickAction`,
-  `treeRare`, and `step(dt, n)` — which runs `n`
+  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
+  `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, and `step(dt, n)` — which runs `n`
   fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
   deterministically. Use this to stage a scene (place structures, jump `state.day`/`state.time`,
   spawn raiders) instead of playing to reach it.
@@ -75,8 +76,8 @@ globals. Order matters: each file's globals must exist before the next runs.
 `game.js` is one ~2100-line IIFE with no internal module boundaries; it is organized by banner
 comments (`// ---- constants / rng / state / world / actions / raiders / update / render / UI /
 boot`). All game state lives in module-scope singletons: `state`, `settings`, `player`, `inv`,
-`hotbar`, and the arrays `raiders`, `animals`, `drops`, `particles`, `floaters`, `footprints`,
-`lights`.
+`tool` (selected `TOOLS` index), and the arrays `raiders`, `animals`, `arrows`, `drops`,
+`particles`, `floaters`, `footprints`, `lights`.
 
 ### Fixed-resolution pixel rendering
 
@@ -100,7 +101,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 - `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice, `2` mine plaza.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
-  `goldore`, `mine`, `wall`, `spike`, `torch`, `fire`, `turret`, `generator`, `spawner`.
+  `goldore`, `mine`, `wall`, `turret`, `generator`, `spawner`.
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
@@ -142,7 +143,7 @@ any screenshot carries the world it came from.
   before that line runs. Everything that does — `genWorld`, `renderGround`, the panel bakes — is
   further down in boot order.
 
-### Day/night, cold, and the night wave
+### Day/night and the night wave
 
 `DAY_LEN = 110`, `NIGHT_LEN = 55`, so a full `CYCLE` is 165 s. `state.time` runs within the cycle,
 `state.day` increments at wrap. `update()` derives `state.darkness` (0→1) from a hand-written
@@ -153,10 +154,50 @@ Everything else keys off `state.darkness`, not `state.time`:
 - `darkness > 0.65` opens the night wave — `toSpawn = min(22, 3 + (day-1)*2)` raiders that climb
   out of the mine at the world centre, trickled in by `spawnTimer`.
 - `darkness < 0.3` ends it and **deletes every living raider** (`raiders.length = 0`).
-- Cold accrues when `darkness > 0.5` and `warmthAt(player) < 0.15`, and at 100 it drains HP.
+- `darkness < 0.3` is also the only passive heal: slow daylight HP regen in `updatePlay()`.
+  (There is no cold/warmth system — it was removed along with placeable campfires.)
 
 Difficulty scales purely off `state.day`: raider HP `24 + (day-1)*7`, speed, contact damage
 `8 + day`, and wave size. Fresh gold ore respawns at the fixed `oreSpots` each dawn.
+
+### Tools and the bow
+
+The old 4-slot hotbar (axe + placeable spike/torch/campfire) is gone. The player has three
+infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by keys **1–3** or the
+scroll wheel (`selectTool()` flashes the name above the bar via `state.toolMsgT`). The default
+is the axe. Harvesting is **hard-gated** in `hitObject()`: trees need the axe, rock/gold ore
+need the pickaxe; the wrong tool plays `SFX.deny` and floats `NEEDS AXE`/`NEEDS PICKAXE` with
+no damage. Bushes and structures accept either melee tool. Axe and pickaxe still melee raiders
+and animals, but only for `MELEE_DMG` (6) — the bow is the real weapon.
+
+The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
+slows to 55%, facing tracks the mouse, a draw meter renders above the player's health bar),
+and mouseup fires via `fireArrow()` — power scales speed (170–360 px/s) and damage (4–13).
+Arrows live in the `arrows` array, updated in `updatePlay()`: they die on solid tiles, on any
+raider or animal hit (knockback scales with power), or after 0.85 s. They render as short
+velocity-aligned lines in their own pass (using `ex`/`ey`) and never hit robots or structures.
+Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
+(0.9 s) is a full draw.
+
+The selected tool is also drawn **on the player** by `drawHeldTool()` (called from
+`drawPlayer()`): carried at the hand while idle/walking (mirrored via a `scale(-1,1)` transform
+for `left`, drawn *before* the body sprite for `up` so it's occluded, 1px walk bob), swept along
+the same arc as the swing effect during a melee swing, and rotated toward the mouse while the
+bow is drawn — the bow icon fires along −x (arc on the left), so aim rotation is `a + PI`.
+Raiders share the player grids but never get a held tool.
+
+### Dodge roll
+
+**Space** (`tryDodge()`) dashes the player in the held 8-way WASD direction (facing direction
+if nothing is held): `DODGE_SPEED` (215) for `DODGE_T` (0.28 s) ≈ 60 px, with i-frames for the
+whole roll (`player.invuln`). Two charges (`DODGE_CHARGES`), refilling **one at a time** every
+`DODGE_CD` (3.5 s); state lives on `player` as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
+dodgeRegenT/dodgeDustT`. While rolling, movement input, footprints, walk animation, and the
+held tool are suppressed — the roll owns `moveEntity` (still collides with solids) and
+`drawPlayer` swaps to a full 360° sprite spin with two afterimage ghosts trailing the velocity
+plus dust bursts. The charge meter is two cyan pips on a plate directly beneath the overhead
+health bar; the recharging slot fills left-to-right. Death cancels the roll, respawn refills
+charges; overlays (map/settings/wheel/pause) block the input.
 
 ### Wildlife
 
@@ -168,9 +209,10 @@ rabbit picks a new wander it drifts toward the nearest berried bush within 7 til
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
 comes within 26 px, and any axe hit sends either species fleeing directly away from the player
 (`fleeT`). Deaths pay out in `updateAnimal`: rabbits drop 1 berry, deer drop 2-3 gold plus a
-`GOLD!` floater. `swingHit()` checks animals alongside raiders (same 10 damage), animals join the
-y-sorted `draws` pass via `drawAnimal()`, and sprites are side-view only (`dir` is `left|right`).
-They are not shown on the minimap or world map.
+`GOLD!` floater. `swingHit()` checks animals alongside raiders (same `MELEE_DMG`), arrows hit
+them too (and set `fleeT`), animals join the y-sorted `draws` pass via `drawAnimal()`, and
+sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
+map.
 
 ### Base building
 
@@ -178,10 +220,11 @@ Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored 
 screen position (clamped to stay on-screen): up = wall, right = turret, down = generator, left =
 spawner (`STRUCT_ORDER`); release over a segment to build, release in the 10 px deadzone to
 cancel. Right-clicking a **finished** structure opens a **manage wheel**: up = upgrade, down =
-demolish, and (spawners only) right = mode toggle. All the data lives in the `STRUCTS` table next
-to `BUILDS`: three tiers per type (wood → stone → gold) with `cost`, `hp`, `buildT`, and
-per-type stats. `tiers[0]` is what the wheel builds; upgrading pays the next tier's cost and
-re-runs a shorter construction. Gold is spent only here — it is the tier-3 cost.
+demolish, and (spawners only) right = mode toggle. This wheel is the **only** way to build —
+there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers per
+type (wood → stone → gold) with `cost`, `hp`, `buildT`, and per-type stats. `tiers[0]` is what
+the wheel builds; upgrading pays the next tier's cost and re-runs a shorter construction. Gold
+is spent only here — it is the tier-3 cost.
 
 Mechanics, all in `game.js`:
 
@@ -191,8 +234,7 @@ Mechanics, all in `game.js`:
   `renderWheel()` so hover math and pixels can never disagree.
 - `placeStruct()` consumes the stump (the tile is **empty** after demolition — stumps are a
   finite site resource), pays `tiers[0].cost`, and drops the object into `building` state at 30%
-  hp. It bypasses `placementValid()` on purpose but keeps the 60 px reach and the
-  don't-entomb-yourself AABB check.
+  hp. It enforces the 60 px reach and the don't-entomb-yourself AABB check.
 - **Construction**: `updateStructures()` (called from `updatePlay`, iterating only the
   `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
   shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
@@ -204,10 +246,10 @@ Mechanics, all in `game.js`:
   seconds as a physical drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
   keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
   `removeStruct()` kills its robots with it.
-- Demolish and player-axe destruction refund **50% of the cumulative cost across tiers**
+- Demolish and player melee destruction refund **50% of the cumulative cost across tiers**
   (`cumulativeCost`); raider destruction refunds nothing. `canAfford`/`pay`/`costText` are
   generic over every `inv` key.
-- None of the four structures emits light — `rebuildLights()` still only knows `fire`/`torch`.
+- None of the four structures emits light (see [Lighting](#lighting)).
 
 ### Robots
 
@@ -229,23 +271,40 @@ player's axe does **not** hit them (no friendly fire). Their SFX are gated on pl
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
 unit, always visible: the player (in `drawPlayer`, play mode only), raiders (in `drawRaider`,
 replacing the old damaged-only sliver), animals (in `drawAnimal`), and robots (in `drawRobot`).
+The player's bar is the **only** player health display — the old top-left Minecraft-style hearts
+were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
+drawn, a second small meter (white → gold at full draw) renders just above the player's bar.
 
-### Lighting and warmth are the same list
+### Damage feedback
 
-`lights` is rebuilt from scratch by `rebuildLights()`, which scans all 36,864 tiles for `fire` and
-`torch`. Each entry has `r` (visual radius) and `warm` (gameplay warmth radius). **Any code that
-adds or removes a light-emitting object must call `rebuildLights()`** or both the glow and the
-warmth go stale. `warmthAt(x, y)` is the gameplay half; `renderLighting()` punches the same lights
-out of a dark overlay on the offscreen `lightCv` using `destination-out`, then `drawWarmGlows()`
-adds `multiply` colour grading plus a `lighter` core.
+`addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`
+array: **gold** for damage the player's side deals (melee, arrows, turret shots, robot guard
+melee), **red `-N`** for damage taken (`damagePlayer`, raider swats on robots). Numbers of 10+
+render at 2× scale, and each gets a small random x-drift so rapid repeat hits stay readable.
+Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floaters render pass;
+plain `addFloater` entries default to the old look. Units also flash white on hit via
+`drawSpriteFlash` (0.8-alpha overlay). Raider hits on **structures** intentionally get no
+numbers — a multi-raider siege would spam them; structures show flash, shake, and damage
+cracks instead.
+
+### Lighting
+
+**Nothing currently emits light.** Campfires and torches were removed with the old hotbar, so
+`rebuildLights()` just empties the `lights` array — but the whole pipeline is kept intact as
+the single rebuild point for any future glowing object: `renderLighting()` punches `lights`
+entries (`{x, y, r, warm}`) out of a dark overlay on the offscreen `lightCv` using
+`destination-out`, then `drawWarmGlows()` adds `multiply` colour grading plus a `lighter` core.
+**Any code that adds or removes a light-emitting object must call `rebuildLights()`.** The only
+night light today is the player's personal glow (radius 44) baked into `renderLighting()`.
+There is no warmth/cold system anymore — night darkness is purely visual pressure plus raiders.
 
 ### Render pass order
 
-`render()` runs: ground blit → footprints → flat objects (spikes, stumps) → build ghost → item
-drops → **y-sorted `draws` array** (tall objects + player + raiders + animals + robots, sorted by
-feet Y) → selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the
-hovered stump / finished structure, or the wheel's target) → construction progress bars →
-particles → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
+`render()` runs: ground blit → footprints → flat objects (stumps) → item drops → **y-sorted
+`draws` array** (tall objects + player + raiders + animals + robots, sorted by feet Y) →
+selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
+stump / finished structure, or the wheel's target) → construction progress bars → particles →
+arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
 map/settings/title/death overlays. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
@@ -267,8 +326,9 @@ after the panel is rebuilt.
 
 ### Death is not game over
 
-`die()` sets `mode = 'dead'`, keeps `ceil(60%)` of each resource, and after 2.6 s `respawn()` puts
-the player next to the nearest surviving campfire (world centre if none). `state.mode` is
+`die()` sets `mode = 'dead'`, drops any bow draw, keeps `ceil(60%)` of each resource, and after
+2.6 s `respawn()` puts the player back at the original spawn pocket (`playerSpawn`, never the
+raider-spewing world centre). `state.mode` is
 `title | play | dead`; `updatePlay()` is skipped entirely while paused, dead, or with the map or
 settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx) keeps running.
 
@@ -282,8 +342,8 @@ itself against.
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
 unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
 it in the extreme top-right corner, drawn just before the seed tag so it survives every overlay,
-and turns red below 45. The elapsed clock in `renderMinimap()` nudges itself left when the fps
-readout is on so the two never collide.
+and turns red below 45. The elapsed clock in `renderMinimap()` sits centered beneath the
+minimap, so it never collides with the fps readout.
 
 ### Audio
 
@@ -301,7 +361,9 @@ trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked wit
 `WPAL_STONE` / `WPAL_GOLD` into `SPRITES[type][tier]` arrays — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
-and the robot is the old `imp1`/`imp2` grids re-baked with the wooden `ROBPAL`. Wildlife is
+and the robot is the old `imp1`/`imp2` grids re-baked with the wooden `ROBPAL`. The tool-bar
+icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL` and are drawn at a crisp
+2× in `renderUI()`. Wildlife is
 side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames
 sharing a `deerHead` upper body) — and left variants are `flipH` of the right-facing grids.
 Anything drawn through `drawSpriteFlash` must stay within 32×32.
@@ -313,15 +375,14 @@ else will corrupt the grids.
 ## Checklists for common changes
 
 **Adding an object type** — touch all of: `isSolidTile()` (if it blocks), `hitObject()` (what a
-swing does to it), the flat pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour
-table, `buildWorldMapImg()`'s colour table, and `rebuildLights()` if it glows. The two map colour
+swing does to it — including which tool is allowed, see the gating block at its top), the flat
+pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
+`buildWorldMapImg()`'s colour table, and `rebuildLights()` if it glows. The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
-**Adding a hotbar buildable** — append to `BUILDS` (index = hotbar slot; 4 slots are hard-coded
-in the `1`–`4` key handler, the wheel modulo, and the hotbar loop in `renderUI()`), add a sprite,
-add its icon in the hotbar loop, add it to the ghost-preview sprite lookup in `render()`, and
-give it a branch in `hitObject()` and in `updateRaider()`'s blocked-tile attack check.
-`canAfford`/`pay` are generic over `inv` keys.
+**Adding a tool** — append to `TOOLS` (order = bar slot; the `1`–`3` key handler and the scroll
+modulo are generic over `TOOLS.length`), add an 8×8 icon sprite and name it in the entry's
+`icon` field, and give its `key` behavior in `clickAction()` / `hitObject()`'s gating.
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
@@ -332,19 +393,21 @@ refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 **Adding a ground type** — extend `renderGround()`, `updateMinimap()`, and `buildWorldMapImg()`,
 and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule.
 
-**Tuning balance** — the numbers live inline: `BUILDS` and `STRUCTS` costs/HP/build times (plus
-turret range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat formulas,
-the `state.day` terms in `updateRaider()`, robot melee in `updateRobot()`, cold rates in
-`updatePlay()`, `TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness
-ramp in `update()`.
+**Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
+range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat formulas, the
+`state.day` terms in `updateRaider()`, robot melee in `updateRobot()`, `MELEE_DMG` and
+`BOW_CHARGE` in the constants banner, the arrow speed/damage formulas in `fireArrow()`,
+`TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness ramp in
+`update()`.
 
 ## Known drift
 
 - [README.md](README.md) is out of date: it says **M** mutes and calls the enemies "frost imps"
   that spawn from darkness. The code binds **M** to the world map and **N** to mute, and the
   enemies are player-shaped `raiders` emerging from the central gold mine. It also predates the
-  4-slot hotbar and the whole base-building layer. (`SPRITES.imp` is still baked with its old ice
-  palette and unreferenced, but its *grids* are now the robot sprite — don't delete them.)
-- `state.lastFire` is assigned in `tryPlace()` and never read.
-- `updateRaider()` checks for a blocking `torch`, but `torch` is not in `isSolidTile()`, so that
-  branch is unreachable — torches are walked over rather than attacked.
+  base-building layer, the three-tool bar, and the removal of cold/campfires. (`SPRITES.imp` is
+  still baked with its old ice palette and unreferenced, but its *grids* are now the robot
+  sprite — don't delete them.)
+- `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
+  unreferenced since the buildables/HUD removal — kept in case those features return (the heart
+  grids also carry the file's mangled-byte repair).
