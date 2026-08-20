@@ -41,8 +41,10 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 Three dev affordances exist for driving the game from outside the browser:
 
 - `window.DBG` (end of [js/game.js](js/game.js#L2065)) exposes the live `SEED`, `state`, `player`,
-  `inv`, `raiders`, `objects`, `lights`, `mouse`, `keys` plus `placeObj`, `spawnRaider`,
-  `startGame`, `setHotbar`, `clickAction`, `treeRare`, and `step(dt, n)` — which runs `n`
+  `inv`, `raiders`, `animals`, `objects`, `lights`, `mouse`, `keys`, `settings`, `perf` plus
+  `placeObj`, `spawnRaider`,
+  `spawnAnimal(kind, x, y)`, `startGame`, `setHotbar`, `clickAction`, `treeRare`, and
+  `step(dt, n)` — which runs `n`
   fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
   deterministically. Use this to stage a scene (place structures, jump `state.day`/`state.time`,
   spawn raiders) instead of playing to reach it.
@@ -69,14 +71,24 @@ globals. Order matters: each file's globals must exist before the next runs.
 `game.js` is one ~2100-line IIFE with no internal module boundaries; it is organized by banner
 comments (`// ---- constants / rng / state / world / actions / raiders / update / render / UI /
 boot`). All game state lives in module-scope singletons: `state`, `settings`, `player`, `inv`,
-`hotbar`, and the arrays `raiders`, `drops`, `particles`, `floaters`, `footprints`, `lights`.
+`hotbar`, and the arrays `raiders`, `animals`, `drops`, `particles`, `floaters`, `footprints`,
+`lights`.
 
 ### Fixed-resolution pixel rendering
 
-The canvas is always 480×270 internally (`VIEW_W`/`VIEW_H`). `fitCanvas()` picks an integer CSS
-scale so pixels stay square. **All game logic and drawing works in the 480×270 space** — mouse
-coords are divided by `scale` on the way in. Round positions when drawing (`Math.round`) or
+The canvas is always 480×270 internally (`VIEW_W`/`VIEW_H`). `fitCanvas()` picks an integer
+**device**-pixel scale (via `devicePixelRatio`) so game pixels land exactly on device pixels even
+under fractional OS display scaling (125%/150% Windows) — `scale` itself is therefore fractional
+in CSS px and must not be floored. **All game logic and drawing works in the 480×270 space** —
+mouse coords are divided by `scale` on the way in. Round positions when drawing (`Math.round`) or
 sprites smear across subpixels.
+
+`render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
+while moving entities (player, raiders, animals, drops, particles, floaters, swing arc) subtract
+the exact `ex`/`ey` and round once at the end. Screen pos must be `round(world - camera)` with a
+**single** rounding — rounding camera and entity separately makes their boundary crossings
+disagree and the sprite vibrates ±1px against the background while walking (measured 48 flips/s),
+which reads as ghosting on high-refresh displays. New entity draw code must use `ex`/`ey`.
 
 ### The tile world
 
@@ -135,6 +147,26 @@ Everything else keys off `state.darkness`, not `state.time`:
 Difficulty scales purely off `state.day`: raider HP `24 + (day-1)*7`, speed, contact damage
 `8 + day`, and wave size. Fresh gold ore respawns at the fixed `oreSpots` each dawn.
 
+### Wildlife
+
+`animals` holds passive fauna spawned once at boot by `spawnAnimals()` (called right after
+`genWorld()`, so its `rng()` draws don't reshuffle the world layout): 8 rabbits (8 HP, biased to
+spawn near berry bushes) and 5 deer (24 HP). Neither reproduces or respawns, and unlike raiders
+they survive dawn. Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
+rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
+(`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
+comes within 26 px, and any axe hit sends either species fleeing directly away from the player
+(`fleeT`). Deaths pay out in `updateAnimal`: rabbits drop 1 berry, deer drop 2-3 gold plus a
+`GOLD!` floater. `swingHit()` checks animals alongside raiders (same 10 damage), animals join the
+y-sorted `draws` pass via `drawAnimal()`, and sprites are side-view only (`dir` is `left|right`).
+They are not shown on the minimap or world map.
+
+### Overhead health bars
+
+`drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
+unit, always visible: the player (in `drawPlayer`, play mode only), raiders (in `drawRaider`,
+replacing the old damaged-only sliver), and animals (in `drawAnimal`).
+
 ### Lighting and warmth are the same list
 
 `lights` is rebuilt from scratch by `rebuildLights()`, which scans all 36,864 tiles for `fire` and
@@ -147,7 +179,7 @@ adds `multiply` colour grading plus a `lighter` core.
 ### Render pass order
 
 `render()` runs: ground blit → footprints → flat objects (spikes, stumps) → build ghost → item
-drops → **y-sorted `draws` array** (tall objects + player + raiders, sorted by feet Y) → particles
+drops → **y-sorted `draws` array** (tall objects + player + raiders + animals, sorted by feet Y) → particles
 → swing arc → floaters → `renderLighting` → `renderWeather` → `renderVignettes` → `renderUI` →
 map/settings/title/death overlays. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
@@ -176,9 +208,16 @@ settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx)
 
 ### Settings
 
-`settings` (`volume`, `mmR`, `shake`, `muted`) persists to `localStorage['emberfrost.settings']`.
-`applyMinimapSize()` must be called after changing `mmR` — it recomputes `MM_R`/`MM_CX`/`MM_CY`,
-which the resource row in `renderUI()` also positions itself against.
+`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`) persists to
+`localStorage['emberfrost.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
+it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
+itself against.
+
+`settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
+unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
+it in the extreme top-right corner, drawn just before the seed tag so it survives every overlay,
+and turns red below 45. The elapsed clock in `renderMinimap()` nudges itself left when the fps
+readout is on so the two never collide.
 
 ### Audio
 
@@ -191,7 +230,10 @@ first click needs to call it too.
 Sprites are literal ASCII grids paired with a palette object mapping character → hex (or `null`
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the player and raiders share the exact same grids with different
-palettes (`PPAL` vs `RDPAL`), so a pose edit changes both.
+palettes (`PPAL` vs `RDPAL`), so a pose edit changes both. Wildlife is side-view only — rabbits
+are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames sharing a `deerHead` upper
+body) — and left variants are `flipH` of the right-facing grids. Anything drawn through
+`drawSpriteFlash` must stay within 32×32.
 
 `js/sprites.js` has a UTF-8 BOM and one heart row that repairs a mangled byte via
 `'...'.replace('о', 'g')`. Preserve the file's encoding when editing — re-saving it as something

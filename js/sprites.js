@@ -432,6 +432,106 @@
     '..............',
   ];
 
+  // ---------------------------------------------------------------- rabbit
+  // Winter hare, side view facing right: white coat, cool blue shading,
+  // long ears laid slightly back, pink inner ear.
+  const RBPAL = {
+    '.': null,
+    'o': '#2e2a3a', // outline
+    'w': '#eef2fa', // fur
+    'W': '#ffffff', // fur highlight
+    'd': '#c9d0e2', // fur shade
+    'D': '#a4adc6', // fur deep shade
+    'p': '#e0a3a8', // inner ear
+    'e': '#211d2b', // eye
+    'n': '#b97880', // nose
+  };
+
+  const rabbitSit = [
+    '.....oo.....',
+    '....owdo.oo.',
+    '....owdoowpo',
+    '....owwwwwpo',
+    '...owwwwwwwo',
+    '..owwwwwWewo',
+    '.owwwwwwwWwn',
+    '.owwwwwwwWo.',
+    'oWwwwwwwdwo.',
+    'oDdwwwddwwo.',
+    '.odo...odo..',
+  ];
+  const rabbitHop = [
+    '..ooo.........',
+    '.owwwoo.......',
+    '..oowwwoo.....',
+    '...oowwwwwoo..',
+    '.oowwwwwwwwwo.',
+    'owwwwwwwwWewo.',
+    'oWwwwwwwwwwWwn',
+    'oDdwwwwddwwwo.',
+    '.odo.odo..odo.',
+  ];
+
+  // ---------------------------------------------------------------- deer
+  // Side view facing right: warm winter coat, cream belly and throat,
+  // white rump patch, small antlers, dark slender legs.
+  const DEPAL = {
+    '.': null,
+    'o': '#2f2114', // outline
+    'b': '#8a6847', // coat mid
+    'B': '#a5825a', // coat light
+    'd': '#6d4f34', // coat dark
+    'D': '#523a26', // leg dark
+    'c': '#e7d9bc', // cream belly / throat
+    'a': '#b99f78', // antler
+    'A': '#d8c39a', // antler light
+    'e': '#1d1710', // eye
+    'n': '#241a12', // nose
+    'h': '#241a12', // hoof
+    'w': '#f4f1e4', // white rump / tail
+  };
+
+  const deerHead = [
+    '................a...a.....',
+    '................aA..aA....',
+    '.................a...a....',
+    '..............aA.a..aA....',
+    '...............oaaoaao....',
+    '...............obabao.....',
+    '.............odbBBbebo....',
+    '...............obBbbbno...',
+    '...............odbbcoo....',
+    '...............odbbco.....',
+    '...............odbco......',
+    '....oooooooooooodbco......',
+    '...owwdbbbbbbbbbbbBco.....',
+    '..owwbbbbbbbbbbbbbBBco....',
+    '..owdbbbbbbbbbbbbbBco.....',
+    '..odbbbbbbbbbbbbbbco......',
+    '...oddbccccccccccdo.......',
+  ];
+  const deerStand = deerHead.concat([
+    '...oddo......oddo.........',
+    '....odo......odo..........',
+    '....oDo......oDo..........',
+    '....oDo......oDo..........',
+    '....oho......oho..........',
+  ]);
+  const deerWalkA = deerHead.concat([
+    '...oddo......oddo.........',
+    '...odo........odo.........',
+    '..oDo..........oDo........',
+    '..oDo..........oDo........',
+    '..oho..........oho........',
+  ]);
+  const deerWalkB = deerHead.concat([
+    '...oddo......oddo.........',
+    '.....odo....odo...........',
+    '......oDo....oDo..........',
+    '......oDo....oDo..........',
+    '......oho....oho..........',
+  ]);
+
   // ---------------------------------------------------------------- wall
   const WPAL = {
     '.': null,
@@ -750,6 +850,14 @@
     mine: bake(mine, MIPAL),
     bush: bake(bush, BPAL),
     bushEmpty: bake(bushEmpty, BPAL),
+    rabbit: {
+      right: [bake(rabbitSit, RBPAL), bake(rabbitHop, RBPAL), bake(rabbitSit, RBPAL)],
+      left: [flipH(bake(rabbitSit, RBPAL)), flipH(bake(rabbitHop, RBPAL)), flipH(bake(rabbitSit, RBPAL))],
+    },
+    deer: {
+      right: [bake(deerStand, DEPAL), bake(deerWalkA, DEPAL), bake(deerWalkB, DEPAL)],
+      left: [flipH(bake(deerStand, DEPAL)), flipH(bake(deerWalkA, DEPAL)), flipH(bake(deerWalkB, DEPAL))],
+    },
     imp: [bake(imp1, IPAL), bake(imp2, IPAL)],
     wall: bake(wall, WPAL),
     spikes: bake(spikes, SPAL),
