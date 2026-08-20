@@ -32,6 +32,9 @@ missing one, because future sessions act on it without re-verifying.
 node serve.js          # static server + screenshot sink on http://localhost:8471
 ```
 
+The port honors `PORT` in the environment (default 8471), and `.claude/launch.json` sets
+`autoPort: true`, so a second session can preview alongside an already-running server.
+
 There is no build step, no package manager, no dependencies, no test suite, and no linter.
 Editing a `js/*.js` file and reloading the page is the whole dev loop (`Cache-Control: no-store`
 is set, so a plain refresh always picks up changes). `.claude/launch.json` runs the same server.
@@ -40,11 +43,12 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 
 Three dev affordances exist for driving the game from outside the browser:
 
-- `window.DBG` (end of [js/game.js](js/game.js#L2065)) exposes the live `SEED`, `state`, `player`,
-  `inv`, `raiders`, `animals`, `objects`, `lights`, `mouse`, `keys`, `settings`, `perf` plus
-  `placeObj`, `spawnRaider`,
-  `spawnAnimal(kind, x, y)`, `startGame`, `setHotbar`, `clickAction`, `treeRare`, and
-  `step(dt, n)` — which runs `n`
+- `window.DBG` (end of [js/game.js](js/game.js)) exposes the live `SEED`, `state`, `player`,
+  `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `objects`, `lights`, `mouse`,
+  `keys`, `settings`, `perf`, `STRUCTS` plus `placeObj`, `spawnRaider`,
+  `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
+  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setHotbar`, `clickAction`,
+  `treeRare`, and `step(dt, n)` — which runs `n`
   fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
   deterministically. Use this to stage a scene (place structures, jump `state.day`/`state.time`,
   spawn raiders) instead of playing to reach it.
@@ -96,9 +100,16 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 - `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice, `2` mine plaza.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
-  `goldore`, `mine`, `wall`, `spike`, `torch`, `fire`.
+  `goldore`, `mine`, `wall`, `spike`, `torch`, `fire`, `turret`, `generator`, `spawner`.
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
-  `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild).
+  `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
+  the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
+- `wall`, `turret`, `generator`, `spawner` are the **stump-built tiered structures** (see
+  [Base building](#base-building)). Each carries `{ tier: 0|1|2, maxHp, building, buildT,
+  buildTotal, dustT }` plus per-type fields (turret `cd`; generator `payT`; spawner `mode`,
+  `bots`, `respawnT`), and every live one is also referenced from the module-scope `structures`
+  array so per-frame ticks never scan the 36k grid. Stumps are **consumable build anchors**:
+  building on one replaces it, and demolition/destruction leaves the tile empty, not a stump.
 - The 2×2 `mine` occupies four tiles that each carry a `part` index; only `part === 0` is drawn.
 - Every `tree` carries `rare`, set at worldgen from `treeRare(tx, ty)`: a `hash2` roll gives each
   tree a `TREE_RARE_CHANCE` (8%) shot at a bonus resource — `gold` for the scarcer ~30% of that
@@ -161,11 +172,63 @@ comes within 26 px, and any axe hit sends either species fleeing directly away f
 y-sorted `draws` pass via `drawAnimal()`, and sprites are side-view only (`dir` is `left|right`).
 They are not shown on the minimap or world map.
 
+### Base building
+
+Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
+screen position (clamped to stay on-screen): up = wall, right = turret, down = generator, left =
+spawner (`STRUCT_ORDER`); release over a segment to build, release in the 10 px deadzone to
+cancel. Right-clicking a **finished** structure opens a **manage wheel**: up = upgrade, down =
+demolish, and (spawners only) right = mode toggle. All the data lives in the `STRUCTS` table next
+to `BUILDS`: three tiers per type (wood → stone → gold) with `cost`, `hp`, `buildT`, and
+per-type stats. `tiers[0]` is what the wheel builds; upgrading pays the next tier's cost and
+re-runs a shorter construction. Gold is spent only here — it is the tier-3 cost.
+
+Mechanics, all in `game.js`:
+
+- `state.wheel` (`{kind:'build'|'manage', tx, ty, seg}`) is the open wheel; ESC/M/settings/death
+  close it, left-click is swallowed while it's open, and the game **keeps running** — opening the
+  wheel mid-night is deliberate pressure. `wheelLayout()` is shared by `resolveWheel()` and
+  `renderWheel()` so hover math and pixels can never disagree.
+- `placeStruct()` consumes the stump (the tile is **empty** after demolition — stumps are a
+  finite site resource), pays `tiers[0].cost`, and drops the object into `building` state at 30%
+  hp. It bypasses `placementValid()` on purpose but keeps the 60 px reach and the
+  don't-entomb-yourself AABB check.
+- **Construction**: `updateStructures()` (called from `updatePlay`, iterating only the
+  `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
+  shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
+  lattice, and completion fires a particle burst + `SFX.place` + screen shake. A yellow progress
+  bar renders above every site. Sites are solid and raider-attackable from placement.
+- **Turret**: re-scans `raiders` for the nearest live target in range every shot (no stored
+  refs, so the dawn wipe can't dangle); instant hit, gold tracer line pushed to `tracers`,
+  knockback. **Generator**: pays 1 of its tier's resource (`wood`/`stone`/`gold`) every `period`
+  seconds as a physical drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
+  keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
+  `removeStruct()` kills its robots with it.
+- Demolish and player-axe destruction refund **50% of the cumulative cost across tiers**
+  (`cumulativeCost`); raider destruction refunds nothing. `canAfford`/`pay`/`costText` are
+  generic over every `inv` key.
+- None of the four structures emits light — `rebuildLights()` still only knows `fire`/`torch`.
+
+### Robots
+
+`robots` holds the spawner-owned wooden units (re-baked `imp` grids, front-facing, 2 frames).
+`updateRobot()` mirrors the animal state machine plus jobs, driven live by the owning spawner's
+`mode`: **gather** — pick the nearest tree/rock/goldore within 8 tiles of the spawner
+(`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
+`carry` pouch (tree-fall leaves a stump and pays the rare bonus, exactly like `hitObject` minus
+the drops), and walk home to deposit into `inv` with floaters at 3+ carried; **guard** — chase
+and melee (5 dmg / 0.7 s) any raider within 5.5 tiles of the spawner, else loiter near home.
+Raiders swat back for `8 + day` in `updateRaider`. Robots use `moveEntity` with the raider
+jitter idiom, abandon a target after ~5 s stuck, survive dawn, die with their spawner, and are
+reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar; the
+player's axe does **not** hit them (no friendly fire). Their SFX are gated on player proximity
+(`nearPlayer`) so a remote base doesn't spam audio.
+
 ### Overhead health bars
 
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
 unit, always visible: the player (in `drawPlayer`, play mode only), raiders (in `drawRaider`,
-replacing the old damaged-only sliver), and animals (in `drawAnimal`).
+replacing the old damaged-only sliver), animals (in `drawAnimal`), and robots (in `drawRobot`).
 
 ### Lighting and warmth are the same list
 
@@ -179,8 +242,11 @@ adds `multiply` colour grading plus a `lighter` core.
 ### Render pass order
 
 `render()` runs: ground blit → footprints → flat objects (spikes, stumps) → build ghost → item
-drops → **y-sorted `draws` array** (tall objects + player + raiders + animals, sorted by feet Y) → particles
-→ swing arc → floaters → `renderLighting` → `renderWeather` → `renderVignettes` → `renderUI` →
+drops → **y-sorted `draws` array** (tall objects + player + raiders + animals + robots, sorted by
+feet Y) → selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the
+hovered stump / finished structure, or the wheel's target) → construction progress bars →
+particles → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
+`renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
 map/settings/title/death overlays. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
@@ -230,10 +296,15 @@ first click needs to call it too.
 Sprites are literal ASCII grids paired with a palette object mapping character → hex (or `null`
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the player and raiders share the exact same grids with different
-palettes (`PPAL` vs `RDPAL`), so a pose edit changes both. Wildlife is side-view only — rabbits
-are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames sharing a `deerHead` upper
-body) — and left variants are `flipH` of the right-facing grids. Anything drawn through
-`drawSpriteFlash` must stay within 32×32.
+palettes (`PPAL` vs `RDPAL`), so a pose edit changes both. The tiered structures use the same
+trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked with `WPAL` /
+`WPAL_STONE` / `WPAL_GOLD` into `SPRITES[type][tier]` arrays — a grid edit changes all three
+tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
+construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
+and the robot is the old `imp1`/`imp2` grids re-baked with the wooden `ROBPAL`. Wildlife is
+side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames
+sharing a `deerHead` upper body) — and left variants are `flipH` of the right-facing grids.
+Anything drawn through `drawSpriteFlash` must stay within 32×32.
 
 `js/sprites.js` has a UTF-8 BOM and one heart row that repairs a mangled byte via
 `'...'.replace('о', 'g')`. Preserve the file's encoding when editing — re-saving it as something
@@ -246,25 +317,34 @@ swing does to it), the flat pass or the `draws` y-sort in `render()`, `updateMin
 table, `buildWorldMapImg()`'s colour table, and `rebuildLights()` if it glows. The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
-**Adding a buildable** — append to `BUILDS` (index = hotbar slot; 5 slots are hard-coded in the
-`1`–`5` key handler, the wheel modulo, and the hotbar loop in `renderUI()`), add a sprite, add its
-icon in the hotbar loop, add it to the ghost-preview sprite lookup in `render()`, give it a branch
-in `hitObject()` and in `updateRaider()`'s blocked-tile attack check, and note that
-`canAfford`/`pay` only understand `wood` and `stone`.
+**Adding a hotbar buildable** — append to `BUILDS` (index = hotbar slot; 4 slots are hard-coded
+in the `1`–`4` key handler, the wheel modulo, and the hotbar loop in `renderUI()`), add a sprite,
+add its icon in the hotbar loop, add it to the ghost-preview sprite lookup in `render()`, and
+give it a branch in `hitObject()` and in `updateRaider()`'s blocked-tile attack check.
+`canAfford`/`pay` are generic over `inv` keys.
+
+**Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
+`STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
+sprite array, entries in `isSolidTile()`, both map colour tables, and a functional tick branch in
+`updateStructures()`. `hitObject()`, the raider attack check, the draws pass, construction, and
+refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 
 **Adding a ground type** — extend `renderGround()`, `updateMinimap()`, and `buildWorldMapImg()`,
 and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule.
 
-**Tuning balance** — the numbers live inline: `BUILDS` costs/HP, `spawnRaider()` stat formulas,
-the `state.day` terms in `updateRaider()`, cold rates in `updatePlay()`, `TREE_RARE_CHANCE` and
-the gold/stone split in `treeRare()`, and the darkness ramp in `update()`.
+**Tuning balance** — the numbers live inline: `BUILDS` and `STRUCTS` costs/HP/build times (plus
+turret range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat formulas,
+the `state.day` terms in `updateRaider()`, robot melee in `updateRobot()`, cold rates in
+`updatePlay()`, `TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness
+ramp in `update()`.
 
 ## Known drift
 
 - [README.md](README.md) is out of date: it says **M** mutes and calls the enemies "frost imps"
   that spawn from darkness. The code binds **M** to the world map and **N** to mute, and the
-  enemies are player-shaped `raiders` emerging from the central gold mine. `SPRITES.imp` is still
-  baked but no longer referenced anywhere in `game.js`.
+  enemies are player-shaped `raiders` emerging from the central gold mine. It also predates the
+  4-slot hotbar and the whole base-building layer. (`SPRITES.imp` is still baked with its old ice
+  palette and unreferenced, but its *grids* are now the robot sprite — don't delete them.)
 - `state.lastFire` is assigned in `tryPlace()` and never read.
 - `updateRaider()` checks for a blocking `torch`, but `torch` is not in `isSolidTile()`, so that
   branch is unreachable — torches are walked over rather than attacked.

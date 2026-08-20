@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = __dirname;
+const PORT = +(process.env.PORT || 8471);
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.png': 'image/png', '.json': 'application/json',
@@ -32,4 +33,4 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
-}).listen(8471, () => console.log('serving on http://localhost:8471'));
+}).listen(PORT, () => console.log('serving on http://localhost:' + PORT));

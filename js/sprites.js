@@ -542,6 +542,36 @@
     'w': '#eef4fb',
     'W': '#ffffff',
     's': '#c9dcee',
+    'k': '#3a4056', // iron fitting dark
+    'K': '#5c6884', // iron fitting light
+    'e': '#ffd95c', // glow
+  };
+  // stone + gold tier variants: same grids, remapped material hues
+  const WPAL_STONE = {
+    '.': null,
+    'o': '#2a3040',
+    'u': '#8b93a8',
+    'U': '#a8b0c4',
+    'v': '#666d84',
+    'w': '#eef4fb',
+    'W': '#ffffff',
+    's': '#c9dcee',
+    'k': '#3a4056',
+    'K': '#5c6884',
+    'e': '#8fd8ff',
+  };
+  const WPAL_GOLD = {
+    '.': null,
+    'o': '#6b4a1e',
+    'u': '#d8a850',
+    'U': '#f2cc6a',
+    'v': '#b9884f',
+    'w': '#fff2c0',
+    'W': '#ffffff',
+    's': '#c9dcee',
+    'k': '#4a3a26',
+    'K': '#8a6a3a',
+    'e': '#fff2c0',
   };
 
   const wall = [
@@ -562,6 +592,141 @@
     'ovvÐ¾.ovvoovvÐ¾.vÐ¾'.replace(/Ð¾/g, 'o'),
     'ssssssssssssssss',
   ];
+
+  // ------------------------------------------------- tiered structures
+  // One 16x16 grid per building, baked with WPAL / WPAL_STONE / WPAL_GOLD.
+  const turret = [
+    '................',
+    '.....okkko......',
+    '....okKKKko.....',
+    '...okKuuKkkkkko.',
+    '...okKueKkkkkKo.',
+    '...okKuuKkkkkko.',
+    '....okKKKko.....',
+    '.....okkko......',
+    '.....ouUvo......',
+    '.....ouUvo......',
+    '....oouUvoo.....',
+    '....ouuUUvo.....',
+    '...oouuUUvoo....',
+    '...ouuuUUuvo....',
+    '...ovvvvvvvvo...',
+    '..ssssssssssss..',
+  ];
+  const generator = [
+    '................',
+    '......kk........',
+    '.....okko.......',
+    '..oooooooooooo..',
+    '.ouUUUUUUUUUUvo.',
+    '.ouKkkKuuKkkKvo.',
+    '.ouKuuKuuKuuKvo.',
+    '.ouKkkKeeKkkKvo.',
+    '.ouuuuuuuuuuuvo.',
+    '.ouvkkkkkkkkvvo.',
+    '.ouvkKKKKKKkvvo.',
+    '.ouvkkkkkkkkvvo.',
+    '.ovuuuuuuuuuuvo.',
+    '.ovvvvvvvvvvvvo.',
+    '.oooooooooooooo.',
+    '.ssssssssssssss.',
+  ];
+  const spawner = [
+    '................',
+    '......oooo......',
+    '....ooUUUUoo....',
+    '...oUUwwwwUUo...',
+    '..oUuuUUUUuuUo..',
+    '..ouuUUUUUUuuo..',
+    '.ouuUUUUUUUUuuo.',
+    '.ouuUUookoUUuuo.',
+    '.ouuUUokekoUUuo.',
+    '.ouuUuookoUuuuo.',
+    '.ovuuookkkoouvo.',
+    '.ovuookkkkkouvo.',
+    '.ovuokkkkkkovvo.',
+    '.ovvokkkkkkovvo.',
+    '.oooooooooooooo.',
+    '.ssssssssssssss.',
+  ];
+
+  // Construction scaffolding, shared by every building. Stage 3 is a mostly
+  // transparent lattice drawn over the finished sprite.
+  const SCPAL = {
+    '.': null,
+    'o': '#3c2a1e',
+    'u': '#8a6142',
+    'U': '#a3794f',
+    'v': '#6b4a30',
+    's': '#c9dcee',
+  };
+  const scaffold1 = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '..o..........o..',
+    '..u..........u..',
+    '..u..........u..',
+    '..v..........v..',
+    '..u..........u..',
+    '..v..........v..',
+    '..u...oooo...u..',
+    '..v...uUUu...v..',
+    '..u..uUuuUu..u..',
+    '..vooUuuuuUoov..',
+    '.ssssssssssssss.',
+  ];
+  const scaffold2 = [
+    '................',
+    '................',
+    '................',
+    '..oooooooooooo..',
+    '..uUUUUUUUUUUu..',
+    '..u..........u..',
+    '..u..........u..',
+    '..uoooooooooou..',
+    '..vUUUUUUUUUUv..',
+    '..u..........u..',
+    '..v..........v..',
+    '..uoooooooooou..',
+    '..vuuuuuuuuuuv..',
+    '..u..uUuuUu..u..',
+    '..vooUuuuuUoov..',
+    '.ssssssssssssss.',
+  ];
+  const scaffold3 = [
+    '..oooooooooooo..',
+    '..uUUUUUUUUUUu..',
+    '..uo........ou..',
+    '..u.oo....oo.u..',
+    '..u..oo..oo..u..',
+    '..u...oooo...u..',
+    '..u...oooo...u..',
+    '..u..oo..oo..u..',
+    '..u.oo....oo.u..',
+    '..uo........ou..',
+    '..u..........u..',
+    '..u..........u..',
+    '..u..........u..',
+    '..u..........u..',
+    '..vooooooooooov.',
+    '................',
+  ];
+
+  // Wooden robot: the old imp grids re-baked in carved-wood colours.
+  const ROBPAL = {
+    '.': null,
+    'o': '#3c2a1e', // outline
+    'i': '#8a6142', // body mid
+    'I': '#a3794f', // body light
+    'j': '#6b4a30', // body shade
+    'e': '#241a10', // eye socket
+    'E': '#ffd95c', // eye glow
+    'h': '#b9884f', // peg
+    'H': '#8a6142', // peg shade
+  };
 
   // ---------------------------------------------------------------- spikes
   const SPAL = {
@@ -859,7 +1024,12 @@
       left: [flipH(bake(deerStand, DEPAL)), flipH(bake(deerWalkA, DEPAL)), flipH(bake(deerWalkB, DEPAL))],
     },
     imp: [bake(imp1, IPAL), bake(imp2, IPAL)],
-    wall: bake(wall, WPAL),
+    wall: [bake(wall, WPAL), bake(wall, WPAL_STONE), bake(wall, WPAL_GOLD)],
+    turret: [bake(turret, WPAL), bake(turret, WPAL_STONE), bake(turret, WPAL_GOLD)],
+    generator: [bake(generator, WPAL), bake(generator, WPAL_STONE), bake(generator, WPAL_GOLD)],
+    spawner: [bake(spawner, WPAL), bake(spawner, WPAL_STONE), bake(spawner, WPAL_GOLD)],
+    scaffold: [bake(scaffold1, SCPAL), bake(scaffold2, SCPAL), bake(scaffold3, SCPAL)],
+    robot: [bake(imp1, ROBPAL), bake(imp2, ROBPAL)],
     spikes: bake(spikes, SPAL),
     fire: [bake(fire1, FPAL), bake(fire2, FPAL), bake(fire3, FPAL)],
     torch: [bake(torch1, TOPAL), bake(torch2, TOPAL)],

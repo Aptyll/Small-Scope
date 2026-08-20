@@ -14,11 +14,37 @@
 
   const BUILDS = [
     null, // slot 0 = axe
-    { key: 'wall',  name: 'WALL',  cost: { wood: 4, stone: 0, berry: 0 }, hp: 60 },
-    { key: 'spike', name: 'SPIKES', cost: { wood: 2, stone: 2, berry: 0 }, hp: 14 },
-    { key: 'torch', name: 'TORCH', cost: { wood: 2, stone: 0, berry: 0 }, hp: 20 },
-    { key: 'fire',  name: 'CAMPFIRE', cost: { wood: 8, stone: 4, berry: 0 }, hp: 90 },
+    { key: 'spike', name: 'SPIKES', cost: { wood: 2, stone: 2 }, hp: 14 },
+    { key: 'torch', name: 'TORCH', cost: { wood: 2 }, hp: 20 },
+    { key: 'fire',  name: 'CAMPFIRE', cost: { wood: 8, stone: 4 }, hp: 90 },
   ];
+
+  // Stump-built structures: right-click a stump, pick from the radial wheel.
+  // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
+  // price and (already shortened) upgrade construction time.
+  const STRUCTS = {
+    wall: { name: 'WALL', tiers: [
+      { cost: { wood: 4 },  hp: 60,  buildT: 4   },
+      { cost: { stone: 6 }, hp: 140, buildT: 2.4 },
+      { cost: { gold: 4 },  hp: 300, buildT: 2.4 },
+    ]},
+    turret: { name: 'TURRET', tiers: [
+      { cost: { wood: 8 },   hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0  },
+      { cost: { stone: 10 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8  },
+      { cost: { gold: 6 },   hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65 },
+    ]},
+    generator: { name: 'GENERATOR', tiers: [
+      { cost: { wood: 10 }, hp: 40,  buildT: 8,   res: 'wood',  period: 10 },
+      { cost: { stone: 8 }, hp: 70,  buildT: 4.8, res: 'stone', period: 12 },
+      { cost: { gold: 5 },  hp: 100, buildT: 4.8, res: 'gold',  period: 18 },
+    ]},
+    spawner: { name: 'SPAWNER', tiers: [
+      { cost: { wood: 12 },  hp: 60,  buildT: 10, bots: 1, botHp: 18 },
+      { cost: { stone: 10 }, hp: 100, buildT: 6,  bots: 2, botHp: 24 },
+      { cost: { gold: 8 },   hp: 150, buildT: 6,  bots: 3, botHp: 30 },
+    ]},
+  };
+  const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner']; // wheel: up, right, down, left
 
   // ------------------------------------------------------------ canvas
   const canvas = document.getElementById('game');
@@ -90,10 +116,11 @@
     shake: 0,
     deadTimer: 0,
     msg: null, msgT: 0,
-    hints: { build: false, dusk: false, raiders: false },
+    hints: { build: false, dusk: false, raiders: false, stump: false },
     paused: false,
     mapOpen: false,
     settingsOpen: false,
+    wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
   };
 
   const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false };
@@ -133,6 +160,9 @@
 
   const raiders = [];
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
+  const structures = []; // every stump-built tiered building (walls included)
+  const robots = []; // spawner-owned wooden units
+  const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
   const drops = [];
   const particles = [];
   const floaters = [];
@@ -148,12 +178,13 @@
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode !== 'play') return;
-    if (e.key >= '1' && e.key <= '5') hotbar = +e.key - 1;
+    if (e.key >= '1' && e.key <= '4') hotbar = +e.key - 1;
     if (e.key.toLowerCase() === 'q') eatBerry();
-    if (e.key.toLowerCase() === 'm' && !state.settingsOpen) state.mapOpen = !state.mapOpen;
+    if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
-      if (state.mapOpen) state.mapOpen = false;
-      else { state.settingsOpen = !state.settingsOpen; dragSlider = null; }
+      if (state.wheel) state.wheel = null;
+      else if (state.mapOpen) state.mapOpen = false;
+      else { state.settingsOpen = !state.settingsOpen; dragSlider = null; state.wheel = null; }
     }
     if (e.key.toLowerCase() === 'n') { settings.muted = SFX.toggleMute(); saveSettings(); }
     if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
@@ -166,15 +197,28 @@
     mouse.y = (e.clientY - r.top) / scale;
   });
   canvas.addEventListener('mousedown', (e) => {
+    if (e.button === 2) {
+      if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
+      SFX.unlock();
+      const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
+      const o = objAt(tx, ty);
+      if (!o) return;
+      if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
+      if (o.type === 'stump') state.wheel = { kind: 'build', tx, ty, seg: -1 };
+      else if (STRUCTS[o.type] && !o.building) state.wheel = { kind: 'manage', tx, ty, seg: -1 };
+      return;
+    }
     if (e.button !== 0) return;
     if (state.mode === 'title') { startGame(); return; }
     if (state.mode !== 'play') return;
+    if (state.wheel) return;
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
     mouse.down = true;
     clickAction();
   });
-  window.addEventListener('mouseup', () => {
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 2 && state.wheel) { resolveWheel(); state.wheel = null; return; }
     if (dragSlider) { saveSettings(); SFX.pickup(); }
     mouse.down = false;
     dragSlider = null;
@@ -184,7 +228,8 @@
     if (state.mode !== 'play') return;
     e.preventDefault();
     if (state.mapOpen) return;
-    hotbar = (hotbar + (e.deltaY > 0 ? 1 : 4)) % 5;
+    if (state.wheel) return;
+    hotbar = (hotbar + (e.deltaY > 0 ? 1 : 3)) % 4;
   }, { passive: false });
 
   // ------------------------------------------------------------ world
@@ -200,7 +245,8 @@
     const o = objects[idx(tx, ty)];
     if (!o) return false;
     return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' || o.type === 'fire' ||
-      o.type === 'mine' || o.type === 'goldore';
+      o.type === 'mine' || o.type === 'goldore' ||
+      o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
   }
 
   function placeObj(tx, ty, type, extra) {
@@ -476,8 +522,13 @@
     drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, t: 0 });
   }
 
-  function canAfford(cost) { return inv.wood >= cost.wood && inv.stone >= cost.stone; }
-  function pay(cost) { inv.wood -= cost.wood; inv.stone -= cost.stone; }
+  function canAfford(cost) { for (const k in cost) if ((inv[k] || 0) < cost[k]) return false; return true; }
+  function pay(cost) { for (const k in cost) inv[k] -= cost[k]; }
+  function costText(cost) {
+    const parts = [];
+    for (const k in cost) if (cost[k] > 0) parts.push(cost[k] + ' ' + k.toUpperCase());
+    return parts.join('  ');
+  }
 
   function eatBerry() {
     if (inv.berry <= 0 || player.hp >= player.maxHp) return;
@@ -603,6 +654,10 @@
         objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
         SFX.treeFall();
         state.shake = Math.max(state.shake, 2.5);
+        if (!state.hints.stump) {
+          state.hints.stump = true;
+          showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
+        }
         spawnDrop(ox, oy, 'wood'); spawnDrop(ox, oy, 'wood');
         burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
         burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
@@ -651,7 +706,7 @@
       } else {
         SFX.swing();
       }
-    } else if (o.type === 'wall' || o.type === 'torch' || o.type === 'fire' || o.type === 'spike') {
+    } else if (STRUCTS[o.type] || o.type === 'torch' || o.type === 'fire' || o.type === 'spike') {
       o.hp -= 10;
       SFX.hit();
       burst(ox, oy - 4, '#a3794f', 5, 40, 0.4, true);
@@ -660,16 +715,23 @@
   }
 
   function destroyStructure(o, refund) {
-    objects[idx(o.tx, o.ty)] = null;
+    if (STRUCTS[o.type]) removeStruct(o);
+    else objects[idx(o.tx, o.ty)] = null;
     const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
     SFX.break_();
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
     if (refund) {
-      const b = BUILDS.find(b => b && b.key === o.type);
-      if (b) {
-        for (let i = 0; i < Math.floor(b.cost.wood / 2); i++) spawnDrop(ox, oy, 'wood');
-        for (let i = 0; i < Math.floor(b.cost.stone / 2); i++) spawnDrop(ox, oy, 'stone');
+      if (STRUCTS[o.type]) {
+        // 50% of everything paid across tiers, raider kills refund nothing
+        const c = cumulativeCost(o.type, o.tier);
+        for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
+      } else {
+        const b = BUILDS.find(b => b && b.key === o.type);
+        if (b) {
+          for (let i = 0; i < Math.floor((b.cost.wood || 0) / 2); i++) spawnDrop(ox, oy, 'wood');
+          for (let i = 0; i < Math.floor((b.cost.stone || 0) / 2); i++) spawnDrop(ox, oy, 'stone');
+        }
       }
     }
     rebuildLights();
@@ -700,10 +762,86 @@
     if (Math.hypot(cxp - player.x, cyp - player.y) > 60) return false;
     // don't trap yourself: block placing solid on player's tile
     const b = BUILDS[hotbar];
-    if (b && (b.key === 'wall' || b.key === 'fire')) {
+    if (b && b.key === 'fire') {
       if (Math.abs(cxp - player.x) < 8 + PLAYER_R && Math.abs(cyp - player.y) < 8 + PLAYER_R) return false;
     }
     return true;
+  }
+
+  // ------------------------------------------------------------ stump structures
+  function cumulativeCost(type, tier) {
+    const total = {};
+    for (let t = 0; t <= tier; t++) {
+      const c = STRUCTS[type].tiers[t].cost;
+      for (const k in c) total[k] = (total[k] || 0) + c[k];
+    }
+    return total;
+  }
+
+  function placeStruct(tx, ty, type) {
+    const site = objAt(tx, ty);
+    if (!site || site.type !== 'stump') { SFX.deny(); return; }
+    const cxp = tx * TILE + 8, cyp = ty * TILE + 8;
+    if (Math.hypot(cxp - player.x, cyp - player.y) > 60) { SFX.deny(); return; }
+    // all four buildings are solid - never let the player entomb themselves
+    if (Math.abs(cxp - player.x) < 8 + PLAYER_R && Math.abs(cyp - player.y) < 8 + PLAYER_R) {
+      SFX.deny();
+      showMsg('STEP OFF THE STUMP FIRST', 1.6);
+      return;
+    }
+    const t0 = STRUCTS[type].tiers[0];
+    if (!canAfford(t0.cost)) {
+      SFX.deny();
+      showMsg('NOT ENOUGH RESOURCES', 1.6);
+      return;
+    }
+    pay(t0.cost);
+    const o = placeObj(tx, ty, type, {
+      tier: 0, hp: Math.ceil(t0.hp * 0.3), maxHp: t0.hp,
+      building: true, buildT: 0, buildTotal: t0.buildT, dustT: 0,
+    });
+    if (type === 'turret') o.cd = 0;
+    if (type === 'generator') o.payT = 0;
+    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
+    structures.push(o);
+    SFX.place();
+    burst(cxp, cyp, '#eef4fb', 8, 40, 0.4, true);
+  }
+
+  function startUpgrade(o) {
+    if (o.building) return;
+    if (o.tier >= 2) { SFX.deny(); showMsg('MAX TIER', 1.4); return; }
+    const t = STRUCTS[o.type].tiers[o.tier + 1];
+    if (!canAfford(t.cost)) {
+      SFX.deny();
+      showMsg('NOT ENOUGH RESOURCES', 1.6);
+      return;
+    }
+    pay(t.cost);
+    o.tier++;
+    o.maxHp = t.hp;
+    o.building = true;
+    o.buildT = 0;
+    o.buildTotal = t.buildT;
+    o.dustT = 0;
+    SFX.place();
+    burst(o.tx * TILE + 8, o.ty * TILE + 8, '#eef4fb', 8, 40, 0.4, true);
+  }
+
+  function demolishStruct(o) {
+    destroyStructure(o, true);
+  }
+
+  function removeStruct(o) {
+    objects[idx(o.tx, o.ty)] = null;
+    const i = structures.indexOf(o);
+    if (i >= 0) structures.splice(i, 1);
+    if (o.bots) for (const b of o.bots) {
+      if (!b.dead) {
+        b.dead = true;
+        burst(b.x, b.y - 4, '#8a6142', 8, 45, 0.5, true);
+      }
+    }
   }
 
   function rebuildLights() {
@@ -753,19 +891,23 @@
     for (let i = 0; i < 5; i++) place('deer', false);
   }
 
-  function nearestBerryBush(x, y, rTiles) {
+  function nearestObj(x, y, rTiles, pred) {
     const ctx0 = Math.floor(x / TILE), cty = Math.floor(y / TILE);
     let best = null, bd = 1e9;
     for (let ty = cty - rTiles; ty <= cty + rTiles; ty++) {
       for (let tx = ctx0 - rTiles; tx <= ctx0 + rTiles; tx++) {
         const o = objAt(tx, ty);
-        if (o && o.type === 'bush' && o.berries > 0) {
+        if (o && pred(o)) {
           const d = Math.hypot(tx * TILE + 8 - x, ty * TILE + 8 - y);
           if (d < bd) { bd = d; best = o; }
         }
       }
     }
     return best;
+  }
+
+  function nearestBerryBush(x, y, rTiles) {
+    return nearestObj(x, y, rTiles, (o) => o.type === 'bush' && o.berries > 0);
   }
 
   function updateAnimal(a, dt) {
@@ -846,6 +988,336 @@
     }
   }
 
+  // ------------------------------------------------------------ structures & robots
+  const RES_COLORS = { wood: '#c9a06a', stone: '#b8c0d4', gold: '#f2cc6a', berry: '#f2707a' };
+  function nearPlayer(x, y, r) { return Math.hypot(player.x - x, player.y - y) < (r || 180); }
+
+  function updateStructures(dt) {
+    for (let i = tracers.length - 1; i >= 0; i--) {
+      tracers[i].t -= dt;
+      if (tracers[i].t <= 0) tracers.splice(i, 1);
+    }
+    for (const o of structures) {
+      const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+      if (o.building) {
+        o.buildT += dt;
+        // SC2-style: hp grows from the 30% floor toward max as the site rises
+        o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.7 * dt / o.buildTotal);
+        o.dustT -= dt;
+        if (o.dustT <= 0) {
+          o.dustT = 0.8;
+          burst(ox, oy + 4, '#c9d0e2', 3, 25, 0.35, true);
+        }
+        if (o.buildT >= o.buildTotal) {
+          o.building = false;
+          o.hp = o.maxHp;
+          burst(ox, oy - 4, '#8a6142', 12, 55, 0.6, true);
+          burst(ox, oy - 4, '#eef4fb', 10, 50, 0.6, true);
+          burst(ox, oy - 4, o.tier === 2 ? '#f2cc6a' : o.tier === 1 ? '#a8b0c4' : '#c9a06a', 6, 45, 0.5, true);
+          SFX.place();
+          state.shake = Math.max(state.shake, 1.5);
+          if (o.type === 'turret') o.cd = 0;
+          if (o.type === 'generator') o.payT = STRUCTS.generator.tiers[o.tier].period;
+          if (o.type === 'spawner') o.respawnT = 0;
+        }
+        continue;
+      }
+      const t = STRUCTS[o.type].tiers[o.tier];
+      if (o.type === 'turret') {
+        o.cd -= dt;
+        if (o.cd <= 0) {
+          let tgt = null, bd = t.range;
+          for (const m of raiders) {
+            if (m.dead || m.spawnT > 0) continue;
+            const d = Math.hypot(m.x - ox, m.y - oy);
+            if (d < bd) { bd = d; tgt = m; }
+          }
+          if (tgt) {
+            o.cd = t.rate;
+            tgt.hp -= t.dmg;
+            tgt.flash = 0.12;
+            const d = bd || 1;
+            tgt.kbx += (tgt.x - ox) / d * 30;
+            tgt.kby += (tgt.y - oy) / d * 30;
+            tracers.push({ x0: ox, y0: oy - 5, x1: tgt.x, y1: tgt.y - 4, t: 0.08 });
+            burst(ox, oy - 5, '#f6d35c', 2, 20, 0.2);
+            if (nearPlayer(ox, oy, 200)) SFX.hit();
+          } else {
+            o.cd = 0.1; // nothing in range - re-scan soon
+          }
+        }
+      } else if (o.type === 'generator') {
+        o.payT -= dt;
+        if (o.payT <= 0) {
+          o.payT = t.period;
+          let near = 0;
+          for (const d of drops) if (Math.hypot(d.x - ox, d.y - oy) < 24) near++;
+          if (near < 6) { // cap the AFK pile
+            spawnDrop(ox, oy - 2, t.res);
+            addFloater(ox, oy - 12, '+1', RES_COLORS[t.res]);
+            burst(ox, oy - 6, '#c9d0e2', 2, 20, 0.3);
+          }
+        }
+      } else if (o.type === 'spawner') {
+        o.bots = o.bots.filter((b) => !b.dead);
+        if (o.bots.length < t.bots) {
+          o.respawnT -= dt;
+          if (o.respawnT <= 0) {
+            o.respawnT = 12;
+            const b = makeRobot(o);
+            o.bots.push(b);
+            robots.push(b);
+            burst(b.x, b.y - 4, '#a3794f', 6, 35, 0.4, true);
+          }
+        }
+      }
+    }
+  }
+
+  function makeRobot(sp) {
+    const t = STRUCTS.spawner.tiers[sp.tier];
+    let sx = sp.tx * TILE + 8, sy = (sp.ty + 1) * TILE + 8;
+    const dirs = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    for (const [dx, dy] of dirs) {
+      if (!isSolidTile(sp.tx + dx, sp.ty + dy)) {
+        sx = (sp.tx + dx) * TILE + 8;
+        sy = (sp.ty + dy) * TILE + 8;
+        break;
+      }
+    }
+    return {
+      x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
+      home: sp, tgt: null, workT: 0, stuckT: 0, atkCd: 0,
+      jitterT: 0, jitterA: 0,
+      carry: { wood: 0, stone: 0, gold: 0 },
+      moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
+      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
+    };
+  }
+
+  function updateRobot(b, dt) {
+    b.flash = Math.max(0, b.flash - dt);
+    b.atkCd = Math.max(0, b.atkCd - dt);
+    b.kbx *= Math.pow(0.02, dt);
+    b.kby *= Math.pow(0.02, dt);
+    const home = b.home;
+    const hx = home.tx * TILE + 8, hy = home.ty * TILE + 8;
+    let moving = false;
+    const SPD = 40;
+
+    const walkToward = (px, py) => {
+      let dx = px - b.x, dy = py - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      dx /= d; dy /= d;
+      if (b.jitterT > 0) {
+        b.jitterT -= dt;
+        const ca = Math.cos(b.jitterA), sa = Math.sin(b.jitterA);
+        const nx = dx * ca - dy * sa; dy = dx * sa + dy * ca; dx = nx;
+      }
+      b.mvx = dx; b.mvy = dy;
+      const mv = moveEntity(b, (dx * SPD + b.kbx) * dt, (dy * SPD + b.kby) * dt, 3);
+      if (mv.blockedX || mv.blockedY) {
+        b.stuckT += dt;
+        if (b.jitterT <= 0) {
+          b.jitterT = rand(0.4, 0.9);
+          b.jitterA = (rng() < 0.5 ? 1 : -1) * rand(0.6, 1.3);
+        }
+      } else {
+        b.stuckT = Math.max(0, b.stuckT - dt * 0.5);
+      }
+      moving = true;
+      return d;
+    };
+
+    const wander = () => {
+      if (b.moveT > 0) {
+        b.moveT -= dt;
+        moving = true;
+        const mv = moveEntity(b, (b.mvx * 24 + b.kbx) * dt, (b.mvy * 24 + b.kby) * dt, 3);
+        if (mv.blockedX || mv.blockedY) b.moveT = 0;
+      } else {
+        b.idleT -= dt;
+        if (b.idleT <= 0) {
+          let ang = rng() * Math.PI * 2;
+          if (Math.hypot(hx - b.x, hy - b.y) > 2.5 * TILE) ang = Math.atan2(hy - b.y, hx - b.x) + rand(-0.5, 0.5);
+          b.mvx = Math.cos(ang); b.mvy = Math.sin(ang);
+          b.moveT = rand(0.5, 1.2);
+          b.idleT = rand(0.8, 2);
+        }
+      }
+    };
+
+    const deposit = () => {
+      let any = false, line = 0;
+      for (const k in b.carry) {
+        if (b.carry[k] > 0) {
+          inv[k] += b.carry[k];
+          addFloater(hx, hy - 14 - line * 8, '+' + b.carry[k], RES_COLORS[k]);
+          b.carry[k] = 0;
+          any = true;
+          line++;
+        }
+      }
+      if (any && nearPlayer(hx, hy)) SFX.pickup();
+    };
+
+    const harvest = () => {
+      const t = b.tgt, ox = t.tx * TILE + 8, oy = t.ty * TILE + 8;
+      t.flash = 0.1;
+      t.shake = 0.22;
+      if (t.type === 'tree') {
+        t.hp--;
+        b.carry.wood++;
+        if (nearPlayer(ox, oy)) SFX.chop();
+        burst(ox, oy - 10, '#eef4fb', 3, 35, 0.4, true);
+        if (t.hp <= 0) {
+          objects[idx(t.tx, t.ty)] = { type: 'stump', tx: t.tx, ty: t.ty, flash: 0, shake: 0 };
+          b.carry.wood += 2;
+          if (t.rare) b.carry[t.rare] += 2;
+          burst(ox, oy - 8, '#eef4fb', 8, 45, 0.5, true);
+          if (nearPlayer(ox, oy)) SFX.treeFall();
+          b.tgt = null;
+        }
+      } else {
+        const res = t.type === 'rock' ? 'stone' : 'gold';
+        t.hp--;
+        b.carry[res]++;
+        if (nearPlayer(ox, oy)) SFX.mine();
+        burst(ox, oy - 4, res === 'stone' ? '#a8b0c4' : '#f2cc6a', 3, 35, 0.35, true);
+        if (t.hp <= 0) {
+          objects[idx(t.tx, t.ty)] = null;
+          b.carry[res] += 2;
+          b.tgt = null;
+        }
+      }
+    };
+
+    const carryTotal = b.carry.wood + b.carry.stone + b.carry.gold;
+
+    if (b.stuckT > 5) { b.tgt = null; b.stuckT = 0; }
+
+    if (home.mode === 'guard') {
+      b.tgt = null;
+      let tgt = null, bd = 5.5 * TILE;
+      for (const m of raiders) {
+        if (m.dead || m.spawnT > 0) continue;
+        const d = Math.hypot(m.x - hx, m.y - hy); // leash measured from the spawner
+        if (d < bd) { bd = d; tgt = m; }
+      }
+      if (tgt) {
+        const d = walkToward(tgt.x, tgt.y);
+        if (d < 10 && b.atkCd <= 0) {
+          b.atkCd = 0.7;
+          tgt.hp -= 5;
+          tgt.flash = 0.12;
+          const kn = d || 1;
+          tgt.kbx += (tgt.x - b.x) / kn * 50;
+          tgt.kby += (tgt.y - b.y) / kn * 50;
+          if (nearPlayer(b.x, b.y)) SFX.hit();
+        }
+      } else if (carryTotal > 0) {
+        if (walkToward(hx, hy) < 14) deposit();
+      } else {
+        wander();
+      }
+    } else if (carryTotal >= 3) {
+      if (walkToward(hx, hy) < 14) deposit();
+    } else {
+      if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
+      if (!b.tgt) {
+        b.tgt = nearestObj(hx, hy, 8, (o) =>
+          o.type === 'tree' || o.type === 'rock' || o.type === 'goldore');
+      }
+      if (b.tgt) {
+        const txp = b.tgt.tx * TILE + 8, typ = b.tgt.ty * TILE + 8;
+        const d = Math.hypot(txp - b.x, typ - b.y);
+        if (d > 20) {
+          walkToward(txp, typ);
+        } else {
+          b.workT += dt;
+          if (b.workT >= 0.9) { b.workT = 0; harvest(); }
+        }
+      } else if (carryTotal > 0) {
+        if (walkToward(hx, hy) < 14) deposit();
+      } else {
+        wander();
+      }
+    }
+
+    b.animT += dt * (moving ? 8 : 0);
+    b.moving = moving;
+    b.x = Math.max(8, Math.min(WORLD * TILE - 8, b.x));
+    b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
+
+    if (b.hp <= 0 && !b.dead) {
+      b.dead = true;
+      if (nearPlayer(b.x, b.y)) SFX.break_();
+      burst(b.x, b.y - 4, '#8a6142', 10, 50, 0.5, true);
+      burst(b.x, b.y - 4, '#ffd95c', 4, 35, 0.4);
+    }
+  }
+
+  // ------------------------------------------------------------ radial wheel
+  const WHEEL_R = 30;
+
+  function wheelOptions() {
+    const w = state.wheel;
+    if (w.kind === 'build') {
+      return STRUCT_ORDER.map((type, i) => ({
+        id: type, ang: [-Math.PI / 2, 0, Math.PI / 2, Math.PI][i],
+      }));
+    }
+    const o = objAt(w.tx, w.ty);
+    const opts = [
+      { id: 'upgrade', ang: -Math.PI / 2 },
+      { id: 'demolish', ang: Math.PI / 2 },
+    ];
+    if (o && o.type === 'spawner') opts.push({ id: 'mode', ang: 0 });
+    return opts;
+  }
+
+  // shared by resolveWheel and renderWheel so hover math and pixels agree
+  function wheelLayout() {
+    const w = state.wheel;
+    let cx = w.tx * TILE + 8 - Math.round(camX);
+    let cy = w.ty * TILE + 8 - Math.round(camY);
+    cx = Math.max(WHEEL_R + 36, Math.min(VIEW_W - WHEEL_R - 36, cx));
+    cy = Math.max(WHEEL_R + 20, Math.min(VIEW_H - WHEEL_R - 30, cy)); // bottom margin fits the label
+    const opts = wheelOptions();
+    const dx = mouse.x - cx, dy = mouse.y - cy;
+    let seg = -1;
+    if (Math.hypot(dx, dy) >= 10) { // 10px deadzone = cancel
+      const ang = Math.atan2(dy, dx);
+      let bd = 1e9;
+      for (let i = 0; i < opts.length; i++) {
+        let d = Math.abs(ang - opts[i].ang);
+        if (d > Math.PI) d = Math.PI * 2 - d;
+        if (d < bd) { bd = d; seg = i; }
+      }
+    }
+    return { cx, cy, opts, seg };
+  }
+
+  function resolveWheel() {
+    const w = state.wheel;
+    const L = wheelLayout();
+    if (L.seg < 0) return; // released in the deadzone = cancel
+    const opt = L.opts[L.seg];
+    if (w.kind === 'build') {
+      placeStruct(w.tx, w.ty, opt.id);
+      return;
+    }
+    const o = objAt(w.tx, w.ty);
+    if (!o || !STRUCTS[o.type] || o.building) return;
+    if (opt.id === 'upgrade') startUpgrade(o);
+    else if (opt.id === 'demolish') demolishStruct(o);
+    else if (opt.id === 'mode') {
+      o.mode = o.mode === 'gather' ? 'guard' : 'gather';
+      addFloater(o.tx * TILE + 8, o.ty * TILE - 4, o.mode.toUpperCase(), '#ffd95c');
+      SFX.pickup();
+    }
+  }
+
   // ------------------------------------------------------------ raiders
   function spawnRaider() {
     // raiders climb out of the gold mine at night
@@ -905,7 +1377,7 @@
       const ftx = Math.floor((m.x + dx * 7) / TILE);
       const fty = Math.floor((m.y + dy * 7) / TILE);
       const o = objAt(ftx, fty);
-      if (o && (o.type === 'wall' || o.type === 'fire' || o.type === 'torch')) {
+      if (o && (STRUCTS[o.type] || o.type === 'fire' || o.type === 'torch')) {
         o.hp -= 7;
         o.flash = 0.12; o.shake = 0.2;
         m.attackCd = 0.95;
@@ -943,6 +1415,23 @@
       m.kbx = -dx * 60; m.kby = -dy * 60;
     }
 
+    // swat robots that get in the way
+    if (m.attackCd <= 0) {
+      for (const b of robots) {
+        if (b.dead) continue;
+        const bd = Math.hypot(b.x - m.x, b.y - m.y);
+        if (bd < 10) {
+          m.attackCd = 0.9;
+          b.hp -= 8 + state.day;
+          b.flash = 0.12;
+          const kn = bd || 1;
+          b.kbx = (b.x - m.x) / kn * 70; b.kby = (b.y - m.y) / kn * 70;
+          SFX.hit();
+          break;
+        }
+      }
+    }
+
     if (m.hp <= 0) {
       m.dead = true;
       SFX.monsterDie();
@@ -967,6 +1456,7 @@
     state.mode = 'dead';
     state.mapOpen = false;
     state.settingsOpen = false;
+    state.wheel = null;
     state.deadTimer = 0;
     inv.wood = Math.ceil(inv.wood * 0.6);
     inv.stone = Math.ceil(inv.stone * 0.6);
@@ -1169,6 +1659,11 @@
     for (const a of animals) updateAnimal(a, dt);
     for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
 
+    // stump-built structures + their robots
+    updateStructures(dt);
+    for (const b of robots) updateRobot(b, dt);
+    for (let i = robots.length - 1; i >= 0; i--) if (robots[i].dead) robots.splice(i, 1);
+
     // drops
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i];
@@ -1191,7 +1686,7 @@
         drops.splice(i, 1);
         if (!state.hints.build && inv.wood >= 8) {
           state.hints.build = true;
-          showMsg('PRESS 2-5 TO BUILD  -  A CAMPFIRE KEEPS YOU WARM AT NIGHT', 6);
+          showMsg('PRESS 2-4 TO BUILD  -  A CAMPFIRE KEEPS YOU WARM AT NIGHT', 6);
         }
       }
     }
@@ -1318,7 +1813,7 @@
       ctx.fillRect(px, py, TILE, TILE);
       ctx.globalAlpha = 0.55;
       const key = BUILDS[hotbar].key;
-      const spr = key === 'wall' ? SPRITES.wall : key === 'spike' ? SPRITES.spikes :
+      const spr = key === 'spike' ? SPRITES.spikes :
         key === 'torch' ? SPRITES.torch[0] : SPRITES.fire[0];
       if (key === 'torch') ctx.drawImage(spr, px + 4, py + 1);
       else ctx.drawImage(spr, px, py);
@@ -1352,12 +1847,14 @@
     draws.push({ y: player.y + 8, player: true });
     for (const m of raiders) draws.push({ y: m.y + 6, m });
     for (const a of animals) draws.push({ y: a.y + 4, a });
+    for (const b of robots) draws.push({ y: b.y + 4, r: b });
     draws.sort((a, b) => a.y - b.y);
 
     for (const d of draws) {
       if (d.player) { drawPlayer(ex, ey, now); continue; }
       if (d.m) { drawRaider(d.m, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
+      if (d.r) { drawRobot(d.r, ex, ey); continue; }
       const o = d.o;
       const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
       const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
@@ -1371,12 +1868,22 @@
         ctx.drawImage(SPRITES.mine, px, py);
       } else if (o.type === 'bush') {
         drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
-      } else if (o.type === 'wall') {
-        drawSpriteFlash(SPRITES.wall, px + sh, py, o.flash);
-        if (o.hp < o.maxHp * 0.6) {
-          ctx.fillStyle = 'rgba(40,25,15,0.5)';
-          ctx.fillRect(px + 4, py + 5, 1, 3); ctx.fillRect(px + 5, py + 8, 1, 2);
-          ctx.fillRect(px + 10, py + 3, 1, 4); ctx.fillRect(px + 11, py + 7, 1, 2);
+      } else if (STRUCTS[o.type]) {
+        if (o.building) {
+          const p = o.buildT / o.buildTotal;
+          if (p < 1 / 3) ctx.drawImage(SPRITES.scaffold[0], px, py);
+          else if (p < 2 / 3) ctx.drawImage(SPRITES.scaffold[1], px, py);
+          else {
+            drawSpriteFlash(SPRITES[o.type][o.tier], px + sh, py, o.flash);
+            ctx.drawImage(SPRITES.scaffold[2], px, py);
+          }
+        } else {
+          drawSpriteFlash(SPRITES[o.type][o.tier], px + sh, py, o.flash);
+          if (o.hp < o.maxHp * 0.6) {
+            ctx.fillStyle = 'rgba(40,25,15,0.5)';
+            ctx.fillRect(px + 4, py + 5, 1, 3); ctx.fillRect(px + 5, py + 8, 1, 2);
+            ctx.fillRect(px + 10, py + 3, 1, 4); ctx.fillRect(px + 11, py + 7, 1, 2);
+          }
         }
       } else if (o.type === 'fire') {
         const f = ((now * 8 + (o.anim || 0)) | 0) % 3;
@@ -1387,11 +1894,37 @@
       }
     }
 
+    drawSelection(ox, oy, now);
+
+    // construction progress bars
+    for (const o of structures) {
+      if (!o.building) continue;
+      const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
+      if (px < -20 || px > VIEW_W + 4 || py < -20 || py > VIEW_H + 4) continue;
+      const p = Math.min(1, o.buildT / o.buildTotal);
+      ctx.fillStyle = 'rgba(15,22,50,0.8)';
+      ctx.fillRect(px + 2, py - 7, 12, 4);
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(px + 3, py - 6, Math.round(10 * p), 2);
+    }
+
     // particles
     for (const p of particles) {
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5));
       ctx.fillStyle = p.color;
       ctx.fillRect(Math.round(p.x - ex), Math.round(p.y - ey), p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    // turret tracers
+    for (const t of tracers) {
+      ctx.globalAlpha = Math.max(0, Math.min(1, t.t / 0.08));
+      ctx.strokeStyle = '#f6d35c';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(t.x0 - ex) + 0.5, Math.round(t.y0 - ey) + 0.5);
+      ctx.lineTo(Math.round(t.x1 - ex) + 0.5, Math.round(t.y1 - ey) + 0.5);
+      ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
@@ -1421,6 +1954,7 @@
     renderWeather(now);
     renderVignettes();
     renderUI(now);
+    if (state.mode === 'play' && state.wheel) renderWheel(now);
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
@@ -1467,6 +2001,119 @@
     else ctx.fillRect(Math.round(a.x - ox) - 7, Math.round(a.y + 2 - oy), 14, 2);
     drawSpriteFlash(spr, px, py, a.flash);
     drawHealthBar(a.x - ox, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : 16);
+  }
+
+  function drawRobot(b, ox, oy) {
+    const spr = SPRITES.robot[b.moving ? Math.floor(b.animT) % 2 : 0];
+    const px = Math.round(b.x - spr.width / 2 - ox);
+    const py = Math.round(b.y + 4 - spr.height - oy);
+    ctx.fillStyle = 'rgba(110,130,170,0.35)';
+    ctx.fillRect(Math.round(b.x - ox) - 5, Math.round(b.y + 2 - oy), 10, 2);
+    drawSpriteFlash(spr, px, py, b.flash);
+    drawHealthBar(b.x - ox, py - 4, b.hp, b.maxHp, 10);
+  }
+
+  // white corner brackets over the hovered / wheel-targeted tile
+  function drawSelection(ox, oy, now) {
+    if (state.mode !== 'play' || state.mapOpen || state.settingsOpen) return;
+    let tx, ty;
+    if (state.wheel) {
+      tx = state.wheel.tx; ty = state.wheel.ty;
+    } else {
+      tx = Math.floor((mouse.x + camX) / TILE);
+      ty = Math.floor((mouse.y + camY) / TILE);
+      const o = objAt(tx, ty);
+      if (!o) return;
+      if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building)) return;
+      if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) return;
+    }
+    const bx = tx * TILE - ox, by = ty * TILE - oy;
+    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now * 6);
+    // four 3px corner brackets, dark shadow first so white reads on snow
+    const corners = (c, px, py) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(px, py, 3, 1); ctx.fillRect(px, py, 1, 3);
+      ctx.fillRect(px + 13, py, 3, 1); ctx.fillRect(px + 15, py, 1, 3);
+      ctx.fillRect(px, py + 15, 3, 1); ctx.fillRect(px, py + 13, 1, 3);
+      ctx.fillRect(px + 13, py + 15, 3, 1); ctx.fillRect(px + 15, py + 13, 1, 3);
+    };
+    corners('rgba(15,22,50,0.9)', bx + 1, by + 1);
+    corners('#ffffff', bx, by);
+    ctx.globalAlpha = 1;
+  }
+
+  function renderWheel(now) {
+    const L = wheelLayout();
+    const w = state.wheel;
+    // backing disc
+    ctx.fillStyle = 'rgba(6,10,24,0.6)';
+    ctx.beginPath();
+    ctx.arc(L.cx, L.cy, WHEEL_R + 14, 0, Math.PI * 2);
+    ctx.fill();
+
+    const n = L.opts.length;
+    const span = Math.PI * 2 / n;
+    for (let i = 0; i < n; i++) {
+      const opt = L.opts[i];
+      const hovered = i === L.seg;
+      ctx.fillStyle = hovered ? '#35426e' : '#141c3c';
+      ctx.beginPath();
+      ctx.moveTo(L.cx, L.cy);
+      ctx.arc(L.cx, L.cy, WHEEL_R + 11, opt.ang - span / 2 + 0.04, opt.ang + span / 2 - 0.04);
+      ctx.closePath();
+      ctx.fill();
+      if (hovered) {
+        ctx.strokeStyle = '#ffd95c';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      const ix = L.cx + Math.cos(opt.ang) * (WHEEL_R - 9);
+      const iy = L.cy + Math.sin(opt.ang) * (WHEEL_R - 9);
+      if (w.kind === 'build') {
+        const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
+        const spr = SPRITES[opt.id][0];
+        ctx.globalAlpha = affordable ? 1 : 0.55;
+        ctx.drawImage(spr, Math.round(ix - 8), Math.round(iy - 8));
+        if (!affordable) {
+          ctx.globalAlpha = 0.35;
+          ctx.fillStyle = '#e85a5a';
+          ctx.fillRect(Math.round(ix - 8), Math.round(iy - 8), 16, 16);
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'MODE';
+        drawPixelTextShadow(ctx, label,
+          Math.round(ix - pixelTextWidth(label) / 2), Math.round(iy - 2),
+          hovered ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
+      }
+    }
+
+    // hovered label + cost under the wheel (or CANCEL in the deadzone)
+    let label = 'CANCEL', color = '#9fb6d8';
+    if (L.seg >= 0) {
+      const opt = L.opts[L.seg];
+      const o = objAt(w.tx, w.ty);
+      if (w.kind === 'build') {
+        const t0 = STRUCTS[opt.id].tiers[0];
+        label = STRUCTS[opt.id].name + ' : ' + costText(t0.cost);
+        color = canAfford(t0.cost) ? '#ffd95c' : '#ff8a7a';
+      } else if (opt.id === 'upgrade') {
+        if (!o || o.tier >= 2) { label = 'MAX TIER'; color = '#9fb6d8'; }
+        else {
+          const t = STRUCTS[o.type].tiers[o.tier + 1];
+          label = 'UPGRADE : ' + costText(t.cost);
+          color = canAfford(t.cost) ? '#ffd95c' : '#ff8a7a';
+        }
+      } else if (opt.id === 'demolish') {
+        label = 'DEMOLISH'; color = '#ff8a7a';
+      } else {
+        label = 'MODE: ' + (o && o.mode === 'gather' ? 'GUARD' : 'GATHER');
+        color = '#ffd95c';
+      }
+    }
+    drawPixelTextShadow(ctx, label,
+      Math.round(L.cx - pixelTextWidth(label) / 2),
+      Math.round(L.cy + WHEEL_R + 20), color, 'rgba(15,22,50,0.9)');
   }
 
   function drawPlayer(ox, oy, now) {
@@ -1667,6 +2314,9 @@
         else if (o.type === 'spike') { r = 168; g = 178; b = 200; }
         else if (o.type === 'goldore') { r = 226; g = 178; b = 82; }
         else if (o.type === 'mine') { r = 74; g = 70; b = 92; }
+        else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
+        else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
+        else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
         else { r = 188; g = 200; b = 218; } // stump
       } else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
       else if (ground[i] === 2) { r = 158; g = 158; b = 172; } // plaza
@@ -1877,6 +2527,9 @@
         else if (o && o.type === 'torch') { r = 230; g = 192; b = 88; }
         else if (o && o.type === 'goldore') { r = 214; g = 168; b = 74; }
         else if (o && o.type === 'mine') { r = 52; g = 48; b = 62; }
+        else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
+        else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
+        else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
         else if (ground[i] === 2) {
           // rocky plaza inked in graphite
           if (h > 0.8) { r = 148; g = 140; b = 128; }
@@ -2190,10 +2843,10 @@
 
     // hotbar
     const slotW = 20, gap = 3;
-    const totalW = 5 * slotW + 4 * gap;
+    const totalW = 4 * slotW + 3 * gap;
     const hx0 = (VIEW_W - totalW) / 2;
     const hy0 = VIEW_H - 26;
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 4; i++) {
       const x = hx0 + i * (slotW + gap);
       const sel = hotbar === i;
       ctx.fillStyle = sel ? 'rgba(38,48,90,0.9)' : 'rgba(18,24,52,0.8)';
@@ -2202,14 +2855,13 @@
       ctx.lineWidth = 1;
       ctx.strokeRect(x + 0.5, hy0 + 0.5, slotW - 1, slotW - 1);
       // icon
-      let icon = null, iy2 = hy0 + 2, ix2 = x + 6;
+      let icon = null;
       if (i === 0) icon = SPRITES.itemAxe;
-      if (i === 1) icon = SPRITES.wall;
-      if (i === 2) icon = SPRITES.spikes;
-      if (i === 3) icon = SPRITES.torch[0];
-      if (i === 4) icon = SPRITES.fire[0];
+      if (i === 1) icon = SPRITES.spikes;
+      if (i === 2) icon = SPRITES.torch[0];
+      if (i === 3) icon = SPRITES.fire[0];
       if (i === 0) ctx.drawImage(icon, x + 6, hy0 + 6);
-      else if (i === 3) ctx.drawImage(icon, x + 6, hy0 + 3);
+      else if (i === 2) ctx.drawImage(icon, x + 6, hy0 + 3);
       else ctx.drawImage(icon, 0, 0, 16, 16, x + 2, hy0 + 2, 16, 16);
       drawPixelText(ctx, String(i + 1), x + 2, hy0 + 2, sel ? '#ffd95c' : '#8f9cc4');
       // affordability dot
@@ -2221,11 +2873,9 @@
     // selected build cost
     if (hotbar > 0) {
       const b = BUILDS[hotbar];
-      let costTxt = b.name + ': ';
-      if (b.cost.wood) costTxt += b.cost.wood + ' WOOD ';
-      if (b.cost.stone) costTxt += b.cost.stone + ' STONE';
-      const cw = pixelTextWidth(costTxt.trim());
-      drawPixelTextShadow(ctx, costTxt.trim(), (VIEW_W - cw) / 2, hy0 - 8,
+      const costTxt = b.name + ': ' + costText(b.cost);
+      const cw = pixelTextWidth(costTxt);
+      drawPixelTextShadow(ctx, costTxt, (VIEW_W - cw) / 2, hy0 - 8,
         canAfford(b.cost) ? '#cfe0ff' : '#e87a7a', 'rgba(15,22,50,0.8)');
     }
 
@@ -2258,7 +2908,8 @@
     const lines = [
       'WASD  MOVE',
       'CLICK CHOP / FIGHT / PLACE',
-      '1-5   TOOLS AND BUILDING',
+      '1-4   TOOLS AND BUILDING',
+      'RIGHT CLICK A STUMP TO BUILD',
       'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
     let ly = 130;
@@ -2310,8 +2961,24 @@
   window.DBG = {
     SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
     settings, perf, treeRare,
+    structures, robots, tracers, STRUCTS,
     placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, tryPlace,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
+    // debug staging: place a construction site directly, no cost or validation
+    buildStruct: (tx, ty, type, tier) => {
+      const t = Math.min(2, tier || 0);
+      const spec = STRUCTS[type].tiers[t];
+      const o = placeObj(tx, ty, type, {
+        tier: t, hp: Math.ceil(spec.hp * 0.3), maxHp: spec.hp,
+        building: true, buildT: 0, buildTotal: spec.buildT, dustT: 0,
+      });
+      if (type === 'turret') o.cd = 0;
+      if (type === 'generator') o.payT = 0;
+      if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
+      structures.push(o);
+      return o;
+    },
+    finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
     setHotbar: (i) => { hotbar = i; },
     getHotbar: () => hotbar,
     cam: () => ({ x: camX, y: camY }),
