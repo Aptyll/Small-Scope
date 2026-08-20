@@ -38,14 +38,18 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 
 ### Verifying changes
 
-Two dev affordances exist for driving the game from outside the browser:
+Three dev affordances exist for driving the game from outside the browser:
 
-- `window.DBG` (end of [js/game.js](js/game.js#L2065)) exposes the live `state`, `player`, `inv`,
-  `raiders`, `objects`, `lights`, `mouse`, `keys` plus `placeObj`, `spawnRaider`, `startGame`,
-  `setHotbar`, `clickAction`, and `step(dt, n)` — which runs `n` fixed-`dt` update ticks and one
-  render. Set `DBG.freeze = true` to stop the rAF loop and step deterministically. Use this to
-  stage a scene (place structures, jump `state.day`/`state.time`, spawn raiders) instead of
-  playing to reach it.
+- `window.DBG` (end of [js/game.js](js/game.js#L2065)) exposes the live `SEED`, `state`, `player`,
+  `inv`, `raiders`, `objects`, `lights`, `mouse`, `keys` plus `placeObj`, `spawnRaider`,
+  `startGame`, `setHotbar`, `clickAction`, `treeRare`, and `step(dt, n)` — which runs `n`
+  fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
+  deterministically. Use this to stage a scene (place structures, jump `state.day`/`state.time`,
+  spawn raiders) instead of playing to reach it.
+- `?seed=N` pins the world (see [Determinism and noise](#determinism-and-noise)). Load the same
+  seed twice to confirm a change is deterministic, or two different seeds to confirm worldgen
+  actually varies. Without it every reload is a different world, which makes A/B screenshots
+  meaningless.
 - `POST /shot` in [serve.js](serve.js#L14) writes a base64 PNG body to `shot.png` in the repo
   root. Nothing in the client calls it; it is there for a headless driver doing
   `canvas.toDataURL()` → POST. `shot.png` is not gitignored — don't commit it.
@@ -84,6 +88,12 @@ sprites smear across subpixels.
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild).
 - The 2×2 `mine` occupies four tiles that each carry a `part` index; only `part === 0` is drawn.
+- Every `tree` carries `rare`, set at worldgen from `treeRare(tx, ty)`: a `hash2` roll gives each
+  tree a `TREE_RARE_CHANCE` (8%) shot at a bonus resource — `gold` for the scarcer ~30% of that
+  band, `stone` otherwise, `null` for the rest. `hitObject()` pays it out (2 drops, plus a floater)
+  only when the tree actually falls, on top of the usual wood. Being a position hash rather than an
+  `rng()` draw, the roll is the same whenever it is asked — `DBG.treeRare(tx, ty)` reports it for
+  any tile, occupied or not.
 
 `renderGround()` pre-renders the *entire* 3072×3072 ground to one offscreen canvas at boot and
 the frame loop just blits the camera window out of it. It is a one-time cost — never call it per
@@ -91,12 +101,23 @@ frame, and note that ground tiles cannot change at runtime without re-rendering.
 
 ### Determinism and noise
 
-- `rng` is a single seeded `mulberry32(20260819)` stream shared by worldgen *and* runtime effects
-  (particle bursts, raider stats, drop velocities). Worldgen is reproducible only because it runs
-  first at boot. **Adding or removing any `rng()` call inside `genWorld()` reshuffles the whole
-  world**; adding one after boot does not.
-- `hash2(x, y)` and `vnoise(x, y)` are pure position hashes independent of `rng` — use these for
-  anything that must stay stable per tile (ground texture, panel mottling, map dithering).
+Every run picks a fresh `SEED` at boot from `Date.now() ^ Math.random()`, and **everything random
+derives from it** — there is no other entropy source. `?seed=N` in the URL overrides it, which is
+how you replay or diff a specific world. `drawSeedTag()` prints `SEED_TXT` bottom-right on every
+frame (drawn last in `render()`, so it survives the map, settings, title, and death overlays), so
+any screenshot carries the world it came from.
+
+- `rng` is a single `mulberry32(SEED)` stream shared by worldgen *and* runtime effects (particle
+  bursts, raider stats, drop velocities). Worldgen is reproducible only because it runs first at
+  boot. **Adding or removing any `rng()` call inside `genWorld()` reshuffles the whole world**;
+  adding one after boot does not.
+- `hash2(x, y)` mixes `SEED` in, and `vnoise(x, y)` is built on it. Both are still pure functions
+  of position *within a run* — use them for anything that must stay stable per tile no matter when
+  it is asked (ground texture, forest boundary, tree rare-drops, panel mottling, map dithering).
+  `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map.
+- `SEED` is a `const` in the rng banner and `hash2` closes over it, so nothing may call `hash2`
+  before that line runs. Everything that does — `genWorld`, `renderGround`, the panel bakes — is
+  further down in boot order.
 
 ### Day/night, cold, and the night wave
 
@@ -130,6 +151,10 @@ drops → **y-sorted `draws` array** (tall objects + player + raiders, sorted by
 → swing arc → floaters → `renderLighting` → `renderWeather` → `renderVignettes` → `renderUI` →
 map/settings/title/death overlays. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
+
+Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it.
+Short ground sprites (rock, bush, goldore, stump) all draw at `py + 4` to stay clear of that
+band — drop one lower and a tree on the tile below hides it almost completely.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 32×32 `scratch`
 canvas with `source-in` — sprites larger than 32×32 will clip.
@@ -189,8 +214,8 @@ in `hitObject()` and in `updateRaider()`'s blocked-tile attack check, and note t
 and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule.
 
 **Tuning balance** — the numbers live inline: `BUILDS` costs/HP, `spawnRaider()` stat formulas,
-the `state.day` terms in `updateRaider()`, cold rates in `updatePlay()`, and the darkness ramp in
-`update()`.
+the `state.day` terms in `updateRaider()`, cold rates in `updatePlay()`, `TREE_RARE_CHANCE` and
+the gold/stone split in `treeRare()`, and the darkness ramp in `update()`.
 
 ## Known drift
 

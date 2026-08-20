@@ -62,7 +62,15 @@
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-  const rng = mulberry32(20260819);
+  // one run seed drives every deterministic value: worldgen, per-tile hashes, fx.
+  // ?seed=N in the URL replays a world exactly.
+  const SEED = (function () {
+    const q = /[?&]seed=([0-9]+)/.exec(location.search);
+    if (q) return (parseInt(q[1], 10) >>> 0) || 1;
+    return ((Date.now() ^ Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0) || 1;
+  })();
+  const SEED_TXT = 'SEED ' + SEED;
+  const rng = mulberry32(SEED);
   function rand(a, b) { return a + rng() * (b - a); }
   function randi(a, b) { return Math.floor(rand(a, b + 1)); }
 
@@ -209,12 +217,21 @@
     return BORDER_MIN + (BORDER_MAX - BORDER_MIN) * n;
   }
 
+  // per-tile rare-drop roll for trees: hash-based, so it stays stable for a tile
+  // regardless of generation order, and reshuffles with the run seed
+  const TREE_RARE_CHANCE = 0.08;
+  function treeRare(tx, ty) {
+    const h = hash2(tx * 5 + 11, ty * 7 + 23);
+    if (h >= TREE_RARE_CHANCE) return null;
+    return h / TREE_RARE_CHANCE < 0.3 ? 'gold' : 'stone'; // gold is the scarcer slice
+  }
+
   function genWorld() {
     // solid irregular forest boundary - players carve their base out of this
     for (let ty = 0; ty < WORLD; ty++) {
       for (let tx = 0; tx < WORLD; tx++) {
         const d = Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty);
-        if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1) });
+        if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
       }
     }
 
@@ -324,7 +341,7 @@
   groundCv.width = WORLD * TILE; groundCv.height = WORLD * TILE;
 
   function hash2(x, y) {
-    let h = (x * 374761393 + y * 668265263) | 0;
+    let h = (x * 374761393 + y * 668265263 + SEED) | 0;
     h = Math.imul(h ^ (h >>> 13), 1274126177);
     return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
@@ -565,6 +582,13 @@
         spawnDrop(ox, oy, 'wood'); spawnDrop(ox, oy, 'wood');
         burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
         burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
+        if (o.rare) {
+          const rc = o.rare === 'gold' ? '#f2cc6a' : '#a8b0c4';
+          spawnDrop(ox, oy, o.rare); spawnDrop(ox, oy, o.rare);
+          burst(ox, oy - 8, rc, 10, 50, 0.6, true);
+          addFloater(ox, oy - 18, o.rare === 'gold' ? 'GOLD!' : 'STONE!', rc);
+          SFX.pickup();
+        }
       }
     } else if (o.type === 'rock') {
       o.hp--;
@@ -1113,7 +1137,8 @@
         if (!o) continue;
         const px = tx * TILE - ox, py = ty * TILE - oy;
         if (o.type === 'spike') drawSpriteFlash(SPRITES.spikes, px, py, o.flash);
-        else if (o.type === 'stump') ctx.drawImage(SPRITES.stump, px, py + 10);
+        // +4 like rocks and bushes - any lower and the canopy of a tree on the tile below buries it
+        else if (o.type === 'stump') ctx.drawImage(SPRITES.stump, px, py + 4);
       }
     }
 
@@ -1234,6 +1259,13 @@
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title') renderTitle(now);
     if (state.mode === 'dead') renderDead();
+    drawSeedTag();
+  }
+
+  // run seed, bottom-right corner - identifies the world and can be replayed via ?seed=N
+  function drawSeedTag() {
+    drawPixelTextShadow(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
+      '#9fb6d8', 'rgba(15,22,50,0.85)');
   }
 
   function drawPlayer(ox, oy, now) {
@@ -2072,7 +2104,8 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    state, player, inv, raiders, objects, lights, mouse, keys, drops, footprints,
+    SEED, state, player, inv, raiders, objects, lights, mouse, keys, drops, footprints,
+    treeRare,
     placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, tryPlace,
     setHotbar: (i) => { hotbar = i; },
     getHotbar: () => hotbar,
