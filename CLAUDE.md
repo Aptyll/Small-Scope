@@ -45,14 +45,15 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 Three dev affordances exist for driving the game from outside the browser:
 
 - `window.DBG` (end of [js/game.js](js/game.js)) exposes the live `SEED`, `state`, `player`,
-  `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
-  `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`, `spawnRaider`,
-  `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
-  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
-  `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, and `step(dt, n)` — which runs `n`
-  fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
-  deterministically. Use this to stage a scene (place structures, jump `state.day`/`state.time`,
-  spawn raiders) instead of playing to reach it.
+ `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
+ `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`, `spawnRaider`,
+ `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
+ directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
+ `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, and `step(dt, n)` — which runs `n`
+ fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
+ deterministically. Set `DBG.hideUI = true` to skip the HUD and seed tag (storefront / screenshot
+ captures). Use this to stage a scene (place structures, jump `state.day`/`state.time`,
+ spawn raiders) instead of playing to reach it.
 - `?seed=N` pins the world (see [Determinism and noise](#determinism-and-noise)). Load the same
   seed twice to confirm a change is deterministic, or two different seeds to confirm worldgen
   actually varies. Without it every reload is a different world, which makes A/B screenshots
@@ -402,12 +403,10 @@ range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat f
 
 ## Known drift
 
-- [README.md](README.md) is out of date: it says **M** mutes and calls the enemies "frost imps"
-  that spawn from darkness. The code binds **M** to the world map and **N** to mute, and the
-  enemies are player-shaped `raiders` emerging from the central gold mine. It also predates the
-  base-building layer, the three-tool bar, and the removal of cold/campfires. (`SPRITES.imp` is
-  still baked with its old ice palette and unreferenced, but its *grids* are now the robot
-  sprite — don't delete them.)
+- [README.md](README.md) is a storefront page (hero + mechanic shots in `docs/media/`), not a
+  tech guide — no run instructions, controls list, or code layout. Those live here.
+- `SPRITES.imp` is still baked with its old ice palette and unreferenced, but its *grids* are
+  now the robot sprite — don't delete them.
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
   unreferenced since the buildables/HUD removal — kept in case those features return (the heart
   grids also carry the file's mangled-byte repair).
