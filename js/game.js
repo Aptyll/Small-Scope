@@ -61,17 +61,12 @@
   const lightCv = document.createElement('canvas');
   const lctx = lightCv.getContext('2d');
 
-  // internal resolution heights selectable in the ESC menu; fitCanvas derives
-  // the actual VIEW_W/VIEW_H from the window aspect so the canvas always
-  // fills the screen edge-to-edge, whatever the device size
-  const RES_OPTIONS = [
-    { label: '270P', h: 270 },
-    { label: '360P', h: 360 },
-    { label: '450P', h: 450 },
-    { label: '540P', h: 540 },
-    { label: '1080P', h: 1080 },
-  ];
-  let resH = 270; // target internal height; applyResolution() syncs from settings
+  // One camera for every player (the SC2/LoL model): the view always shows
+  // ~TARGET_ROWS rows of world — monitor resolution buys sharpness, never zoom.
+  // Heights that don't divide cleanly "breathe" a few percent rather than
+  // letterbox or blur (the Terraria/Stardew trade), and width is capped at
+  // 16:9 so ultrawides get slim pillarbox bars instead of extra vision.
+  const TARGET_ROWS = 270;
 
   let scale = 2;
   function fitCanvas() {
@@ -81,14 +76,14 @@
     const dpr = window.devicePixelRatio || 1;
     const devW = Math.max(1, Math.round(window.innerWidth * dpr));
     const devH = Math.max(1, Math.round(window.innerHeight * dpr));
-    let dev = Math.max(1, Math.round(devH / resH));
+    let dev = Math.max(1, Math.round(devH / TARGET_ROWS));
     // never shrink the view below the UI panels' footprint
     while (dev > 1 && (devW / dev < 320 || devH / dev < 240)) dev--;
     scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
     // cover the window exactly: ceil leaves at most one game px of overflow,
     // which the body's flex centering splits and overflow:hidden clips
-    VIEW_W = Math.ceil(devW / dev);
     VIEW_H = Math.ceil(devH / dev);
+    VIEW_W = Math.min(Math.ceil(devW / dev), Math.ceil(VIEW_H * 16 / 9));
     canvas.width = VIEW_W; canvas.height = VIEW_H;
     ctx.imageSmoothingEnabled = false; // resizing the canvas resets ctx state
     lightCv.width = VIEW_W; lightCv.height = VIEW_H;
@@ -152,7 +147,7 @@
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
   };
 
-  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false, res: 0 };
+  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false };
 
   // performance monitor: fps averaged over half-second windows from raw
   // (unclamped) frame deltas, so sim clamping can't mask slow frames
@@ -172,14 +167,8 @@
     MM_CX = VIEW_W - MM_R - 8;
     MM_CY = MM_R + 16;
   }
-  function applyResolution() {
-    settings.res = Math.max(0, Math.min(RES_OPTIONS.length - 1, settings.res | 0));
-    resH = RES_OPTIONS[settings.res].h;
-    fitCanvas();
-    relayout();
-  }
   // recompute everything positioned off VIEW_W/VIEW_H; must run after any
-  // change to the canvas size (window resize, fullscreen, resolution setting)
+  // change to the canvas size (window resize, fullscreen)
   function relayout() {
     applyMinimapSize();
     PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);
@@ -190,8 +179,7 @@
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_RES = SET_Y + 108;
-    ROW_FS = SET_Y + 124;
+    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_FS = SET_Y + 108;
     fitFlakes();
   }
 
@@ -2842,13 +2830,13 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 218;
+  const SET_W = 240, SET_H = 202;
   let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
   let SET_Y = Math.round((VIEW_H - SET_H) / 2);
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
   let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92, ROW_RES = SET_Y + 108, ROW_FS = SET_Y + 124;
+    ROW_FPS = SET_Y + 92, ROW_FS = SET_Y + 108;
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -2902,22 +2890,21 @@
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
-    drawPixelText(g, 'RESOLUTION', 14, ROW_RES - SET_Y, L);
     drawPixelText(g, 'FULLSCREEN', 14, ROW_FS - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 142, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 126, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 145, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 145, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 156;
+      let y = 140;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -2927,7 +2914,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 204, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 188, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -2966,14 +2953,6 @@
       saveSettings();
       return;
     }
-    if (inRow(ROW_RES) && onWidget) {
-      const dir = mx < SL_X + SL_W / 2 ? -1 : 1; // left half = coarser, right = finer
-      settings.res = (settings.res + dir + RES_OPTIONS.length) % RES_OPTIONS.length;
-      applyResolution();
-      SFX.pickup();
-      saveSettings();
-      return;
-    }
     if (inRow(ROW_FS) && onWidget) {
       // needs the click gesture; the fullscreenchange listener refits the canvas
       if (document.fullscreenElement) document.exitFullscreen();
@@ -2990,16 +2969,6 @@
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, y - 1, 5, 9);
     ctx.fillStyle = '#f4f7ff'; ctx.fillRect(kx - 1, y, 3, 7);
     drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
-  }
-
-  function drawCycleRow(y, txt, value) {
-    ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X - 1, y - 1, SL_W + 2, 9);
-    ctx.fillStyle = '#121a3a'; ctx.fillRect(SL_X, y, SL_W, 7);
-    drawPixelText(ctx, '<', SL_X + 2, y + 1, '#ffd95c');
-    drawPixelText(ctx, '>', SL_X + SL_W - 5, y + 1, '#ffd95c');
-    drawPixelTextShadow(ctx, txt, Math.round(SL_X + (SL_W - pixelTextWidth(txt)) / 2), y + 1,
-      '#cfe0ff', 'rgba(8,12,28,0.9)');
-    drawPixelTextShadow(ctx, value, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
   }
 
   function drawToggleRow(y, on) {
@@ -3021,7 +2990,6 @@
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
-    drawCycleRow(ROW_RES, RES_OPTIONS[settings.res].label, VIEW_W + 'X' + VIEW_H);
     drawToggleRow(ROW_FS, !!document.fullscreenElement);
   }
 
@@ -3151,7 +3119,7 @@
   }
 
   loadSettings();
-  applyResolution(); // sizes the canvas from the saved setting; also runs relayout()
+  relayout(); // fitCanvas already ran at load; this places the UI for the fitted view
   SFX.setVolume(settings.volume);
   SFX.setMuted(settings.muted);
   genWorld();
@@ -3168,7 +3136,7 @@
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
     SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
-    settings, perf, treeRare, applyResolution,
+    settings, perf, treeRare,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },

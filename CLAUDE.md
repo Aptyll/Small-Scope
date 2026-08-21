@@ -80,27 +80,35 @@ boot`). All game state lives in module-scope singletons: `state`, `settings`, `p
 `tool` (selected `TOOLS` index), and the arrays `raiders`, `animals`, `arrows`, `drops`,
 `particles`, `floaters`, `footprints`, `lights`.
 
-### Adaptive-resolution pixel rendering
+### One-camera fullscreen pixel rendering
 
-The canvas **fills the window edge-to-edge on every device**. `VIEW_W`/`VIEW_H` are `let`s:
-`fitCanvas()` picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels
-land exactly on device pixels even under fractional OS display scaling) sized to the selected
-resolution height, then derives `VIEW_W`/`VIEW_H` as `ceil(devicePx / scale)` — the canvas
-covers the window exactly (≤1 game px of overflow, split by the body's flex centering and
-clipped by `overflow:hidden`), so there are never letterbox bars and never distortion. `scale`
-is fractional in CSS px and must not be floored. The target height comes from `RES_OPTIONS`
-(270/360/450/540/1080) via `settings.res` (see [Settings](#settings)); a guard keeps the view at
-least 320×240 so the UI panels always fit. **All game logic and drawing works in the
-`VIEW_W`×`VIEW_H` space** — mouse coords are divided by `scale` on the way in. Round positions
-when drawing (`Math.round`) or sprites smear across subpixels.
+Every player gets the **same camera** (the SC2/League model): the view always shows
+`TARGET_ROWS` (270) rows of world — a 1920×1080 fullscreen is exactly 480×270 at 4×, and other
+monitors buy sharpness with their extra pixels, never zoom. There is deliberately **no
+resolution setting**; camera zoom, if it comes, will be a gameplay feature, not a display one.
+`VIEW_W`/`VIEW_H` are `let`s set by `fitCanvas()`:
+
+- It picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels land
+  exactly on device pixels even under fractional 125%/150% OS scaling) closest to
+  `deviceH / TARGET_ROWS`. `scale` is fractional in CSS px and must not be floored.
+- Heights that don't divide cleanly (1440p → 5×, 288 rows) **"breathe"** a few percent rather
+  than letterbox or blur — the Terraria/Stardew trade. 16:9 screens always fill edge-to-edge.
+- `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get black
+  pillarbox bars (the page body's `#000` background) instead of extra vision — the SC2 rule.
+  Narrower screens simply see less width. A guard keeps the view at least 320×240 so the UI
+  panels always fit.
+
+**All game logic and drawing works in the `VIEW_W`×`VIEW_H` space** — mouse coords are divided
+by `scale` on the way in. Round positions when drawing (`Math.round`) or sprites smear across
+subpixels.
 
 **Cross-file invariant:** any code path that changes the canvas size — window resize,
-`fullscreenchange`, the resolution setting (`applyResolution()`) — must call `fitCanvas()` then
-`relayout()`. `relayout()` recomputes everything positioned off `VIEW_W`/`VIEW_H`: the minimap
-anchors, the map/settings panel positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — now `let`s;
-the offsets *within* each baked panel stay fixed), and `fitFlakes()`, which keeps snow density
-constant by topping up/trimming the `flakes` array. Never write layout code against a literal
-480/270; `renderTitle()` shows the pattern for recentering a 270-authored layout (`toy` offset).
+`fullscreenchange` — must call `fitCanvas()` then `relayout()`. `relayout()` recomputes
+everything positioned off `VIEW_W`/`VIEW_H`: the minimap anchors, the map/settings panel
+positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — now `let`s; the offsets *within* each baked
+panel stay fixed), and `fitFlakes()`, which keeps snow density constant by topping up/trimming
+the `flakes` array. Never write layout code against a literal 480/270; `renderTitle()` shows the
+pattern for recentering a 270-authored layout (`toy` offset).
 
 `render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
 while moving entities (player, raiders, animals, drops, particles, floaters, swing arc) subtract
@@ -356,20 +364,15 @@ settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx)
 
 ### Settings
 
-`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`, `res`) persists to
+`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`) persists to
 `localStorage['emberfrost.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
-itself against.
+itself against. (Old saves may still carry a `res` key from the removed resolution setting;
+`Object.assign` in `loadSettings` copies it harmlessly and nothing reads it.)
 
-`settings.res` indexes `RES_OPTIONS` (270P/360P/450P/540P/1080P internal heights); change it only via
-`applyResolution()` (exposed on `DBG`), which clamps it, refits the canvas, and runs
-`relayout()`. The ESC menu's RESOLUTION row is a `<`/`>` cycle control (left half of the widget
-steps back, right half forward — the `<`/`>` glyphs were added to `js/font.js` for it) and shows
-the resulting live `VIEW_W`×`VIEW_H` beside it; because the scale snaps to integer device
-pixels, adjacent options can produce the same view size on some windows, which the readout makes
-visible. Below it a FULLSCREEN toggle drives the browser Fullscreen API from the click gesture
-(`fullscreenchange` refits the canvas; the row reads `document.fullscreenElement` live and is
-deliberately not persisted).
+The ESC menu's FULLSCREEN row is a live (not persisted) toggle driving the browser Fullscreen
+API from the click gesture; `fullscreenchange` refits the canvas, and the row reads
+`document.fullscreenElement` each frame.
 
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
 unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
@@ -441,3 +444,5 @@ range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat f
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
   unreferenced since the buildables/HUD removal — kept in case those features return (the heart
   grids also carry the file's mangled-byte repair).
+- The `<` and `>` glyphs in [js/font.js](js/font.js) were added for the removed resolution
+  cycle control and are currently unreferenced — kept as generic font coverage.
