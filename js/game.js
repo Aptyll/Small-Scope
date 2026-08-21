@@ -6,7 +6,7 @@
   const TILE = 16;
   const WORLD = 192;                // tiles per side
   const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
-  const VIEW_W = 480, VIEW_H = 270; // internal resolution
+  let VIEW_W = 480, VIEW_H = 270; // internal resolution; fitCanvas() sizes it to the window
   const DAY_LEN = 110, NIGHT_LEN = 55;
   const CYCLE = DAY_LEN + NIGHT_LEN;
   const PLAYER_SPEED = 72;
@@ -57,25 +57,46 @@
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
 
+  // offscreen light canvas (sized by fitCanvas alongside the main canvas)
+  const lightCv = document.createElement('canvas');
+  const lctx = lightCv.getContext('2d');
+
+  // internal resolution heights selectable in the ESC menu; fitCanvas derives
+  // the actual VIEW_W/VIEW_H from the window aspect so the canvas always
+  // fills the screen edge-to-edge, whatever the device size
+  const RES_OPTIONS = [
+    { label: '270P', h: 270 },
+    { label: '360P', h: 360 },
+    { label: '450P', h: 450 },
+    { label: '540P', h: 540 },
+  ];
+  let resH = 270; // target internal height; applyResolution() syncs from settings
+
   let scale = 2;
   function fitCanvas() {
     // pick an integer scale in DEVICE pixels, not CSS pixels: on fractional
     // display scaling (125%/150% Windows) a CSS-integer scale lands game pixels
     // on fractional device pixels, which smears and shimmers during scrolling.
     const dpr = window.devicePixelRatio || 1;
-    const dev = Math.max(1, Math.floor(Math.min(
-      window.innerWidth * dpr / VIEW_W, window.innerHeight * dpr / VIEW_H)));
+    const devW = Math.max(1, Math.round(window.innerWidth * dpr));
+    const devH = Math.max(1, Math.round(window.innerHeight * dpr));
+    let dev = Math.max(1, Math.round(devH / resH));
+    // never shrink the view below the UI panels' footprint
+    while (dev > 1 && (devW / dev < 320 || devH / dev < 240)) dev--;
     scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
+    // cover the window exactly: ceil leaves at most one game px of overflow,
+    // which the body's flex centering splits and overflow:hidden clips
+    VIEW_W = Math.ceil(devW / dev);
+    VIEW_H = Math.ceil(devH / dev);
+    canvas.width = VIEW_W; canvas.height = VIEW_H;
+    ctx.imageSmoothingEnabled = false; // resizing the canvas resets ctx state
+    lightCv.width = VIEW_W; lightCv.height = VIEW_H;
     canvas.style.width = (VIEW_W * scale) + 'px';
     canvas.style.height = (VIEW_H * scale) + 'px';
   }
-  window.addEventListener('resize', fitCanvas);
+  window.addEventListener('resize', () => { fitCanvas(); relayout(); });
+  document.addEventListener('fullscreenchange', () => { fitCanvas(); relayout(); });
   fitCanvas();
-
-  // offscreen light canvas
-  const lightCv = document.createElement('canvas');
-  lightCv.width = VIEW_W; lightCv.height = VIEW_H;
-  const lctx = lightCv.getContext('2d');
 
   // scratch canvas for white hit-flash sprites
   const scratch = document.createElement('canvas');
@@ -130,7 +151,7 @@
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
   };
 
-  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false };
+  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false, res: 0 };
 
   // performance monitor: fps averaged over half-second windows from raw
   // (unclamped) frame deltas, so sim clamping can't mask slow frames
@@ -149,6 +170,28 @@
     MM_R = settings.mmR;
     MM_CX = VIEW_W - MM_R - 8;
     MM_CY = MM_R + 16;
+  }
+  function applyResolution() {
+    settings.res = Math.max(0, Math.min(RES_OPTIONS.length - 1, settings.res | 0));
+    resH = RES_OPTIONS[settings.res].h;
+    fitCanvas();
+    relayout();
+  }
+  // recompute everything positioned off VIEW_W/VIEW_H; must run after any
+  // change to the canvas size (window resize, fullscreen, resolution setting)
+  function relayout() {
+    applyMinimapSize();
+    PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);
+    PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
+    MAP_X = PANEL_X + 10; MAP_Y = PANEL_Y + 24;
+    COL_CX = PANEL_X + 254;
+    SET_X = Math.round((VIEW_W - SET_W) / 2);
+    SET_Y = Math.round((VIEW_H - SET_H) / 2);
+    SL_X = SET_X + 112;
+    ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
+    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_RES = SET_Y + 108;
+    ROW_FS = SET_Y + 124;
+    fitFlakes();
   }
 
   const player = {
@@ -1798,6 +1841,21 @@
     });
   }
 
+  // keep snow density constant across view sizes; resize top-ups draw from a
+  // separate seeded stream so they never perturb the main rng's worldgen prefix
+  const fxRng = mulberry32((SEED ^ 0x9e3779b9) >>> 0);
+  function fitFlakes() {
+    const target = Math.round(70 * (VIEW_W * VIEW_H) / (480 * 270));
+    while (flakes.length > target) flakes.pop();
+    while (flakes.length < target) {
+      flakes.push({
+        x: fxRng() * VIEW_W, y: fxRng() * VIEW_H,
+        spd: 9 + fxRng() * 17, sway: 0.4 + fxRng(), ph: fxRng() * 9,
+        size: fxRng() < 0.75 ? 1 : 2, a: 0.35 + fxRng() * 0.45,
+      });
+    }
+  }
+
   function updateFx(dt) {
     const now = performance.now() / 1000;
     for (const f of flakes) {
@@ -2571,10 +2629,10 @@
 
   // ------------------------------------------------------------ world map (M)
   const PANEL_W = 308, PANEL_H = 226;
-  const PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);
-  const PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
-  const MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;   // 192x192 map area
-  const COL_CX = PANEL_X + 254;                        // right column center
+  let PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);   // relayout() recenters these
+  let PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
+  let MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;     // 192x192 map area
+  let COL_CX = PANEL_X + 254;                          // right column center
 
   const mapCv = document.createElement('canvas');
   mapCv.width = WORLD; mapCv.height = WORLD;
@@ -2783,12 +2841,13 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 186;
-  const SET_X = Math.round((VIEW_W - SET_W) / 2);
-  const SET_Y = Math.round((VIEW_H - SET_H) / 2);
-  const SL_X = SET_X + 112, SL_W = 66;  // slider track
-  const ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92;
+  const SET_W = 240, SET_H = 218;
+  let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
+  let SET_Y = Math.round((VIEW_H - SET_H) / 2);
+  let SL_X = SET_X + 112;
+  const SL_W = 66;  // slider track
+  let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
+    ROW_FPS = SET_Y + 92, ROW_RES = SET_Y + 108, ROW_FS = SET_Y + 124;
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -2842,20 +2901,22 @@
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
+    drawPixelText(g, 'RESOLUTION', 14, ROW_RES - SET_Y, L);
+    drawPixelText(g, 'FULLSCREEN', 14, ROW_FS - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 110, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 142, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 113, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 113, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 145, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 145, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 124;
+      let y = 156;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -2865,7 +2926,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 172, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 204, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -2902,6 +2963,21 @@
       settings.fps = !settings.fps;
       SFX.pickup();
       saveSettings();
+      return;
+    }
+    if (inRow(ROW_RES) && onWidget) {
+      const dir = mx < SL_X + SL_W / 2 ? -1 : 1; // left half = coarser, right = finer
+      settings.res = (settings.res + dir + RES_OPTIONS.length) % RES_OPTIONS.length;
+      applyResolution();
+      SFX.pickup();
+      saveSettings();
+      return;
+    }
+    if (inRow(ROW_FS) && onWidget) {
+      // needs the click gesture; the fullscreenchange listener refits the canvas
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => { });
+      SFX.pickup();
     }
   }
 
@@ -2913,6 +2989,16 @@
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, y - 1, 5, 9);
     ctx.fillStyle = '#f4f7ff'; ctx.fillRect(kx - 1, y, 3, 7);
     drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
+  }
+
+  function drawCycleRow(y, txt, value) {
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X - 1, y - 1, SL_W + 2, 9);
+    ctx.fillStyle = '#121a3a'; ctx.fillRect(SL_X, y, SL_W, 7);
+    drawPixelText(ctx, '<', SL_X + 2, y + 1, '#ffd95c');
+    drawPixelText(ctx, '>', SL_X + SL_W - 5, y + 1, '#ffd95c');
+    drawPixelTextShadow(ctx, txt, Math.round(SL_X + (SL_W - pixelTextWidth(txt)) / 2), y + 1,
+      '#cfe0ff', 'rgba(8,12,28,0.9)');
+    drawPixelTextShadow(ctx, value, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
   }
 
   function drawToggleRow(y, on) {
@@ -2934,6 +3020,8 @@
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
+    drawCycleRow(ROW_RES, RES_OPTIONS[settings.res].label, VIEW_W + 'X' + VIEW_H);
+    drawToggleRow(ROW_FS, !!document.fullscreenElement);
   }
 
   function renderUI(now) {
@@ -3015,11 +3103,13 @@
   function renderTitle(now) {
     ctx.fillStyle = 'rgba(10,16,42,0.55)';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // layout was authored for a 270px-tall view; recenter it vertically
+    const toy = Math.round((VIEW_H - 270) / 2);
     const t1 = 'EMBERFROST';
     const bob = Math.sin(now * 1.5) * 2;
-    drawPixelTextShadow(ctx, t1, (VIEW_W - pixelTextWidth(t1, 4)) / 2, 62 + bob, '#ffd95c', '#3c2a1e', 4);
+    drawPixelTextShadow(ctx, t1, (VIEW_W - pixelTextWidth(t1, 4)) / 2, toy + 62 + bob, '#ffd95c', '#3c2a1e', 4);
     const t2 = 'A COZY WINTER SURVIVAL';
-    drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, 96 + bob, '#cfe0ff', 'rgba(15,22,50,0.9)');
+    drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, toy + 96 + bob, '#cfe0ff', 'rgba(15,22,50,0.9)');
 
     const lines = [
       'WASD MOVE - SPACE DODGE ROLL',
@@ -3029,14 +3119,14 @@
       'RIGHT CLICK A STUMP TO BUILD',
       'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
-    let ly = 130;
+    let ly = toy + 130;
     for (const l of lines) {
       drawPixelTextShadow(ctx, l, (VIEW_W - pixelTextWidth(l)) / 2, ly, '#9fb6d8', 'rgba(15,22,50,0.9)');
       ly += 12;
     }
     if (((now * 1.6) | 0) % 2 === 0) {
       const t3 = 'CLICK TO BEGIN';
-      drawPixelTextShadow(ctx, t3, (VIEW_W - pixelTextWidth(t3, 2)) / 2, 196, '#ffffff', 'rgba(15,22,50,0.9)', 2);
+      drawPixelTextShadow(ctx, t3, (VIEW_W - pixelTextWidth(t3, 2)) / 2, toy + 196, '#ffffff', 'rgba(15,22,50,0.9)', 2);
     }
   }
 
@@ -3060,7 +3150,7 @@
   }
 
   loadSettings();
-  applyMinimapSize();
+  applyResolution(); // sizes the canvas from the saved setting; also runs relayout()
   SFX.setVolume(settings.volume);
   SFX.setMuted(settings.muted);
   genWorld();
@@ -3077,7 +3167,7 @@
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
     SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
-    settings, perf, treeRare,
+    settings, perf, treeRare, applyResolution,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },

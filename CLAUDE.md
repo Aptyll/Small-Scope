@@ -80,14 +80,27 @@ boot`). All game state lives in module-scope singletons: `state`, `settings`, `p
 `tool` (selected `TOOLS` index), and the arrays `raiders`, `animals`, `arrows`, `drops`,
 `particles`, `floaters`, `footprints`, `lights`.
 
-### Fixed-resolution pixel rendering
+### Adaptive-resolution pixel rendering
 
-The canvas is always 480×270 internally (`VIEW_W`/`VIEW_H`). `fitCanvas()` picks an integer
-**device**-pixel scale (via `devicePixelRatio`) so game pixels land exactly on device pixels even
-under fractional OS display scaling (125%/150% Windows) — `scale` itself is therefore fractional
-in CSS px and must not be floored. **All game logic and drawing works in the 480×270 space** —
-mouse coords are divided by `scale` on the way in. Round positions when drawing (`Math.round`) or
-sprites smear across subpixels.
+The canvas **fills the window edge-to-edge on every device**. `VIEW_W`/`VIEW_H` are `let`s:
+`fitCanvas()` picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels
+land exactly on device pixels even under fractional OS display scaling) sized to the selected
+resolution height, then derives `VIEW_W`/`VIEW_H` as `ceil(devicePx / scale)` — the canvas
+covers the window exactly (≤1 game px of overflow, split by the body's flex centering and
+clipped by `overflow:hidden`), so there are never letterbox bars and never distortion. `scale`
+is fractional in CSS px and must not be floored. The target height comes from `RES_OPTIONS`
+(270/360/450/540) via `settings.res` (see [Settings](#settings)); a guard keeps the view at
+least 320×240 so the UI panels always fit. **All game logic and drawing works in the
+`VIEW_W`×`VIEW_H` space** — mouse coords are divided by `scale` on the way in. Round positions
+when drawing (`Math.round`) or sprites smear across subpixels.
+
+**Cross-file invariant:** any code path that changes the canvas size — window resize,
+`fullscreenchange`, the resolution setting (`applyResolution()`) — must call `fitCanvas()` then
+`relayout()`. `relayout()` recomputes everything positioned off `VIEW_W`/`VIEW_H`: the minimap
+anchors, the map/settings panel positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — now `let`s;
+the offsets *within* each baked panel stay fixed), and `fitFlakes()`, which keeps snow density
+constant by topping up/trimming the `flakes` array. Never write layout code against a literal
+480/270; `renderTitle()` shows the pattern for recentering a 270-authored layout (`toy` offset).
 
 `render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
 while moving entities (player, raiders, animals, drops, particles, floaters, swing arc) subtract
@@ -140,6 +153,11 @@ any screenshot carries the world it came from.
   of position *within a run* — use them for anything that must stay stable per tile no matter when
   it is asked (ground texture, forest boundary, tree rare-drops, panel mottling, map dithering).
   `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map.
+- One exception to the single stream: `fxRng` (a second `mulberry32` seeded from
+  `SEED ^ 0x9e3779b9`) feeds resize-driven snowflake top-ups in `fitFlakes()`, precisely so that
+  window size / resolution changes can never perturb the main `rng`'s worldgen prefix — the same
+  seed yields the same world on every device (the boot-time 70 flakes still draw from `rng`,
+  unchanged).
 - `SEED` is a `const` in the rng banner and `hash2` closes over it, so nothing may call `hash2`
   before that line runs. Everything that does — `genWorld`, `renderGround`, the panel bakes — is
   further down in boot order.
@@ -321,9 +339,12 @@ canvas with `source-in` — sprites larger than 32×32 will clip.
 
 `buildMapPanel()` and `buildSettingsPanel()` draw the static chrome (parchment, compass, labels)
 into offscreen canvases at boot; per-frame code blits them and draws only the live parts on top.
-Their layout constants (`PANEL_*`, `MAP_*`, `SET_*`, `SL_X`, `ROW_*`) are shared between the bake
+Their layout variables (`PANEL_*`, `MAP_*`, `SET_*`, `SL_X`, `ROW_*`) are shared between the bake
 function and the per-frame code, so both sides move together — but a bake-side change only appears
-after the panel is rebuilt.
+after the panel is rebuilt. The position variables are `let`s recentered by `relayout()` on every
+canvas-size change; the bake draws in panel-relative coordinates (e.g. `ROW_FPS - SET_Y`), so a
+recenter never requires a re-bake — keep any new row's bake-side label and per-frame widget
+expressed the same way.
 
 ### Death is not game over
 
@@ -335,10 +356,20 @@ settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx)
 
 ### Settings
 
-`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`) persists to
+`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`, `res`) persists to
 `localStorage['emberfrost.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against.
+
+`settings.res` indexes `RES_OPTIONS` (270P/360P/450P/540P internal heights); change it only via
+`applyResolution()` (exposed on `DBG`), which clamps it, refits the canvas, and runs
+`relayout()`. The ESC menu's RESOLUTION row is a `<`/`>` cycle control (left half of the widget
+steps back, right half forward — the `<`/`>` glyphs were added to `js/font.js` for it) and shows
+the resulting live `VIEW_W`×`VIEW_H` beside it; because the scale snaps to integer device
+pixels, adjacent options can produce the same view size on some windows, which the readout makes
+visible. Below it a FULLSCREEN toggle drives the browser Fullscreen API from the click gesture
+(`fullscreenchange` refits the canvas; the row reads `document.fullscreenElement` live and is
+deliberately not persisted).
 
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
 unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
