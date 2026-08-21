@@ -347,9 +347,14 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   arrows still fly over holes.
 - **Refreeze**: at dawn every hole reverts to ice (`repaintGround` again) and `iceCracks`
   clears, alongside the ore respawn.
-- **Fish**: the `fish` array holds `FISH_COUNT` (30) passive swimmers spawned on random ice
-  tiles at boot (`spawnFish()`, after `spawnAnimals()`). `updateFish()` wanders them and steers
-  them to stay on ice/hole tiles; they never enter snow. They render as translucent silhouettes
+- **Fish**: the `fish` array holds `FISH_COUNT` (30) passive swimmers spawned at boot
+  (`spawnFish()`, after `spawnAnimals()`) on **interior** ice only (tile centers passing
+  `fishClear` with a 14 px margin, ~a tile off the shore). `updateFish()` wanders them with a
+  **soft edge cap**: `fishClear(x, y)` requires `FISH_MARGIN` (6 px) of water on all four sides
+  of the body, the steering veers away from shore a look-ahead early (choosing the more open
+  side, falling back to the fish's per-fish `ts` turn bias), and movement is hard-clamped —
+  a position that would poke the body into snow is never committed, so fish can't visually
+  overlap the shoreline. They render as translucent silhouettes
   through the ice — brighter and surfaced inside an open hole — in a pass right after the
   ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
 - **Bow-fishing**: `fireArrow()` first checks whether the player stands on an ice tile with a

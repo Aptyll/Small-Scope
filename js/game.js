@@ -42,6 +42,7 @@
   const HOLE_FALL_T = 1.1;   // seconds floundering before climbing back out
   const FISH_COUNT = 30;     // shoal size, topped back up each dawn
   const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
+  const FISH_MARGIN = 6;     // body clearance from snow: soft-steered away, hard-clamped
 
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
@@ -1196,12 +1197,31 @@
   // passive swimmers that live under the frozen water, visible as silhouettes
   // through the ice; the bow spears one when it's right under the player
   function addFish(x, y) {
-    fish.push({ x, y, a: rand(0, Math.PI * 2), spd: rand(9, 18), t: rand(0, 9), turnT: rand(1, 3), spook: 0 });
+    fish.push({
+      x, y, a: rand(0, Math.PI * 2), spd: rand(9, 18), t: rand(0, 9), turnT: rand(1, 3),
+      spook: 0, ts: rng() < 0.5 ? -1 : 1, // preferred turn direction at a dead end
+    });
+  }
+
+  function fishWater(x, y) {
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    return inWorld(tx, ty) && ground[idx(tx, ty)] !== 0;
+  }
+  // the whole body fits in water with margin px to spare on every side, so a
+  // fish never reads as poking into the snow
+  function fishClear(x, y, margin) {
+    const m = margin || FISH_MARGIN;
+    return fishWater(x - m, y) && fishWater(x + m, y) &&
+      fishWater(x, y - m) && fishWater(x, y + m);
   }
 
   function spawnFish(minPlayerDist) {
     const spots = [];
-    for (let i = 0; i < WORLD * WORLD; i++) if (ground[i] === 1) spots.push(i);
+    for (let i = 0; i < WORLD * WORLD; i++) {
+      if (ground[i] !== 1) continue;
+      const x = (i % WORLD + 0.5) * TILE, y = ((i / WORLD | 0) + 0.5) * TILE;
+      if (fishClear(x, y, 14)) spots.push(i); // interior ice only, ~a tile off the shore
+    }
     let guard = 0;
     while (fish.length < FISH_COUNT && spots.length && guard++ < 400) {
       const i = spots[randi(0, spots.length - 1)];
@@ -1218,13 +1238,17 @@
       f.turnT -= dt;
       if (f.turnT <= 0) { f.turnT = rand(1, 3); f.a += rand(-1.1, 1.1); }
       const spd = f.spd * (f.spook > 0 ? 3 : 1);
-      // stay under the water: veer off when open snow is ahead
-      const lx = f.x + Math.cos(f.a) * 8, ly = f.y + Math.sin(f.a) * 8;
-      const ltx = Math.floor(lx / TILE), lty = Math.floor(ly / TILE);
-      if (!inWorld(ltx, lty) || ground[idx(ltx, lty)] === 0) f.a += 4 * dt;
+      // soft edge cap: veer away well before the shore, turning toward
+      // whichever side opens into water (falling back to the fish's own bias)
+      if (!fishClear(f.x + Math.cos(f.a) * 10, f.y + Math.sin(f.a) * 10)) {
+        const L = fishClear(f.x + Math.cos(f.a + 0.9) * 10, f.y + Math.sin(f.a + 0.9) * 10);
+        const R = fishClear(f.x + Math.cos(f.a - 0.9) * 10, f.y + Math.sin(f.a - 0.9) * 10);
+        f.a += (L === R ? f.ts : L ? 1 : -1) * 5 * dt;
+      }
+      // hard clamp: never commit a position whose body margin touches snow
       const nx = f.x + Math.cos(f.a) * spd * dt, ny = f.y + Math.sin(f.a) * spd * dt;
-      const ntx = Math.floor(nx / TILE), nty = Math.floor(ny / TILE);
-      if (inWorld(ntx, nty) && ground[idx(ntx, nty)] !== 0) { f.x = nx; f.y = ny; }
+      if (fishClear(nx, ny)) { f.x = nx; f.y = ny; }
+      else f.a += f.ts * 5 * dt; // pinned: keep rotating until a way out opens
     }
   }
 
