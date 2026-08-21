@@ -226,7 +226,8 @@ and knockback still use the old direct-move idiom.
   ease-the-speed model: the travel direction *rotates* toward the input at a per-state rad/s
   rate (carving, never snapping), while speed eases toward a per-state target. Ice pumps
   toward `ICE_MAX` (150, ~2× walk) while a direction is held, glides on idle, and barely
-  bleeds overspeed; snow bleeds overspeed back to walking speed in about a second.
+  bleeds overspeed; snow kills overspeed (dodge exits included) in well under a second
+  unless you shift-slide to keep it.
 - **Dodge roll** is an impulse into the same velocity: `tryDodge()` sets `vx/vy` to
   `max(DODGE_SPEED, current speed)` (a dash never slows you), the roll itself applies no
   friction, and the speed **carries out of the roll** for the surface to spend — so dashes
@@ -284,8 +285,9 @@ dodgeRegenT/dodgeDustT` (`dodgeVX/VY` exist only for the spin/ghost render — m
 tool are suppressed (still collides with solids; a wall zeroes that axis), and `drawPlayer`
 swaps to a full 360° sprite spin with two afterimage ghosts trailing the velocity plus dust
 bursts. The roll's exit speed is spent by the surface — see
-[Momentum movement](#momentum-movement-player-only). The charge meter is two cyan pips on a plate directly beneath the overhead
-health bar; the recharging slot fills left-to-right. Death cancels the roll, respawn refills
+[Momentum movement](#momentum-movement-player-only). The charge meter is a single unsegmented cyan stamina
+bar on a plate directly beneath the overhead health bar — charges stay discrete in the sim,
+the bar shows the pooled total (full charges + regen progress). Death cancels the roll, respawn refills
 charges; overlays (map/settings/wheel/pause) block the input.
 
 ### Wildlife

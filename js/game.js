@@ -1614,7 +1614,7 @@
           if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
           else { steer = 0; target = 0; decay = 0.18; } // idle glide
         } else {
-          steer = 4.5; target = len > 0 ? walkMax : 0; decay = 2.2; // snow bleeds overspeed fast
+          steer = 4.5; target = len > 0 ? walkMax : 0; decay = 3.5; // snow kills overspeed fast unless you slide
         }
         if (len > 0 && steer > 0 && (dirx !== 0 || diry !== 0)) {
           // carve: rotate the travel direction toward the input, never snap it
@@ -2257,25 +2257,18 @@
     }
 
     if (state.mode === 'play') drawHealthBar(player.x - ox, py - 3, player.hp, player.maxHp, 14);
-    // dodge charges: two pips tucked under the health bar; the recharging
-    // slot fills left-to-right as its cooldown runs
+    // dodge stamina: one clean unsegmented bar under the health bar — charges
+    // stay discrete in the sim, the bar just shows the pooled total
     if (state.mode === 'play') {
       const bx = Math.round(player.x - ox) - 7, by = py;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by - 1, 16, 4);
-      for (let i = 0; i < DODGE_CHARGES; i++) {
-        const x = bx + i * 8;
-        ctx.fillStyle = '#3a3448';
-        ctx.fillRect(x, by, 6, 2);
-        if (i < player.dodgeCharges) {
-          ctx.fillStyle = '#8ad8ff';
-          ctx.fillRect(x, by, 6, 2);
-        } else if (i === player.dodgeCharges) {
-          const p = 1 - player.dodgeRegenT / DODGE_CD;
-          ctx.fillStyle = '#48708e';
-          ctx.fillRect(x, by, Math.max(0, Math.round(6 * p)), 2);
-        }
-      }
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(bx, by, 14, 2);
+      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
+      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
+      ctx.fillStyle = '#8ad8ff';
+      ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
     // bow draw meter, just above the health bar; gold when fully drawn
     if (player.charging && state.mode === 'play') {
