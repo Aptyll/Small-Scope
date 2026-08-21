@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Emberfrost — a browser canvas pixel-art winter survival game. Gather with three tool-gated
-tools (bow, axe, pickaxe), build structures on stumps, and travel fast via a momentum system
+Emberfrost — a browser canvas pixel-art winter survival game. Fight with an always-in-hand
+bow, harvest with **E** (the axe/pickaxe come out on their own for whatever's under the
+cursor), build structures on stumps, and travel fast via a momentum system
 (slippery frozen rivers, chained dodges, shift-sliding). The central gold mine and the
 night raider waves were removed — night is currently visual-only (darkness, no threat).
 
@@ -115,7 +116,7 @@ by `fitCanvas()`). The wheel handler only bumps `zoomStep`; `update()` applies i
 against `zoomEff` and calling `fitCanvas()`/`relayout()` — overlays (map/settings) and non-play
 modes force base zoom so the fixed-size panels always fit, restoring on close. The whole
 presentation zooms, HUD included. `DBG.setZoom(n)`/`DBG.getZoom()` drive it externally. The
-scroll wheel does **not** switch tools anymore — that's keys 1–3 only.
+scroll wheel is zoom only — there is no tool selection to cycle.
 
 **All game logic and drawing works in the `VIEW_W`×`VIEW_H` space** — mouse coords are divided
 by `scale` on the way in. Round positions when drawing (`Math.round`) or sprites smear across
@@ -245,7 +246,7 @@ and knockback still use the old direct-move idiom.
   chain into real speed on ice but die fast on snow. I-frames still end with the roll.
 - **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
   on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering),
-  drops any bow draw, and blocks all tool use (`clickAction` and the held-button auto-swing
+  drops any bow draw, and blocks all tool use (`clickAction` and `tryWork`
   both check `player.sliding`). Snow slides have **fatigue** (`player.slideT`): friction ramps
   with slide duration, so the early glide is cheap but the tail drops off hard and a slide
   ends decisively (~2.2 s from full speed). The timer recovers while sliding on ice, so
@@ -265,16 +266,29 @@ and knockback still use the old direct-move idiom.
 
 ### Tools and the bow
 
-The old 4-slot hotbar (axe + placeable spike/torch/campfire) is gone. The player has three
-infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by keys **1–3** only
-(`selectTool()` flashes the name above the bar via `state.toolMsgT`; the scroll wheel is the
-camera zoom, not a tool cycler). The default
-is the axe. Harvesting is **hard-gated** in `hitObject()`: trees need the axe, rock/gold ore
-need the pickaxe; the wrong tool plays `SFX.deny` and floats `NEEDS AXE`/`NEEDS PICKAXE` with
-no damage. Bushes and structures accept either melee tool. A pick swing that finds no object
-over bare ice cracks it toward a fishing hole (see
-[Ice holes and fishing](#ice-holes-and-fishing)). Axe and pickaxe still melee animals,
-but only for `MELEE_DMG` (6) — the bow is the ranged weapon.
+There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
+`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `tool` is the *held* index,
+which is the bow at rest. The bottom strip of the HUD is deliberately empty — it is reserved
+for combat abilities. Two verbs, two inputs:
+
+- **Left click = bow**, always (`clickAction`).
+- **E = work** (`tryWork`, auto-repeating every swing cooldown while held — `updatePlay`
+  calls it whenever `keys['e']` is down). It resolves `workTarget()`: the tile under the
+  cursor, if it holds a tree (→ axe), rock/gold ore (→ pick), a berried bush (→ axe), or is
+  bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile
+  centre is within `WORK_REACH` (30 px) of the player. Out of reach or nothing workable, E
+  does nothing. A valid target swaps `tool` to the right one, drops any bow draw, faces the
+  tile, and starts the swing; `swingHit()` lands on the locked tile (`player.workTx/Ty`) —
+  whatever is there by then — via `hitObject()`/`crackIce()`. Once `swingT` and `swingCd`
+  both reach 0, `updatePlay` puts the bow back (`tool = TOOL_BOW`), so the axe only exists
+  visually for the duration of the work. `workTarget()` is shared with the cursor, so the
+  lock ring is exactly "E will do something here".
+
+`hitObject()` keeps its hard tool gating (trees need the axe, rock/ore the pick, with
+`SFX.deny` + a `NEEDS AXE`/`NEEDS PICKAXE` floater) as a safety net, but since `tryWork`
+always picks the right tool it is no longer reachable in normal play. Stumps and structures
+are **not** E targets — they are the right-click wheel's domain — and there is no melee against
+animals anymore: the bow is the only weapon.
 
 The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
 targets scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter
@@ -331,17 +345,17 @@ spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or respawns.
 Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
-comes within 26 px, and any axe hit sends either species fleeing directly away from the player
+comes within 26 px, and an arrow hit sends either species fleeing directly away from the player
 (`fleeT`). Deaths pay out in `updateAnimal`: rabbits drop 1 berry, deer drop 2-3 gold plus a
-`GOLD!` floater. `swingHit()` checks animals first (same `MELEE_DMG`), arrows hit
-them too (and set `fleeT`), animals join the y-sorted `draws` pass via `drawAnimal()`, and
+`GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
+animals join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
 map.
 
 ### Ice holes and fishing
 
-The pickaxe works on **bare ice tiles** (no object): each swing that finds no object while the
-pick is selected calls `crackIce(tx, ty)` on the reach-point tile. Hits accumulate in the
+**E over a bare ice tile** (no object) brings out the pickaxe and calls `crackIce(tx, ty)` on
+that tile (see [Tools and the bow](#tools-and-the-bow)). Hits accumulate in the
 `iceCracks` map (`tile idx → hits`, rendered as bright fracture decals in their own pass);
 `ICE_HOLE_HITS` (3) breaks through — the tile becomes `ground = 2` (open water), joins the
 `holes` list, and is repainted into the ground canvas via `repaintGround()`. Constants live in
@@ -351,7 +365,7 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
 - **Falling in**: standing over a hole tile (checked at the player's feet in `updatePlay`)
   plunges the player: `HOLE_FALL_DMG` (15) via `damagePlayer`, velocity zeroed, and
   `player.fallT` runs `HOLE_FALL_T` (1.1 s) of floundering — no movement, tools, dodge, or
-  slide (`clickAction`, the auto-swing, and `tryDodge` all check `fallT`). `drawPlayer` clips
+  slide (`clickAction`, `tryWork`, and `tryDodge` all check `fallT`). `drawPlayer` clips
   the sprite to the waterline with ripple rects. The climb-out teleports to
   `nearestDryTile()` with brief i-frames. An **active dodge roll crosses holes safely**
   (the fall check skips while `dodgeT > 0`). `die()`/`respawn()` clear `fallT`.
@@ -410,8 +424,9 @@ Mechanics, all in `game.js`:
   seconds as a physical drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
   keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
   `removeStruct()` kills its robots with it.
-- Demolish and player melee destruction refund **50% of the cumulative cost across tiers**
-  (`cumulativeCost`). `canAfford`/`pay`/`costText` are generic over every `inv` key.
+- Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`); the
+  `hitObject()` structure-damage branch and `destroyStructure(o, true)` refund path still
+  exist but nothing reaches them now that E ignores structures. `canAfford`/`pay`/`costText` are generic over every `inv` key.
 - None of the four structures emits light (see [Lighting](#lighting)).
 
 ### Robots
@@ -424,8 +439,8 @@ Mechanics, all in `game.js`:
 the drops), and walk home to deposit into `inv` with floaters at 3+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
 Robots use `moveEntity`, abandon a target after ~5 s stuck, die with their spawner, and are
-reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar; the
-player's axe does **not** hit them (no friendly fire). Their SFX are gated on player proximity
+reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar;
+nothing the player does can hit them (no friendly fire). Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
 
 ### Overhead health bars
@@ -452,13 +467,12 @@ and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, fra
   so hover and click can never disagree) or a live wheel segment; **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
-- Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — the held tool
-  can work the object under the pointer (tree+axe, rock/ore+pick, berried bush+melee);
-  **bad** red with a centre slash — the wrong tool, mirroring `hitObject()`'s gating;
-  **hunt** amber breathing ring over an animal; **ice** pale-blue ring over bare ice with the
-  pick (crackable); **bow** — while charging the ring closes as the draw fills and turns
-  orange at full, like the meter. `dim` (50% alpha) means tools are blocked right now:
-  sliding, floundering in a hole, or mid-roll.
+- Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work
+  the object under the pointer (`workTarget()` is non-null: tree, rock/ore, berried bush),
+  dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
+  **hunt** amber breathing ring over an animal; **bow** — while charging the ring closes as
+  the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
+  are blocked right now: sliding, floundering in a hole, or mid-roll.
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),
@@ -473,7 +487,7 @@ and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, fra
 ### Damage feedback
 
 `addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`
-array: **gold** for damage the player's side deals (melee, arrows), **red `-N`** for damage
+array: **gold** for damage the player's side deals (arrows), **red `-N`** for damage
 taken (`damagePlayer` — currently unreachable, since nothing hostile exists). Numbers of 10+
 render at 2× scale, and each gets a small random x-drift so rapid repeat hits stay readable.
 Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floaters render pass;
@@ -587,15 +601,14 @@ else will corrupt the grids.
 **Adding an object type** — touch all of: `isSolidTile()` (if it blocks), `hitObject()` (what a
 swing does to it — including which tool is allowed, see the gating block at its top), the flat
 pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
-`buildWorldMapImg()`'s colour table, `rebuildLights()` if it glows, and `cursorInfo()` if the
-pointer should react to it (lock/bad per tool). The two map colour
+`buildWorldMapImg()`'s colour table, `rebuildLights()` if it glows, and `workTarget()` if E
+should work it (that one line also gives it the cursor's lock ring). The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
-**Adding a tool** — append to `TOOLS` (order = bar slot; the `1`–`3` key handler is generic
-over `TOOLS.length`, but a fourth tool needs the key range in the keydown handler widened), add
-an 8×8 icon sprite and name it in the entry's `icon` field, and give its `key` behavior in
-`clickAction()` / `hitObject()`'s gating — and mirror that gating in `cursorInfo()` so the
-reticle's lock/bad hint stays truthful.
+**Adding a tool** — append to `TOOLS` with a `TOOL_*` index constant, add an 8×8 icon sprite
+and name it in the entry's `icon` field, map the object types it works in `workTarget()`
+(that is the only selection logic — there are no keys or bar slots), and give its `key`
+behavior in `hitObject()`'s gating.
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
@@ -609,7 +622,7 @@ the template), and remember `genWorld()`'s `free()` helper treats "ground must b
 placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator period, spawner bot counts/HP), `MELEE_DMG`, `BOW_CHARGE`, and the
+range/dmg/rate, generator period, spawner bot counts/HP), `WORK_REACH`, `BOW_CHARGE`, and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
 the per-surface steer/decay rates inline in `updatePlay()`'s movement block,
 the arrow speed/damage formulas in `fireArrow()`,

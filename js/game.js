@@ -13,15 +13,17 @@
   const PLAYER_SPEED = 72;
   const PLAYER_R = 4.5;
 
-  // the three infinite tools; the bar is keys 1-3 or scroll wheel
+  // the three infinite tools. Not player-selectable: the bow is always in hand
+  // and E auto-swaps to the axe / pick for whatever is under the cursor
   const TOOLS = [
     { key: 'bow',  name: 'BOW',     icon: 'itemBow' },
     { key: 'axe',  name: 'AXE',     icon: 'itemAxe' },
     { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
   ];
+  const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
   const BOW_CHARGE = 0.9;   // seconds to a full draw
   const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
-  const MELEE_DMG = 6;      // axe/pick vs animals (bow is the real weapon)
+  const WORK_REACH = 30;    // E works a tile whose centre is within this of the player
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
   const DODGE_CHARGES = 2;
@@ -243,7 +245,6 @@
     shake: 0,
     deadTimer: 0,
     msg: null, msgT: 0,
-    toolMsgT: 0, // tool name flash above the bar after switching
     hints: { stump: false },
     paused: false,
     mapOpen: false,
@@ -299,13 +300,14 @@
     stamGhost: 0, stamGhostT: 0, // spent-stamina ghost: lingers, then drains
     sliding: false, slideT: 0, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
+    workTx: -1, workTy: -1, // tile the current E swing is aimed at
     hurtT: 0, invuln: 0,
     fallT: 0, fallRipT: 0, // floundering in an ice hole
     footT: 0, footSide: 0,
   };
 
   const inv = { wood: 0, stone: 0, berry: 0, gold: 0, fish: 0 };
-  let tool = 1; // selected TOOLS index, axe by default
+  let tool = TOOL_BOW; // held TOOLS index: the bow, except mid-work (see tryWork)
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
@@ -329,7 +331,6 @@
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode !== 'play') return;
-    if (e.key >= '1' && e.key <= '3') selectTool(+e.key - 1);
     if (e.key === ' ') tryDodge();
     if (e.key.toLowerCase() === 'q') eatBerry();
     if (e.key.toLowerCase() === 'f') eatFish();
@@ -393,13 +394,6 @@
     // scroll up = zoom in, scroll down = back out toward the 270-row baseline
     zoomStep = Math.max(0, Math.min(zoomMax, zoomStep + (e.deltaY > 0 ? -1 : 1)));
   }, { passive: false });
-
-  function selectTool(i) {
-    if (i === tool) return;
-    if (player.charging) { player.charging = false; player.chargeT = 0; } // swapping drops the draw
-    tool = i;
-    state.toolMsgT = 1.4;
-  }
 
   // ------------------------------------------------------------ world
   const ground = new Uint8Array(WORLD * WORLD); // 0 snow, 1 ice, 2 hole (open water)
@@ -799,14 +793,48 @@
   }
 
   // ------------------------------------------------------------ actions
+  // left click is the bow, always
   function clickAction() {
     SFX.unlock();
     if (player.sliding || player.fallT > 0) return; // no tool use mid-slide or in the water
-    if (TOOLS[tool].key === 'bow') {
-      if (!player.charging) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
-    } else {
-      trySwing();
-    }
+    if (!player.charging && player.swingT <= 0) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
+  }
+
+  // what E would work right now: the tile under the cursor, if it holds
+  // something a tool can harvest (bare ice counts, for the pick). Shared by
+  // tryWork() and the cursor so the lock ring can never lie about E.
+  function workTarget() {
+    const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
+    if (!inWorld(tx, ty)) return null;
+    const o = objects[idx(tx, ty)];
+    let t = -1;
+    if (o) {
+      if (o.type === 'tree') t = TOOL_AXE;
+      else if (o.type === 'rock' || o.type === 'goldore') t = TOOL_PICK;
+      else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
+    } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
+    if (t < 0) return null;
+    const near = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) <= WORK_REACH;
+    return { o, tx, ty, tool: t, near };
+  }
+
+  // E: swing the right tool at the cursor's tile. Held E repeats every swing
+  // cooldown; the bow comes back on its own once the cooldown runs out.
+  function tryWork() {
+    if (player.swingCd > 0 || player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    const t = workTarget();
+    if (!t || !t.near) return;
+    if (player.charging) { player.charging = false; player.chargeT = 0; } // work drops the draw
+    tool = t.tool;
+    player.workTx = t.tx; player.workTy = t.ty;
+    const dx = t.tx * TILE + 8 - player.x, dy = t.ty * TILE + 8 - player.y;
+    player.swingDir = Math.atan2(dy, dx);
+    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
+    else player.dir = dy > 0 ? 'down' : 'up';
+    player.swingT = 0.18;
+    player.swingCd = 0.34;
+    player.swingHitDone = false;
+    SFX.swing();
   }
 
   // dodge roll: dash with i-frames in the held movement direction (8-way),
@@ -886,60 +914,14 @@
     SFX.arrow();
   }
 
-  function trySwing() {
-    if (player.swingCd > 0) return;
-    const dx = mouse.x + camX - player.x;
-    const dy = mouse.y + camY - player.y;
-    player.swingDir = Math.atan2(dy, dx);
-    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
-    else player.dir = dy > 0 ? 'down' : 'up';
-    player.swingT = 0.18;
-    player.swingCd = 0.34;
-    player.swingHitDone = false;
-    SFX.swing();
-  }
-
+  // the swing lands on the tile tryWork() locked, whatever is there by now
+  // (a robot may have felled the tree mid-swing: then it's just air)
   function swingHit() {
-    const reachX = player.x + Math.cos(player.swingDir) * 12;
-    const reachY = player.y + Math.sin(player.swingDir) * 12;
-
-    // 1) animals first
-    let hitSomething = false;
-    for (const a of animals) {
-      if (Math.hypot(a.x - reachX, a.y - reachY) < 13) {
-        a.hp -= MELEE_DMG;
-        a.flash = 0.12;
-        addDmgFloater(a.x, a.y - 12, MELEE_DMG);
-        a.fleeT = a.kind === 'rabbit' ? 1.4 : 2.2;
-        const kb = 70;
-        a.kbx = Math.cos(player.swingDir) * kb;
-        a.kby = Math.sin(player.swingDir) * kb;
-        burst(a.x, a.y - 4, a.kind === 'rabbit' ? '#eef2fa' : '#a5825a', 6, 40, 0.4);
-        SFX.hit();
-        hitSomething = true;
-      }
-    }
-    if (hitSomething) return;
-
-    // 2) resources / structures: check tiles near reach point
-    let best = null, bestD = 14;
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-      const tx = Math.floor(reachX / TILE) + dx, ty = Math.floor(reachY / TILE) + dy;
-      const o = objAt(tx, ty);
-      if (!o || o.type === 'stump') continue;
-      const ox = tx * TILE + 8, oy = ty * TILE + 8;
-      const d = Math.hypot(ox - reachX, oy - reachY);
-      if (d < bestD) { best = o; bestD = d; }
-    }
-    if (!best) {
-      // 3) pickaxe on bare ice: crack it toward a fishing hole
-      if (TOOLS[tool].key === 'pick') {
-        const tx = Math.floor(reachX / TILE), ty = Math.floor(reachY / TILE);
-        if (inWorld(tx, ty) && ground[idx(tx, ty)] === 1) crackIce(tx, ty);
-      }
-      return;
-    }
-    hitObject(best);
+    const tx = player.workTx, ty = player.workTy;
+    if (!inWorld(tx, ty)) return;
+    const o = objects[idx(tx, ty)];
+    if (o) { if (o.type !== 'stump' && !STRUCTS[o.type]) hitObject(o); }
+    else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty);
   }
 
   function crackIce(tx, ty) {
@@ -1693,6 +1675,8 @@
     player.dodgeT = 0;
     player.dodgeCharges = DODGE_CHARGES;
     player.dodgeRegenT = 0;
+    player.swingT = player.swingCd = 0;
+    tool = TOOL_BOW;
     state.mode = 'play';
     showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
   }
@@ -1759,7 +1743,6 @@
 
     state.shake = Math.max(0, state.shake - dt * 12);
     state.msgT = Math.max(0, state.msgT - dt);
-    state.toolMsgT = Math.max(0, state.toolMsgT - dt);
 
     updateFx(dt);
   }
@@ -1975,7 +1958,9 @@
         swingHit();
       }
     }
-    if (mouse.down && !player.sliding && player.fallT <= 0 && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
+    // the work tool goes away with the swing cooldown; held E brings it right back
+    if (player.swingT <= 0 && player.swingCd <= 0) tool = TOOL_BOW;
+    if (keys['e']) tryWork();
 
     // bow draw: charge up and keep facing the mouse
     if (player.charging) {
@@ -2417,7 +2402,7 @@
   // like this frame, once, and both the pixel cursor and the browser-cursor
   // fallback read from it:
   //   kind  arrow | hand | grab | hammer | reticle
-  //   mode  (reticle only) idle | lock | bad | hunt | ice | bow
+  //   mode  (reticle only) idle | lock | hunt | ice | bow
   //   dim   the action under the pointer is currently blocked / out of reach
   function cursorInfo() {
     if (state.mode !== 'play') return { kind: 'arrow' };
@@ -2440,7 +2425,6 @@
     if (player.charging) {
       return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / BOW_CHARGE) };
     }
-    const k = TOOLS[tool].key;
     // a living thing under the pointer: hunting reticle
     for (const a of animals) {
       const hw = a.kind === 'rabbit' ? 7 : 13, h = a.kind === 'rabbit' ? 11 : 22;
@@ -2448,28 +2432,18 @@
         return { kind: 'reticle', mode: 'hunt', dim: busy };
       }
     }
-    // harvestables: lock on when the held tool can work them, bar when it can't
-    if (o) {
-      if (o.type === 'tree') return { kind: 'reticle', mode: k === 'axe' ? 'lock' : 'bad', dim: busy };
-      if (o.type === 'rock' || o.type === 'goldore') {
-        return { kind: 'reticle', mode: k === 'pick' ? 'lock' : 'bad', dim: busy };
-      }
-      if (o.type === 'bush' && o.berries > 0) {
-        return { kind: 'reticle', mode: k === 'bow' ? 'bad' : 'lock', dim: busy };
-      }
-    } else if (k === 'pick' && inWorld(tx, ty) && ground[idx(tx, ty)] === 1) {
-      return { kind: 'reticle', mode: 'ice', dim: busy }; // bare ice: crackable
-    }
+    // something E can work: lock ring (ice-blue over bare ice), dim out of reach
+    const wt = workTarget();
+    if (wt) return { kind: 'reticle', mode: wt.o ? 'lock' : 'ice', dim: busy || !wt.near };
     return { kind: 'reticle', mode: 'idle', dim: busy };
   }
 
   // sprite hotspots (the pixel that sits under the true mouse position)
   const CUR_HOT = { arrow: [0, 0], hand: [4, 0], grab: [5, 4], hammer: [6, 5] };
-  // reticle looks: colour, tick gap from centre, corner dots, centre slash
+  // reticle looks: colour, tick gap from centre, corner dots
   const RETICLE = {
     idle: { col: '#f4f7ff', gap: 3 },
     lock: { col: '#ffd95c', gap: 3, diag: true },
-    bad:  { col: '#ff6a5a', gap: 3, slash: true },
     hunt: { col: '#f2cc6a', gap: 4, diag: true },
     ice:  { col: '#a8e0f8', gap: 3, diag: true },
     bow:  { col: '#ffd95c', gap: 6, diag: true },
@@ -2529,8 +2503,7 @@
       const g = gap + 1;
       rects.push([mx - g, my - g, 1, 1], [mx + g, my - g, 1, 1], [mx - g, my + g, 1, 1], [mx + g, my + g, 1, 1]);
     }
-    if (R.slash) for (let i = -2; i <= 2; i++) rects.push([mx + i, my - i, 1, 1]);
-    else rects.push([mx, my, 1, 1]);
+    rects.push([mx, my, 1, 1]);
     drawOutlinedRects(rects, col, base);
   }
 
@@ -3355,7 +3328,7 @@
     g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
-      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
     ];
     for (let c = 0; c < 2; c++) {
@@ -3483,31 +3456,7 @@
     // minimap with day/night ring
     renderMinimap(now);
 
-    // tool bar: three infinite tools, keys 1-3 / scroll wheel
-    const slotW = 20, gap = 3;
-    const totalW = TOOLS.length * slotW + (TOOLS.length - 1) * gap;
-    const hx0 = (VIEW_W - totalW) / 2;
-    const hy0 = VIEW_H - 26;
-    for (let i = 0; i < TOOLS.length; i++) {
-      const x = hx0 + i * (slotW + gap);
-      const sel = tool === i;
-      ctx.fillStyle = sel ? 'rgba(38,48,90,0.9)' : 'rgba(18,24,52,0.8)';
-      ctx.fillRect(x, hy0, slotW, slotW);
-      ctx.strokeStyle = sel ? '#ffd95c' : '#4a5480';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, hy0 + 0.5, slotW - 1, slotW - 1);
-      // 8x8 icons drawn at a crisp 2x so they fill the slot
-      ctx.drawImage(SPRITES[TOOLS[i].icon], x + 2, hy0 + 2, 16, 16);
-      drawPixelTextShadow(ctx, String(i + 1), x + 2, hy0 + 2, sel ? '#ffd95c' : '#8f9cc4', 'rgba(15,22,50,0.8)');
-    }
-    // tool name flashes briefly above the bar after switching
-    if (state.toolMsgT > 0) {
-      const name = TOOLS[tool].name;
-      ctx.globalAlpha = Math.min(1, state.toolMsgT * 2);
-      drawPixelTextShadow(ctx, name, (VIEW_W - pixelTextWidth(name)) / 2, hy0 - 8,
-        '#cfe0ff', 'rgba(15,22,50,0.8)');
-      ctx.globalAlpha = 1;
-    }
+    // (the bottom strip is deliberately empty: reserved for combat abilities)
 
     // message
     if (state.msgT > 0 && state.msg) {
@@ -3539,9 +3488,9 @@
 
     const lines = [
       'WASD MOVE - SPACE DODGE - SHIFT SLIDE',
-      'AXE TREES - PICKAXE STONE AND GOLD',
       'HOLD CLICK TO DRAW THE BOW',
-      '1-3 SWAP TOOLS - SCROLL TO ZOOM',
+      'HOLD E TO CHOP, MINE, AND PICK',
+      'SCROLL TO ZOOM',
       'RIGHT CLICK A STUMP TO BUILD',
       'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
@@ -3572,7 +3521,7 @@
   function startGame() {
     SFX.unlock();
     state.mode = 'play';
-    showMsg('GATHER WOOD - CHOP TREES WITH THE AXE', 6);
+    showMsg('GATHER WOOD - HOLD E AT A TREE', 6);
   }
 
   loadSettings();
@@ -3597,7 +3546,7 @@
     fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
-    placeObj, rebuildLights, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
+    placeObj, rebuildLights, idx, objAt, clickAction, tryWork, workTarget, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {
