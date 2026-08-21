@@ -138,10 +138,14 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 
 ### The tile world
 
-- `WORLD = 192` tiles of `TILE = 16` px → a 3072×3072 px world.
+- `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world. The forest border keeps its
+  original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
+  open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
+  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `SPAWN_D` is derived
+  (`WORLD / 2 - 55`) so the camps stay 55 tiles from the world edge, nestled at the treeline.
 - `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice. Ice is **mechanically slippery** (see
   [Momentum movement](#momentum-movement-player-only)), and worldgen carves it as a travel
-  network: 7 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
+  network: 14 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
   a spoke from each camp to the central ore field and a ring linking adjacent camps. The
   shared `carveIce` rule skips existing objects, the camps, and the ore field, so rivers gap
   naturally around them.
@@ -166,7 +170,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
   `rng()` draw, the roll is the same whenever it is asked — `DBG.treeRare(tx, ty)` reports it for
   any tile, occupied or not.
 
-`renderGround()` pre-renders the *entire* 3072×3072 ground to one offscreen canvas at boot and
+`renderGround()` pre-renders the *entire* 3712×3712 ground to one offscreen canvas at boot and
 the frame loop just blits the camera window out of it. It is a one-time cost — never call it per
 frame, and note that ground tiles cannot change at runtime without re-rendering.
 
@@ -298,8 +302,8 @@ charges; overlays (map/settings/wheel/pause) block the input.
 ### Wildlife
 
 `animals` holds passive fauna spawned once at boot by `spawnAnimals()` (called right after
-`genWorld()`, so its `rng()` draws don't reshuffle the world layout): 8 rabbits (8 HP, biased to
-spawn near berry bushes) and 5 deer (24 HP). Neither reproduces or respawns.
+`genWorld()`, so its `rng()` draws don't reshuffle the world layout): 16 rabbits (8 HP, biased to
+spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or respawns.
 Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
@@ -419,6 +423,12 @@ after the panel is rebuilt. The position variables are `let`s recentered by `rel
 canvas-size change; the bake draws in panel-relative coordinates (e.g. `ROW_FPS - SET_Y`), so a
 recenter never requires a re-bake — keep any new row's bake-side label and per-frame widget
 expressed the same way.
+
+The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so
+`renderWorldMap()` blits `mapCv` scaled by `MAP_S = MAP_W / WORLD` and every tile-space
+position drawn on top (grid lines, camera rect, player marker) must be multiplied by `MAP_S`.
+The minimap needs no such factor — it is a scrolling 1px-per-tile viewport, not a whole-world
+view.
 
 ### Death is not game over
 

@@ -4,7 +4,7 @@
 
   // ------------------------------------------------------------ constants
   const TILE = 16;
-  const WORLD = 192;                // tiles per side
+  const WORLD = 232;                // tiles per side (~132-tile open interior, 2x the old 92's area; treeline depth unchanged)
   const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
   let VIEW_W = 480, VIEW_H = 270; // internal resolution; fitCanvas() sizes it to the window
   let FULL_W = 480; // window width in game px BEFORE the 16:9 cap (bars canvas span)
@@ -407,7 +407,7 @@
   const cx = WORLD / 2, cy = WORLD / 2;
 
   // four quadrant spawn pockets (FFA start positions); player takes slot 0
-  const SPAWN_D = 41;
+  const SPAWN_D = WORLD / 2 - 55;  // camps keep their 55-tile distance from the world edge (nestled at the treeline)
   const spawnPts = [
     { tx: cx - SPAWN_D, ty: cy - SPAWN_D }, { tx: cx + SPAWN_D, ty: cy - SPAWN_D },
     { tx: cx - SPAWN_D, ty: cy + SPAWN_D }, { tx: cx + SPAWN_D, ty: cy + SPAWN_D },
@@ -465,7 +465,7 @@
 
     // frozen ponds - carved only into the open snow interior, away from spawns
     const nearAnySpawn = (tx, ty, r) => spawnPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < r);
-    for (let l = 0; l < 7; l++) {
+    for (let l = 0; l < 14; l++) {
       let px = 0, py = 0, ok = false;
       for (let tries = 0; tries < 40 && !ok; tries++) {
         px = randi(BORDER_MIN + 6, WORLD - 1 - BORDER_MIN - 6);
@@ -530,7 +530,7 @@
 
     // no interior trees: wood only grows at the forest boundary.
     // rocks
-    for (let c = 0; c < 55; c++) {
+    for (let c = 0; c < 110; c++) {
       const ox = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), oy = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       const n = randi(1, 4);
       for (let i = 0; i < n; i++) {
@@ -542,7 +542,7 @@
       }
     }
     // berry bushes
-    for (let c = 0; c < 48; c++) {
+    for (let c = 0; c < 96; c++) {
       const tx = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), ty = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > CENTER_R + 3) {
         placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
@@ -1053,8 +1053,8 @@
         return;
       }
     };
-    for (let i = 0; i < 8; i++) place('rabbit', true);
-    for (let i = 0; i < 5; i++) place('deer', false);
+    for (let i = 0; i < 16; i++) place('rabbit', true);
+    for (let i = 0; i < 10; i++) place('deer', false);
   }
 
   function nearestObj(x, y, rTiles, pred) {
@@ -2576,6 +2576,8 @@
   let PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
   let MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;     // 192x192 map area
   let COL_CX = PANEL_X + 254;                          // right column center
+  const MAP_W = 192;             // the baked panel's map slot — the world scales into it
+  const MAP_S = MAP_W / WORLD;   // tiles -> map px
 
   const mapCv = document.createElement('canvas');
   mapCv.width = WORLD; mapCv.height = WORLD;
@@ -2724,32 +2726,32 @@
     // terrain
     buildWorldMapImg();
     mapCtx.putImageData(mapImg, 0, 0);
-    ctx.drawImage(mapCv, MAP_X, MAP_Y);
+    ctx.drawImage(mapCv, MAP_X, MAP_Y, MAP_W, MAP_W);
 
     // faint surveyor's grid
     ctx.globalAlpha = 0.07;
     ctx.fillStyle = '#3a2c1c';
-    for (let gx = 24; gx < WORLD; gx += 24) ctx.fillRect(MAP_X + gx, MAP_Y, 1, WORLD);
-    for (let gy = 24; gy < WORLD; gy += 24) ctx.fillRect(MAP_X, MAP_Y + gy, WORLD, 1);
+    for (let gx = 24; gx < WORLD; gx += 24) ctx.fillRect(MAP_X + Math.round(gx * MAP_S), MAP_Y, 1, MAP_W);
+    for (let gy = 24; gy < WORLD; gy += 24) ctx.fillRect(MAP_X, MAP_Y + Math.round(gy * MAP_S), MAP_W, 1);
     ctx.globalAlpha = 1;
 
     // night falls over the chart too
     if (state.darkness > 0.01) {
       ctx.globalAlpha = state.darkness * 0.22;
       ctx.fillStyle = '#2c3c6e';
-      ctx.fillRect(MAP_X, MAP_Y, WORLD, WORLD);
+      ctx.fillRect(MAP_X, MAP_Y, MAP_W, MAP_W);
       ctx.globalAlpha = 1;
     }
 
     // current camera view
     ctx.strokeStyle = 'rgba(58,44,28,0.5)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(MAP_X + camX / TILE + 0.5, MAP_Y + camY / TILE + 0.5,
-      VIEW_W / TILE - 1, VIEW_H / TILE - 1);
+    ctx.strokeRect(MAP_X + (camX / TILE) * MAP_S + 0.5, MAP_Y + (camY / TILE) * MAP_S + 0.5,
+      (VIEW_W / TILE) * MAP_S - 1, (VIEW_H / TILE) * MAP_S - 1);
 
     // player marker: inked diamond + pulsing ring
-    const pmx = MAP_X + Math.round(player.x / TILE);
-    const pmy = MAP_Y + Math.round(player.y / TILE);
+    const pmx = MAP_X + Math.round((player.x / TILE) * MAP_S);
+    const pmy = MAP_Y + Math.round((player.y / TILE) * MAP_S);
     const ph = (now * 0.9) % 1;
     ctx.globalAlpha = (1 - ph) * 0.5;
     ctx.strokeStyle = '#d84040';
