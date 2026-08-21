@@ -143,7 +143,8 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
   (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `SPAWN_D` is derived
   (`WORLD / 2 - 55`) so the camps stay 55 tiles from the world edge, nestled at the treeline.
-- `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice. Ice is **mechanically slippery** (see
+- `ground` — `Uint8Array(WORLD²)`: `0` snow, `1` ice, `2` open-water hole (runtime-only, see
+  [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
   [Momentum movement](#momentum-movement-player-only)), and worldgen carves it as a travel
   network: 14 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
   a spoke from each camp to the central ore field and a ring linking adjacent camps. The
@@ -172,7 +173,10 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 
 `renderGround()` pre-renders the *entire* 3712×3712 ground to one offscreen canvas at boot and
 the frame loop just blits the camera window out of it. It is a one-time cost — never call it per
-frame, and note that ground tiles cannot change at runtime without re-rendering.
+frame. The per-tile painter is factored out as `paintGroundTile(g, tx, ty)`, and a runtime
+ground change must call `repaintGround(tx, ty)` — it repaints the tile plus its four neighbors
+(edge rims depend on neighbors) into the prerendered canvas. Ice holes are currently the only
+runtime ground change.
 
 ### Determinism and noise
 
@@ -211,6 +215,8 @@ keys off the cycle:
 - `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlay()`.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
 - Fresh gold ore respawns at the fixed `oreSpots` each dawn.
+- Carved ice holes refreeze at dawn (cracks heal too) and the fish shoal tops back up to
+  `FISH_COUNT` — see [Ice holes and fishing](#ice-holes-and-fishing).
 
 `state.day` no longer drives any difficulty — nothing hostile exists, so nothing currently
 damages the player (`damagePlayer`/`die`/`respawn` are kept intact for whatever threat comes
@@ -264,7 +270,9 @@ infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by key
 camera zoom, not a tool cycler). The default
 is the axe. Harvesting is **hard-gated** in `hitObject()`: trees need the axe, rock/gold ore
 need the pickaxe; the wrong tool plays `SFX.deny` and floats `NEEDS AXE`/`NEEDS PICKAXE` with
-no damage. Bushes and structures accept either melee tool. Axe and pickaxe still melee animals,
+no damage. Bushes and structures accept either melee tool. A pick swing that finds no object
+over bare ice cracks it toward a fishing hole (see
+[Ice holes and fishing](#ice-holes-and-fishing)). Axe and pickaxe still melee animals,
 but only for `MELEE_DMG` (6) — the bow is the ranged weapon.
 
 The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
@@ -316,6 +324,41 @@ comes within 26 px, and any axe hit sends either species fleeing directly away f
 them too (and set `fleeT`), animals join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
 map.
+
+### Ice holes and fishing
+
+The pickaxe works on **bare ice tiles** (no object): each swing that finds no object while the
+pick is selected calls `crackIce(tx, ty)` on the reach-point tile. Hits accumulate in the
+`iceCracks` map (`tile idx → hits`, rendered as bright fracture decals in their own pass);
+`ICE_HOLE_HITS` (3) breaks through — the tile becomes `ground = 2` (open water), joins the
+`holes` list, and is repainted into the ground canvas via `repaintGround()`. Constants live in
+the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COUNT`,
+`FISH_CATCH_R`).
+
+- **Falling in**: standing over a hole tile (checked at the player's feet in `updatePlay`)
+  plunges the player: `HOLE_FALL_DMG` (15) via `damagePlayer`, velocity zeroed, and
+  `player.fallT` runs `HOLE_FALL_T` (1.1 s) of floundering — no movement, tools, dodge, or
+  slide (`clickAction`, the auto-swing, and `tryDodge` all check `fallT`). `drawPlayer` clips
+  the sprite to the waterline with ripple rects. The climb-out teleports to
+  `nearestDryTile()` with brief i-frames. An **active dodge roll crosses holes safely**
+  (the fall check skips while `dodgeT > 0`). `die()`/`respawn()` clear `fallT`.
+- **Everyone else avoids water**: `moveEntity` treats hole tiles as solid for every entity
+  except the player, so animals and robots never wade in. `isSolidTile` itself is unchanged —
+  arrows still fly over holes.
+- **Refreeze**: at dawn every hole reverts to ice (`repaintGround` again) and `iceCracks`
+  clears, alongside the ore respawn.
+- **Fish**: the `fish` array holds `FISH_COUNT` (30) passive swimmers spawned on random ice
+  tiles at boot (`spawnFish()`, after `spawnAnimals()`). `updateFish()` wanders them and steers
+  them to stay on ice/hole tiles; they never enter snow. They render as translucent silhouettes
+  through the ice — brighter and surfaced inside an open hole — in a pass right after the
+  ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
+- **Bow-fishing**: `fireArrow()` first checks whether the player stands on an ice tile with a
+  fish within `FISH_CATCH_R` (16 px); if so the shot becomes the catch (any charge level):
+  `inv.fish++`, splash, no arrow. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
+  the berry's Q/+20), with a count indicator under the berry indicator top-left
+  (`SPRITES.itemFish`, 8×8, own `FIPAL`). The shoal tops back up to `FISH_COUNT` each dawn,
+  never within 120 px of the player. `SFX.splash()` was added for the water sounds. `DBG`
+  exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`.
 
 ### Base building
 
@@ -400,7 +443,8 @@ There is no warmth/cold system anymore — night darkness is purely visual.
 
 ### Render pass order
 
-`render()` runs: ground blit → footprints → flat objects (stumps) → item drops → **y-sorted
+`render()` runs: ground blit → under-ice fish → ice-crack decals → footprints → flat objects
+(stumps) → item drops → **y-sorted
 `draws` array** (tall objects + player + animals + robots, sorted by feet Y) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / finished structure, or the wheel's target) → construction progress bars → particles →
@@ -505,7 +549,7 @@ sprite array, entries in `isSolidTile()`, both map colour tables, and a function
 `updateStructures()`. `hitObject()`, the draws pass, construction, and
 refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 
-**Adding a ground type** — extend `renderGround()`, `updateMinimap()`, and `buildWorldMapImg()`,
+**Adding a ground type** — extend `paintGroundTile()`, `updateMinimap()`, and `buildWorldMapImg()`,
 give it a surface branch in `updatePlay()`'s momentum block (steer/decay/target rates — ice is
 the template), and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the
 placement rule.

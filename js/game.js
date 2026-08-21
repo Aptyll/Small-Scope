@@ -36,6 +36,13 @@
   const SNOW_TRAIL_LIFE = 3.5; // snow groove lifetime (ice scratches keep the 9s footprint life)
   const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
 
+  // ice fishing: the pickaxe opens holes in bare ice, fish swim underneath
+  const ICE_HOLE_HITS = 3;   // pickaxe hits to break through
+  const HOLE_FALL_DMG = 15;  // falling into open water hurts
+  const HOLE_FALL_T = 1.1;   // seconds floundering before climbing back out
+  const FISH_COUNT = 30;     // shoal size, topped back up each dawn
+  const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
+
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
   // price and (already shortened) upgrade construction time.
@@ -291,10 +298,11 @@
     sliding: false, slideT: 0, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
     hurtT: 0, invuln: 0,
+    fallT: 0, fallRipT: 0, // floundering in an ice hole
     footT: 0, footSide: 0,
   };
 
-  const inv = { wood: 0, stone: 0, berry: 0, gold: 0 };
+  const inv = { wood: 0, stone: 0, berry: 0, gold: 0, fish: 0 };
   let tool = 1; // selected TOOLS index, axe by default
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
@@ -307,6 +315,9 @@
   const floaters = [];
   const footprints = [];
   const lights = []; // rebuilt from placed objects
+  const fish = []; // swimmers under the ice: {x,y,a,spd,t,turnT,spook}
+  const iceCracks = new Map(); // tile idx -> pickaxe hits taken (cracked, not yet open)
+  const holes = []; // tile idx of open water holes; they refreeze each dawn
 
   // ------------------------------------------------------------ input
   const keys = {};
@@ -319,6 +330,7 @@
     if (e.key >= '1' && e.key <= '3') selectTool(+e.key - 1);
     if (e.key === ' ') tryDodge();
     if (e.key.toLowerCase() === 'q') eatBerry();
+    if (e.key.toLowerCase() === 'f') eatFish();
     if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
       if (state.wheel) state.wheel = null;
@@ -384,7 +396,7 @@
   }
 
   // ------------------------------------------------------------ world
-  const ground = new Uint8Array(WORLD * WORLD); // 0 snow, 1 ice
+  const ground = new Uint8Array(WORLD * WORLD); // 0 snow, 1 ice, 2 hole (open water)
   const objects = new Array(WORLD * WORLD).fill(null);
 
   function idx(tx, ty) { return ty * WORLD + tx; }
@@ -584,13 +596,11 @@
     return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
   }
 
-  function renderGround() {
-    const g = groundCv.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    for (let ty = 0; ty < WORLD; ty++) {
-      for (let tx = 0; tx < WORLD; tx++) {
+  // paints one tile into the pre-rendered ground canvas; used by the boot-time
+  // full render and by repaintGround() when a tile changes at runtime (ice holes)
+  function paintGroundTile(g, tx, ty) {
         const px = tx * TILE, py = ty * TILE;
-        const ice = ground[idx(tx, ty)] === 1;
+        const gv = ground[idx(tx, ty)];
         const h = hash2(tx, ty);
         // soft tone variation sampled per 8px quad so no tile grid shows
         const quad = (g2, colA, colB) => {
@@ -601,7 +611,28 @@
             g2.fillRect(px + qx * 8, py + qy * 8, 8, 8);
           }
         };
-        if (ice) {
+        if (gv === 2) {
+          // pick-carved hole: dark open water, drifting glints, chipped ice rim
+          quad(g, '#1e3a54', '#234159');
+          g.fillStyle = '#2e5573';
+          const n = 2 + ((h * 5) | 0) % 2;
+          for (let i = 0; i < n; i++) {
+            g.fillRect(px + ((h * (37 + i * 53)) | 0) % 12 + 1, py + ((h * (71 + i * 31)) | 0) % 12 + 2, 3, 1);
+          }
+          // broken-ice chips on every edge that still borders frozen ground
+          g.fillStyle = '#d6ecf4';
+          const chip = (x0, y0, sx, sy) => {
+            for (let i = 0; i < TILE; i += 2) {
+              if (hash2(tx * 31 + x0 + sx * i, ty * 37 + y0 + sy * i) > 0.4) {
+                g.fillRect(px + x0 + sx * i, py + y0 + sy * i, sx ? 2 : 1, sy ? 2 : 1);
+              }
+            }
+          };
+          if (!inWorld(tx, ty - 1) || ground[idx(tx, ty - 1)] !== 2) chip(0, 0, 1, 0);
+          if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] !== 2) chip(0, TILE - 1, 1, 0);
+          if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] !== 2) chip(0, 0, 0, 1);
+          if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] !== 2) chip(TILE - 1, 0, 0, 1);
+        } else if (gv === 1) {
           quad(g, '#b9dcec', '#c4e3f0');
           // cracks
           if (h > 0.55) {
@@ -646,7 +677,23 @@
             g.fillRect(px + ((h * 700) | 0) % 12 + 2, py + ((h * 900) | 0) % 12 + 2, 2, 1);
           }
         }
-      }
+  }
+
+  function renderGround() {
+    const g = groundCv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    for (let ty = 0; ty < WORLD; ty++) {
+      for (let tx = 0; tx < WORLD; tx++) paintGroundTile(g, tx, ty);
+    }
+  }
+
+  // runtime ground change (hole opened / refrozen): repaint the tile plus its
+  // four neighbors so edge rims recompute
+  function repaintGround(tx, ty) {
+    const g = groundCv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (inWorld(tx + dx, ty + dy)) paintGroundTile(g, tx + dx, ty + dy);
     }
   }
 
@@ -702,8 +749,21 @@
     burst(player.x, player.y - 8, '#f2707a', 6, 30, 0.4);
   }
 
+  function eatFish() {
+    if (inv.fish <= 0 || player.hp >= player.maxHp) return;
+    inv.fish--;
+    player.hp = Math.min(player.maxHp, player.hp + 50);
+    SFX.eat(); setTimeout(() => SFX.heal(), 90);
+    addFloater(player.x, player.y - 14, '+50', '#8fe08a');
+    burst(player.x, player.y - 8, '#7ac0e8', 6, 30, 0.4);
+  }
+
   // ------------------------------------------------------------ movement & collision
   function moveEntity(e, dx, dy, r) {
+    // everyone but the player treats open water holes as walls - animals and
+    // robots never wade in; the player falls in instead (handled in updatePlay)
+    const solid = e === player ? isSolidTile :
+      (tx, ty) => isSolidTile(tx, ty) || (inWorld(tx, ty) && ground[idx(tx, ty)] === 2);
     let blockedX = false, blockedY = false;
     // X axis
     if (dx !== 0) {
@@ -713,7 +773,7 @@
       let hit = false;
       for (let ty = y0; ty <= y1; ty++) {
         const tx = dx > 0 ? x1 : x0;
-        if (isSolidTile(tx, ty)) hit = true;
+        if (solid(tx, ty)) hit = true;
       }
       if (!hit) e.x = nx; else blockedX = true;
     }
@@ -725,7 +785,7 @@
       let hit = false;
       for (let tx = x0; tx <= x1; tx++) {
         const ty = dy > 0 ? y1 : y0;
-        if (isSolidTile(tx, ty)) hit = true;
+        if (solid(tx, ty)) hit = true;
       }
       if (!hit) e.y = ny; else blockedY = true;
     }
@@ -735,7 +795,7 @@
   // ------------------------------------------------------------ actions
   function clickAction() {
     SFX.unlock();
-    if (player.sliding) return; // no tool use mid-slide
+    if (player.sliding || player.fallT > 0) return; // no tool use mid-slide or in the water
     if (TOOLS[tool].key === 'bow') {
       if (!player.charging) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
     } else {
@@ -747,7 +807,7 @@
   // falling back to the facing direction when no key is down
   function tryDodge() {
     if (state.paused || state.mapOpen || state.settingsOpen || state.wheel) return;
-    if (player.dodgeT > 0 || player.dodgeCharges <= 0) return;
+    if (player.dodgeT > 0 || player.dodgeCharges <= 0 || player.fallT > 0) return;
     let dx = 0, dy = 0;
     if (keys['w'] || keys['arrowup']) dy -= 1;
     if (keys['s'] || keys['arrowdown']) dy += 1;
@@ -782,6 +842,27 @@
   }
 
   function fireArrow() {
+    // bow-fishing: standing on ice with a fish right underfoot spears it
+    // through the sheet instead of loosing the arrow
+    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+    if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
+      let bi = -1, bd = FISH_CATCH_R;
+      for (let i = 0; i < fish.length; i++) {
+        const d = Math.hypot(fish[i].x - player.x, fish[i].y - player.y);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      if (bi >= 0) {
+        const f = fish[bi];
+        fish.splice(bi, 1);
+        inv.fish++;
+        addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
+        burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
+        burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
+        SFX.splash();
+        SFX.pickup();
+        return;
+      }
+    }
     const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
     const dx = mouse.x + camX - player.x;
     const dy = mouse.y + camY - player.y;
@@ -842,8 +923,60 @@
       const d = Math.hypot(ox - reachX, oy - reachY);
       if (d < bestD) { best = o; bestD = d; }
     }
-    if (!best) return;
+    if (!best) {
+      // 3) pickaxe on bare ice: crack it toward a fishing hole
+      if (TOOLS[tool].key === 'pick') {
+        const tx = Math.floor(reachX / TILE), ty = Math.floor(reachY / TILE);
+        if (inWorld(tx, ty) && ground[idx(tx, ty)] === 1) crackIce(tx, ty);
+      }
+      return;
+    }
     hitObject(best);
+  }
+
+  function crackIce(tx, ty) {
+    const i = idx(tx, ty);
+    const px = tx * TILE + 8, py = ty * TILE + 8;
+    const hits = (iceCracks.get(i) || 0) + 1;
+    SFX.mine();
+    burst(px, py, '#ddf1f8', 6, 45, 0.4, true);
+    if (hits >= ICE_HOLE_HITS) {
+      // broken through: the tile becomes open water
+      iceCracks.delete(i);
+      ground[i] = 2;
+      holes.push(i);
+      repaintGround(tx, ty);
+      SFX.splash();
+      state.shake = Math.max(state.shake, 2);
+      burst(px, py, '#3a6080', 10, 50, 0.5, true);
+      burst(px, py, '#ddf1f8', 8, 55, 0.5, true);
+      // the noise sends nearby fish darting away
+      for (const f of fish) {
+        if (Math.hypot(f.x - px, f.y - py) < 40) {
+          f.a = Math.atan2(f.y - py, f.x - px);
+          f.spook = 1.2;
+        }
+      }
+    } else {
+      iceCracks.set(i, hits);
+    }
+  }
+
+  // nearest tile the player can stand on - used to climb out of a hole
+  function nearestDryTile(x, y) {
+    const ctx0 = Math.floor(x / TILE), cty0 = Math.floor(y / TILE);
+    for (let r = 1; r <= 8; r++) {
+      let best = null, bd = 1e9;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const tx = ctx0 + dx, ty = cty0 + dy;
+        if (!inWorld(tx, ty) || ground[idx(tx, ty)] === 2 || isSolidTile(tx, ty)) continue;
+        const d = Math.hypot(dx, dy);
+        if (d < bd) { bd = d; best = { tx, ty }; }
+      }
+      if (best) return best;
+    }
+    return playerSpawn;
   }
 
   function hitObject(o) {
@@ -1059,6 +1192,42 @@
     for (let i = 0; i < 10; i++) place('deer', false);
   }
 
+  // ------------------------------------------------------------ fish
+  // passive swimmers that live under the frozen water, visible as silhouettes
+  // through the ice; the bow spears one when it's right under the player
+  function addFish(x, y) {
+    fish.push({ x, y, a: rand(0, Math.PI * 2), spd: rand(9, 18), t: rand(0, 9), turnT: rand(1, 3), spook: 0 });
+  }
+
+  function spawnFish(minPlayerDist) {
+    const spots = [];
+    for (let i = 0; i < WORLD * WORLD; i++) if (ground[i] === 1) spots.push(i);
+    let guard = 0;
+    while (fish.length < FISH_COUNT && spots.length && guard++ < 400) {
+      const i = spots[randi(0, spots.length - 1)];
+      const x = (i % WORLD + 0.5) * TILE, y = ((i / WORLD | 0) + 0.5) * TILE;
+      if (minPlayerDist && Math.hypot(x - player.x, y - player.y) < minPlayerDist) continue;
+      addFish(x, y);
+    }
+  }
+
+  function updateFish(dt) {
+    for (const f of fish) {
+      f.t += dt;
+      f.spook = Math.max(0, f.spook - dt);
+      f.turnT -= dt;
+      if (f.turnT <= 0) { f.turnT = rand(1, 3); f.a += rand(-1.1, 1.1); }
+      const spd = f.spd * (f.spook > 0 ? 3 : 1);
+      // stay under the water: veer off when open snow is ahead
+      const lx = f.x + Math.cos(f.a) * 8, ly = f.y + Math.sin(f.a) * 8;
+      const ltx = Math.floor(lx / TILE), lty = Math.floor(ly / TILE);
+      if (!inWorld(ltx, lty) || ground[idx(ltx, lty)] === 0) f.a += 4 * dt;
+      const nx = f.x + Math.cos(f.a) * spd * dt, ny = f.y + Math.sin(f.a) * spd * dt;
+      const ntx = Math.floor(nx / TILE), nty = Math.floor(ny / TILE);
+      if (inWorld(ntx, nty) && ground[idx(ntx, nty)] !== 0) { f.x = nx; f.y = ny; }
+    }
+  }
+
   function nearestObj(x, y, rTiles, pred) {
     const ctx0 = Math.floor(x / TILE), cty = Math.floor(y / TILE);
     let best = null, bd = 1e9;
@@ -1157,7 +1326,7 @@
   }
 
   // ------------------------------------------------------------ structures & robots
-  const RES_COLORS = { wood: '#c9a06a', stone: '#b8c0d4', gold: '#f2cc6a', berry: '#f2707a' };
+  const RES_COLORS = { wood: '#c9a06a', stone: '#b8c0d4', gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8' };
   function nearPlayer(x, y, r) { return Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
   function updateStructures(dt) {
@@ -1468,6 +1637,7 @@
     player.dodgeT = 0;
     player.vx = player.vy = 0;
     player.sliding = false;
+    player.fallT = 0;
     state.mapOpen = false;
     state.settingsOpen = false;
     state.wheel = null;
@@ -1476,6 +1646,7 @@
     inv.stone = Math.ceil(inv.stone * 0.6);
     inv.berry = Math.ceil(inv.berry * 0.6);
     inv.gold = Math.ceil(inv.gold * 0.6);
+    inv.fish = Math.ceil(inv.fish * 0.6);
   }
 
   function respawn() {
@@ -1487,6 +1658,7 @@
     player.kbx = player.kby = 0;
     player.vx = player.vy = 0;
     player.sliding = false;
+    player.fallT = 0;
     player.dodgeT = 0;
     player.dodgeCharges = DODGE_CHARGES;
     player.dodgeRegenT = 0;
@@ -1517,6 +1689,15 @@
         for (const s of oreSpots) {
           if (!objects[idx(s.tx, s.ty)]) placeObj(s.tx, s.ty, 'goldore', { hp: 6, maxHp: 6 });
         }
+        // carved ice holes freeze back over during the night; cracks heal too
+        for (const i of holes) {
+          ground[i] = 1;
+          repaintGround(i % WORLD, (i / WORLD) | 0);
+        }
+        holes.length = 0;
+        iceCracks.clear();
+        // and the shoal recovers (never right under the player)
+        spawnFish(120);
       }
     }
     // darkness curve
@@ -1592,7 +1773,26 @@
       player.slideT = 0;
     }
 
-    if (player.dodgeT > 0) {
+    if (player.fallT > 0) {
+      // floundering in an ice hole: no control until the climb-out
+      player.fallT -= dt;
+      player.vx = player.vy = 0;
+      player.sliding = false;
+      player.fallRipT -= dt;
+      if (player.fallRipT <= 0) {
+        player.fallRipT = 0.16;
+        burst(player.x + rand(-3, 3), player.y + 4, '#9fc4dd', 2, 16, 0.3, true);
+      }
+      if (player.fallT <= 0) {
+        // scramble out onto the nearest walkable tile
+        const out = nearestDryTile(player.x, player.y);
+        player.x = (out.tx + 0.5) * TILE;
+        player.y = (out.ty + 0.5) * TILE;
+        player.invuln = Math.max(player.invuln, 0.8);
+        burst(player.x, player.y + 4, '#cfe4f2', 8, 40, 0.45, true);
+        SFX.dodge();
+      }
+    } else if (player.dodgeT > 0) {
       // rolling: the dash owns the velocity; friction waits until the roll ends,
       // so whatever speed the dash reached is carried out for the surface to spend
       player.dodgeT -= dt;
@@ -1656,6 +1856,24 @@
 
     player.x = Math.max(8, Math.min(WORLD * TILE - 8, player.x));
     player.y = Math.max(8, Math.min(WORLD * TILE - 8, player.y));
+
+    // carved ice holes: standing over open water plunges you in (an active
+    // dodge roll carries across the gap)
+    if (player.fallT <= 0 && player.dodgeT <= 0) {
+      const htx = Math.floor(player.x / TILE), hty = Math.floor((player.y + 4) / TILE);
+      if (inWorld(htx, hty) && ground[idx(htx, hty)] === 2) {
+        player.fallT = HOLE_FALL_T;
+        player.fallRipT = 0;
+        player.vx = player.vy = 0;
+        player.sliding = false;
+        player.slideT = 0;
+        if (player.charging) { player.charging = false; player.chargeT = 0; }
+        SFX.splash();
+        burst(player.x, player.y + 4, '#3a6080', 10, 55, 0.5, true);
+        burst(player.x, player.y + 2, '#ddf1f8', 8, 60, 0.5, true);
+        damagePlayer(HOLE_FALL_DMG, 0, 0);
+      }
+    }
 
     // dodge charges refill one at a time
     if (player.dodgeCharges < DODGE_CHARGES) {
@@ -1726,7 +1944,7 @@
         swingHit();
       }
     }
-    if (mouse.down && !player.sliding && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
+    if (mouse.down && !player.sliding && player.fallT <= 0 && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
 
     // bow draw: charge up and keep facing the mouse
     if (player.charging) {
@@ -1777,6 +1995,7 @@
     // wildlife
     for (const a of animals) updateAnimal(a, dt);
     for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
+    updateFish(dt);
 
     // stump-built structures + their robots
     updateStructures(dt);
@@ -1902,6 +2121,44 @@
 
     // ground
     ctx.drawImage(groundCv, ox, oy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+
+    // fish: silhouettes drifting under the thin ice, crisp in open holes
+    for (const f of fish) {
+      const sx = f.x - ex, sy = f.y - ey;
+      if (sx < -12 || sy < -12 || sx > VIEW_W + 12 || sy > VIEW_H + 12) continue;
+      const surfaced = ground[idx(Math.floor(f.x / TILE), Math.floor(f.y / TILE))] === 2;
+      const wig = Math.round(Math.sin(f.t * 7) * 1.5);
+      ctx.save();
+      ctx.translate(Math.round(sx), Math.round(sy));
+      ctx.rotate(f.a);
+      ctx.globalAlpha = surfaced ? 0.95 : 0.4;
+      ctx.fillStyle = surfaced ? '#7fa9c6' : '#4a708c';
+      ctx.fillRect(-3, -1, 6, 2);            // body
+      ctx.fillRect(-5, -1 + wig, 2, 2);      // waving tail
+      if (surfaced) { ctx.fillStyle = '#c9dded'; ctx.fillRect(1, -1, 2, 1); }
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+
+    // pick-cracked ice: bright fractures radiating from the struck tile
+    for (const [ci, hits] of iceCracks) {
+      const ctx2 = ci % WORLD, cty2 = (ci / WORLD) | 0;
+      const px = ctx2 * TILE - ox, py = cty2 * TILE - oy;
+      if (px < -TILE || py < -TILE || px > VIEW_W || py > VIEW_H) continue;
+      const n = 3 + hits * 3;
+      for (let j = 0; j < n; j++) {
+        const h = hash2(ci * 7 + j * 13, j * 31 + hits);
+        const a = (j / n) * Math.PI * 2 + h;
+        let x0 = px + 8, y0 = py + 8;
+        const steps = 2 + hits;
+        ctx.fillStyle = j % 2 ? 'rgba(238,248,253,0.9)' : 'rgba(163,203,224,0.9)';
+        for (let s = 0; s < steps; s++) {
+          x0 += Math.cos(a) * 2 + (hash2(ci + s, j) - 0.5);
+          y0 += Math.sin(a) * 2 + (hash2(j + 7, ci + s) - 0.5);
+          ctx.fillRect(Math.round(x0), Math.round(y0), 1, 1);
+        }
+      }
+    }
 
     // footprints + slide trails
     for (const f of footprints) {
@@ -2252,11 +2509,24 @@
     const spr = set[frame];
     const px = Math.round(player.x - 8 - ox);
     const py = Math.round(player.y - 12 - oy);
-    // shadow
-    ctx.fillStyle = 'rgba(110,130,170,0.4)';
-    ctx.fillRect(px + 5, py + 15, 6, 2);
+    // shadow (not while swimming in a hole)
+    if (player.fallT <= 0) {
+      ctx.fillStyle = 'rgba(110,130,170,0.4)';
+      ctx.fillRect(px + 5, py + 15, 6, 2);
+    }
 
-    if (player.dodgeT > 0) {
+    if (player.fallT > 0) {
+      // plunged through the ice: quick sink, only the head above the waterline
+      const sink = Math.round(Math.min(7, (HOLE_FALL_T - player.fallT) * 40));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(px - 2, py - 8, 20, 20); ctx.clip();
+      drawSpriteFlash(spr, px, py + sink, player.hurtT > 0.12 ? 1 : 0);
+      ctx.restore();
+      // ripple rings at the waterline
+      ctx.fillStyle = 'rgba(207,228,242,0.75)';
+      ctx.fillRect(px + 2, py + 11, 12, 1);
+      ctx.fillRect(px + 4, py + 13, 8, 1);
+    } else if (player.dodgeT > 0) {
       // dodge roll: full spin over the roll, trailing two afterimage ghosts.
       // Spin sign follows horizontal intent so side rolls tumble forward.
       const prog = 1 - player.dodgeT / DODGE_T;
@@ -2503,7 +2773,8 @@
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
         else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
         else { r = 188; g = 200; b = 218; } // stump
-      } else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
+      } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
+      else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
       else { r = 205; g = 216; b = 232; } // snow
       const j = i * 4;
       d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
@@ -2701,6 +2972,7 @@
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
         else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
+        else if (ground[i] === 2) { r = 44; g = 74; b = 104; } // carved water hole
         else if (ground[i] === 1) {
           // inked pond with darker shoreline
           const edge =
@@ -2945,6 +3217,12 @@
       drawPixelTextShadow(ctx, String(inv.berry), 15, 7, '#f4f7ff', 'rgba(15,22,50,0.8)');
       drawPixelTextShadow(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', 'rgba(15,22,50,0.8)');
     }
+    // fish: the bigger meal, right below the berries
+    if (inv.fish > 0) {
+      ctx.drawImage(SPRITES.itemFish, 5, 15);
+      drawPixelTextShadow(ctx, String(inv.fish), 15, 17, '#f4f7ff', 'rgba(15,22,50,0.8)');
+      drawPixelTextShadow(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', 'rgba(15,22,50,0.8)');
+    }
 
     // core resources - horizontal row, left of the minimap
     const res = [
@@ -3067,6 +3345,7 @@
   SFX.setMuted(settings.muted);
   genWorld();
   spawnAnimals();
+  spawnFish();
   player.x = (playerSpawn.tx + 0.5) * TILE;
   player.y = (playerSpawn.ty + 0.5) * TILE;
   renderGround();
@@ -3079,6 +3358,7 @@
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
     SEED, state, player, inv, animals, objects, ground, lights, mouse, keys, drops, footprints,
+    fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     placeObj, rebuildLights, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,

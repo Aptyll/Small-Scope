@@ -925,6 +925,24 @@
     '...oo...',
     '........',
   ];
+  const FIPAL = {
+    '.': null,
+    'o': '#243b52',
+    'b': '#4f7ea3',
+    'B': '#6f9fc0',
+    'w': '#c9dded',
+    'e': '#101d2c',
+  };
+  const itemFish = [
+    '........',
+    '....oo..',
+    '.o.oBBo.',
+    '.ooBbBBo',
+    '.oBbBeBo',
+    '.oowbBBo',
+    '.o.oBBo.',
+    '....oo..',
+  ];
   const itemGold = [
     '........',
     '..oooo..',
@@ -1059,6 +1077,7 @@
     itemStone: bake(itemStone, ITPAL),
     itemBerry: bake(itemBerry, ITPAL),
     itemGold: bake(itemGold, ITPAL),
+    itemFish: bake(itemFish, FIPAL),
     itemAxe: bake(itemAxe, AXPAL),
     itemBow: bake(itemBow, AXPAL),
     itemPick: bake(itemPick, AXPAL),
