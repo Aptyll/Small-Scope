@@ -264,7 +264,7 @@
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_FS = SET_Y + 108;
+    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92;
     fitFlakes();
     renderBars();
   }
@@ -2922,13 +2922,13 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 202;
+  const SET_W = 240, SET_H = 186;
   let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
   let SET_Y = Math.round((VIEW_H - SET_H) / 2);
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
   let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92, ROW_FS = SET_Y + 108;
+    ROW_FPS = SET_Y + 92;
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -2982,21 +2982,20 @@
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
-    drawPixelText(g, 'FULLSCREEN', 14, ROW_FS - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 126, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 110, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 113, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 113, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 140;
+      let y = 124;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -3006,7 +3005,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 188, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 176, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -3045,12 +3044,6 @@
       saveSettings();
       return;
     }
-    if (inRow(ROW_FS) && onWidget) {
-      // needs the click gesture; the fullscreenchange listener refits the canvas
-      if (document.fullscreenElement) document.exitFullscreen();
-      else document.documentElement.requestFullscreen().catch(() => { });
-      SFX.pickup();
-    }
   }
 
   function drawSliderRow(y, t, txt) {
@@ -3082,7 +3075,6 @@
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
-    drawToggleRow(ROW_FS, !!document.fullscreenElement);
   }
 
   function renderUI(now) {

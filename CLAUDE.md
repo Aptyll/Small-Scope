@@ -389,9 +389,8 @@ it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` als
 itself against. (Old saves may still carry a `res` key from the removed resolution setting;
 `Object.assign` in `loadSettings` copies it harmlessly and nothing reads it.)
 
-The ESC menu's FULLSCREEN row is a live (not persisted) toggle driving the browser Fullscreen
-API from the click gesture; `fullscreenchange` refits the canvas, and the row reads
-`document.fullscreenElement` each frame.
+There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
+still refits the canvas when the browser toggles it.
 
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
 unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
