@@ -33,6 +33,8 @@
   const SLIDE_MIN = 85;     // shift-slide only engages above this speed...
   const SLIDE_EXIT = 55;    // ...and drops out below this one (hysteresis)
   const TRAIL_MIN = 110;    // sliding faster than this carves the snow trail
+  const SNOW_TRAIL_LIFE = 3.5; // snow groove lifetime (ice scratches keep the 9s footprint life)
+  const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
 
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
@@ -1864,8 +1866,9 @@
       if (f.t > 0.9) floaters.splice(i, 1);
     }
     for (let i = footprints.length - 1; i >= 0; i--) {
-      footprints[i].t += dt;
-      if (footprints[i].t > 9) footprints.splice(i, 1);
+      const f = footprints[i];
+      f.t += dt;
+      if (f.t > (f.k === 1 ? SNOW_TRAIL_LIFE : 9)) footprints.splice(i, 1);
     }
   }
 
@@ -1902,10 +1905,12 @@
 
     // footprints + slide trails
     for (const f of footprints) {
-      const a = Math.max(0, 1 - f.t / 9);
       if (f.k === 1) {
         // carved snow groove, lit from the top-left like the rest of the art:
-        // shadowed trench wall on top, lit pressed floor below
+        // shadowed trench wall on top, lit pressed floor below. Holds crisp for
+        // most of its (short) life, then fades out fast — so a slide's trail
+        // wipes away tail-first behind the player instead of ghosting out as one
+        const a = Math.max(0, Math.min(1, (SNOW_TRAIL_LIFE - f.t) / SNOW_TRAIL_FADE));
         const px = Math.round(f.x - ox) - 1, py = Math.round(f.y - oy) - 1;
         ctx.fillStyle = 'rgba(128,152,190,' + (a * 0.6).toFixed(3) + ')';
         ctx.fillRect(px, py, 2, 1);
@@ -1913,10 +1918,12 @@
         ctx.fillRect(px, py + 1, 2, 1);
       } else if (f.k === 2) {
         // ice skate scratch: thin frosted nick, brighter than the ice sheet
+        const a = Math.max(0, 1 - f.t / 9);
         ctx.fillStyle = 'rgba(238,250,255,' + (a * 0.75).toFixed(3) + ')';
         ctx.fillRect(Math.round(f.x - ox), Math.round(f.y - oy), 1, 1);
       } else {
         // walking footprints
+        const a = Math.max(0, 1 - f.t / 9);
         ctx.fillStyle = 'rgba(122,150,192,' + (a * 0.6).toFixed(3) + ')';
         ctx.fillRect(Math.round(f.x - ox) - 1, Math.round(f.y - oy), 2, 2);
       }

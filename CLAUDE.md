@@ -247,7 +247,10 @@ and knockback still use the old direct-move idiom.
   top-left like the rest of the art); on ice, thin frosted skate scratches. Marks are
   `k`-tagged entries pushed into the existing `footprints` decal array (cap 800) every ~2.5px
   of travel, interpolated along the path so a fast frame never gaps the line — never drawn
-  into the pre-rendered ground canvas — plus snow-spray particle bursts.
+  into the pre-rendered ground canvas — plus snow-spray particle bursts. Snow grooves have
+  their own short hold-then-fade life (`SNOW_TRAIL_LIFE` 3.5 s, fading only over the last
+  `SNOW_TRAIL_FADE` 1.4 s), so a trail stays crisp and then wipes away tail-first behind the
+  player; ice scratches and walking footprints keep the original 9 s linear fade.
 - **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
   normal movement, so you never grind along a treeline at full speed.
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
