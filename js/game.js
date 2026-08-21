@@ -150,15 +150,15 @@
       g.fillStyle = '#232f52'; g.fillRect(x, 0, 1, len - 1);
       if (h > 0.75) { g.fillStyle = '#35426e'; g.fillRect(x, len - 1, 1, 1); }
     }
-    // snowdrifts piled along the bottom (layered waves, deterministic)
-    for (let x = 0; x < W; x++) {
+    // matching icicle fringe rising from the bottom edge (different hash row
+    // so it isn't a literal mirror)
+    for (let x = 0; x < W; x += 4) {
       if (!inBar(x)) continue;
-      const dh = Math.max(2, Math.round(
-        6 + 2.5 * Math.sin(x * 0.07 + 1.3) + 1.8 * Math.sin(x * 0.23) +
-        hash2(x * 13 + 1, 55) * 1.5));
-      g.fillStyle = '#aebfd8'; g.fillRect(x, H - dh, 1, dh);        // shaded base
-      g.fillStyle = '#dfe9f6'; g.fillRect(x, H - dh, 1, Math.max(1, dh - 2));
-      g.fillStyle = '#f4f8ff'; g.fillRect(x, H - dh, 1, 1);          // sunlit crest
+      const h = hash2(x * 9 + 5, 113);
+      const len = 2 + ((h * 7) | 0);
+      g.fillStyle = '#141c3c'; g.fillRect(x, H - len, 2, len);
+      g.fillStyle = '#232f52'; g.fillRect(x, H - len + 1, 1, len - 1);
+      if (h > 0.75) { g.fillStyle = '#35426e'; g.fillRect(x, H - len, 1, 1); }
     }
     // icy bevel hugging the game view on both sides
     const xL = Math.floor(barW), xR = Math.ceil(W - barW);

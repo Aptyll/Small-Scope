@@ -98,7 +98,8 @@ resolution setting**; camera zoom, if it comes, will be a gameplay feature, not 
   keeps the view at least 320×240 so the UI panels always fit.
 - The bars are **themed, not black**: a second full-window canvas (`#bars`, z-order under
   `#game`, `pointer-events: none`) carries a static frost-panel frame — night slab, mottling,
-  ice crystals, icicle fringe, snowdrifts, and an icy bevel hugging the game view — baked by
+  ice crystals, icicle fringes on the top and bottom edges, and an icy bevel hugging the game
+  view — baked by
   `renderBars()` in the game palette. It spans `FULL_W` (the pre-cap window width in game px)
   and is deliberately darker than the world so the eye stays on the game; on ≤16:9 screens it
   is cleared and fully covered. It uses `hash2`, so it must never run before boot — it is baked
