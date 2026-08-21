@@ -234,9 +234,12 @@ and knockback still use the old direct-move idiom.
 - **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
   on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering),
   drops any bow draw, and blocks all tool use (`clickAction` and the held-button auto-swing
-  both check `player.sliding`). Above `TRAIL_MIN` (110) it carves a double-groove trail —
-  distance-spaced entries pushed into the existing `footprints` decal array (cap 400), never
-  drawn into the pre-rendered ground canvas — plus snow-spray particle bursts.
+  both check `player.sliding`). Above `TRAIL_MIN` (110) it carves a surface-specific double
+  trail: on snow, two-tone carved grooves (shadowed top row, lit bottom row — lit from the
+  top-left like the rest of the art); on ice, thin frosted skate scratches. Marks are
+  `k`-tagged entries pushed into the existing `footprints` decal array (cap 800) every ~2.5px
+  of travel, interpolated along the path so a fast frame never gaps the line — never drawn
+  into the pre-rendered ground canvas — plus snow-spray particle bursts.
 - **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
   normal movement, so you never grind along a treeline at full speed.
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and

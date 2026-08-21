@@ -1666,17 +1666,25 @@
       player.animT = 0; // sliding/gliding uses the standing pose
     }
 
-    // fast slide: carve a double-groove trail (footprint decals, distance-spaced
-    // so the grooves read as continuous lines) and kick up snow spray
+    // fast slide: carve a double trail (footprint decals, spaced ~2.5px so the
+    // marks overlap into continuous lines) and kick up snow spray. Snow gets
+    // two-tone carved grooves (k:1, lip offset toward the outer side); ice gets
+    // thin frosted skate scratches (k:2).
     if (player.sliding && spNow > TRAIL_MIN) {
       player.trailD -= spNow * dt;
-      if (player.trailD <= 0) {
-        player.trailD = 3.5;
-        const nx = -player.vy / spNow, ny = player.vx / spNow;
-        footprints.push({ x: player.x + nx * 2, y: player.y + 6 + ny * 2, t: 0 });
-        footprints.push({ x: player.x - nx * 2, y: player.y + 6 - ny * 2, t: 0 });
-        while (footprints.length > 400) footprints.shift();
+      const nx = -player.vy / spNow, ny = player.vx / spNow;
+      const k = onIce ? 2 : 1;
+      let emit = 0;
+      while (player.trailD <= 0 && emit++ < 6) {
+        // interpolate the mark back along the path so the spacing stays even
+        // no matter how far a single frame travelled
+        const back = -player.trailD;
+        const bx = player.x - ny * back, by = player.y + 6 + nx * back;
+        footprints.push({ x: bx + nx * 2, y: by + ny * 2, t: 0, k });
+        footprints.push({ x: bx - nx * 2, y: by - ny * 2, t: 0, k });
+        player.trailD += 2.5;
       }
+      while (footprints.length > 800) footprints.shift();
       player.slideDustT -= dt;
       if (player.slideDustT <= 0) {
         player.slideDustT = 0.1;
@@ -1869,11 +1877,26 @@
     // ground
     ctx.drawImage(groundCv, ox, oy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
 
-    // footprints
+    // footprints + slide trails
     for (const f of footprints) {
-      const a = Math.max(0, 1 - f.t / 9) * 0.6;
-      ctx.fillStyle = 'rgba(122,150,192,' + a.toFixed(3) + ')';
-      ctx.fillRect(Math.round(f.x - ox) - 1, Math.round(f.y - oy), 2, 2);
+      const a = Math.max(0, 1 - f.t / 9);
+      if (f.k === 1) {
+        // carved snow groove, lit from the top-left like the rest of the art:
+        // shadowed trench wall on top, lit pressed floor below
+        const px = Math.round(f.x - ox) - 1, py = Math.round(f.y - oy) - 1;
+        ctx.fillStyle = 'rgba(128,152,190,' + (a * 0.6).toFixed(3) + ')';
+        ctx.fillRect(px, py, 2, 1);
+        ctx.fillStyle = 'rgba(182,199,222,' + (a * 0.55).toFixed(3) + ')';
+        ctx.fillRect(px, py + 1, 2, 1);
+      } else if (f.k === 2) {
+        // ice skate scratch: thin frosted nick, brighter than the ice sheet
+        ctx.fillStyle = 'rgba(238,250,255,' + (a * 0.75).toFixed(3) + ')';
+        ctx.fillRect(Math.round(f.x - ox), Math.round(f.y - oy), 1, 1);
+      } else {
+        // walking footprints
+        ctx.fillStyle = 'rgba(122,150,192,' + (a * 0.6).toFixed(3) + ')';
+        ctx.fillRect(Math.round(f.x - ox) - 1, Math.round(f.y - oy), 2, 2);
+      }
     }
 
     // visible tile range
