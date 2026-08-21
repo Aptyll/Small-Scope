@@ -284,6 +284,14 @@ for combat abilities. Two verbs, two inputs:
   visually for the duration of the work. `workTarget()` is shared with the cursor, so the
   lock ring is exactly "E will do something here".
 
+Whenever `workTarget()` is non-null and `near` (and tools aren't blocked or the bow drawn),
+`drawWorkHint()` — called right after `drawSelection` in the overlay pass — floats a
+Fortnite-style key prompt over the target: a 9×10 pixel key-cap with an **E** plus the verb
+(CHOP / MINE / PICK / CRACK ICE), lifted above trees by 20 px and short objects by 10. The cap
+visibly presses (face drops a pixel, highlight gone, label goes gold) while `keys['e']` is down.
+If the prompt would overlap the player sprite (an adjacent target) it flips under the tile
+instead. Since it only appears in reach, it doubles as the "you're close enough" signal.
+
 `hitObject()` keeps its hard tool gating (trees need the axe, rock/ore the pick, with
 `SFX.deny` + a `NEEDS AXE`/`NEEDS PICKAXE` floater) as a safety net, but since `tryWork`
 always picks the right tool it is no longer reachable in normal play. Stumps and structures
@@ -512,7 +520,7 @@ There is no warmth/cold system anymore — night darkness is purely visual.
 (stumps) → item drops → **y-sorted
 `draws` array** (tall objects + player + animals + robots, sorted by feet Y) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
-stump / finished structure, or the wheel's target) → construction progress bars → particles →
+stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → construction progress bars → particles →
 arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
 map/settings/title/death overlays → fps/seed tags → the pixel cursor (always last). The bow's

@@ -2290,6 +2290,7 @@
     }
 
     drawSelection(ox, oy, now);
+    drawWorkHint(ox, oy);
 
     // construction progress bars
     for (const o of structures) {
@@ -2630,6 +2631,43 @@
     corners('rgba(15,22,50,0.9)', bx + 1, by + 1);
     corners('#ffffff', bx, by);
     ctx.globalAlpha = 1;
+  }
+
+  // "E  CHOP" key prompt over whatever E would work right now (Fortnite-style):
+  // a pixel key-cap that visibly presses while E is held, plus the verb. Only
+  // when the target is in reach and tools aren't blocked, so it doubles as
+  // the "you're close enough" signal.
+  function drawWorkHint(ox, oy) {
+    if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
+    if (player.charging || player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    const t = workTarget();
+    if (!t || !t.near) return;
+    const verb = !t.o ? 'CRACK ICE' : t.o.type === 'tree' ? 'CHOP' :
+      t.o.type === 'bush' ? 'PICK' : 'MINE';
+    // sit above the sprite: trees reach 8px above their tile, short objects start 6px below
+    const lift = t.o ? (t.o.type === 'tree' ? 20 : 10) : 8;
+    const pressed = !!keys['e'];
+    const capW = 9, gapW = 3;
+    const totalW = capW + gapW + pixelTextWidth(verb);
+    const x = Math.round(t.tx * TILE + 8 - ox - totalW / 2);
+    let y = Math.round(t.ty * TILE - oy - lift);
+    // an adjacent target puts the prompt over the player's head: flip it under the tile instead
+    const px0 = Math.round(player.x - ox), py0 = Math.round(player.y - oy);
+    if (x < px0 + 9 && x + totalW > px0 - 9 && y < py0 + 5 && y + 10 > py0 - 14) {
+      y = Math.round(t.ty * TILE - oy + TILE + 3);
+    }
+    // key-cap: navy rim, icy face, top highlight; pressed = face drops a pixel, no highlight
+    const cy = y + (pressed ? 1 : 0);
+    ctx.fillStyle = '#0a0e23';
+    ctx.fillRect(x, y, capW, 10);
+    ctx.fillStyle = pressed ? '#8fb3d6' : '#c2d8ee';
+    ctx.fillRect(x + 1, cy + 1, capW - 2, 8 - (pressed ? 1 : 0));
+    if (!pressed) {
+      ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x + 1, y + 1, capW - 2, 1);
+      ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 1, y + 8, capW - 2, 1); // bottom shade = depth
+    }
+    drawPixelText(ctx, 'E', x + 3, cy + 3, '#0a0e23');
+    drawPixelTextShadow(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', 'rgba(10,14,35,0.9)');
   }
 
   function renderWheel(now) {
