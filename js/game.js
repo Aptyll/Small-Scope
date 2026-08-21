@@ -69,6 +69,7 @@
     { label: '360P', h: 360 },
     { label: '450P', h: 450 },
     { label: '540P', h: 540 },
+    { label: '1080P', h: 1080 },
   ];
   let resH = 270; // target internal height; applyResolution() syncs from settings
 

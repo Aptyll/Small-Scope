@@ -89,7 +89,7 @@ resolution height, then derives `VIEW_W`/`VIEW_H` as `ceil(devicePx / scale)` �
 covers the window exactly (≤1 game px of overflow, split by the body's flex centering and
 clipped by `overflow:hidden`), so there are never letterbox bars and never distortion. `scale`
 is fractional in CSS px and must not be floored. The target height comes from `RES_OPTIONS`
-(270/360/450/540) via `settings.res` (see [Settings](#settings)); a guard keeps the view at
+(270/360/450/540/1080) via `settings.res` (see [Settings](#settings)); a guard keeps the view at
 least 320×240 so the UI panels always fit. **All game logic and drawing works in the
 `VIEW_W`×`VIEW_H` space** — mouse coords are divided by `scale` on the way in. Round positions
 when drawing (`Math.round`) or sprites smear across subpixels.
@@ -361,7 +361,7 @@ settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx)
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against.
 
-`settings.res` indexes `RES_OPTIONS` (270P/360P/450P/540P internal heights); change it only via
+`settings.res` indexes `RES_OPTIONS` (270P/360P/450P/540P/1080P internal heights); change it only via
 `applyResolution()` (exposed on `DBG`), which clamps it, refits the canvas, and runs
 `relayout()`. The ESC menu's RESOLUTION row is a `<`/`>` cycle control (left half of the widget
 steps back, right half forward — the `<`/`>` glyphs were added to `js/font.js` for it) and shows
