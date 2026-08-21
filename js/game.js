@@ -26,6 +26,14 @@
   const DODGE_CHARGES = 2;
   const DODGE_CD = 3.5;     // seconds to refill one charge
 
+  // momentum (player-only): input accelerates vx/vy, the surface underfoot sets
+  // friction and speed caps. Walking on snow is tuned to feel like the old fixed
+  // PLAYER_SPEED; everything faster than that is earned via ice, dodges, or sliding.
+  const ICE_MAX = 150;      // ice speed cap (~2x walk); holding a direction pumps toward it
+  const SLIDE_MIN = 85;     // shift-slide only engages above this speed...
+  const SLIDE_EXIT = 55;    // ...and drops out below this one (hysteresis)
+  const TRAIL_MIN = 110;    // sliding faster than this carves the snow trail
+
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
   // price and (already shortened) upgrade construction time.
@@ -277,6 +285,7 @@
     charging: false, chargeT: 0, // bow draw state
     dodgeT: 0, dodgeVX: 0, dodgeVY: 0, dodgeDustT: 0, // active roll
     dodgeCharges: 2, dodgeRegenT: 0,
+    sliding: false, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
     hurtT: 0, invuln: 0,
     footT: 0, footSide: 0,
@@ -464,7 +473,7 @@
           Math.hypot(px - cx, py - cy) > 16 && !nearAnySpawn(px, py, 16);
       }
       if (!ok) continue;
-      let n = randi(50, 110);
+      let n = randi(70, 160);
       let wx = px, wy = py;
       while (n-- > 0) {
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -477,6 +486,39 @@
         wy = Math.max(4, Math.min(WORLD - 5, wy));
       }
     }
+
+    // frozen rivers: winding ~5-tile-wide ribbons that link each camp to the
+    // central ore field plus a ring around it — ice is the map's travel network.
+    // Same carve rules as the ponds, so rivers gap politely around camps, the
+    // ore field, and anything already standing (border trees leave natural gaps).
+    const carveIce = (tx, ty) => {
+      if (inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0 &&
+        Math.hypot(tx - cx, ty - cy) > CENTER_R + 3 && !nearAnySpawn(tx, ty, 9)) ground[idx(tx, ty)] = 1;
+    };
+    const carveRiver = (x0, y0, x1, y1) => {
+      let wx = x0, wy = y0;
+      let a = Math.atan2(y1 - wy, x1 - wx) + rand(-0.4, 0.4);
+      const phase = rand(0, Math.PI * 2), wig = rand(0.06, 0.12);
+      for (let s = 0; s < 320; s++) {
+        // home in on the target while serpentining around the straight line
+        const home = Math.atan2(y1 - wy, x1 - wx);
+        let da = home - a;
+        if (da > Math.PI) da -= Math.PI * 2;
+        if (da < -Math.PI) da += Math.PI * 2;
+        a += Math.max(-0.15, Math.min(0.15, da * 0.08)) + Math.sin(s * 0.09 + phase) * wig;
+        wx += Math.cos(a); wy += Math.sin(a);
+        const rx = Math.round(wx), ry = Math.round(wy);
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+          if (dx * dx + dy * dy <= 4.5) carveIce(rx + dx, ry + dy);
+        }
+        if (Math.hypot(wx - x1, wy - y1) < 3) break;
+      }
+    };
+    for (const p of spawnPts) carveRiver(p.tx, p.ty, cx, cy); // spokes
+    carveRiver(spawnPts[0].tx, spawnPts[0].ty, spawnPts[1].tx, spawnPts[1].ty); // ring
+    carveRiver(spawnPts[1].tx, spawnPts[1].ty, spawnPts[3].tx, spawnPts[3].ty);
+    carveRiver(spawnPts[3].tx, spawnPts[3].ty, spawnPts[2].tx, spawnPts[2].ty);
+    carveRiver(spawnPts[2].tx, spawnPts[2].ty, spawnPts[0].tx, spawnPts[0].ty);
 
     function free(tx, ty) {
       return inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0;
@@ -690,6 +732,7 @@
   // ------------------------------------------------------------ actions
   function clickAction() {
     SFX.unlock();
+    if (player.sliding) return; // no tool use mid-slide
     if (TOOLS[tool].key === 'bow') {
       if (!player.charging) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
     } else {
@@ -712,8 +755,13 @@
       dy = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
     }
     const d = Math.hypot(dx, dy) || 1;
-    player.dodgeVX = dx / d * DODGE_SPEED;
-    player.dodgeVY = dy / d * DODGE_SPEED;
+    // impulse into the shared velocity: a dash never slows you below the speed
+    // you already carry, so on ice dashes chain into real speed
+    const v = Math.max(DODGE_SPEED, Math.hypot(player.vx, player.vy));
+    player.dodgeVX = dx / d * v; // kept for the roll spin/ghost render
+    player.dodgeVY = dy / d * v;
+    player.vx = player.dodgeVX;
+    player.vy = player.dodgeVY;
     player.dodgeT = DODGE_T;
     player.dodgeDustT = 0;
     player.dodgeCharges--;
@@ -1411,6 +1459,8 @@
     player.charging = false;
     player.chargeT = 0;
     player.dodgeT = 0;
+    player.vx = player.vy = 0;
+    player.sliding = false;
     state.mapOpen = false;
     state.settingsOpen = false;
     state.wheel = null;
@@ -1428,6 +1478,8 @@
     player.hp = player.maxHp;
     player.invuln = 3;
     player.kbx = player.kby = 0;
+    player.vx = player.vy = 0;
+    player.sliding = false;
     player.dodgeT = 0;
     player.dodgeCharges = DODGE_CHARGES;
     player.dodgeRegenT = 0;
@@ -1513,10 +1565,26 @@
     player.kbx = (player.kbx || 0) * Math.pow(0.01, dt);
     player.kby = (player.kby || 0) * Math.pow(0.01, dt);
 
+    // ---- unified momentum: input accelerates vx/vy, the surface sets friction/caps
+    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+    const onIce = inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1;
+    let sp = Math.hypot(player.vx, player.vy);
+
+    // shift-slide: only engages above walking speed; keeps momentum, drops the tools
+    const wantSlide = keys['shift'] && player.dodgeT <= 0;
+    if (!player.sliding && wantSlide && sp > SLIDE_MIN) {
+      player.sliding = true;
+      if (player.charging) { player.charging = false; player.chargeT = 0; } // slide drops the draw
+    }
+    if (player.sliding && (!wantSlide || sp < SLIDE_EXIT)) player.sliding = false;
+
     if (player.dodgeT > 0) {
-      // rolling: the dash owns movement; input is ignored until it ends
+      // rolling: the dash owns the velocity; friction waits until the roll ends,
+      // so whatever speed the dash reached is carried out for the surface to spend
       player.dodgeT -= dt;
-      moveEntity(player, player.dodgeVX * dt, player.dodgeVY * dt, PLAYER_R);
+      const mv = moveEntity(player, player.vx * dt, player.vy * dt, PLAYER_R);
+      if (mv.blockedX) player.vx = 0;
+      if (mv.blockedY) player.vy = 0;
       player.dodgeDustT -= dt;
       if (player.dodgeDustT <= 0) {
         player.dodgeDustT = 0.05;
@@ -1524,10 +1592,49 @@
       }
       if (player.dodgeT <= 0) burst(player.x, player.y + 4, '#cfd8e8', 4, 30, 0.3, true);
     } else {
-      const spd = player.charging ? PLAYER_SPEED * 0.55 : PLAYER_SPEED; // drawn bow slows you
-      moveEntity(player,
-        (mx * spd + player.kbx) * dt,
-        (my * spd + player.kby) * dt, PLAYER_R);
+      const chargeMul = player.charging ? 0.55 : 1; // drawn bow slows you
+      const walkMax = PLAYER_SPEED * chargeMul;
+
+      if (!onIce && !player.sliding && sp <= walkMax + 6) {
+        // plain snow walking: near-instant vector approach, tuned so it feels
+        // exactly like the old fixed-speed movement (settles in ~3 frames)
+        const f = 1 - Math.exp(-25 * dt);
+        player.vx += (mx * walkMax - player.vx) * f;
+        player.vy += (my * walkMax - player.vy) * f;
+      } else {
+        // carrying momentum (ice, slide, or overspeed on snow):
+        // steer the heading toward the input, ease the speed toward the target
+        let dirx = mx, diry = my;
+        if (sp > 1) { dirx = player.vx / sp; diry = player.vy / sp; }
+        let steer, decay, target;
+        if (player.sliding) {
+          steer = 1.7; target = 0; decay = onIce ? 0.15 : 0.4;
+        } else if (onIce) {
+          const cap = ICE_MAX * chargeMul;
+          if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
+          else { steer = 0; target = 0; decay = 0.18; } // idle glide
+        } else {
+          steer = 4.5; target = len > 0 ? walkMax : 0; decay = 2.2; // snow bleeds overspeed fast
+        }
+        if (len > 0 && steer > 0 && (dirx !== 0 || diry !== 0)) {
+          // carve: rotate the travel direction toward the input, never snap it
+          const cur = Math.atan2(diry, dirx), want = Math.atan2(my, mx);
+          let da = want - cur;
+          if (da > Math.PI) da -= Math.PI * 2;
+          if (da < -Math.PI) da += Math.PI * 2;
+          const na = cur + Math.max(-steer * dt, Math.min(steer * dt, da));
+          dirx = Math.cos(na); diry = Math.sin(na);
+        }
+        sp = target + (sp - target) * Math.exp(-decay * dt);
+        player.vx = dirx * sp;
+        player.vy = diry * sp;
+      }
+
+      const mv = moveEntity(player,
+        (player.vx + player.kbx) * dt,
+        (player.vy + player.kby) * dt, PLAYER_R);
+      if (mv.blockedX) player.vx = 0; // a wall kills that axis instead of grinding
+      if (mv.blockedY) player.vy = 0;
     }
 
     player.x = Math.max(8, Math.min(WORLD * TILE - 8, player.x));
@@ -1542,7 +1649,8 @@
       }
     }
 
-    if (player.moving && player.dodgeT <= 0) {
+    const spNow = Math.hypot(player.vx, player.vy);
+    if (spNow > 8 && player.dodgeT <= 0 && !player.sliding) {
       player.animT += dt * 9;
       player.footT -= dt;
       if (player.footT <= 0) {
@@ -1552,10 +1660,28 @@
         const px = player.dir === 'left' || player.dir === 'right' ? player.x : player.x + side;
         const py = player.dir === 'left' || player.dir === 'right' ? player.y + 6 + (player.footSide ? 1 : -1) : player.y + 6;
         footprints.push({ x: px, y: py, t: 0 });
-        if (footprints.length > 90) footprints.shift();
+        if (footprints.length > 400) footprints.shift();
       }
     } else {
-      player.animT = 0;
+      player.animT = 0; // sliding/gliding uses the standing pose
+    }
+
+    // fast slide: carve a double-groove trail (footprint decals, distance-spaced
+    // so the grooves read as continuous lines) and kick up snow spray
+    if (player.sliding && spNow > TRAIL_MIN) {
+      player.trailD -= spNow * dt;
+      if (player.trailD <= 0) {
+        player.trailD = 3.5;
+        const nx = -player.vy / spNow, ny = player.vx / spNow;
+        footprints.push({ x: player.x + nx * 2, y: player.y + 6 + ny * 2, t: 0 });
+        footprints.push({ x: player.x - nx * 2, y: player.y + 6 - ny * 2, t: 0 });
+        while (footprints.length > 400) footprints.shift();
+      }
+      player.slideDustT -= dt;
+      if (player.slideDustT <= 0) {
+        player.slideDustT = 0.1;
+        burst(player.x, player.y + 5, '#eef4fb', 1, 18, 0.3, true);
+      }
     }
 
     // swing
@@ -1567,7 +1693,7 @@
         swingHit();
       }
     }
-    if (mouse.down && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
+    if (mouse.down && !player.sliding && TOOLS[tool].key !== 'bow' && player.swingCd <= 0) trySwing();
 
     // bow draw: charge up and keep facing the mouse
     if (player.charging) {
@@ -2844,7 +2970,7 @@
     drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, toy + 96 + bob, '#cfe0ff', 'rgba(15,22,50,0.9)');
 
     const lines = [
-      'WASD MOVE - SPACE DODGE ROLL',
+      'WASD MOVE - SPACE DODGE - SHIFT SLIDE',
       'AXE TREES - PICKAXE STONE AND GOLD',
       'HOLD CLICK TO DRAW THE BOW',
       '1-3 SWAP TOOLS - SCROLL TO ZOOM',
@@ -2898,7 +3024,7 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, player, inv, animals, objects, lights, mouse, keys, drops, footprints,
+    SEED, state, player, inv, animals, objects, ground, lights, mouse, keys, drops, footprints,
     settings, perf, treeRare,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     placeObj, rebuildLights, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,

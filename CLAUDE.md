@@ -5,7 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project
 
 Emberfrost — a browser canvas pixel-art winter survival game. Gather with three tool-gated
-tools (bow, axe, pickaxe) and build structures on stumps. The central gold mine and the
+tools (bow, axe, pickaxe), build structures on stumps, and travel fast via a momentum system
+(slippery frozen rivers, chained dodges, shift-sliding). The central gold mine and the
 night raider waves were removed — night is currently visual-only (darkness, no threat).
 
 ## Keeping this file current
@@ -45,7 +46,7 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 Three dev affordances exist for driving the game from outside the browser:
 
 - `window.DBG` (end of [js/game.js](js/game.js)) exposes the live `SEED`, `state`, `player`,
- `inv`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
+ `inv`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `ground`, `lights`,
  `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`,
  `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
@@ -138,7 +139,12 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 ### The tile world
 
 - `WORLD = 192` tiles of `TILE = 16` px → a 3072×3072 px world.
-- `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice.
+- `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice. Ice is **mechanically slippery** (see
+  [Momentum movement](#momentum-movement-player-only)), and worldgen carves it as a travel
+  network: 7 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
+  a spoke from each camp to the central ore field and a ring linking adjacent camps. The
+  shared `carveIce` rule skips existing objects, the camps, and the ore field, so rivers gap
+  naturally around them.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
   `goldore`, `wall`, `turret`, `generator`, `spawner`.
@@ -206,6 +212,36 @@ keys off the cycle:
 damages the player (`damagePlayer`/`die`/`respawn` are kept intact for whatever threat comes
 next).
 
+### Momentum movement (player-only)
+
+The player moves on a real velocity (`player.vx/vy`): input accelerates, and the surface
+underfoot sets friction and speed caps. All the tuning constants live in the constants banner
+(`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) and the per-surface rates inline in
+`updatePlay()`'s movement block. **Momentum is deliberately player-only** — animals, robots,
+and knockback still use the old direct-move idiom.
+
+- **Snow at walking speed** uses a near-instant vector approach (settles in ~3 frames) tuned to
+  feel exactly like the old fixed `PLAYER_SPEED` — crisp starts and stops, nothing floaty.
+- **Everything faster** (ice, sliding, or overspeed on snow) switches to a steer-the-heading /
+  ease-the-speed model: the travel direction *rotates* toward the input at a per-state rad/s
+  rate (carving, never snapping), while speed eases toward a per-state target. Ice pumps
+  toward `ICE_MAX` (150, ~2× walk) while a direction is held, glides on idle, and barely
+  bleeds overspeed; snow bleeds overspeed back to walking speed in about a second.
+- **Dodge roll** is an impulse into the same velocity: `tryDodge()` sets `vx/vy` to
+  `max(DODGE_SPEED, current speed)` (a dash never slows you), the roll itself applies no
+  friction, and the speed **carries out of the roll** for the surface to spend — so dashes
+  chain into real speed on ice but die fast on snow. I-frames still end with the roll.
+- **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
+  on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering),
+  drops any bow draw, and blocks all tool use (`clickAction` and the held-button auto-swing
+  both check `player.sliding`). Above `TRAIL_MIN` (110) it carves a double-groove trail —
+  distance-spaced entries pushed into the existing `footprints` decal array (cap 400), never
+  drawn into the pre-rendered ground canvas — plus snow-spray particle bursts.
+- **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
+  normal movement, so you never grind along a treeline at full speed.
+- Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
+  ice-gliding use the standing pose. `die()`/`respawn()` zero `vx/vy` and clear `sliding`.
+
 ### Tools and the bow
 
 The old 4-slot hotbar (axe + placeable spike/torch/campfire) is gone. The player has three
@@ -218,7 +254,8 @@ no damage. Bushes and structures accept either melee tool. Axe and pickaxe still
 but only for `MELEE_DMG` (6) — the bow is the ranged weapon.
 
 The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
-slows to 55%, facing tracks the mouse, a draw meter renders above the player's health bar),
+targets scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter
+renders above the player's health bar),
 and mouseup fires via `fireArrow()` — power scales speed (170–360 px/s) and damage (4–13).
 Arrows live in the `arrows` array, updated in `updatePlay()`: they die on solid tiles, on any
 animal hit (knockback scales with power), or after 0.85 s. They render as short
@@ -235,13 +272,16 @@ bow is drawn — the bow icon fires along −x (arc on the left), so aim rotatio
 ### Dodge roll
 
 **Space** (`tryDodge()`) dashes the player in the held 8-way WASD direction (facing direction
-if nothing is held): `DODGE_SPEED` (215) for `DODGE_T` (0.28 s) ≈ 60 px, with i-frames for the
-whole roll (`player.invuln`). Two charges (`DODGE_CHARGES`), refilling **one at a time** every
-`DODGE_CD` (3.5 s); state lives on `player` as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
-dodgeRegenT/dodgeDustT`. While rolling, movement input, footprints, walk animation, and the
-held tool are suppressed — the roll owns `moveEntity` (still collides with solids) and
-`drawPlayer` swaps to a full 360° sprite spin with two afterimage ghosts trailing the velocity
-plus dust bursts. The charge meter is two cyan pips on a plate directly beneath the overhead
+if nothing is held): an impulse of `max(DODGE_SPEED (215), current speed)` into `player.vx/vy`
+for `DODGE_T` (0.28 s), with i-frames for the roll only (`player.invuln` — momentum carried
+past the roll gets no i-frames). Two charges (`DODGE_CHARGES`), refilling **one at a time**
+every `DODGE_CD` (3.5 s); state lives on `player` as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
+dodgeRegenT/dodgeDustT` (`dodgeVX/VY` exist only for the spin/ghost render — movement runs on
+`vx/vy`). While rolling, movement input, friction, footprints, walk animation, and the held
+tool are suppressed (still collides with solids; a wall zeroes that axis), and `drawPlayer`
+swaps to a full 360° sprite spin with two afterimage ghosts trailing the velocity plus dust
+bursts. The roll's exit speed is spent by the surface — see
+[Momentum movement](#momentum-movement-player-only). The charge meter is two cyan pips on a plate directly beneath the overhead
 health bar; the recharging slot fills left-to-right. Death cancels the roll, respawn refills
 charges; overlays (map/settings/wheel/pause) block the input.
 
@@ -443,11 +483,15 @@ sprite array, entries in `isSolidTile()`, both map colour tables, and a function
 refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 
 **Adding a ground type** — extend `renderGround()`, `updateMinimap()`, and `buildWorldMapImg()`,
-and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule.
+give it a surface branch in `updatePlay()`'s momentum block (steer/decay/target rates — ice is
+the template), and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the
+placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator period, spawner bot counts/HP), `MELEE_DMG` and
-`BOW_CHARGE` in the constants banner, the arrow speed/damage formulas in `fireArrow()`,
+range/dmg/rate, generator period, spawner bot counts/HP), `MELEE_DMG`, `BOW_CHARGE`, and the
+momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
+the per-surface steer/decay rates inline in `updatePlay()`'s movement block,
+the arrow speed/damage formulas in `fireArrow()`,
 `TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness ramp in
 `update()`.
 
