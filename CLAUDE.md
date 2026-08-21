@@ -287,8 +287,10 @@ Switching tools, opening an overlay, or dying drops the draw without firing; `BO
 (0.9 s) is a full draw.
 
 While the bow is drawn, `drawAimLine()` (called from `render()` right before the arrows pass,
-using `ex`/`ey`) shows the shot: 2×2 dots with a 1 px drop shadow march outward from the bow
-along the exact direction `fireArrow()` would use, the march quickening with the draw. The
+using `ex`/`ey`) shows the shot: a static line of 2×2 drop-shadowed dots from the arrow's spawn
+point along the exact direction `fireArrow()` uses. Both aim from `player.y - BOW_Y` (6 px above
+the feet, where the arrow spawns) — not the feet — so the line and the flight pass exactly
+through the cursor instead of running parallel a few px above it. The
 line is **truthful, not decorative** — it runs exactly as far as the arrow would fly
 (`(170 + 190p) × 0.85`, so it lengthens with the draw), stops at the first `isSolidTile`
 along the path with an impact cross (arrows die on solids), and otherwise ends in a short

@@ -20,6 +20,7 @@
     { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
   ];
   const BOW_CHARGE = 0.9;   // seconds to a full draw
+  const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
   const MELEE_DMG = 6;      // axe/pick vs animals (bow is the real weapon)
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
@@ -869,12 +870,14 @@
       }
     }
     const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
+    // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise the
+    // flight runs parallel to the cursor line, a few px above it, and never meets it
     const dx = mouse.x + camX - player.x;
-    const dy = mouse.y + camY - player.y;
+    const dy = mouse.y + camY - (player.y - BOW_Y);
     const d = Math.hypot(dx, dy) || 1;
     const spd = 170 + 190 * p;
     arrows.push({
-      x: player.x, y: player.y - 6,
+      x: player.x, y: player.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
       t: 0, life: 0.85, dmg: Math.round(4 + 9 * p), pow: p,
     });
@@ -2531,8 +2534,8 @@
     drawOutlinedRects(rects, col, base);
   }
 
-  // dotted flight line while the bow is drawn: dots march outward from the
-  // bow, run exactly as far as the arrow would (range grows with the draw),
+  // dotted flight line while the bow is drawn: a static dotted line from the
+  // arrow's spawn point through the cursor, exactly as far as the arrow would fly (range grows with the draw),
   // and stop at the first solid tile, since arrows die on those. A fish in
   // bow-fishing reach gets a catch marker instead - that shot never flies.
   function drawAimLine(ex, ey, now) {
@@ -2558,8 +2561,8 @@
     }
     const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
     const range = (170 + 190 * p) * 0.85; // speed x lifetime, as fireArrow() sets them
-    const x0 = player.x, y0 = player.y - 6;
-    const dx = mouse.x + camX - player.x, dy = mouse.y + camY - player.y;
+    const x0 = player.x, y0 = player.y - BOW_Y; // exactly fireArrow()'s origin and direction
+    const dx = mouse.x + camX - x0, dy = mouse.y + camY - y0;
     const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
     let len = range, blocked = false;
     for (let s = 10; s < range; s += 3) {
@@ -2567,10 +2570,9 @@
         len = s; blocked = true; break;
       }
     }
-    // the march quickens with the draw; dots thin out toward the end of the flight
+    // static dots (no animation - it read as clutter), fading toward the end of the flight
     const sp = 6;
-    const phase = (now * (28 + 32 * p)) % sp;
-    for (let s = 13 + phase; s < len - 3; s += sp) {
+    for (let s = 13; s < len - 3; s += sp) {
       const a = 0.95 * (1 - (s / range) * 0.6);
       const sx = Math.round(x0 + nx * s - ex), sy = Math.round(y0 + ny * s - ey);
       ctx.globalAlpha = a * 0.6; ctx.fillStyle = '#0a0e23'; ctx.fillRect(sx + 1, sy + 1, 2, 2);
@@ -2830,7 +2832,7 @@
     // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
     // rotating by a + PI points the arc at the target
     if (t.key === 'bow' && player.charging) {
-      const a = Math.atan2(mouse.y + camY - player.y, mouse.x + camX - player.x);
+      const a = Math.atan2(mouse.y + camY - (player.y - BOW_Y), mouse.x + camX - player.x);
       ctx.save();
       ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
       ctx.rotate(a + Math.PI);
