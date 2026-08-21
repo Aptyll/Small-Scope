@@ -399,7 +399,8 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   `inv.fish++`, splash, no arrow. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
   cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
   prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
-  pixel mouse icon (`drawMouseIcon`, left button lit, gold while pressed/charging) reading
+  pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, hot orange while
+  pressed/charging — so nothing hints at right-click) reading
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
   the berry's Q/+20), with a count indicator under the berry indicator top-left

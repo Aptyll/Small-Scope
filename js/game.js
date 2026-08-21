@@ -2694,13 +2694,18 @@
     drawPixelTextShadow(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', 'rgba(10,14,35,0.9)');
   }
 
-  // 7x10 pixel mouse with the left button lit: the "click" key-cap
+  // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour
+  // (gold = the game's "active" accent, hot orange while pressed); the right
+  // button is plain body so nothing suggests right-click.
   function drawMouseIcon(x, y, pressed) {
     ctx.fillStyle = '#0a0e23';
-    ctx.fillRect(x + 1, y, 5, 1); ctx.fillRect(x, y + 1, 7, 6); ctx.fillRect(x + 1, y + 7, 5, 2); ctx.fillRect(x + 2, y + 9, 3, 1);
-    ctx.fillStyle = '#c2d8ee'; ctx.fillRect(x + 1, y + 4, 5, 3); ctx.fillRect(x + 2, y + 7, 3, 1);
-    ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 4, y + 1, 2, 2); // right button, shaded
-    ctx.fillStyle = pressed ? '#ffd95c' : '#f4f7ff'; ctx.fillRect(x + 1, y + 1, 2, 2); // left button, lit
+    ctx.fillRect(x + 1, y, 7, 1); ctx.fillRect(x, y + 1, 9, 8); ctx.fillRect(x + 1, y + 9, 7, 1); ctx.fillRect(x + 2, y + 10, 5, 1);
+    ctx.fillStyle = '#c2d8ee';
+    ctx.fillRect(x + 1, y + 5, 7, 4); ctx.fillRect(x + 2, y + 9, 5, 1); // body
+    ctx.fillRect(x + 5, y + 1, 3, 3); // right button: body colour, nothing to notice
+    ctx.fillStyle = '#dce9f5'; ctx.fillRect(x + 1, y + 5, 7, 1); // body highlight under the seam
+    ctx.fillStyle = pressed ? '#ff9440' : '#ffd95c'; ctx.fillRect(x + 1, y + 1, 3, 3); // left button
+    ctx.fillStyle = '#fff3b0'; ctx.fillRect(x + 1, y + 1, 1, 1); // button glint
   }
 
   // hovering a fish: white brackets on the fish (the same "this reacts" cue as
@@ -2726,10 +2731,10 @@
     corners('#ffffff', fx - 8, fy - 6);
     ctx.globalAlpha = near ? 1 : 0.6;
     const verb = near ? 'SPEAR' : 'GET CLOSE';
-    const totalW = 7 + 3 + pixelTextWidth(verb);
+    const totalW = 9 + 3 + pixelTextWidth(verb);
     const x = Math.round(fx - totalW / 2), y = fy - 26; // clear of an adjacent player's bars
     drawMouseIcon(x, y, near && (mouse.down || player.charging));
-    drawPixelTextShadow(ctx, verb, x + 10, y + 3, near ? '#f4f7ff' : '#9fb6d8', 'rgba(10,14,35,0.9)');
+    drawPixelTextShadow(ctx, verb, x + 12, y + 3, near ? '#f4f7ff' : '#9fb6d8', 'rgba(10,14,35,0.9)');
     ctx.globalAlpha = 1;
   }
 
