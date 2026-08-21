@@ -7,8 +7,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Emberfrost — a browser canvas pixel-art winter survival game. Fight with an always-in-hand
 bow, harvest with **E** (the axe/pickaxe come out on their own for whatever's under the
 cursor), build structures on stumps, and travel fast via a momentum system
-(slippery frozen rivers, chained dodges, shift-sliding). The central gold mine and the
-night raider waves were removed — night is currently visual-only (darkness, no threat).
+(slippery frozen rivers, chained dodges, shift-sliding). **Gold is the only currency** —
+every source (trees, rocks, animals, generators) pays gold with its own yield profile, and
+berries/fish are food, not resources (see [Economy](#economy-one-currency)). The central gold
+mine and the night raider waves were removed — night is currently visual-only (darkness, no
+threat).
 
 ## Keeping this file current
 
@@ -149,12 +152,12 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
   [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
   [Momentum movement](#momentum-movement-player-only)), and worldgen carves it as a travel
   network: 14 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
-  a spoke from each camp to the central ore field and a ring linking adjacent camps. The
-  shared `carveIce` rule skips existing objects, the camps, and the ore field, so rivers gap
+  a spoke from each camp to the central clearing and a ring linking adjacent camps. The
+  shared `carveIce` rule skips existing objects, the camps, and the clearing, so rivers gap
   naturally around them.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
-  `goldore`, `wall`, `turret`, `generator`, `spawner`.
+  `wall`, `turret`, `generator`, `spawner`.
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
@@ -164,14 +167,16 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
   `bots`, `respawnT`), and every live one is also referenced from the module-scope `structures`
   array so per-frame ticks never scan the 36k grid. Stumps are **consumable build anchors**:
   building on one replaces it, and demolition/destruction leaves the tile empty, not a stump.
-- The world center holds a ring of `goldore` at the fixed `oreSpots` (respawned each dawn);
-  `CENTER_R` in `genWorld()` keeps ice ponds, rocks, and bushes clear of it.
-- Every `tree` carries `rare`, set at worldgen from `treeRare(tx, ty)`: a `hash2` roll gives each
-  tree a `TREE_RARE_CHANCE` (8%) shot at a bonus resource — `gold` for the scarcer ~30% of that
-  band, `stone` otherwise, `null` for the rest. `hitObject()` pays it out (2 drops, plus a floater)
-  only when the tree actually falls, on top of the usual wood. Being a position hash rather than an
-  `rng()` draw, the roll is the same whenever it is asked — `DBG.treeRare(tx, ty)` reports it for
-  any tile, occupied or not.
+- The world center is an empty clearing (the old gold-ore ring is gone); `CENTER_R` in
+  `genWorld()` still keeps ice ponds, rocks, and bushes clear of it so the river spokes meet in
+  open ground, and the ore loop's two `rand()` draws per spot are kept as no-ops so existing
+  seeds still generate the same world.
+- Every `tree` carries `rare` (boolean), set at worldgen from `treeRare(tx, ty)`: a `hash2`
+  roll gives each tree a `TREE_RARE_CHANCE` (8%) shot at a **jackpot** — `YIELD.treeRare` extra
+  gold (as two coins, plus a `JACKPOT!` floater), paid by `hitObject()` only when the tree
+  actually falls, on top of the normal payout. Being a position hash rather than an `rng()`
+  draw, the roll is the same whenever it is asked — `DBG.treeRare(tx, ty)` reports it for any
+  tile, occupied or not.
 
 `renderGround()` pre-renders the *entire* 3712×3712 ground to one offscreen canvas at boot and
 the frame loop just blits the camera window out of it. It is a one-time cost — never call it per
@@ -216,7 +221,6 @@ keys off the cycle:
 
 - `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlay()`.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
-- Fresh gold ore respawns at the fixed `oreSpots` each dawn.
 - Carved ice holes refreeze at dawn (cracks heal too) and the fish shoal tops back up to
   `FISH_COUNT` — see [Ice holes and fishing](#ice-holes-and-fishing).
 
@@ -274,7 +278,7 @@ for combat abilities. Two verbs, two inputs:
 - **Left click = bow**, always (`clickAction`).
 - **E = work** (`tryWork`, auto-repeating every swing cooldown while held — `updatePlay`
   calls it whenever `keys['e']` is down). It resolves `workTarget()`: the tile under the
-  cursor, if it holds a tree (→ axe), rock/gold ore (→ pick), a berried bush (→ axe), or is
+  cursor, if it holds a tree (→ axe), rock (→ pick), a berried bush (→ axe), or is
   bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
   within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
   ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
@@ -293,7 +297,7 @@ visibly presses (face drops a pixel, highlight gone, label goes gold) while `key
 If the prompt would overlap the player sprite (an adjacent target) it flips under the tile
 instead. Since it only appears in reach, it doubles as the "you're close enough" signal.
 
-`hitObject()` keeps its hard tool gating (trees need the axe, rock/ore the pick, with
+`hitObject()` keeps its hard tool gating (trees need the axe, rocks the pick, with
 `SFX.deny` + a `NEEDS AXE`/`NEEDS PICKAXE` floater) as a safety net, but since `tryWork`
 always picks the right tool it is no longer reachable in normal play. Stumps and structures
 are **not** E targets — they are the right-click wheel's domain — and there is no melee against
@@ -356,8 +360,8 @@ Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
 comes within 26 px, and an arrow hit sends either species fleeing directly away from the player
-(`fleeT`). Deaths pay out in `updateAnimal`: rabbits drop 1 berry, deer drop 2-3 gold plus a
-`GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
+(`fleeT`). Deaths pay out in `updateAnimal` from the `YIELD` table: rabbits drop 1 berry plus
+`YIELD.rabbit` coins, deer drop `YIELD.deer` coins plus a `GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
 animals join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
 map.
@@ -383,7 +387,7 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   except the player, so animals and robots never wade in. `isSolidTile` itself is unchanged —
   arrows still fly over holes.
 - **Refreeze**: at dawn every hole reverts to ice (`repaintGround` again) and `iceCracks`
-  clears, alongside the ore respawn.
+  clears.
 - **Fish**: the `fish` array holds `FISH_COUNT` (30) passive swimmers spawned at boot
   (`spawnFish()`, after `spawnAnimals()`) on **interior** ice only (tile centers passing
   `fishClear` with a 14 px margin, ~a tile off the shore). `updateFish()` wanders them with a
@@ -408,6 +412,29 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   never within 120 px of the player. `SFX.splash()` was added for the water sounds. `DBG`
   exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`.
 
+### Economy (one currency)
+
+`inv` is `{ gold, berry, fish }`. **Gold is the only resource** — there is no wood or stone —
+and berries/fish are consumables (Q/F heals), never spent on anything. The whole economy is the
+`YIELD` table in the constants banner, which gives every source a different **yield profile**
+rather than a different resource (the League model: one number, many ways to earn it):
+
+| Source | Pays | Profile |
+| --- | --- | --- |
+| tree (4 hp) | `treeHit` 1 per swing + `treeFall` 1 → 5 | slow, safe, everywhere; leaves a stump |
+| rare tree (8%) | + `treeRare` 6 → 11 | jackpot roll, see `treeRare()` |
+| rock (5 hp) | `rockHit` 1 per swing + `rockBreak` 4 → 9 | a bit more than a tree, back-loaded |
+| rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached |
+| deer | `deer` 3 coins × 6 → 18 | the big mobile target |
+| generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, capped at 6 uncollected |
+
+Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
+(`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` and floats
+`+n` in `RES_COLORS[type]`. Only `gold` and `berry` drops exist (fish go straight to `inv`).
+The HUD shows one gold counter (`itemGold`) left of the minimap; the berry/fish indicators sit
+top-left as before. `die()` keeps 60% of all three. Robots carry a single gold number
+(`b.carry`) and deposit at 8+.
+
 ### Base building
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
@@ -416,9 +443,9 @@ spawner (`STRUCT_ORDER`); release over a segment to build, release in the 10 px 
 cancel. Right-clicking a **finished** structure opens a **manage wheel**: up = upgrade, down =
 demolish, and (spawners only) right = mode toggle. This wheel is the **only** way to build —
 there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers per
-type (wood → stone → gold) with `cost`, `hp`, `buildT`, and per-type stats. `tiers[0]` is what
-the wheel builds; upgrading pays the next tier's cost and re-runs a shorter construction. Gold
-is spent only here — it is the tier-3 cost.
+type (the wood → stone → gold *look* is just the sprite palette) with a gold `cost`, `hp`,
+`buildT`, and per-type stats. `tiers[0]` is what the wheel builds; upgrading pays the next
+tier's cost and re-runs a shorter construction. Building is the only gold sink.
 
 Mechanics, all in `game.js`:
 
@@ -436,8 +463,8 @@ Mechanics, all in `game.js`:
   bar renders above every site. Sites are solid from placement.
 - **Turret**: currently idle — its targeting/firing tick was removed with the raiders, so it is
   a decorative buildable until a new threat exists (the `tracers` array and its render pass are
-  kept for that). **Generator**: pays 1 of its tier's resource (`wood`/`stone`/`gold`) every `period`
-  seconds as a physical drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
+  kept for that). **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
+  coin drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
   keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
   `removeStruct()` kills its robots with it.
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`); the
@@ -449,10 +476,11 @@ Mechanics, all in `game.js`:
 
 `robots` holds the spawner-owned wooden units (re-baked `imp` grids, front-facing, 2 frames).
 `updateRobot()` mirrors the animal state machine plus jobs, driven live by the owning spawner's
-`mode`: **gather** — pick the nearest tree/rock/goldore within 8 tiles of the spawner
+`mode`: **gather** — pick the nearest tree/rock within 8 tiles of the spawner
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
-`carry` pouch (tree-fall leaves a stump and pays the rare bonus, exactly like `hitObject` minus
-the drops), and walk home to deposit into `inv` with floaters at 3+ carried; **guard** — with
+`carry` gold count (same `YIELD` numbers as `hitObject`, tree-fall leaves a stump and pays the
+jackpot, minus the physical drops), and walk home to deposit into `inv.gold` with a floater at
+8+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
 Robots use `moveEntity`, abandon a target after ~5 s stuck, die with their spawner, and are
 reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar;
@@ -484,7 +512,7 @@ and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, fra
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work
-  the object under the pointer (`workTarget()` is non-null: tree, rock/ore, berried bush),
+  the object under the pointer (`workTarget()` is non-null: tree, rock, berried bush),
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
   the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
@@ -537,7 +565,7 @@ map/settings/title/death overlays → fps/seed tags → the pixel cursor (always
 with a sort key; anything flat goes in the pre-pass.
 
 Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it.
-Short ground sprites (rock, bush, goldore, stump) all draw at `py + 4` to stay clear of that
+Short ground sprites (rock, bush, stump) all draw at `py + 4` to stay clear of that
 band — drop one lower and a tree on the tile below hides it almost completely.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 32×32 `scratch`
@@ -639,11 +667,12 @@ the template), and remember `genWorld()`'s `free()` helper treats "ground must b
 placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator period, spawner bot counts/HP), `WORK_REACH`, `BOW_CHARGE`, and the
+range/dmg/rate, generator pay/period, spawner bot counts/HP), the `YIELD` table (every gold
+payout), `WORK_REACH`, `BOW_CHARGE`, and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
 the per-surface steer/decay rates inline in `updatePlay()`'s movement block,
 the arrow speed/damage formulas in `fireArrow()`,
-`TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness ramp in
+`TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
 `update()`.
 
 ## Known drift
@@ -659,6 +688,8 @@ the arrow speed/damage formulas in `fireArrow()`,
   cycle control and are currently unreferenced — kept as generic font coverage.
 - `SPRITES.raider` (+ `RDPAL`) and `SPRITES.mine` are still baked but unreferenced since the
   raider/mine removal — kept in case a threat returns; the raider set shares the player grids.
+- `SPRITES.goldOre`, `SPRITES.itemWood`, and `SPRITES.itemStone` are baked but unreferenced since
+  the single-currency change (no ore object, no wood/stone drops or HUD counters).
 - `SFX.nightSting` and `SFX.monsterDie` in [js/audio.js](js/audio.js) are unreferenced since
   the raider removal.
 - With nothing hostile, `damagePlayer`/`die`/`respawn`, the turret type (its tick is an idle

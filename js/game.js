@@ -47,29 +47,39 @@
   const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
   const FISH_MARGIN = 6;     // body clearance from snow: soft-steered away, hard-clamped
 
+  // One currency, many sources. Every source pays gold with a different yield profile
+  // (per-hit trickle vs. burst on completion); this table is the whole economy.
+  const YIELD = {
+    treeHit: 1,   treeFall: 1,            // 4 hp tree  -> 5 gold, slow and safe
+    treeRare: 6,                          // rare-tree jackpot on top of the fall payout
+    rockHit: 1,   rockBreak: 4,           // 5 hp rock  -> 9 gold, a bit more than a tree
+    rabbit: { coins: 2, each: 5 },        // 10 gold + a berry, but it bolts
+    deer:   { coins: 3, each: 6 },        // 18 gold, the big mobile target
+  };
+
   // Stump-built structures: right-click a stump, pick from the radial wheel.
   // tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
   // price and (already shortened) upgrade construction time.
   const STRUCTS = {
     wall: { name: 'WALL', tiers: [
-      { cost: { wood: 4 },  hp: 60,  buildT: 4   },
-      { cost: { stone: 6 }, hp: 140, buildT: 2.4 },
-      { cost: { gold: 4 },  hp: 300, buildT: 2.4 },
+      { cost: { gold: 5 },  hp: 60,  buildT: 4   },
+      { cost: { gold: 12 }, hp: 140, buildT: 2.4 },
+      { cost: { gold: 30 }, hp: 300, buildT: 2.4 },
     ]},
     turret: { name: 'TURRET', tiers: [
-      { cost: { wood: 8 },   hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0  },
-      { cost: { stone: 10 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8  },
-      { cost: { gold: 6 },   hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65 },
+      { cost: { gold: 10 }, hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0  },
+      { cost: { gold: 25 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8  },
+      { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65 },
     ]},
     generator: { name: 'GENERATOR', tiers: [
-      { cost: { wood: 10 }, hp: 40,  buildT: 8,   res: 'wood',  period: 10 },
-      { cost: { stone: 8 }, hp: 70,  buildT: 4.8, res: 'stone', period: 12 },
-      { cost: { gold: 5 },  hp: 100, buildT: 4.8, res: 'gold',  period: 18 },
+      { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 10 },
+      { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 2, period: 10 },
+      { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 4, period: 10 },
     ]},
     spawner: { name: 'SPAWNER', tiers: [
-      { cost: { wood: 12 },  hp: 60,  buildT: 10, bots: 1, botHp: 18 },
-      { cost: { stone: 10 }, hp: 100, buildT: 6,  bots: 2, botHp: 24 },
-      { cost: { gold: 8 },   hp: 150, buildT: 6,  bots: 3, botHp: 30 },
+      { cost: { gold: 15 }, hp: 60,  buildT: 10, bots: 1, botHp: 18 },
+      { cost: { gold: 30 }, hp: 100, buildT: 6,  bots: 2, botHp: 24 },
+      { cost: { gold: 60 }, hp: 150, buildT: 6,  bots: 3, botHp: 30 },
     ]},
   };
   const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner']; // wheel: up, right, down, left
@@ -306,7 +316,7 @@
     footT: 0, footSide: 0,
   };
 
-  const inv = { wood: 0, stone: 0, berry: 0, gold: 0, fish: 0 };
+  const inv = { gold: 0, berry: 0, fish: 0 };
   let tool = TOOL_BOW; // held TOOLS index: the bow, except mid-work (see tryWork)
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
@@ -408,7 +418,6 @@
     const o = objects[idx(tx, ty)];
     if (!o) return false;
     return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' ||
-      o.type === 'goldore' ||
       o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
   }
 
@@ -427,7 +436,6 @@
     { tx: cx - SPAWN_D, ty: cy + SPAWN_D }, { tx: cx + SPAWN_D, ty: cy + SPAWN_D },
   ];
   const playerSpawn = spawnPts[0];
-  const oreSpots = []; // gold ore positions at the world center, respawned each dawn
 
   // depth of the forest boundary at a given tile: smooth irregular inner edge,
   // always solid from the world edge inward (variation eats into the interior)
@@ -437,13 +445,11 @@
     return BORDER_MIN + (BORDER_MAX - BORDER_MIN) * n;
   }
 
-  // per-tile rare-drop roll for trees: hash-based, so it stays stable for a tile
+  // per-tile jackpot roll for trees: hash-based, so it stays stable for a tile
   // regardless of generation order, and reshuffles with the run seed
   const TREE_RARE_CHANCE = 0.08;
   function treeRare(tx, ty) {
-    const h = hash2(tx * 5 + 11, ty * 7 + 23);
-    if (h >= TREE_RARE_CHANCE) return null;
-    return h / TREE_RARE_CHANCE < 0.3 ? 'gold' : 'stone'; // gold is the scarcer slice
+    return hash2(tx * 5 + 11, ty * 7 + 23) < TREE_RARE_CHANCE;
   }
 
   function genWorld() {
@@ -464,18 +470,11 @@
       }
     }
 
-    // central gold-ore field; CENTER_R keeps other worldgen from crowding it
+    // central clearing (the old ore field); CENTER_R keeps other worldgen out of it
+    // so the river spokes still meet in open ground. Its rng() draws are kept so
+    // existing seeds still produce the same world.
     const CENTER_R = 8;
-    for (let i = 0; i < 8; i++) {
-      const a = i * Math.PI / 4 + rand(-0.25, 0.25);
-      const d2 = rand(3.6, 6.2);
-      const tx = Math.round(cx + Math.cos(a) * d2);
-      const ty = Math.round(cy + Math.sin(a) * d2);
-      if (inWorld(tx, ty) && !objects[idx(tx, ty)]) {
-        placeObj(tx, ty, 'goldore', { hp: 6, maxHp: 6 });
-        oreSpots.push({ tx, ty });
-      }
-    }
+    for (let i = 0; i < 8; i++) { rand(-0.25, 0.25); rand(3.6, 6.2); }
 
     // frozen ponds - carved only into the open snow interior, away from spawns
     const nearAnySpawn = (tx, ty, r) => spawnPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < r);
@@ -727,9 +726,10 @@
     }
   }
 
-  function spawnDrop(x, y, type) {
+  // n = how much the pickup is worth (gold coins can carry several; food is always 1)
+  function spawnDrop(x, y, type, n) {
     const a = rng() * Math.PI * 2;
-    drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, t: 0 });
+    drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, n: n || 1, t: 0 });
   }
 
   function canAfford(cost) { for (const k in cost) if ((inv[k] || 0) < cost[k]) return false; return true; }
@@ -810,7 +810,7 @@
     let t = -1;
     if (o) {
       if (o.type === 'tree') t = TOOL_AXE;
-      else if (o.type === 'rock' || o.type === 'goldore') t = TOOL_PICK;
+      else if (o.type === 'rock') t = TOOL_PICK;
       else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
     } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
     if (t < 0) return null;
@@ -989,7 +989,7 @@
     // hard tool gating: the wrong tool bounces off instead of harvesting
     const k = TOOLS[tool].key;
     if ((o.type === 'tree' && k !== 'axe') ||
-        ((o.type === 'rock' || o.type === 'goldore') && k !== 'pick')) {
+        (o.type === 'rock' && k !== 'pick')) {
       SFX.deny();
       addFloater(ox, oy - 14, o.type === 'tree' ? 'NEEDS AXE' : 'NEEDS PICKAXE', '#9fb6d8');
       return;
@@ -999,7 +999,7 @@
     if (o.type === 'tree') {
       o.hp--;
       SFX.chop();
-      spawnDrop(ox, oy, 'wood');
+      spawnDrop(ox, oy, 'gold', YIELD.treeHit);
       burst(ox, oy - 10, '#eef4fb', 6, 40, 0.5, true);
       burst(ox, oy - 12, '#3f7a5c', 3, 30, 0.4, true);
       if (o.hp <= 0) {
@@ -1010,40 +1010,27 @@
           state.hints.stump = true;
           showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
         }
-        spawnDrop(ox, oy, 'wood'); spawnDrop(ox, oy, 'wood');
+        spawnDrop(ox, oy, 'gold', YIELD.treeFall);
         burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
         burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
         if (o.rare) {
-          const rc = o.rare === 'gold' ? '#f2cc6a' : '#a8b0c4';
-          spawnDrop(ox, oy, o.rare); spawnDrop(ox, oy, o.rare);
-          burst(ox, oy - 8, rc, 10, 50, 0.6, true);
-          addFloater(ox, oy - 18, o.rare === 'gold' ? 'GOLD!' : 'STONE!', rc);
+          spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2); spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2);
+          burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
+          addFloater(ox, oy - 18, 'JACKPOT!', '#f2cc6a');
           SFX.pickup();
         }
       }
     } else if (o.type === 'rock') {
       o.hp--;
       SFX.mine();
-      spawnDrop(ox, oy, 'stone');
+      spawnDrop(ox, oy, 'gold', YIELD.rockHit);
       burst(ox, oy - 4, '#a8b0c4', 6, 45, 0.4, true);
       if (o.hp <= 0) {
         objects[idx(o.tx, o.ty)] = null;
         SFX.break_();
         state.shake = Math.max(state.shake, 2);
-        spawnDrop(ox, oy, 'stone'); spawnDrop(ox, oy, 'stone');
+        spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2);
         burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
-      }
-    } else if (o.type === 'goldore') {
-      o.hp--;
-      SFX.mine();
-      spawnDrop(ox, oy, 'gold');
-      burst(ox, oy - 4, '#f2cc6a', 6, 45, 0.4, true);
-      if (o.hp <= 0) {
-        objects[idx(o.tx, o.ty)] = null;
-        SFX.break_();
-        state.shake = Math.max(state.shake, 2);
-        spawnDrop(ox, oy, 'gold'); spawnDrop(ox, oy, 'gold');
-        burst(ox, oy - 4, '#d8a850', 12, 55, 0.6, true);
       }
     } else if (o.type === 'bush') {
       if (o.berries > 0) {
@@ -1343,18 +1330,18 @@
         burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
         burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
         spawnDrop(a.x, a.y, 'berry');
+        for (let i = 0; i < YIELD.rabbit.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.rabbit.each);
       } else {
         burst(a.x, a.y - 5, '#8a6847', 12, 50, 0.55);
         burst(a.x, a.y - 5, '#f2cc6a', 8, 45, 0.5);
-        const n = randi(2, 3);
-        for (let i = 0; i < n; i++) spawnDrop(a.x, a.y, 'gold');
+        for (let i = 0; i < YIELD.deer.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.deer.each);
         addFloater(a.x, a.y - 14, 'GOLD!', '#f2cc6a');
       }
     }
   }
 
   // ------------------------------------------------------------ structures & robots
-  const RES_COLORS = { wood: '#c9a06a', stone: '#b8c0d4', gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8' };
+  const RES_COLORS = { gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8' };
   function nearPlayer(x, y, r) { return Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
   function updateStructures(dt) {
@@ -1397,8 +1384,8 @@
           let near = 0;
           for (const d of drops) if (Math.hypot(d.x - ox, d.y - oy) < 24) near++;
           if (near < 6) { // cap the AFK pile
-            spawnDrop(ox, oy - 2, t.res);
-            addFloater(ox, oy - 12, '+1', RES_COLORS[t.res]);
+            spawnDrop(ox, oy - 2, 'gold', t.pay);
+            addFloater(ox, oy - 12, '+' + t.pay, RES_COLORS.gold);
             burst(ox, oy - 6, '#c9d0e2', 2, 20, 0.3);
           }
         }
@@ -1433,7 +1420,7 @@
       x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
       home: sp, tgt: null, workT: 0, stuckT: 0, atkCd: 0,
       jitterT: 0, jitterA: 0,
-      carry: { wood: 0, stone: 0, gold: 0 },
+      carry: 0, // gold held, deposited at home
       moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
       animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
     };
@@ -1492,17 +1479,11 @@
     };
 
     const deposit = () => {
-      let any = false, line = 0;
-      for (const k in b.carry) {
-        if (b.carry[k] > 0) {
-          inv[k] += b.carry[k];
-          addFloater(hx, hy - 14 - line * 8, '+' + b.carry[k], RES_COLORS[k]);
-          b.carry[k] = 0;
-          any = true;
-          line++;
-        }
-      }
-      if (any && nearPlayer(hx, hy)) SFX.pickup();
+      if (b.carry <= 0) return;
+      inv.gold += b.carry;
+      addFloater(hx, hy - 14, '+' + b.carry, RES_COLORS.gold);
+      b.carry = 0;
+      if (nearPlayer(hx, hy)) SFX.pickup();
     };
 
     const harvest = () => {
@@ -1511,32 +1492,31 @@
       t.shake = 0.22;
       if (t.type === 'tree') {
         t.hp--;
-        b.carry.wood++;
+        b.carry += YIELD.treeHit;
         if (nearPlayer(ox, oy)) SFX.chop();
         burst(ox, oy - 10, '#eef4fb', 3, 35, 0.4, true);
         if (t.hp <= 0) {
           objects[idx(t.tx, t.ty)] = { type: 'stump', tx: t.tx, ty: t.ty, flash: 0, shake: 0 };
-          b.carry.wood += 2;
-          if (t.rare) b.carry[t.rare] += 2;
+          b.carry += YIELD.treeFall;
+          if (t.rare) b.carry += YIELD.treeRare;
           burst(ox, oy - 8, '#eef4fb', 8, 45, 0.5, true);
           if (nearPlayer(ox, oy)) SFX.treeFall();
           b.tgt = null;
         }
       } else {
-        const res = t.type === 'rock' ? 'stone' : 'gold';
         t.hp--;
-        b.carry[res]++;
+        b.carry += YIELD.rockHit;
         if (nearPlayer(ox, oy)) SFX.mine();
-        burst(ox, oy - 4, res === 'stone' ? '#a8b0c4' : '#f2cc6a', 3, 35, 0.35, true);
+        burst(ox, oy - 4, '#a8b0c4', 3, 35, 0.35, true);
         if (t.hp <= 0) {
           objects[idx(t.tx, t.ty)] = null;
-          b.carry[res] += 2;
+          b.carry += YIELD.rockBreak;
           b.tgt = null;
         }
       }
     };
 
-    const carryTotal = b.carry.wood + b.carry.stone + b.carry.gold;
+    const carryTotal = b.carry;
 
     if (b.stuckT > 5) { b.tgt = null; b.stuckT = 0; }
 
@@ -1548,13 +1528,13 @@
       } else {
         wander();
       }
-    } else if (carryTotal >= 3) {
+    } else if (carryTotal >= 8) {
       if (walkToward(hx, hy) < 14) deposit();
     } else {
       if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
       if (!b.tgt) {
         b.tgt = nearestObj(hx, hy, 8, (o) =>
-          o.type === 'tree' || o.type === 'rock' || o.type === 'goldore');
+          o.type === 'tree' || o.type === 'rock');
       }
       if (b.tgt) {
         const txp = b.tgt.tx * TILE + 8, typ = b.tgt.ty * TILE + 8;
@@ -1670,10 +1650,8 @@
     state.settingsOpen = false;
     state.wheel = null;
     state.deadTimer = 0;
-    inv.wood = Math.ceil(inv.wood * 0.6);
-    inv.stone = Math.ceil(inv.stone * 0.6);
-    inv.berry = Math.ceil(inv.berry * 0.6);
     inv.gold = Math.ceil(inv.gold * 0.6);
+    inv.berry = Math.ceil(inv.berry * 0.6);
     inv.fish = Math.ceil(inv.fish * 0.6);
   }
 
@@ -1715,10 +1693,6 @@
         state.day++;
         SFX.dawnChime();
         showMsg('DAY ' + state.day, 3);
-        // fresh gold veins each dawn keeps the center worth visiting
-        for (const s of oreSpots) {
-          if (!objects[idx(s.tx, s.ty)]) placeObj(s.tx, s.ty, 'goldore', { hp: 6, maxHp: 6 });
-        }
         // carved ice holes freeze back over during the night; cracks heal too
         for (const i of holes) {
           ground[i] = 1;
@@ -2047,9 +2021,8 @@
         d.y += (player.y - d.y) * dt * 10;
       }
       if (d.t > 0.35 && pd < 7) {
-        inv[d.type]++;
-        addFloater(player.x, player.y - 14, '+1',
-          d.type === 'wood' ? '#c9a06a' : d.type === 'stone' ? '#b8c0d4' : d.type === 'gold' ? '#f2cc6a' : '#f2707a');
+        inv[d.type] += d.n;
+        addFloater(player.x, player.y - 14, '+' + d.n, RES_COLORS[d.type]);
         SFX.pickup();
         drops.splice(i, 1);
       }
@@ -2246,8 +2219,7 @@
 
     // drops (under entities)
     for (const d of drops) {
-      const spr = d.type === 'wood' ? SPRITES.itemWood : d.type === 'stone' ? SPRITES.itemStone :
-        d.type === 'gold' ? SPRITES.itemGold : SPRITES.itemBerry;
+      const spr = d.type === 'gold' ? SPRITES.itemGold : SPRITES.itemBerry;
       // shadow
       ctx.fillStyle = 'rgba(120,140,175,0.35)';
       ctx.fillRect(Math.round(d.x - ex) - 2, Math.round(d.y - ey) + 2, 4, 2);
@@ -2279,8 +2251,6 @@
         drawSpriteFlash(SPRITES.tree[o.variant], px + sh, py - 8, o.flash);
       } else if (o.type === 'rock') {
         drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
-      } else if (o.type === 'goldore') {
-        drawSpriteFlash(SPRITES.goldOre, px + sh, py + 4, o.flash);
       } else if (o.type === 'bush') {
         drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
       } else if (STRUCTS[o.type]) {
@@ -3078,7 +3048,6 @@
         else if (o.type === 'rock') { r = 122; g = 131; b = 153; }
         else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
-        else if (o.type === 'goldore') { r = 226; g = 178; b = 82; }
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
         else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
@@ -3236,8 +3205,7 @@
     drawPixelText(g, 'N', Math.round(254 - pixelTextWidth('N') / 2), 26, '#4a3322');
     // legend
     const legend = [
-      ['FOREST', '#3c5840'], ['ROCKS', '#686c76'], ['GOLD', '#d8a850'],
-      ['FIRES', '#ec9240'],
+      ['FOREST', '#3c5840'], ['ROCKS', '#686c76'], ['ICE', '#7a9cb0'],
     ];
     let ly = 72;
     for (const [name, col] of legend) {
@@ -3278,7 +3246,6 @@
         }
         else if (o && o.type === 'stump') { r = 172; g = 138; b = 92; }
         else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
-        else if (o && o.type === 'goldore') { r = 214; g = 168; b = 74; }
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
         else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
@@ -3538,10 +3505,8 @@
       drawPixelTextShadow(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', 'rgba(15,22,50,0.8)');
     }
 
-    // core resources - horizontal row, left of the minimap
+    // the one currency - left of the minimap
     const res = [
-      ['itemWood', inv.wood],
-      ['itemStone', inv.stone],
       ['itemGold', inv.gold],
     ];
     const resGap = 7;
@@ -3626,7 +3591,7 @@
   function startGame() {
     SFX.unlock();
     state.mode = 'play';
-    showMsg('GATHER WOOD - HOLD E AT A TREE', 6);
+    showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
   }
 
   loadSettings();
