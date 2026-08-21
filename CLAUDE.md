@@ -245,9 +245,9 @@ and knockback still use the old direct-move idiom.
   friction, and the speed **carries out of the roll** for the surface to spend — so dashes
   chain into real speed on ice but die fast on snow. I-frames still end with the roll.
 - **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
-  on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering),
-  drops any bow draw, and blocks all tool use (`clickAction` and `tryWork`
-  both check `player.sliding`). Snow slides have **fatigue** (`player.slideT`): friction ramps
+  on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering).
+  Tools work normally while sliding — you can draw, hold, and loose the bow or E a tree
+  mid-slide; only the hole-flounder and the dodge roll lock tools out. Snow slides have **fatigue** (`player.slideT`): friction ramps
   with slide duration, so the early glide is cheap but the tail drops off hard and a slide
   ends decisively (~2.2 s from full speed). The timer recovers while sliding on ice, so
   snow→ice→snow chains start each snow leg fresh-ish; ice slide friction itself is flat. Above `TRAIL_MIN` (110) it carves a surface-specific double
@@ -488,7 +488,7 @@ and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, fra
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
   the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
-  are blocked right now: sliding, floundering in a hole, or mid-roll.
+  are blocked right now: floundering in a hole, or mid-roll.
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),

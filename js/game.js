@@ -796,7 +796,7 @@
   // left click is the bow, always
   function clickAction() {
     SFX.unlock();
-    if (player.sliding || player.fallT > 0) return; // no tool use mid-slide or in the water
+    if (player.fallT > 0) return; // no tool use in the water (sliding is fine - shoot on the move)
     if (!player.charging && player.swingT <= 0) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
   }
 
@@ -836,7 +836,7 @@
   // E: swing the right tool at the cursor's tile. Held E repeats every swing
   // cooldown; the bow comes back on its own once the cooldown runs out.
   function tryWork() {
-    if (player.swingCd > 0 || player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    if (player.swingCd > 0 || player.fallT > 0 || player.dodgeT > 0) return;
     const t = workTarget();
     if (!t || !t.near) return;
     if (player.charging) { player.charging = false; player.chargeT = 0; } // work drops the draw
@@ -1791,7 +1791,6 @@
     const wantSlide = keys['shift'] && player.dodgeT <= 0;
     if (!player.sliding && wantSlide && sp > SLIDE_MIN) {
       player.sliding = true;
-      if (player.charging) { player.charging = false; player.chargeT = 0; } // slide drops the draw
     }
     if (player.sliding && (!wantSlide || sp < SLIDE_EXIT)) player.sliding = false;
     // slide fatigue: builds on snow so long slides run out of glide, recovers on
@@ -2433,7 +2432,7 @@
     const wx = mouse.x + camX, wy = mouse.y + camY;
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
     const o = objAt(tx, ty);
-    const busy = player.sliding || player.fallT > 0 || player.dodgeT > 0; // tools locked out
+    const busy = player.fallT > 0 || player.dodgeT > 0; // tools locked out
     // build sites (right-click) outrank tool hints; beyond the 60px reach they dim
     if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building))) {
       const far = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60;
@@ -2662,7 +2661,7 @@
   // the "you're close enough" signal.
   function drawWorkHint(ox, oy) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
-    if (player.charging || player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
     if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
     const t = workTarget();
     if (!t || !t.near) return;
@@ -2713,7 +2712,7 @@
   // since the mechanic is standing on the ice beside it, not aiming at it
   function drawFishHint(ex, ey, now) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
-    if (player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    if (player.fallT > 0 || player.dodgeT > 0) return;
     const f = hoverFish();
     if (!f) return;
     const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
