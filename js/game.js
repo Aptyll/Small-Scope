@@ -285,6 +285,7 @@
     charging: false, chargeT: 0, // bow draw state
     dodgeT: 0, dodgeVX: 0, dodgeVY: 0, dodgeDustT: 0, // active roll
     dodgeCharges: 2, dodgeRegenT: 0,
+    stamGhost: 0, stamGhostT: 0, // spent-stamina ghost: lingers, then drains
     sliding: false, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
     hurtT: 0, invuln: 0,
@@ -764,6 +765,10 @@
     player.vy = player.dodgeVY;
     player.dodgeT = DODGE_T;
     player.dodgeDustT = 0;
+    // remember the fill level before the spend so the bar can ghost the lost chunk
+    const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
+    player.stamGhost = Math.max(player.stamGhost, (player.dodgeCharges + regenP) / DODGE_CHARGES);
+    player.stamGhostT = 0.3;
     player.dodgeCharges--;
     if (player.dodgeRegenT <= 0) player.dodgeRegenT = DODGE_CD;
     player.invuln = Math.max(player.invuln, DODGE_T + 0.05);
@@ -1648,6 +1653,14 @@
         player.dodgeRegenT = player.dodgeCharges < DODGE_CHARGES ? DODGE_CD : 0;
       }
     }
+    // spent-stamina ghost: hold briefly, then drain toward the live fill
+    {
+      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
+      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
+      if (player.stamGhostT > 0) player.stamGhostT -= dt;
+      else player.stamGhost -= dt * 1.6;
+      if (player.stamGhost < frac) player.stamGhost = frac;
+    }
 
     const spNow = Math.hypot(player.vx, player.vy);
     if (spNow > 8 && player.dodgeT <= 0 && !player.sliding) {
@@ -2267,6 +2280,12 @@
       ctx.fillRect(bx, by, 14, 2);
       const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
       const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
+      // ghost of the chunk just spent: pale segment that drains into place
+      const gw = Math.round(14 * Math.max(frac, player.stamGhost)) - Math.round(14 * frac);
+      if (gw > 0) {
+        ctx.fillStyle = '#e6f4ff';
+        ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
+      }
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }

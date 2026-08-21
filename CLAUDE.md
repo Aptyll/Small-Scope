@@ -287,7 +287,9 @@ swaps to a full 360° sprite spin with two afterimage ghosts trailing the veloci
 bursts. The roll's exit speed is spent by the surface — see
 [Momentum movement](#momentum-movement-player-only). The charge meter is a single unsegmented cyan stamina
 bar on a plate directly beneath the overhead health bar — charges stay discrete in the sim,
-the bar shows the pooled total (full charges + regen progress). Death cancels the roll, respawn refills
+the bar shows the pooled total (full charges + regen progress). Spending a charge leaves a
+pale ghost of the lost chunk (`player.stamGhost`/`stamGhostT`): it holds ~0.3 s, then drains
+into the live fill souls-style. Death cancels the roll, respawn refills
 charges; overlays (map/settings/wheel/pause) block the input.
 
 ### Wildlife
