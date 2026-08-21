@@ -820,6 +820,19 @@
     return { o, tx, ty, tool: t, near };
   }
 
+  // the fish under the cursor, if any (their bodies are ~10x5, so a 7px disc)
+  function hoverFish() {
+    const wx = mouse.x + camX, wy = mouse.y + camY;
+    for (const f of fish) if (Math.hypot(f.x - wx, f.y - wy) < 7) return f;
+    return null;
+  }
+  // bow-fishing works when the player stands on ice with the fish in FISH_CATCH_R
+  function fishInRange(f) {
+    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+    return inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1 &&
+      Math.hypot(f.x - player.x, f.y - player.y) < FISH_CATCH_R;
+  }
+
   // E: swing the right tool at the cursor's tile. Held E repeats every swing
   // cooldown; the bow comes back on its own once the cooldown runs out.
   function tryWork() {
@@ -2293,6 +2306,7 @@
 
     drawSelection(ox, oy, now);
     drawWorkHint(ox, oy);
+    drawFishHint(ex, ey, now);
 
     // construction progress bars
     for (const o of structures) {
@@ -2405,7 +2419,7 @@
   // like this frame, once, and both the pixel cursor and the browser-cursor
   // fallback read from it:
   //   kind  arrow | hand | grab | hammer | reticle
-  //   mode  (reticle only) idle | lock | hunt | ice | bow
+  //   mode  (reticle only) idle | lock | hunt | fish | ice | bow
   //   dim   the action under the pointer is currently blocked / out of reach
   function cursorInfo() {
     if (state.mode !== 'play') return { kind: 'arrow' };
@@ -2435,6 +2449,8 @@
         return { kind: 'reticle', mode: 'hunt', dim: busy };
       }
     }
+    // a fish under the ice: water-blue ring (the bow spears it from point-blank)
+    if (hoverFish()) return { kind: 'reticle', mode: 'fish', dim: busy };
     // something E can work: lock ring (ice-blue over bare ice), dim out of reach
     const wt = workTarget();
     if (wt) return { kind: 'reticle', mode: wt.o ? 'lock' : 'ice', dim: busy || !wt.near };
@@ -2448,6 +2464,7 @@
     idle: { col: '#f4f7ff', gap: 3 },
     lock: { col: '#ffd95c', gap: 3, diag: true },
     hunt: { col: '#f2cc6a', gap: 4, diag: true },
+    fish: { col: '#7ac0e8', gap: 4, diag: true },
     ice:  { col: '#a8e0f8', gap: 3, diag: true },
     bow:  { col: '#ffd95c', gap: 6, diag: true },
   };
@@ -2540,11 +2557,15 @@
     const x0 = player.x, y0 = player.y - BOW_Y; // exactly fireArrow()'s origin and direction
     const dx = mouse.x + camX - x0, dy = mouse.y + camY - y0;
     const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
-    let len = range, blocked = false;
+    // walk the flight: stop at the first solid tile or the first animal the
+    // arrow would hit (same 8px body test as the arrow update)
+    let len = range, blocked = null; // 'solid' | 'animal'
     for (let s = 10; s < range; s += 3) {
-      if (isSolidTile(Math.floor((x0 + nx * s) / TILE), Math.floor((y0 + ny * s) / TILE))) {
-        len = s; blocked = true; break;
-      }
+      const x = x0 + nx * s, y = y0 + ny * s;
+      if (isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
+      let hit = false;
+      for (const an of animals) if (Math.hypot(an.x - x, an.y - 3 - y) < 8) { hit = true; break; }
+      if (hit) { len = s; blocked = 'animal'; break; }
     }
     // static dots (no animation - it read as clutter), fading toward the end of the flight
     const sp = 6;
@@ -2557,10 +2578,10 @@
     ctx.globalAlpha = 1;
     const tx1 = Math.round(x0 + nx * len - ex), ty1 = Math.round(y0 + ny * len - ey);
     if (blocked) {
-      // impact cross where the shot would shatter
+      // impact cross where the shot lands: line colour on a solid, hunt amber on a body
       const r = [];
       for (let i = -2; i <= 2; i++) r.push([tx1 + i, ty1 + i, 1, 1], [tx1 + i, ty1 - i, 1, 1]);
-      drawOutlinedRects(r, col, 0.9);
+      drawOutlinedRects(r, blocked === 'animal' ? RETICLE.hunt.col : col, 0.9);
     } else {
       // range cap: a short bar square to the flight line
       const r = [];
@@ -2642,6 +2663,7 @@
   function drawWorkHint(ox, oy) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
     if (player.charging || player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
     const t = workTarget();
     if (!t || !t.near) return;
     const verb = !t.o ? 'CRACK ICE' : t.o.type === 'tree' ? 'CHOP' :
@@ -2670,6 +2692,45 @@
     }
     drawPixelText(ctx, 'E', x + 3, cy + 3, '#0a0e23');
     drawPixelTextShadow(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', 'rgba(10,14,35,0.9)');
+  }
+
+  // 7x10 pixel mouse with the left button lit: the "click" key-cap
+  function drawMouseIcon(x, y, pressed) {
+    ctx.fillStyle = '#0a0e23';
+    ctx.fillRect(x + 1, y, 5, 1); ctx.fillRect(x, y + 1, 7, 6); ctx.fillRect(x + 1, y + 7, 5, 2); ctx.fillRect(x + 2, y + 9, 3, 1);
+    ctx.fillStyle = '#c2d8ee'; ctx.fillRect(x + 1, y + 4, 5, 3); ctx.fillRect(x + 2, y + 7, 3, 1);
+    ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 4, y + 1, 2, 2); // right button, shaded
+    ctx.fillStyle = pressed ? '#ffd95c' : '#f4f7ff'; ctx.fillRect(x + 1, y + 1, 2, 2); // left button, lit
+  }
+
+  // hovering a fish: white brackets on the fish (the same "this reacts" cue as
+  // stumps) and a click prompt - SPEAR in catch range, GET CLOSE otherwise,
+  // since the mechanic is standing on the ice beside it, not aiming at it
+  function drawFishHint(ex, ey, now) {
+    if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
+    if (player.sliding || player.fallT > 0 || player.dodgeT > 0) return;
+    const f = hoverFish();
+    if (!f) return;
+    const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
+    const near = fishInRange(f);
+    // brackets: 16x12 box, pulsing like the stump selection
+    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now * 6);
+    const corners = (c, px, py) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(px, py, 3, 1); ctx.fillRect(px, py, 1, 3);
+      ctx.fillRect(px + 13, py, 3, 1); ctx.fillRect(px + 15, py, 1, 3);
+      ctx.fillRect(px, py + 11, 3, 1); ctx.fillRect(px, py + 9, 1, 3);
+      ctx.fillRect(px + 13, py + 11, 3, 1); ctx.fillRect(px + 15, py + 9, 1, 3);
+    };
+    corners('rgba(15,22,50,0.9)', fx - 7, fy - 5);
+    corners('#ffffff', fx - 8, fy - 6);
+    ctx.globalAlpha = near ? 1 : 0.6;
+    const verb = near ? 'SPEAR' : 'GET CLOSE';
+    const totalW = 7 + 3 + pixelTextWidth(verb);
+    const x = Math.round(fx - totalW / 2), y = fy - 26; // clear of an adjacent player's bars
+    drawMouseIcon(x, y, near && (mouse.down || player.charging));
+    drawPixelTextShadow(ctx, verb, x + 10, y + 3, near ? '#f4f7ff' : '#9fb6d8', 'rgba(10,14,35,0.9)');
+    ctx.globalAlpha = 1;
   }
 
   function renderWheel(now) {
@@ -3586,7 +3647,7 @@
     fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
-    placeObj, rebuildLights, idx, objAt, clickAction, tryWork, workTarget, fireArrow, tryDodge,
+    placeObj, rebuildLights, idx, objAt, clickAction, tryWork, workTarget, hoverFish, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {

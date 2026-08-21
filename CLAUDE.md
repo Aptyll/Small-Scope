@@ -316,8 +316,9 @@ the feet, where the arrow spawns) — not the feet — so the line and the fligh
 through the cursor instead of running parallel a few px above it. The
 line is **truthful, not decorative** — it runs exactly as far as the arrow would fly
 (`(170 + 190p) × 0.85`, so it lengthens with the draw), stops at the first `isSolidTile`
-along the path with an impact cross (arrows die on solids), and otherwise ends in a short
-perpendicular range-cap bar. Colour follows the draw meter: yellow charging, hot orange at
+along the path *or the first animal the arrow would hit* (the same 8 px body test as the arrow
+update) with an impact cross — line-coloured on a solid, hunt-amber on a body — and otherwise
+ends in a short perpendicular range-cap bar. Colour follows the draw meter: yellow charging, hot orange at
 full. If the player stands on ice with a fish inside `FISH_CATCH_R` the line is replaced by
 four ticks closing over that fish, because that shot becomes the catch and never flies.
 
@@ -395,7 +396,12 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
 - **Bow-fishing**: `fireArrow()` first checks whether the player stands on an ice tile with a
   fish within `FISH_CATCH_R` (16 px); if so the shot becomes the catch (any charge level):
-  `inv.fish++`, splash, no arrow. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
+  `inv.fish++`, splash, no arrow. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
+  cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
+  prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
+  pixel mouse icon (`drawMouseIcon`, left button lit, gold while pressed/charging) reading
+  **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
+  mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
   the berry's Q/+20), with a count indicator under the berry indicator top-left
   (`SPRITES.itemFish`, 8×8, own `FIPAL`). The shoal tops back up to `FISH_COUNT` each dawn,
   never within 120 px of the player. `SFX.splash()` was added for the water sounds. `DBG`
@@ -479,7 +485,7 @@ and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, fra
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work
   the object under the pointer (`workTarget()` is non-null: tree, rock/ore, berried bush),
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
-  **hunt** amber breathing ring over an animal; **bow** — while charging the ring closes as
+  **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
   the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
   are blocked right now: sliding, floundering in a hole, or mid-roll.
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
@@ -521,7 +527,8 @@ There is no warmth/cold system anymore — night darkness is purely visual.
 (stumps) → item drops → **y-sorted
 `draws` array** (tall objects + player + animals + robots, sorted by feet Y) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
-stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → construction progress bars → particles →
+stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
+fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
 map/settings/title/death overlays → fps/seed tags → the pixel cursor (always last). The bow's
