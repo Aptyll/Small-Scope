@@ -2580,11 +2580,11 @@
       if (held && !toolBehind) drawHeldTool(px, py);
     }
 
-    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 3, player.hp, player.maxHp, 14);
+    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 7, player.hp, player.maxHp, 14);
     // dodge stamina: one clean unsegmented bar under the health bar — charges
     // stay discrete in the sim, the bar just shows the pooled total
     if (state.mode === 'play') {
-      const bx = Math.round(player.x - ox) - 7, by = py;
+      const bx = Math.round(player.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
@@ -2600,15 +2600,19 @@
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
-    // bow draw meter, just above the health bar; gold when fully drawn
+    // bow draw meter, just above the health bar; fill ripens yellow -> salmon
+    // as the draw completes
     if (player.charging && state.mode === 'play') {
-      const frac = player.chargeT / BOW_CHARGE;
-      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 8);
+      const frac = Math.min(1, player.chargeT / BOW_CHARGE);
+      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 12);
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(x, y, 14, 2);
-      ctx.fillStyle = frac >= 1 ? '#ffd95c' : '#cfe0ff';
+      const r = Math.round(0xff + (0xfa - 0xff) * frac);
+      const g = Math.round(0xd9 + (0x80 - 0xd9) * frac);
+      const b = Math.round(0x5c + (0x72 - 0x5c) * frac);
+      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
       ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
     }
   }
