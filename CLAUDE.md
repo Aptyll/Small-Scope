@@ -93,10 +93,16 @@ resolution setting**; camera zoom, if it comes, will be a gameplay feature, not 
   `deviceH / TARGET_ROWS`. `scale` is fractional in CSS px and must not be floored.
 - Heights that don't divide cleanly (1440p → 5×, 288 rows) **"breathe"** a few percent rather
   than letterbox or blur — the Terraria/Stardew trade. 16:9 screens always fill edge-to-edge.
-- `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get black
-  pillarbox bars (the page body's `#000` background) instead of extra vision — the SC2 rule.
-  Narrower screens simply see less width. A guard keeps the view at least 320×240 so the UI
-  panels always fit.
+- `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get pillarbox
+  bars instead of extra vision — the SC2 rule. Narrower screens simply see less width. A guard
+  keeps the view at least 320×240 so the UI panels always fit.
+- The bars are **themed, not black**: a second full-window canvas (`#bars`, z-order under
+  `#game`, `pointer-events: none`) carries a static frost-panel frame — night slab, mottling,
+  ice crystals, icicle fringe, snowdrifts, and an icy bevel hugging the game view — baked by
+  `renderBars()` in the game palette. It spans `FULL_W` (the pre-cap window width in game px)
+  and is deliberately darker than the world so the eye stays on the game; on ≤16:9 screens it
+  is cleared and fully covered. It uses `hash2`, so it must never run before boot — it is baked
+  once per canvas size by `relayout()`, never per frame, and the game never draws into it.
 
 **All game logic and drawing works in the `VIEW_W`×`VIEW_H` space** — mouse coords are divided
 by `scale` on the way in. Round positions when drawing (`Math.round`) or sprites smear across
@@ -106,9 +112,10 @@ subpixels.
 `fullscreenchange` — must call `fitCanvas()` then `relayout()`. `relayout()` recomputes
 everything positioned off `VIEW_W`/`VIEW_H`: the minimap anchors, the map/settings panel
 positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — now `let`s; the offsets *within* each baked
-panel stay fixed), and `fitFlakes()`, which keeps snow density constant by topping up/trimming
-the `flakes` array. Never write layout code against a literal 480/270; `renderTitle()` shows the
-pattern for recentering a 270-authored layout (`toy` offset).
+panel stay fixed), `fitFlakes()`, which keeps snow density constant by topping up/trimming
+the `flakes` array, and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
+code against a literal 480/270; `renderTitle()` shows the pattern for recentering a 270-authored
+layout (`toy` offset).
 
 `render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
 while moving entities (player, raiders, animals, drops, particles, floaters, swing arc) subtract

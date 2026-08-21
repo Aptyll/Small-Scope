@@ -7,6 +7,7 @@
   const WORLD = 192;                // tiles per side
   const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
   let VIEW_W = 480, VIEW_H = 270; // internal resolution; fitCanvas() sizes it to the window
+  let FULL_W = 480; // window width in game px BEFORE the 16:9 cap (bars canvas span)
   const DAY_LEN = 110, NIGHT_LEN = 55;
   const CYCLE = DAY_LEN + NIGHT_LEN;
   const PLAYER_SPEED = 72;
@@ -61,6 +62,10 @@
   const lightCv = document.createElement('canvas');
   const lctx = lightCv.getContext('2d');
 
+  // full-window canvas behind the game: the pillarbox bars' frost frame
+  const barsCv = document.getElementById('bars');
+  const bctx = barsCv.getContext('2d');
+
   // One camera for every player (the SC2/LoL model): the view always shows
   // ~TARGET_ROWS rows of world — monitor resolution buys sharpness, never zoom.
   // Heights that don't divide cleanly "breathe" a few percent rather than
@@ -83,16 +88,84 @@
     // cover the window exactly: ceil leaves at most one game px of overflow,
     // which the body's flex centering splits and overflow:hidden clips
     VIEW_H = Math.ceil(devH / dev);
-    VIEW_W = Math.min(Math.ceil(devW / dev), Math.ceil(VIEW_H * 16 / 9));
+    FULL_W = Math.ceil(devW / dev);
+    VIEW_W = Math.min(FULL_W, Math.ceil(VIEW_H * 16 / 9));
     canvas.width = VIEW_W; canvas.height = VIEW_H;
     ctx.imageSmoothingEnabled = false; // resizing the canvas resets ctx state
     lightCv.width = VIEW_W; lightCv.height = VIEW_H;
     canvas.style.width = (VIEW_W * scale) + 'px';
     canvas.style.height = (VIEW_H * scale) + 'px';
+    // bars canvas spans the whole window at the same pixel scale; painted by
+    // renderBars() via relayout() (it needs hash2, so never before boot)
+    barsCv.width = FULL_W; barsCv.height = VIEW_H;
+    barsCv.style.width = (FULL_W * scale) + 'px';
+    barsCv.style.height = (VIEW_H * scale) + 'px';
   }
   window.addEventListener('resize', () => { fitCanvas(); relayout(); });
   document.addEventListener('fullscreenchange', () => { fitCanvas(); relayout(); });
   fitCanvas();
+
+  // Frost-panel art for the pillarbox bars (wider-than-16:9 screens), in the
+  // game's palette instead of dead black. Purely decorative and deliberately
+  // darker than the world so the eye stays on the game; the game canvas sits
+  // on top and covers everything between the bars. Static — baked once per
+  // canvas size by relayout(), never per frame.
+  function renderBars() {
+    const g = bctx, W = barsCv.width, H = barsCv.height;
+    const barW = (W - VIEW_W) / 2;
+    if (barW < 2) { g.clearRect(0, 0, W, H); return; }
+    const inBar = (x) => x < barW - 1 || x > W - barW - 2;
+    // deep night slab
+    g.fillStyle = '#050814'; g.fillRect(0, 0, W, H);
+    // frost mottling
+    for (let y = 0; y < H; y += 3) {
+      for (let x = 0; x < W; x += 3) {
+        if (!inBar(x)) continue;
+        const h = hash2(x * 5 + 7, y * 13 + 3);
+        if (h > 0.86) g.fillStyle = '#0b1226';
+        else if (h < 0.10) g.fillStyle = '#03050d';
+        else continue;
+        g.fillRect(x, y, 3, 3);
+      }
+    }
+    // sparse ice crystals, dimmer toward the outer edge
+    for (let y = 12; y < H - 20; y += 14) {
+      for (let x = 6; x < W - 6; x += 14) {
+        if (!inBar(x) || !inBar(x + 5)) continue;
+        const h = hash2(x * 3 + 11, y * 7 + 29);
+        if (h < 0.86) continue;
+        const cx = x + ((hash2(x + 1, y + 1) * 7) | 0) - 3;
+        const cy = y + ((hash2(x + 2, y + 5) * 9) | 0) - 4;
+        g.fillStyle = h > 0.95 ? '#35426e' : '#1c2646';
+        g.fillRect(cx - 2, cy, 5, 1); g.fillRect(cx, cy - 2, 1, 5);
+        if (h > 0.95) { g.fillStyle = '#5a7fb8'; g.fillRect(cx, cy, 1, 1); }
+      }
+    }
+    // icicle fringe hanging from the top edge
+    for (let x = 0; x < W; x += 4) {
+      if (!inBar(x)) continue;
+      const h = hash2(x * 9 + 5, 71);
+      const len = 2 + ((h * 7) | 0);
+      g.fillStyle = '#141c3c'; g.fillRect(x, 0, 2, len);
+      g.fillStyle = '#232f52'; g.fillRect(x, 0, 1, len - 1);
+      if (h > 0.75) { g.fillStyle = '#35426e'; g.fillRect(x, len - 1, 1, 1); }
+    }
+    // snowdrifts piled along the bottom (layered waves, deterministic)
+    for (let x = 0; x < W; x++) {
+      if (!inBar(x)) continue;
+      const dh = Math.max(2, Math.round(
+        6 + 2.5 * Math.sin(x * 0.07 + 1.3) + 1.8 * Math.sin(x * 0.23) +
+        hash2(x * 13 + 1, 55) * 1.5));
+      g.fillStyle = '#aebfd8'; g.fillRect(x, H - dh, 1, dh);        // shaded base
+      g.fillStyle = '#dfe9f6'; g.fillRect(x, H - dh, 1, Math.max(1, dh - 2));
+      g.fillStyle = '#f4f8ff'; g.fillRect(x, H - dh, 1, 1);          // sunlit crest
+    }
+    // icy bevel hugging the game view on both sides
+    const xL = Math.floor(barW), xR = Math.ceil(W - barW);
+    g.fillStyle = '#0a0e23'; g.fillRect(xL - 3, 0, 3, H); g.fillRect(xR, 0, 3, H);
+    g.fillStyle = '#141c3c'; g.fillRect(xL - 2, 0, 1, H); g.fillRect(xR + 1, 0, 1, H);
+    g.fillStyle = '#35426e'; g.fillRect(xL - 1, 0, 1, H); g.fillRect(xR, 0, 1, H);
+  }
 
   // scratch canvas for white hit-flash sprites
   const scratch = document.createElement('canvas');
@@ -181,6 +254,7 @@
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
     ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_FS = SET_Y + 108;
     fitFlakes();
+    renderBars();
   }
 
   const player = {
