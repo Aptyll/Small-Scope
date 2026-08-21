@@ -2151,15 +2151,26 @@
       const sx = f.x - ex, sy = f.y - ey;
       if (sx < -12 || sy < -12 || sx > VIEW_W + 12 || sy > VIEW_H + 12) continue;
       const surfaced = ground[idx(Math.floor(f.x / TILE), Math.floor(f.y / TILE))] === 2;
-      const wig = Math.round(Math.sin(f.t * 7) * 1.5);
+      const wig = Math.round(Math.sin(f.t * 7) * 1.2);
       ctx.save();
       ctx.translate(Math.round(sx), Math.round(sy));
       ctx.rotate(f.a);
       ctx.globalAlpha = surfaced ? 0.95 : 0.4;
       ctx.fillStyle = surfaced ? '#7fa9c6' : '#4a708c';
-      ctx.fillRect(-3, -1, 6, 2);            // body
-      ctx.fillRect(-5, -1 + wig, 2, 2);      // waving tail
-      if (surfaced) { ctx.fillStyle = '#c9dded'; ctx.fillRect(1, -1, 2, 1); }
+      // tapered oval body with a pointed nose (drawn along +x)
+      ctx.fillRect(-3, -1, 7, 3);            // core
+      ctx.fillRect(-1, -2, 3, 5);            // dorsal/belly bulge amidships
+      ctx.fillRect(4, 0, 1, 1);              // nose tip
+      // forked tail on a narrow peduncle, waving side to side
+      ctx.fillRect(-4, -1 + wig, 1, 3);
+      ctx.fillRect(-5, -2 + wig, 1, 2);
+      ctx.fillRect(-5, 1 + wig, 1, 2);
+      if (surfaced) {
+        ctx.fillStyle = '#c9dded';
+        ctx.fillRect(-1, 1, 3, 1);           // pale belly
+        ctx.fillStyle = '#101d2c';
+        ctx.fillRect(2, -1, 1, 1);           // eye
+      }
       ctx.restore();
       ctx.globalAlpha = 1;
     }
