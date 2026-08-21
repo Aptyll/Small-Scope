@@ -2600,8 +2600,9 @@
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
-    // bow draw meter, just above the health bar; fill ripens yellow -> salmon
-    // as the draw completes
+    // bow draw meter, just above the health bar. Two clean states instead of a
+    // gradient (a lerp is unreadable at 14px): yellow while charging, then a
+    // snap to pulsing salmon the moment the draw is full and ready to release
     if (player.charging && state.mode === 'play') {
       const frac = Math.min(1, player.chargeT / BOW_CHARGE);
       const x = Math.round(player.x - ox) - 7, y = Math.round(py - 12);
@@ -2609,10 +2610,7 @@
       ctx.fillRect(x - 1, y - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(x, y, 14, 2);
-      const r = Math.round(0xff + (0xfa - 0xff) * frac);
-      const g = Math.round(0xd9 + (0x80 - 0xd9) * frac);
-      const b = Math.round(0x5c + (0x72 - 0x5c) * frac);
-      ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+      ctx.fillStyle = frac >= 1 ? (((now * 4) | 0) % 2 ? '#fa8072' : '#ffa89a') : '#ffd95c';
       ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
     }
   }
