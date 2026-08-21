@@ -275,8 +275,9 @@ for combat abilities. Two verbs, two inputs:
 - **E = work** (`tryWork`, auto-repeating every swing cooldown while held — `updatePlay`
   calls it whenever `keys['e']` is down). It resolves `workTarget()`: the tile under the
   cursor, if it holds a tree (→ axe), rock/gold ore (→ pick), a berried bush (→ axe), or is
-  bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile
-  centre is within `WORK_REACH` (30 px) of the player. Out of reach or nothing workable, E
+  bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
+  within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
+  ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
   does nothing. A valid target swaps `tool` to the right one, drops any bow draw, faces the
   tile, and starts the swing; `swingHit()` lands on the locked tile (`player.workTx/Ty`) —
   whatever is there by then — via `hitObject()`/`crackIce()`. Once `swingT` and `swingCd`

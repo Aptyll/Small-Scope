@@ -23,7 +23,7 @@
   const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
   const BOW_CHARGE = 0.9;   // seconds to a full draw
   const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
-  const WORK_REACH = 30;    // E works a tile whose centre is within this of the player
+  const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
   const DODGE_CHARGES = 2;
@@ -814,7 +814,9 @@
       else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
     } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
     if (t < 0) return null;
-    const near = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) <= WORK_REACH;
+    // tile-based, not a radius: only the ring of tiles around the one you stand on
+    const ptx = Math.floor(player.x / TILE), pty = Math.floor(player.y / TILE);
+    const near = Math.max(Math.abs(tx - ptx), Math.abs(ty - pty)) <= WORK_REACH;
     return { o, tx, ty, tool: t, near };
   }
 
