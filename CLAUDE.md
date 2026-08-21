@@ -422,9 +422,8 @@ unit, always visible: the player (in `drawPlayer`, play mode only), animals (in 
 and robots (in `drawRobot`).
 The player's bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
-drawn, a second small meter renders just above the player's bar: solid yellow while charging,
-snapping to a pulsing salmon at full draw (two discrete states — a gradient is unreadable at
-14 px). The player's overhead stack floats clear of the sprite: stamina plate at `py - 4`,
+drawn, a second small meter renders just above the player's bar: yellow while charging,
+turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px). The player's overhead stack floats clear of the sprite: stamina plate at `py - 4`,
 health at `py - 7`, draw meter at `py - 12`.
 
 ### Damage feedback
