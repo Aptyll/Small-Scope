@@ -20,7 +20,7 @@
     { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
   ];
   const BOW_CHARGE = 0.9;   // seconds to a full draw
-  const MELEE_DMG = 6;      // axe/pick vs raiders & animals (bow is the real weapon)
+  const MELEE_DMG = 6;      // axe/pick vs animals (bow is the real weapon)
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
   const DODGE_CHARGES = 2;
@@ -225,7 +225,7 @@
     deadTimer: 0,
     msg: null, msgT: 0,
     toolMsgT: 0, // tool name flash above the bar after switching
-    hints: { dusk: false, raiders: false, stump: false },
+    hints: { stump: false },
     paused: false,
     mapOpen: false,
     settingsOpen: false,
@@ -285,7 +285,6 @@
   const inv = { wood: 0, stone: 0, berry: 0, gold: 0 };
   let tool = 1; // selected TOOLS index, axe by default
 
-  const raiders = [];
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
   const robots = []; // spawner-owned wooden units
@@ -296,7 +295,6 @@
   const floaters = [];
   const footprints = [];
   const lights = []; // rebuilt from placed objects
-  let toSpawn = 0, spawnTimer = 0, nightActive = false;
 
   // ------------------------------------------------------------ input
   const keys = {};
@@ -386,7 +384,7 @@
     const o = objects[idx(tx, ty)];
     if (!o) return false;
     return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' ||
-      o.type === 'mine' || o.type === 'goldore' ||
+      o.type === 'goldore' ||
       o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
   }
 
@@ -405,7 +403,7 @@
     { tx: cx - SPAWN_D, ty: cy + SPAWN_D }, { tx: cx + SPAWN_D, ty: cy + SPAWN_D },
   ];
   const playerSpawn = spawnPts[0];
-  const oreSpots = []; // gold ore positions around the mine, respawned each dawn
+  const oreSpots = []; // gold ore positions at the world center, respawned each dawn
 
   // depth of the forest boundary at a given tile: smooth irregular inner edge,
   // always solid from the world edge inward (variation eats into the interior)
@@ -442,20 +440,8 @@
       }
     }
 
-    // central gold mine on a rocky plaza
-    const PLAZA_R = 8;
-    for (let ty = cy - PLAZA_R - 2; ty <= cy + PLAZA_R + 2; ty++) {
-      for (let tx = cx - PLAZA_R - 2; tx <= cx + PLAZA_R + 2; tx++) {
-        if (!inWorld(tx, ty)) continue;
-        if (Math.hypot(tx - cx, ty - cy) <= PLAZA_R + (hash2(tx, ty) - 0.5) * 2.5) {
-          ground[idx(tx, ty)] = 2;
-          objects[idx(tx, ty)] = null;
-        }
-      }
-    }
-    for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-      placeObj(cx - 1 + dx, cy - 1 + dy, 'mine', { part: dy * 2 + dx, hp: 9999 });
-    }
+    // central gold-ore field; CENTER_R keeps other worldgen from crowding it
+    const CENTER_R = 8;
     for (let i = 0; i < 8; i++) {
       const a = i * Math.PI / 4 + rand(-0.25, 0.25);
       const d2 = rand(3.6, 6.2);
@@ -484,7 +470,7 @@
         for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
           const tx = wx + dx, ty = wy + dy;
           if (inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0 &&
-            Math.hypot(tx - cx, ty - cy) > PLAZA_R + 3 && !nearAnySpawn(tx, ty, 10)) ground[idx(tx, ty)] = 1;
+            Math.hypot(tx - cx, ty - cy) > CENTER_R + 3 && !nearAnySpawn(tx, ty, 10)) ground[idx(tx, ty)] = 1;
         }
         wx += randi(-1, 1); wy += randi(-1, 1);
         wx = Math.max(4, Math.min(WORLD - 5, wx));
@@ -507,7 +493,7 @@
       for (let i = 0; i < n; i++) {
         const tx = ox + Math.round(rand(-1.6, 1.6));
         const ty = oy + Math.round(rand(-1.6, 1.6));
-        if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > PLAZA_R + 3) {
+        if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > CENTER_R + 3) {
           placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
         }
       }
@@ -515,7 +501,7 @@
     // berry bushes
     for (let c = 0; c < 48; c++) {
       const tx = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), ty = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
-      if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > PLAZA_R + 3) {
+      if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > CENTER_R + 3) {
         placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
       }
     }
@@ -559,8 +545,7 @@
     for (let ty = 0; ty < WORLD; ty++) {
       for (let tx = 0; tx < WORLD; tx++) {
         const px = tx * TILE, py = ty * TILE;
-        const gv = ground[idx(tx, ty)];
-        const ice = gv === 1;
+        const ice = ground[idx(tx, ty)] === 1;
         const h = hash2(tx, ty);
         // soft tone variation sampled per 8px quad so no tile grid shows
         const quad = (g2, colA, colB) => {
@@ -571,28 +556,7 @@
             g2.fillRect(px + qx * 8, py + qy * 8, 8, 8);
           }
         };
-        if (gv === 2) {
-          // rocky mine plaza: frost-dusted gravel
-          quad(g, '#a4a4b2', '#9c9caa');
-          if (h > 0.55) {
-            g.fillStyle = '#8a8a98';
-            g.fillRect(px + ((h * 90) | 0) % 11 + 2, py + ((h * 57) | 0) % 11 + 2, 3, 2);
-          }
-          if (h > 0.8) {
-            g.fillStyle = '#74747f';
-            g.fillRect(px + ((h * 130) | 0) % 12 + 1, py + ((h * 210) | 0) % 12 + 1, 2, 1);
-          }
-          if (h < 0.14) {
-            g.fillStyle = '#b8b8c6';
-            g.fillRect(px + ((h * 500) | 0) % 12 + 2, py + ((h * 800) | 0) % 12 + 2, 2, 2);
-          }
-          // snow dust rim where plaza meets snow
-          g.fillStyle = '#c8ccd8';
-          if (!inWorld(tx, ty - 1) || ground[idx(tx, ty - 1)] === 0) g.fillRect(px, py, TILE, 1);
-          if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] === 0) g.fillRect(px, py + TILE - 1, TILE, 1);
-          if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] === 0) g.fillRect(px, py, 1, TILE);
-          if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] === 0) g.fillRect(px + TILE - 1, py, 1, TILE);
-        } else if (ice) {
+        if (ice) {
           quad(g, '#b9dcec', '#c4e3f0');
           // cracks
           if (h > 0.55) {
@@ -795,22 +759,8 @@
     const reachX = player.x + Math.cos(player.swingDir) * 12;
     const reachY = player.y + Math.sin(player.swingDir) * 12;
 
-    // 1) monsters first
+    // 1) animals first
     let hitSomething = false;
-    for (const m of raiders) {
-      if (Math.hypot(m.x - reachX, m.y - reachY) < 13) {
-        m.hp -= MELEE_DMG;
-        m.flash = 0.12;
-        m.squash = 0.2;
-        const kb = 90;
-        m.kbx = Math.cos(player.swingDir) * kb;
-        m.kby = Math.sin(player.swingDir) * kb;
-        addDmgFloater(m.x, m.y - 16, MELEE_DMG);
-        burst(m.x, m.y - 4, '#c6ecf4', 7, 45, 0.4);
-        SFX.hit();
-        hitSomething = true;
-      }
-    }
     for (const a of animals) {
       if (Math.hypot(a.x - reachX, a.y - reachY) < 13) {
         a.hp -= MELEE_DMG;
@@ -902,9 +852,6 @@
         spawnDrop(ox, oy, 'gold'); spawnDrop(ox, oy, 'gold');
         burst(ox, oy - 4, '#d8a850', 12, 55, 0.6, true);
       }
-    } else if (o.type === 'mine') {
-      SFX.deny();
-      o.shake = 0;
     } else if (o.type === 'bush') {
       if (o.berries > 0) {
         o.berries = 0;
@@ -931,7 +878,7 @@
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
     if (refund && STRUCTS[o.type]) {
-      // 50% of everything paid across tiers, raider kills refund nothing
+      // 50% of everything paid across tiers
       const c = cumulativeCost(o.type, o.tier);
       for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
     }
@@ -1036,7 +983,7 @@
     const bushes = [];
     for (const o of objects) if (o && o.type === 'bush') bushes.push(o);
     const freeSpot = (tx, ty) =>
-      inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] !== 2 &&
+      inWorld(tx, ty) && !objects[idx(tx, ty)] &&
       Math.hypot(tx - cx, ty - cy) > 14;
     const place = (kind, nearBushes) => {
       for (let tries = 0; tries < 40; tries++) {
@@ -1190,29 +1137,7 @@
       }
       const t = STRUCTS[o.type].tiers[o.tier];
       if (o.type === 'turret') {
-        o.cd -= dt;
-        if (o.cd <= 0) {
-          let tgt = null, bd = t.range;
-          for (const m of raiders) {
-            if (m.dead || m.spawnT > 0) continue;
-            const d = Math.hypot(m.x - ox, m.y - oy);
-            if (d < bd) { bd = d; tgt = m; }
-          }
-          if (tgt) {
-            o.cd = t.rate;
-            tgt.hp -= t.dmg;
-            tgt.flash = 0.12;
-            addDmgFloater(tgt.x, tgt.y - 16, t.dmg);
-            const d = bd || 1;
-            tgt.kbx += (tgt.x - ox) / d * 30;
-            tgt.kby += (tgt.y - oy) / d * 30;
-            tracers.push({ x0: ox, y0: oy - 5, x1: tgt.x, y1: tgt.y - 4, t: 0.08 });
-            burst(ox, oy - 5, '#f6d35c', 2, 20, 0.2);
-            if (nearPlayer(ox, oy, 200)) SFX.hit();
-          } else {
-            o.cd = 0.1; // nothing in range - re-scan soon
-          }
-        }
+        // idle: nothing hostile exists since raiders were removed
       } else if (o.type === 'generator') {
         o.payT -= dt;
         if (o.payT <= 0) {
@@ -1364,26 +1289,9 @@
     if (b.stuckT > 5) { b.tgt = null; b.stuckT = 0; }
 
     if (home.mode === 'guard') {
+      // no raiders to fight: guard mode just loiters near home
       b.tgt = null;
-      let tgt = null, bd = 5.5 * TILE;
-      for (const m of raiders) {
-        if (m.dead || m.spawnT > 0) continue;
-        const d = Math.hypot(m.x - hx, m.y - hy); // leash measured from the spawner
-        if (d < bd) { bd = d; tgt = m; }
-      }
-      if (tgt) {
-        const d = walkToward(tgt.x, tgt.y);
-        if (d < 10 && b.atkCd <= 0) {
-          b.atkCd = 0.7;
-          tgt.hp -= 5;
-          tgt.flash = 0.12;
-          addDmgFloater(tgt.x, tgt.y - 16, 5);
-          const kn = d || 1;
-          tgt.kbx += (tgt.x - b.x) / kn * 50;
-          tgt.kby += (tgt.y - b.y) / kn * 50;
-          if (nearPlayer(b.x, b.y)) SFX.hit();
-        }
-      } else if (carryTotal > 0) {
+      if (carryTotal > 0) {
         if (walkToward(hx, hy) < 14) deposit();
       } else {
         wander();
@@ -1486,115 +1394,6 @@
     }
   }
 
-  // ------------------------------------------------------------ raiders
-  function spawnRaider() {
-    // raiders climb out of the gold mine at night
-    for (let tries = 0; tries < 40; tries++) {
-      const a = rng() * Math.PI * 2;
-      const d = rand(2.5, 6.5) * TILE;
-      const x = cx * TILE + Math.cos(a) * d;
-      const y = cy * TILE + Math.sin(a) * d;
-      const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-      if (!inWorld(tx, ty) || isSolidTile(tx, ty)) continue;
-      const n = state.day;
-      raiders.push({
-        x, y, hp: 24 + (n - 1) * 7, maxHp: 24 + (n - 1) * 7,
-        speed: rand(27, 34) + Math.min(16, n * 1.5),
-        t: rng() * 10, attackCd: 0, flash: 0, squash: 0,
-        kbx: 0, kby: 0, jitterT: 0, jitterA: 0, spawnT: 0.6,
-        dir: 'down', animT: rng() * 2,
-      });
-      burst(x, y, '#55506e', 10, 40, 0.5);
-      return;
-    }
-  }
-
-  function updateRaider(m, dt) {
-    m.t += dt;
-    m.flash = Math.max(0, m.flash - dt);
-    m.squash = Math.max(0, m.squash - dt);
-    m.attackCd = Math.max(0, m.attackCd - dt);
-    if (m.spawnT > 0) { m.spawnT -= dt; return; }
-
-    // knockback decay
-    m.kbx *= Math.pow(0.02, dt); m.kby *= Math.pow(0.02, dt);
-
-    let dx = player.x - m.x, dy = player.y - m.y;
-    const dist = Math.hypot(dx, dy) || 1;
-    dx /= dist; dy /= dist;
-
-    if (m.jitterT > 0) {
-      m.jitterT -= dt;
-      const ca = Math.cos(m.jitterA), sa = Math.sin(m.jitterA);
-      const ndx = dx * ca - dy * sa, ndy = dx * sa + dy * ca;
-      dx = ndx; dy = ndy;
-    }
-
-    // walking facing + animation for the player-like sprite
-    if (Math.abs(dx) > Math.abs(dy)) m.dir = dx > 0 ? 'right' : 'left';
-    else m.dir = dy > 0 ? 'down' : 'up';
-    m.animT += dt * 8;
-
-    const mv = moveEntity(m,
-      (dx * m.speed + m.kbx) * dt,
-      (dy * m.speed + m.kby) * dt, 4);
-
-    if ((mv.blockedX || mv.blockedY) && m.attackCd <= 0) {
-      // what blocked us? check the tile we're pushing toward
-      const ftx = Math.floor((m.x + dx * 7) / TILE);
-      const fty = Math.floor((m.y + dy * 7) / TILE);
-      const o = objAt(ftx, fty);
-      if (o && STRUCTS[o.type]) {
-        o.hp -= 7;
-        o.flash = 0.12; o.shake = 0.2;
-        m.attackCd = 0.95;
-        m.squash = 0.25;
-        SFX.hit();
-        burst(ftx * TILE + 8, fty * TILE + 8, '#a3794f', 4, 35, 0.35, true);
-        if (o.hp <= 0) destroyStructure(o, false);
-      } else if (mv.blockedX && mv.blockedY) {
-        m.jitterT = rand(0.5, 1.1);
-        m.jitterA = (rng() < 0.5 ? 1 : -1) * rand(0.6, 1.3);
-      } else if (rng() < 0.02) {
-        m.jitterT = rand(0.4, 0.9);
-        m.jitterA = (rng() < 0.5 ? 1 : -1) * rand(0.6, 1.3);
-      }
-    }
-
-    // touch player
-    if (dist < 10 && m.attackCd <= 0 && player.invuln <= 0) {
-      m.attackCd = 0.9;
-      damagePlayer(8 + state.day, dx, dy);
-      m.kbx = -dx * 60; m.kby = -dy * 60;
-    }
-
-    // swat robots that get in the way
-    if (m.attackCd <= 0) {
-      for (const b of robots) {
-        if (b.dead) continue;
-        const bd = Math.hypot(b.x - m.x, b.y - m.y);
-        if (bd < 10) {
-          m.attackCd = 0.9;
-          b.hp -= 8 + state.day;
-          b.flash = 0.12;
-          addDmgFloater(b.x, b.y - 14, 8 + state.day, true);
-          const kn = bd || 1;
-          b.kbx = (b.x - m.x) / kn * 70; b.kby = (b.y - m.y) / kn * 70;
-          SFX.hit();
-          break;
-        }
-      }
-    }
-
-    if (m.hp <= 0) {
-      m.dead = true;
-      SFX.monsterDie();
-      burst(m.x, m.y - 5, '#8f8ba0', 14, 60, 0.6);
-      burst(m.x, m.y - 5, '#ff6a5a', 6, 40, 0.5);
-      if (rng() < 0.25) spawnDrop(m.x, m.y, 'berry');
-    }
-  }
-
   function damagePlayer(dmg, dx, dy) {
     player.hp -= dmg;
     player.hurtT = 0.25;
@@ -1623,7 +1422,7 @@
   }
 
   function respawn() {
-    // back at the original camp pocket, never the raider-spewing world center
+    // back at the original camp pocket
     player.x = (playerSpawn.tx + 0.5) * TILE;
     player.y = (playerSpawn.ty + 0.5) * TILE;
     player.hp = player.maxHp;
@@ -1655,7 +1454,7 @@
         state.day++;
         SFX.dawnChime();
         showMsg('DAY ' + state.day, 3);
-        // fresh gold veins each dawn keeps the mine worth contesting
+        // fresh gold veins each dawn keeps the center worth visiting
         for (const s of oreSpots) {
           if (!objects[idx(s.tx, s.ty)]) placeObj(s.tx, s.ty, 'goldore', { hp: 6, maxHp: 6 });
         }
@@ -1669,34 +1468,6 @@
     else if (t < CYCLE - 10) dark = 1;
     else dark = 1 - (t - (CYCLE - 10)) / 10;
     state.darkness = dark;
-
-    // night waves
-    if (dark > 0.65 && !nightActive && state.mode === 'play') {
-      nightActive = true;
-      toSpawn = Math.min(22, 3 + (state.day - 1) * 2);
-      spawnTimer = 1.5;
-      SFX.nightSting();
-      if (!state.hints.raiders) {
-        showMsg('RAIDERS POUR FROM THE GOLD MINE - GET BEHIND YOUR DEFENSES', 5);
-        state.hints.raiders = true;
-      }
-    }
-    if (dark < 0.3 && nightActive) {
-      nightActive = false;
-      toSpawn = 0;
-      for (const m of raiders) {
-        burst(m.x, m.y - 4, '#c6ecf4', 10, 45, 0.5);
-      }
-      raiders.length = 0;
-    }
-    if (nightActive && toSpawn > 0) {
-      spawnTimer -= dt;
-      if (spawnTimer <= 0) {
-        spawnRaider();
-        toSpawn--;
-        spawnTimer = (NIGHT_LEN * 0.55) / Math.max(1, 3 + (state.day - 1) * 2);
-      }
-    }
 
     if (state.mode === 'dead') {
       state.deadTimer += dt;
@@ -1826,21 +1597,7 @@
       }
       if (!dead) {
         const vd = Math.hypot(a.vx, a.vy) || 1;
-        for (const m of raiders) {
-          if (m.spawnT > 0) continue;
-          if (Math.hypot(m.x - a.x, m.y - 4 - a.y) < 8) {
-            m.hp -= a.dmg;
-            m.flash = 0.12; m.squash = 0.2;
-            const kb = 30 + 60 * a.pow;
-            m.kbx = a.vx / vd * kb; m.kby = a.vy / vd * kb;
-            addDmgFloater(m.x, m.y - 16, a.dmg);
-            burst(m.x, m.y - 4, '#c6ecf4', 6, 45, 0.4);
-            SFX.hit();
-            dead = true;
-            break;
-          }
-        }
-        if (!dead) for (const an of animals) {
+        for (const an of animals) {
           if (Math.hypot(an.x - a.x, an.y - 3 - a.y) < 8) {
             an.hp -= a.dmg;
             an.flash = 0.12;
@@ -1857,10 +1614,6 @@
       }
       if (dead) arrows.splice(i, 1);
     }
-
-    // raiders
-    for (const m of raiders) updateRaider(m, dt);
-    for (let i = raiders.length - 1; i >= 0; i--) if (raiders[i].dead) raiders.splice(i, 1);
 
     // wildlife
     for (const a of animals) updateAnimal(a, dt);
@@ -1905,11 +1658,6 @@
       }
     }
 
-    // dusk warning
-    if (!state.hints.dusk && state.darkness > 0.15 && state.darkness < 0.5) {
-      state.hints.dusk = true;
-      showMsg('NIGHT IS COMING - GET BEHIND YOUR DEFENSES', 5);
-    }
   }
 
   // ------------------------------------------------------------ fx updates
@@ -2035,23 +1783,16 @@
       for (let tx = tx0; tx <= tx1; tx++) {
         const o = objects[idx(tx, ty)];
         if (!o || o.type === 'stump') continue;
-        if (o.type === 'mine') {
-          if (o.part !== 0) continue;
-          draws.push({ y: ty * TILE + 32, o, tx, ty }); // sorts by its 2-tile base
-          continue;
-        }
         draws.push({ y: ty * TILE + 16, o, tx, ty });
       }
     }
     draws.push({ y: player.y + 8, player: true });
-    for (const m of raiders) draws.push({ y: m.y + 6, m });
     for (const a of animals) draws.push({ y: a.y + 4, a });
     for (const b of robots) draws.push({ y: b.y + 4, r: b });
     draws.sort((a, b) => a.y - b.y);
 
     for (const d of draws) {
       if (d.player) { drawPlayer(ex, ey, now); continue; }
-      if (d.m) { drawRaider(d.m, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
       if (d.r) { drawRobot(d.r, ex, ey); continue; }
       const o = d.o;
@@ -2063,8 +1804,6 @@
         drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
       } else if (o.type === 'goldore') {
         drawSpriteFlash(SPRITES.goldOre, px + sh, py + 4, o.flash);
-      } else if (o.type === 'mine') {
-        ctx.drawImage(SPRITES.mine, px, py);
       } else if (o.type === 'bush') {
         drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
       } else if (STRUCTS[o.type]) {
@@ -2452,19 +2191,6 @@
     }
   }
 
-  function drawRaider(m, ox, oy, now) {
-    const set = SPRITES.raider[m.dir || 'down'];
-    const spr = set[1 + (Math.floor(m.animT) % 2)];
-    const px = Math.round(m.x - 8 - ox);
-    const py = Math.round(m.y - 12 - oy);
-    ctx.fillStyle = 'rgba(40,50,90,0.4)';
-    ctx.fillRect(px + 5, py + 15, 6, 2);
-    if (m.spawnT > 0) ctx.globalAlpha = Math.max(0.15, 1 - m.spawnT / 0.6);
-    drawSpriteFlash(spr, px, py, m.flash);
-    ctx.globalAlpha = 1;
-    drawHealthBar(m.x - ox, py - 3, m.hp, m.maxHp, 12);
-  }
-
   function renderLighting(ox, oy, now) {
     const dark = state.darkness;
     // dusk warm tint
@@ -2524,31 +2250,6 @@
     ctx.drawImage(lightCv, 0, 0);
 
     drawWarmGlows(ox, oy, now, 0.10 + dark * 0.16);
-
-    // raider eye glow + the mine smolders at night
-    if (dark > 0.4) {
-      ctx.globalCompositeOperation = 'lighter';
-      for (const m of raiders) {
-        const lx = m.x - ox, ly = m.y - 5 - oy;
-        const grd = ctx.createRadialGradient(lx, ly, 0, lx, ly, 8);
-        grd.addColorStop(0, 'rgba(255,90,80,0.25)');
-        grd.addColorStop(1, 'rgba(255,90,80,0)');
-        ctx.fillStyle = grd;
-        ctx.fillRect(lx - 8, ly - 8, 16, 16);
-      }
-      {
-        const lx = cx * TILE - ox, ly = cy * TILE - oy;
-        const r = 46 + Math.sin(now * 2.2) * 5;
-        if (lx > -r && ly > -r && lx < VIEW_W + r && ly < VIEW_H + r) {
-          const grd = ctx.createRadialGradient(lx, ly, 2, lx, ly, r);
-          grd.addColorStop(0, 'rgba(255,110,60,' + (0.16 * dark).toFixed(3) + ')');
-          grd.addColorStop(1, 'rgba(255,110,60,0)');
-          ctx.fillStyle = grd;
-          ctx.fillRect(lx - r, ly - r, r * 2, r * 2);
-        }
-      }
-      ctx.globalCompositeOperation = 'source-over';
-    }
   }
 
   function drawWarmGlows(ox, oy, now, strength) {
@@ -2620,13 +2321,11 @@
         else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
         else if (o.type === 'goldore') { r = 226; g = 178; b = 82; }
-        else if (o.type === 'mine') { r = 74; g = 70; b = 92; }
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
         else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
         else { r = 188; g = 200; b = 218; } // stump
       } else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
-      else if (ground[i] === 2) { r = 158; g = 158; b = 172; } // plaza
       else { r = 205; g = 216; b = 232; } // snow
       const j = i * 4;
       d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
@@ -2647,14 +2346,6 @@
     ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R, 0, Math.PI * 2); ctx.clip();
     ctx.drawImage(mmCv, ptx - MM_R, pty - MM_R, MM_R * 2, MM_R * 2,
       MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
-    // raiders prowling in the dark
-    if (state.darkness > 0.4) {
-      ctx.fillStyle = '#ff6a5a';
-      for (const m of raiders) {
-        const mx = MM_CX + m.x / TILE - ptx, my = MM_CY + m.y / TILE - pty;
-        if (Math.hypot(mx - MM_CX, my - MM_CY) < MM_R - 1) ctx.fillRect(Math.round(mx) - 1, Math.round(my) - 1, 2, 2);
-      }
-    }
     // player dot
     ctx.fillStyle = 'rgba(15,22,50,0.9)';
     ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
@@ -2827,15 +2518,9 @@
         else if (o && o.type === 'stump') { r = 172; g = 138; b = 92; }
         else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
         else if (o && o.type === 'goldore') { r = 214; g = 168; b = 74; }
-        else if (o && o.type === 'mine') { r = 52; g = 48; b = 62; }
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
         else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
-        else if (ground[i] === 2) {
-          // rocky plaza inked in graphite
-          if (h > 0.8) { r = 148; g = 140; b = 128; }
-          else { r = 158; g = 150; b = 136; }
-        }
         else if (ground[i] === 1) {
           // inked pond with darker shoreline
           const edge =
@@ -2890,12 +2575,6 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(MAP_X + camX / TILE + 0.5, MAP_Y + camY / TILE + 0.5,
       VIEW_W / TILE - 1, VIEW_H / TILE - 1);
-
-    // raiders prowl the chart at night
-    if (state.darkness > 0.4 && ((now * 3) | 0) % 2 === 0) {
-      ctx.fillStyle = '#ff6a5a';
-      for (const m of raiders) ctx.fillRect(MAP_X + Math.round(m.x / TILE), MAP_Y + Math.round(m.y / TILE), 1, 1);
-    }
 
     // player marker: inked diamond + pulsing ring
     const pmx = MAP_X + Math.round(player.x / TILE);
@@ -3219,10 +2898,10 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, player, inv, raiders, animals, objects, lights, mouse, keys, drops, footprints,
+    SEED, state, player, inv, animals, objects, lights, mouse, keys, drops, footprints,
     settings, perf, treeRare,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
-    placeObj, rebuildLights, spawnRaider, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
+    placeObj, rebuildLights, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {

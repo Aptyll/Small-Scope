@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Emberfrost — a browser canvas pixel-art winter survival game. Gather by day with three
-tool-gated tools (bow, axe, pickaxe) and build defenses on stumps; raiders pour out of the
-central gold mine each night, and every night is harder.
+Emberfrost — a browser canvas pixel-art winter survival game. Gather with three tool-gated
+tools (bow, axe, pickaxe) and build structures on stumps. The central gold mine and the
+night raider waves were removed — night is currently visual-only (darkness, no threat).
 
 ## Keeping this file current
 
@@ -45,15 +45,15 @@ is set, so a plain refresh always picks up changes). `.claude/launch.json` runs 
 Three dev affordances exist for driving the game from outside the browser:
 
 - `window.DBG` (end of [js/game.js](js/game.js)) exposes the live `SEED`, `state`, `player`,
- `inv`, `raiders`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
- `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`, `spawnRaider`,
+ `inv`, `animals`, `structures`, `robots`, `tracers`, `arrows`, `objects`, `lights`,
+ `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`,
  `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
  `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, and `step(dt, n)` — which runs `n`
  fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
  deterministically. Set `DBG.hideUI = true` to skip the HUD and seed tag (storefront / screenshot
- captures). Use this to stage a scene (place structures, jump `state.day`/`state.time`,
- spawn raiders) instead of playing to reach it.
+ captures). Use this to stage a scene (place structures, jump `state.day`/`state.time`)
+ instead of playing to reach it.
 - `?seed=N` pins the world (see [Determinism and noise](#determinism-and-noise)). Load the same
   seed twice to confirm a change is deterministic, or two different seeds to confirm worldgen
   actually varies. Without it every reload is a different world, which makes A/B screenshots
@@ -75,9 +75,9 @@ globals. Order matters: each file's globals must exist before the next runs.
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
 
 `game.js` is one ~2100-line IIFE with no internal module boundaries; it is organized by banner
-comments (`// ---- constants / rng / state / world / actions / raiders / update / render / UI /
+comments (`// ---- constants / rng / state / world / actions / update / render / UI /
 boot`). All game state lives in module-scope singletons: `state`, `settings`, `player`, `inv`,
-`tool` (selected `TOOLS` index), and the arrays `raiders`, `animals`, `arrows`, `drops`,
+`tool` (selected `TOOLS` index), and the arrays `animals`, `arrows`, `drops`,
 `particles`, `floaters`, `footprints`, `lights`.
 
 ### One-camera fullscreen pixel rendering
@@ -129,7 +129,7 @@ code against a literal 480/270; `renderTitle()` shows the pattern for recenterin
 layout (`toy` offset).
 
 `render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
-while moving entities (player, raiders, animals, drops, particles, floaters, swing arc) subtract
+while moving entities (player, animals, robots, drops, particles, floaters, swing arc) subtract
 the exact `ex`/`ey` and round once at the end. Screen pos must be `round(world - camera)` with a
 **single** rounding — rounding camera and entity separately makes their boundary crossings
 disagree and the sprite vibrates ±1px against the background while walking (measured 48 flips/s),
@@ -138,10 +138,10 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 ### The tile world
 
 - `WORLD = 192` tiles of `TILE = 16` px → a 3072×3072 px world.
-- `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice, `2` mine plaza.
+- `ground` — `Uint8Array(192*192)`: `0` snow, `1` ice.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
-  `goldore`, `mine`, `wall`, `turret`, `generator`, `spawner`.
+  `goldore`, `wall`, `turret`, `generator`, `spawner`.
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
@@ -151,7 +151,8 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
   `bots`, `respawnT`), and every live one is also referenced from the module-scope `structures`
   array so per-frame ticks never scan the 36k grid. Stumps are **consumable build anchors**:
   building on one replaces it, and demolition/destruction leaves the tile empty, not a stump.
-- The 2×2 `mine` occupies four tiles that each carry a `part` index; only `part === 0` is drawn.
+- The world center holds a ring of `goldore` at the fixed `oreSpots` (respawned each dawn);
+  `CENTER_R` in `genWorld()` keeps ice ponds, rocks, and bushes clear of it.
 - Every `tree` carries `rare`, set at worldgen from `treeRare(tx, ty)`: a `hash2` roll gives each
   tree a `TREE_RARE_CHANCE` (8%) shot at a bonus resource — `gold` for the scarcer ~30% of that
   band, `stone` otherwise, `null` for the rest. `hitObject()` pays it out (2 drops, plus a floater)
@@ -172,7 +173,7 @@ frame (drawn last in `render()`, so it survives the map, settings, title, and de
 any screenshot carries the world it came from.
 
 - `rng` is a single `mulberry32(SEED)` stream shared by worldgen *and* runtime effects (particle
-  bursts, raider stats, drop velocities). Worldgen is reproducible only because it runs first at
+  bursts, animal wanders, drop velocities). Worldgen is reproducible only because it runs first at
   boot. **Adding or removing any `rng()` call inside `genWorld()` reshuffles the whole world**;
   adding one after boot does not.
 - `hash2(x, y)` mixes `SEED` in, and `vnoise(x, y)` is built on it. Both are still pure functions
@@ -188,22 +189,22 @@ any screenshot carries the world it came from.
   before that line runs. Everything that does — `genWorld`, `renderGround`, the panel bakes — is
   further down in boot order.
 
-### Day/night and the night wave
+### Day/night
 
 `DAY_LEN = 110`, `NIGHT_LEN = 55`, so a full `CYCLE` is 165 s. `state.time` runs within the cycle,
 `state.day` increments at wrap. `update()` derives `state.darkness` (0→1) from a hand-written
 ramp: dusk over the last 12 s of day, full dark, then a 10 s dawn.
 
-Everything else keys off `state.darkness`, not `state.time`:
+With the raider waves removed, night is purely visual pressure (darkness + lighting). What still
+keys off the cycle:
 
-- `darkness > 0.65` opens the night wave — `toSpawn = min(22, 3 + (day-1)*2)` raiders that climb
-  out of the mine at the world centre, trickled in by `spawnTimer`.
-- `darkness < 0.3` ends it and **deletes every living raider** (`raiders.length = 0`).
-- `darkness < 0.3` is also the only passive heal: slow daylight HP regen in `updatePlay()`.
+- `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlay()`.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
+- Fresh gold ore respawns at the fixed `oreSpots` each dawn.
 
-Difficulty scales purely off `state.day`: raider HP `24 + (day-1)*7`, speed, contact damage
-`8 + day`, and wave size. Fresh gold ore respawns at the fixed `oreSpots` each dawn.
+`state.day` no longer drives any difficulty — nothing hostile exists, so nothing currently
+damages the player (`damagePlayer`/`die`/`respawn` are kept intact for whatever threat comes
+next).
 
 ### Tools and the bow
 
@@ -213,14 +214,14 @@ infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by key
 camera zoom, not a tool cycler). The default
 is the axe. Harvesting is **hard-gated** in `hitObject()`: trees need the axe, rock/gold ore
 need the pickaxe; the wrong tool plays `SFX.deny` and floats `NEEDS AXE`/`NEEDS PICKAXE` with
-no damage. Bushes and structures accept either melee tool. Axe and pickaxe still melee raiders
-and animals, but only for `MELEE_DMG` (6) — the bow is the real weapon.
+no damage. Bushes and structures accept either melee tool. Axe and pickaxe still melee animals,
+but only for `MELEE_DMG` (6) — the bow is the ranged weapon.
 
 The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
 slows to 55%, facing tracks the mouse, a draw meter renders above the player's health bar),
 and mouseup fires via `fireArrow()` — power scales speed (170–360 px/s) and damage (4–13).
 Arrows live in the `arrows` array, updated in `updatePlay()`: they die on solid tiles, on any
-raider or animal hit (knockback scales with power), or after 0.85 s. They render as short
+animal hit (knockback scales with power), or after 0.85 s. They render as short
 velocity-aligned lines in their own pass (using `ex`/`ey`) and never hit robots or structures.
 Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
 (0.9 s) is a full draw.
@@ -230,7 +231,6 @@ The selected tool is also drawn **on the player** by `drawHeldTool()` (called fr
 for `left`, drawn *before* the body sprite for `up` so it's occluded, 1px walk bob), swept along
 the same arc as the swing effect during a melee swing, and rotated toward the mouse while the
 bow is drawn — the bow icon fires along −x (arc on the left), so aim rotation is `a + PI`.
-Raiders share the player grids but never get a held tool.
 
 ### Dodge roll
 
@@ -249,13 +249,13 @@ charges; overlays (map/settings/wheel/pause) block the input.
 
 `animals` holds passive fauna spawned once at boot by `spawnAnimals()` (called right after
 `genWorld()`, so its `rng()` draws don't reshuffle the world layout): 8 rabbits (8 HP, biased to
-spawn near berry bushes) and 5 deer (24 HP). Neither reproduces or respawns, and unlike raiders
-they survive dawn. Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
+spawn near berry bushes) and 5 deer (24 HP). Neither reproduces or respawns.
+Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
 comes within 26 px, and any axe hit sends either species fleeing directly away from the player
 (`fleeT`). Deaths pay out in `updateAnimal`: rabbits drop 1 berry, deer drop 2-3 gold plus a
-`GOLD!` floater. `swingHit()` checks animals alongside raiders (same `MELEE_DMG`), arrows hit
+`GOLD!` floater. `swingHit()` checks animals first (same `MELEE_DMG`), arrows hit
 them too (and set `fleeT`), animals join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
 map.
@@ -285,16 +285,15 @@ Mechanics, all in `game.js`:
   `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
   shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
   lattice, and completion fires a particle burst + `SFX.place` + screen shake. A yellow progress
-  bar renders above every site. Sites are solid and raider-attackable from placement.
-- **Turret**: re-scans `raiders` for the nearest live target in range every shot (no stored
-  refs, so the dawn wipe can't dangle); instant hit, gold tracer line pushed to `tracers`,
-  knockback. **Generator**: pays 1 of its tier's resource (`wood`/`stone`/`gold`) every `period`
+  bar renders above every site. Sites are solid from placement.
+- **Turret**: currently idle — its targeting/firing tick was removed with the raiders, so it is
+  a decorative buildable until a new threat exists (the `tracers` array and its render pass are
+  kept for that). **Generator**: pays 1 of its tier's resource (`wood`/`stone`/`gold`) every `period`
   seconds as a physical drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
   keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
   `removeStruct()` kills its robots with it.
 - Demolish and player melee destruction refund **50% of the cumulative cost across tiers**
-  (`cumulativeCost`); raider destruction refunds nothing. `canAfford`/`pay`/`costText` are
-  generic over every `inv` key.
+  (`cumulativeCost`). `canAfford`/`pay`/`costText` are generic over every `inv` key.
 - None of the four structures emits light (see [Lighting](#lighting)).
 
 ### Robots
@@ -304,10 +303,9 @@ Mechanics, all in `game.js`:
 `mode`: **gather** — pick the nearest tree/rock/goldore within 8 tiles of the spawner
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
 `carry` pouch (tree-fall leaves a stump and pays the rare bonus, exactly like `hitObject` minus
-the drops), and walk home to deposit into `inv` with floaters at 3+ carried; **guard** — chase
-and melee (5 dmg / 0.7 s) any raider within 5.5 tiles of the spawner, else loiter near home.
-Raiders swat back for `8 + day` in `updateRaider`. Robots use `moveEntity` with the raider
-jitter idiom, abandon a target after ~5 s stuck, survive dawn, die with their spawner, and are
+the drops), and walk home to deposit into `inv` with floaters at 3+ carried; **guard** — with
+raiders removed it just loiters near home (the mode toggle is kept for a future threat).
+Robots use `moveEntity`, abandon a target after ~5 s stuck, die with their spawner, and are
 reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar; the
 player's axe does **not** hit them (no friendly fire). Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
@@ -315,8 +313,8 @@ player's axe does **not** hit them (no friendly fire). Their SFX are gated on pl
 ### Overhead health bars
 
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
-unit, always visible: the player (in `drawPlayer`, play mode only), raiders (in `drawRaider`,
-replacing the old damaged-only sliver), animals (in `drawAnimal`), and robots (in `drawRobot`).
+unit, always visible: the player (in `drawPlayer`, play mode only), animals (in `drawAnimal`),
+and robots (in `drawRobot`).
 The player's bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
 drawn, a second small meter (white → gold at full draw) renders just above the player's bar.
@@ -324,14 +322,13 @@ drawn, a second small meter (white → gold at full draw) renders just above the
 ### Damage feedback
 
 `addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`
-array: **gold** for damage the player's side deals (melee, arrows, turret shots, robot guard
-melee), **red `-N`** for damage taken (`damagePlayer`, raider swats on robots). Numbers of 10+
+array: **gold** for damage the player's side deals (melee, arrows), **red `-N`** for damage
+taken (`damagePlayer` — currently unreachable, since nothing hostile exists). Numbers of 10+
 render at 2× scale, and each gets a small random x-drift so rapid repeat hits stay readable.
 Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floaters render pass;
 plain `addFloater` entries default to the old look. Units also flash white on hit via
-`drawSpriteFlash` (0.8-alpha overlay). Raider hits on **structures** intentionally get no
-numbers — a multi-raider siege would spam them; structures show flash, shake, and damage
-cracks instead.
+`drawSpriteFlash` (0.8-alpha overlay). Hits on **structures** intentionally get no numbers;
+structures show flash, shake, and damage cracks instead.
 
 ### Lighting
 
@@ -342,12 +339,12 @@ entries (`{x, y, r, warm}`) out of a dark overlay on the offscreen `lightCv` usi
 `destination-out`, then `drawWarmGlows()` adds `multiply` colour grading plus a `lighter` core.
 **Any code that adds or removes a light-emitting object must call `rebuildLights()`.** The only
 night light today is the player's personal glow (radius 44) baked into `renderLighting()`.
-There is no warmth/cold system anymore — night darkness is purely visual pressure plus raiders.
+There is no warmth/cold system anymore — night darkness is purely visual.
 
 ### Render pass order
 
 `render()` runs: ground blit → footprints → flat objects (stumps) → item drops → **y-sorted
-`draws` array** (tall objects + player + raiders + animals + robots, sorted by feet Y) →
+`draws` array** (tall objects + player + animals + robots, sorted by feet Y) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / finished structure, or the wheel's target) → construction progress bars → particles →
 arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
@@ -376,10 +373,11 @@ expressed the same way.
 ### Death is not game over
 
 `die()` sets `mode = 'dead'`, drops any bow draw, keeps `ceil(60%)` of each resource, and after
-2.6 s `respawn()` puts the player back at the original spawn pocket (`playerSpawn`, never the
-raider-spewing world centre). `state.mode` is
+2.6 s `respawn()` puts the player back at the original spawn pocket (`playerSpawn`).
+`state.mode` is
 `title | play | dead`; `updatePlay()` is skipped entirely while paused, dead, or with the map or
-settings overlay open, but `update()` (time, darkness, spawn timers, camera, fx) keeps running.
+settings overlay open, but `update()` (time, darkness, camera, fx) keeps running. With nothing
+hostile in the game, `die()` is currently unreachable but kept working.
 
 ### Settings
 
@@ -408,8 +406,8 @@ first click needs to call it too.
 
 Sprites are literal ASCII grids paired with a palette object mapping character → hex (or `null`
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
-Character sprites are 16×16; the player and raiders share the exact same grids with different
-palettes (`PPAL` vs `RDPAL`), so a pose edit changes both. The tiered structures use the same
+Character sprites are 16×16; the raider set (`SPRITES.raider`, `RDPAL`) is baked from the exact
+same grids as the player, so a player pose edit changes both. The tiered structures use the same
 trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` into `SPRITES[type][tier]` arrays — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
@@ -441,15 +439,14 @@ an 8×8 icon sprite and name it in the entry's `icon` field, and give its `key` 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
 sprite array, entries in `isSolidTile()`, both map colour tables, and a functional tick branch in
-`updateStructures()`. `hitObject()`, the raider attack check, the draws pass, construction, and
+`updateStructures()`. `hitObject()`, the draws pass, construction, and
 refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 
 **Adding a ground type** — extend `renderGround()`, `updateMinimap()`, and `buildWorldMapImg()`,
 and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat formulas, the
-`state.day` terms in `updateRaider()`, robot melee in `updateRobot()`, `MELEE_DMG` and
+range/dmg/rate, generator period, spawner bot counts/HP), `MELEE_DMG` and
 `BOW_CHARGE` in the constants banner, the arrow speed/damage formulas in `fireArrow()`,
 `TREE_RARE_CHANCE` and the gold/stone split in `treeRare()`, and the darkness ramp in
 `update()`.
@@ -465,3 +462,10 @@ range/dmg/rate, generator period, spawner bot counts/HP), `spawnRaider()` stat f
   grids also carry the file's mangled-byte repair).
 - The `<` and `>` glyphs in [js/font.js](js/font.js) were added for the removed resolution
   cycle control and are currently unreferenced — kept as generic font coverage.
+- `SPRITES.raider` (+ `RDPAL`) and `SPRITES.mine` are still baked but unreferenced since the
+  raider/mine removal — kept in case a threat returns; the raider set shares the player grids.
+- `SFX.nightSting` and `SFX.monsterDie` in [js/audio.js](js/audio.js) are unreferenced since
+  the raider removal.
+- With nothing hostile, `damagePlayer`/`die`/`respawn`, the turret type (its tick is an idle
+  no-op), the spawner's guard mode (loiters), and the `tracers` pass are all kept working but
+  currently have no trigger.
