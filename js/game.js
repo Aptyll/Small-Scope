@@ -73,6 +73,16 @@
   // 16:9 so ultrawides get slim pillarbox bars instead of extra vision.
   const TARGET_ROWS = 270;
 
+  // Scroll-wheel camera zoom: each step raises the integer device-pixel scale
+  // by one, so every zoom level stays pixel-perfect. Zoom OUT is capped at the
+  // TARGET_ROWS baseline (the fairness ceiling — nobody buys vision), zoom IN
+  // at ~MIN_ROWS rows. Overlays and non-play modes render at base zoom so the
+  // fixed-size UI panels always fit; update() applies changes via zoomEff.
+  const MIN_ROWS = 150;
+  let zoomStep = 0;  // player-requested steps above base scale
+  let zoomEff = 0;   // currently applied steps
+  let zoomMax = 0;   // available steps on this window (set by fitCanvas)
+
   let scale = 2;
   function fitCanvas() {
     // pick an integer scale in DEVICE pixels, not CSS pixels: on fractional
@@ -84,6 +94,8 @@
     let dev = Math.max(1, Math.round(devH / TARGET_ROWS));
     // never shrink the view below the UI panels' footprint
     while (dev > 1 && (devW / dev < 320 || devH / dev < 240)) dev--;
+    zoomMax = Math.max(0, Math.floor(devH / MIN_ROWS) - dev);
+    dev += Math.min(zoomEff, zoomMax);
     scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
     // cover the window exactly: ceil leaves at most one game px of overflow,
     // which the body's flex centering splits and overflow:hidden clips
@@ -349,9 +361,9 @@
   canvas.addEventListener('wheel', (e) => {
     if (state.mode !== 'play') return;
     e.preventDefault();
-    if (state.mapOpen) return;
-    if (state.wheel) return;
-    selectTool((tool + (e.deltaY > 0 ? 1 : TOOLS.length - 1)) % TOOLS.length);
+    if (state.mapOpen || state.settingsOpen || state.wheel) return;
+    // scroll up = zoom in, scroll down = back out toward the 270-row baseline
+    zoomStep = Math.max(0, Math.min(zoomMax, zoomStep + (e.deltaY > 0 ? -1 : 1)));
   }, { passive: false });
 
   function selectTool(i) {
@@ -1628,6 +1640,12 @@
   let camX = 0, camY = 0;
 
   function update(dt) {
+    // apply pending camera zoom (overlays and non-play modes drop to base zoom
+    // so the fixed-size panels fit; zoomMax can shrink on a window resize)
+    const ze = (state.mode !== 'play' || state.mapOpen || state.settingsOpen)
+      ? 0 : Math.min(zoomStep, zoomMax);
+    if (ze !== zoomEff) { zoomEff = ze; fitCanvas(); relayout(); }
+
     // time
     if (state.mode === 'play') {
       state.time += dt;
@@ -2975,7 +2993,7 @@
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
-      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS']],
+      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
     ];
     for (let c = 0; c < 2; c++) {
       let y = 140;
@@ -3158,7 +3176,7 @@
       'WASD MOVE - SPACE DODGE ROLL',
       'AXE TREES - PICKAXE STONE AND GOLD',
       'HOLD CLICK TO DRAW THE BOW',
-      '1-3 OR SCROLL TO SWAP TOOLS',
+      '1-3 SWAP TOOLS - SCROLL TO ZOOM',
       'RIGHT CLICK A STUMP TO BUILD',
       'Q BERRY  M MAP  N MUTE  P PAUSE',
     ];
@@ -3229,6 +3247,8 @@
       return o;
     },
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
+    setZoom: (n) => { zoomStep = Math.max(0, n | 0); },
+    getZoom: () => ({ step: zoomStep, applied: zoomEff, max: zoomMax }),
     setTool: (i) => { tool = i; },
     getTool: () => tool,
     cam: () => ({ x: camX, y: camY }),

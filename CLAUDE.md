@@ -85,7 +85,7 @@ boot`). All game state lives in module-scope singletons: `state`, `settings`, `p
 Every player gets the **same camera** (the SC2/League model): the view always shows
 `TARGET_ROWS` (270) rows of world — a 1920×1080 fullscreen is exactly 480×270 at 4×, and other
 monitors buy sharpness with their extra pixels, never zoom. There is deliberately **no
-resolution setting**; camera zoom, if it comes, will be a gameplay feature, not a display one.
+resolution setting**; camera zoom is a gameplay feature (below), not a display one.
 `VIEW_W`/`VIEW_H` are `let`s set by `fitCanvas()`:
 
 - It picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels land
@@ -104,6 +104,16 @@ resolution setting**; camera zoom, if it comes, will be a gameplay feature, not 
   and is deliberately darker than the world so the eye stays on the game; on ≤16:9 screens it
   is cleared and fully covered. It uses `hash2`, so it must never run before boot — it is baked
   once per canvas size by `relayout()`, never per frame, and the game never draws into it.
+
+**Scroll-wheel camera zoom** rides on the same machinery: each `zoomStep` raises the integer
+device-pixel scale by one (so every level stays pixel-perfect), zoom **out** is hard-capped at
+the `TARGET_ROWS` baseline (the fairness ceiling — scrolling out never buys extra vision) and
+zoom **in** at `MIN_ROWS` (150) rows, so the number of steps varies per monitor (`zoomMax`, set
+by `fitCanvas()`). The wheel handler only bumps `zoomStep`; `update()` applies it by diffing
+against `zoomEff` and calling `fitCanvas()`/`relayout()` — overlays (map/settings) and non-play
+modes force base zoom so the fixed-size panels always fit, restoring on close. The whole
+presentation zooms, HUD included. `DBG.setZoom(n)`/`DBG.getZoom()` drive it externally. The
+scroll wheel does **not** switch tools anymore — that's keys 1–3 only.
 
 **All game logic and drawing works in the `VIEW_W`×`VIEW_H` space** — mouse coords are divided
 by `scale` on the way in. Round positions when drawing (`Math.round`) or sprites smear across
@@ -198,8 +208,9 @@ Difficulty scales purely off `state.day`: raider HP `24 + (day-1)*7`, speed, con
 ### Tools and the bow
 
 The old 4-slot hotbar (axe + placeable spike/torch/campfire) is gone. The player has three
-infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by keys **1–3** or the
-scroll wheel (`selectTool()` flashes the name above the bar via `state.toolMsgT`). The default
+infinite tools in the `TOOLS` table — `bow`, `axe`, `pick` — selected by keys **1–3** only
+(`selectTool()` flashes the name above the bar via `state.toolMsgT`; the scroll wheel is the
+camera zoom, not a tool cycler). The default
 is the axe. Harvesting is **hard-gated** in `hitObject()`: trees need the axe, rock/gold ore
 need the pickaxe; the wrong tool plays `SFX.deny` and floats `NEEDS AXE`/`NEEDS PICKAXE` with
 no damage. Bushes and structures accept either melee tool. Axe and pickaxe still melee raiders
@@ -423,9 +434,10 @@ pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
 `buildWorldMapImg()`'s colour table, and `rebuildLights()` if it glows. The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
-**Adding a tool** — append to `TOOLS` (order = bar slot; the `1`–`3` key handler and the scroll
-modulo are generic over `TOOLS.length`), add an 8×8 icon sprite and name it in the entry's
-`icon` field, and give its `key` behavior in `clickAction()` / `hitObject()`'s gating.
+**Adding a tool** — append to `TOOLS` (order = bar slot; the `1`–`3` key handler is generic
+over `TOOLS.length`, but a fourth tool needs the key range in the keydown handler widened), add
+an 8×8 icon sprite and name it in the entry's `icon` field, and give its `key` behavior in
+`clickAction()` / `hitObject()`'s gating.
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
