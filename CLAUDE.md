@@ -235,7 +235,10 @@ and knockback still use the old direct-move idiom.
 - **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
   on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering),
   drops any bow draw, and blocks all tool use (`clickAction` and the held-button auto-swing
-  both check `player.sliding`). Above `TRAIL_MIN` (110) it carves a surface-specific double
+  both check `player.sliding`). Snow slides have **fatigue** (`player.slideT`): friction ramps
+  with slide duration, so the early glide is cheap but the tail drops off hard and a slide
+  ends decisively (~2.2 s from full speed). The timer recovers while sliding on ice, so
+  snow→ice→snow chains start each snow leg fresh-ish; ice slide friction itself is flat. Above `TRAIL_MIN` (110) it carves a surface-specific double
   trail: on snow, two-tone carved grooves (shadowed top row, lit bottom row — lit from the
   top-left like the rest of the art); on ice, thin frosted skate scratches. Marks are
   `k`-tagged entries pushed into the existing `footprints` decal array (cap 800) every ~2.5px

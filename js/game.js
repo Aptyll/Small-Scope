@@ -286,7 +286,7 @@
     dodgeT: 0, dodgeVX: 0, dodgeVY: 0, dodgeDustT: 0, // active roll
     dodgeCharges: 2, dodgeRegenT: 0,
     stamGhost: 0, stamGhostT: 0, // spent-stamina ghost: lingers, then drains
-    sliding: false, trailD: 0, slideDustT: 0, // shift-slide state
+    sliding: false, slideT: 0, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
     hurtT: 0, invuln: 0,
     footT: 0, footSide: 0,
@@ -1582,6 +1582,13 @@
       if (player.charging) { player.charging = false; player.chargeT = 0; } // slide drops the draw
     }
     if (player.sliding && (!wantSlide || sp < SLIDE_EXIT)) player.sliding = false;
+    // slide fatigue: builds on snow so long slides run out of glide, recovers on
+    // ice so a snow->ice->snow chain starts the snow leg fresh-ish
+    if (player.sliding) {
+      player.slideT = onIce ? Math.max(0, player.slideT - dt * 1.5) : player.slideT + dt;
+    } else {
+      player.slideT = 0;
+    }
 
     if (player.dodgeT > 0) {
       // rolling: the dash owns the velocity; friction waits until the roll ends,
@@ -1613,7 +1620,10 @@
         if (sp > 1) { dirx = player.vx / sp; diry = player.vy / sp; }
         let steer, decay, target;
         if (player.sliding) {
-          steer = 1.7; target = 0; decay = onIce ? 0.15 : 0.4;
+          // snow friction ramps with slide fatigue: early glide is cheap, the
+          // tail drops off hard so slides end decisively
+          steer = 1.7; target = 0;
+          decay = onIce ? 0.15 : Math.min(2.6, 0.35 + 0.45 * player.slideT);
         } else if (onIce) {
           const cap = ICE_MAX * chargeMul;
           if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
