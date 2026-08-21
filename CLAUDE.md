@@ -50,7 +50,8 @@ Three dev affordances exist for driving the game from outside the browser:
  `mouse`, `keys`, `settings`, `perf`, `STRUCTS`, `TOOLS` plus `placeObj`,
  `spawnAnimal(kind, x, y)`, `buildStruct(tx, ty, type, tier)` (stages a construction site
  directly, no cost or validation), `finishBuild(o)`, `startGame`, `setTool`/`getTool`,
- `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, and `step(dt, n)` — which runs `n`
+ `clickAction`, `fireArrow`, `tryDodge`, `treeRare`, `cursorInfo` (the resolved pointer state
+  for the current `mouse` position — see [Cursor](#cursor)), and `step(dt, n)` — which runs `n`
  fixed-`dt` update ticks and one render. Set `DBG.freeze = true` to stop the rAF loop and step
  deterministically. Set `DBG.hideUI = true` to skip the HUD and seed tag (storefront / screenshot
  captures). Use this to stage a scene (place structures, jump `state.day`/`state.time`)
@@ -285,6 +286,16 @@ velocity-aligned lines in their own pass (using `ex`/`ey`) and never hit robots 
 Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
 (0.9 s) is a full draw.
 
+While the bow is drawn, `drawAimLine()` (called from `render()` right before the arrows pass,
+using `ex`/`ey`) shows the shot: 2×2 dots with a 1 px drop shadow march outward from the bow
+along the exact direction `fireArrow()` would use, the march quickening with the draw. The
+line is **truthful, not decorative** — it runs exactly as far as the arrow would fly
+(`(170 + 190p) × 0.85`, so it lengthens with the draw), stops at the first `isSolidTile`
+along the path with an impact cross (arrows die on solids), and otherwise ends in a short
+perpendicular range-cap bar. Colour follows the draw meter: yellow charging, hot orange at
+full. If the player stands on ice with a fish inside `FISH_CATCH_R` the line is replaced by
+four ticks closing over that fish, because that shot becomes the catch and never flies.
+
 The selected tool is also drawn **on the player** by `drawHeldTool()` (called from
 `drawPlayer()`): carried at the hand while idle/walking (mirrored via a `scale(-1,1)` transform
 for `left`, drawn *before* the body sprite for `up` so it's occluded, 1px walk bob), swept along
@@ -426,6 +437,37 @@ drawn, a second small meter renders just above the player's bar: yellow while ch
 turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px). The player's overhead stack floats clear of the sprite: stamina plate at `py - 4`,
 health at `py - 7`, draw meter at `py - 12`.
 
+### Cursor
+
+The native pointer is hidden over the canvas and a **pixel-art cursor is drawn in-canvas** as
+the very last thing in `render()` (above every overlay and the seed tag), so it sits on the
+game's pixel grid at every zoom level. `cursorInfo()` resolves the pointer state once per
+frame from `mouse`, `state`, `tool`, and what's under the pointer, and both the pixel cursor
+and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, frac }`:
+
+- `kind` **arrow** — title, dead, paused, map, and anywhere in the settings/wheel that isn't
+  a widget; **hand** — over a settings widget (`settingsHit()`, shared with the click handler
+  so hover and click can never disagree) or a live wheel segment; **grab** — dragging a
+  slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
+  60 px reach); **reticle** — everywhere else in play.
+- Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — the held tool
+  can work the object under the pointer (tree+axe, rock/ore+pick, berried bush+melee);
+  **bad** red with a centre slash — the wrong tool, mirroring `hitObject()`'s gating;
+  **hunt** amber breathing ring over an animal; **ice** pale-blue ring over bare ice with the
+  pick (crackable); **bow** — while charging the ring closes as the draw fills and turns
+  orange at full, like the meter. `dim` (50% alpha) means tools are blocked right now:
+  sliding, floundering in a hole, or mid-roll.
+- Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
+  bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
+  in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),
+  which the aim line's markers reuse.
+- `settings.pixelCursor` (default **on**, the CURSOR row in the ESC menu: PIXEL/BROWSER)
+  switches to the native pointer; `applyCursorStyle()` then maps the same state to the
+  nearest CSS cursor (`crosshair`/`pointer`/`grabbing`/`default`) and sets
+  `canvas.style.cursor` only on change. `mouse.inside` (set by mousemove, cleared by
+  `mouseleave` on the canvas and document) hides the drawn cursor when the pointer leaves,
+  and `DBG.hideUI` hides it for captures.
+
 ### Damage feedback
 
 `addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`
@@ -457,7 +499,8 @@ selection brackets (`drawSelection`: white pulsing corners with a dark shadow ov
 stump / finished structure, or the wheel's target) → construction progress bars → particles →
 arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
-map/settings/title/death overlays. Anything that should be occluded by trees goes into `draws`
+map/settings/title/death overlays → fps/seed tags → the pixel cursor (always last). The bow's
+`drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
 Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it.
@@ -495,7 +538,7 @@ hostile in the game, `die()` is currently unreachable but kept working.
 
 ### Settings
 
-`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`) persists to
+`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`, `pixelCursor`) persists to
 `localStorage['emberfrost.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry a `res` key from the removed resolution setting;
@@ -542,13 +585,15 @@ else will corrupt the grids.
 **Adding an object type** — touch all of: `isSolidTile()` (if it blocks), `hitObject()` (what a
 swing does to it — including which tool is allowed, see the gating block at its top), the flat
 pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
-`buildWorldMapImg()`'s colour table, and `rebuildLights()` if it glows. The two map colour
+`buildWorldMapImg()`'s colour table, `rebuildLights()` if it glows, and `cursorInfo()` if the
+pointer should react to it (lock/bad per tool). The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
 **Adding a tool** — append to `TOOLS` (order = bar slot; the `1`–`3` key handler is generic
 over `TOOLS.length`, but a fourth tool needs the key range in the keydown handler widened), add
 an 8×8 icon sprite and name it in the entry's `icon` field, and give its `key` behavior in
-`clickAction()` / `hitObject()`'s gating.
+`clickAction()` / `hitObject()`'s gating — and mirror that gating in `cursorInfo()` so the
+reticle's lock/bad hint stays truthful.
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`

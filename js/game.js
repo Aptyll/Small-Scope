@@ -250,7 +250,7 @@
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
   };
 
-  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false };
+  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false, pixelCursor: true };
 
   // performance monitor: fps averaged over half-second windows from raw
   // (unclamped) frame deltas, so sim clamping can't mask slow frames
@@ -282,7 +282,7 @@
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92;
+    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
     fitFlakes();
     renderBars();
   }
@@ -322,7 +322,7 @@
 
   // ------------------------------------------------------------ input
   const keys = {};
-  const mouse = { x: VIEW_W / 2, y: VIEW_H / 2, down: false };
+  const mouse = { x: VIEW_W / 2, y: VIEW_H / 2, down: false, inside: false }; // inside: pointer over the canvas
 
   window.addEventListener('keydown', (e) => {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -347,7 +347,11 @@
     const r = canvas.getBoundingClientRect();
     mouse.x = (e.clientX - r.left) / scale;
     mouse.y = (e.clientY - r.top) / scale;
+    mouse.inside = true;
   });
+  // the in-canvas cursor must vanish when the pointer leaves the page
+  canvas.addEventListener('mouseleave', () => { mouse.inside = false; });
+  document.addEventListener('mouseleave', () => { mouse.inside = false; });
   canvas.addEventListener('mousedown', (e) => {
     if (e.button === 2) {
       if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
@@ -2319,6 +2323,8 @@
     }
     ctx.globalAlpha = 1;
 
+    drawAimLine(ex, ey, now);
+
     // arrows: short shaft trailing the velocity, bright tip
     for (const a of arrows) {
       const vd = Math.hypot(a.vx, a.vy) || 1;
@@ -2383,6 +2389,10 @@
     if (state.mode === 'dead') renderDead();
     if (settings.fps) drawFps();
     if (!window.DBG.hideUI) drawSeedTag();
+    // pointer, last of all so it sits above every overlay
+    const cur = cursorInfo();
+    applyCursorStyle(cur);
+    if (settings.pixelCursor && mouse.inside && !window.DBG.hideUI) drawCursor(cur, now);
   }
 
   // fps readout, very top-right corner, above every overlay
@@ -2397,6 +2407,190 @@
     drawPixelTextShadow(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
       '#9fb6d8', 'rgba(15,22,50,0.85)');
   }
+
+  // ------------------------------------------------------------ cursor
+  // The pointer is drawn in-canvas (settings.pixelCursor) so it stays on the
+  // game's pixel grid at every zoom. cursorInfo() resolves what it should look
+  // like this frame, once, and both the pixel cursor and the browser-cursor
+  // fallback read from it:
+  //   kind  arrow | hand | grab | hammer | reticle
+  //   mode  (reticle only) idle | lock | bad | hunt | ice | bow
+  //   dim   the action under the pointer is currently blocked / out of reach
+  function cursorInfo() {
+    if (state.mode !== 'play') return { kind: 'arrow' };
+    if (state.settingsOpen) {
+      if (dragSlider) return { kind: 'grab' };
+      return { kind: settingsHit() ? 'hand' : 'arrow' };
+    }
+    if (state.mapOpen || state.paused) return { kind: 'arrow' };
+    if (state.wheel) return { kind: wheelLayout().seg >= 0 ? 'hand' : 'arrow' };
+
+    const wx = mouse.x + camX, wy = mouse.y + camY;
+    const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
+    const o = objAt(tx, ty);
+    const busy = player.sliding || player.fallT > 0 || player.dodgeT > 0; // tools locked out
+    // build sites (right-click) outrank tool hints; beyond the 60px reach they dim
+    if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building))) {
+      const far = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60;
+      return { kind: 'hammer', dim: far };
+    }
+    if (player.charging) {
+      return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / BOW_CHARGE) };
+    }
+    const k = TOOLS[tool].key;
+    // a living thing under the pointer: hunting reticle
+    for (const a of animals) {
+      const hw = a.kind === 'rabbit' ? 7 : 13, h = a.kind === 'rabbit' ? 11 : 22;
+      if (Math.abs(wx - a.x) <= hw && wy >= a.y + 4 - h && wy <= a.y + 4) {
+        return { kind: 'reticle', mode: 'hunt', dim: busy };
+      }
+    }
+    // harvestables: lock on when the held tool can work them, bar when it can't
+    if (o) {
+      if (o.type === 'tree') return { kind: 'reticle', mode: k === 'axe' ? 'lock' : 'bad', dim: busy };
+      if (o.type === 'rock' || o.type === 'goldore') {
+        return { kind: 'reticle', mode: k === 'pick' ? 'lock' : 'bad', dim: busy };
+      }
+      if (o.type === 'bush' && o.berries > 0) {
+        return { kind: 'reticle', mode: k === 'bow' ? 'bad' : 'lock', dim: busy };
+      }
+    } else if (k === 'pick' && inWorld(tx, ty) && ground[idx(tx, ty)] === 1) {
+      return { kind: 'reticle', mode: 'ice', dim: busy }; // bare ice: crackable
+    }
+    return { kind: 'reticle', mode: 'idle', dim: busy };
+  }
+
+  // sprite hotspots (the pixel that sits under the true mouse position)
+  const CUR_HOT = { arrow: [0, 0], hand: [4, 0], grab: [5, 4], hammer: [6, 5] };
+  // reticle looks: colour, tick gap from centre, corner dots, centre slash
+  const RETICLE = {
+    idle: { col: '#f4f7ff', gap: 3 },
+    lock: { col: '#ffd95c', gap: 3, diag: true },
+    bad:  { col: '#ff6a5a', gap: 3, slash: true },
+    hunt: { col: '#f2cc6a', gap: 4, diag: true },
+    ice:  { col: '#a8e0f8', gap: 3, diag: true },
+    bow:  { col: '#ffd95c', gap: 6, diag: true },
+  };
+  let lastCssCursor = null;
+
+  // browser-cursor fallback: hide the native pointer under the pixel cursor,
+  // otherwise mirror the resolved state with the nearest CSS cursor
+  function applyCursorStyle(info) {
+    let css = 'none';
+    if (!settings.pixelCursor) {
+      css = info.kind === 'reticle' ? 'crosshair' : info.kind === 'grab' ? 'grabbing' :
+        info.kind === 'arrow' ? 'default' : 'pointer';
+    }
+    if (css !== lastCssCursor) { canvas.style.cursor = css; lastCssCursor = css; }
+  }
+
+  // outlined pixel rects: every rect gets a dark rim first, then the fill, so
+  // touching ticks never eat each other's outline
+  function drawOutlinedRects(rects, col, alpha) {
+    ctx.globalAlpha = alpha * 0.7;
+    ctx.fillStyle = '#0a0e23';
+    for (const r of rects) ctx.fillRect(r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = col;
+    for (const r of rects) ctx.fillRect(r[0], r[1], r[2], r[3]);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCursor(info, now) {
+    const mx = Math.round(mouse.x), my = Math.round(mouse.y);
+    const base = info.dim ? 0.5 : 1;
+    if (info.kind !== 'reticle') {
+      const [hx, hy] = CUR_HOT[info.kind];
+      ctx.globalAlpha = base * 0.45;
+      ctx.drawImage(SPRITES.cursorShadow[info.kind], mx - hx + 1, my - hy + 1);
+      ctx.globalAlpha = base;
+      ctx.drawImage(SPRITES.cursor[info.kind], mx - hx, my - hy);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    const R = RETICLE[info.mode];
+    let gap = R.gap, col = R.col;
+    if (info.mode === 'bow') {
+      // the ring closes as the draw fills and goes hot at full, like the meter
+      gap = Math.round(6 - 3 * info.frac);
+      if (info.frac >= 1) col = '#ff9440';
+    } else if (info.mode === 'hunt') {
+      gap = 4 + (((now * 3) | 0) % 2); // slow breathing
+    }
+    const L = 3; // tick length
+    const rects = [
+      [mx - gap - L + 1, my, L, 1], [mx + gap, my, L, 1],
+      [mx, my - gap - L + 1, 1, L], [mx, my + gap, 1, L],
+    ];
+    if (R.diag) { // corner dots one step outside the ring so they never fuse with the ticks
+      const g = gap + 1;
+      rects.push([mx - g, my - g, 1, 1], [mx + g, my - g, 1, 1], [mx - g, my + g, 1, 1], [mx + g, my + g, 1, 1]);
+    }
+    if (R.slash) for (let i = -2; i <= 2; i++) rects.push([mx + i, my - i, 1, 1]);
+    else rects.push([mx, my, 1, 1]);
+    drawOutlinedRects(rects, col, base);
+  }
+
+  // dotted flight line while the bow is drawn: dots march outward from the
+  // bow, run exactly as far as the arrow would (range grows with the draw),
+  // and stop at the first solid tile, since arrows die on those. A fish in
+  // bow-fishing reach gets a catch marker instead - that shot never flies.
+  function drawAimLine(ex, ey, now) {
+    if (!player.charging || state.mode !== 'play') return;
+    const full = player.chargeT >= BOW_CHARGE;
+    const col = full ? '#ff9440' : '#ffd95c';
+    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+    if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
+      let best = null, bd = FISH_CATCH_R;
+      for (const f of fish) {
+        const d = Math.hypot(f.x - player.x, f.y - player.y);
+        if (d < bd) { bd = d; best = f; }
+      }
+      if (best) {
+        // four ticks closing in over the fish
+        const fx = Math.round(best.x - ex), fy = Math.round(best.y - ey);
+        const g = 4 + Math.round(Math.abs(Math.sin(now * 4)) * 2);
+        drawOutlinedRects([
+          [fx - g - 2, fy, 3, 1], [fx + g, fy, 3, 1], [fx, fy - g - 2, 1, 3], [fx, fy + g, 1, 3],
+        ], col, 0.95);
+        return;
+      }
+    }
+    const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
+    const range = (170 + 190 * p) * 0.85; // speed x lifetime, as fireArrow() sets them
+    const x0 = player.x, y0 = player.y - 6;
+    const dx = mouse.x + camX - player.x, dy = mouse.y + camY - player.y;
+    const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
+    let len = range, blocked = false;
+    for (let s = 10; s < range; s += 3) {
+      if (isSolidTile(Math.floor((x0 + nx * s) / TILE), Math.floor((y0 + ny * s) / TILE))) {
+        len = s; blocked = true; break;
+      }
+    }
+    // the march quickens with the draw; dots thin out toward the end of the flight
+    const sp = 6;
+    const phase = (now * (28 + 32 * p)) % sp;
+    for (let s = 13 + phase; s < len - 3; s += sp) {
+      const a = 0.95 * (1 - (s / range) * 0.6);
+      const sx = Math.round(x0 + nx * s - ex), sy = Math.round(y0 + ny * s - ey);
+      ctx.globalAlpha = a * 0.6; ctx.fillStyle = '#0a0e23'; ctx.fillRect(sx + 1, sy + 1, 2, 2);
+      ctx.globalAlpha = a; ctx.fillStyle = col; ctx.fillRect(sx, sy, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+    const tx1 = Math.round(x0 + nx * len - ex), ty1 = Math.round(y0 + ny * len - ey);
+    if (blocked) {
+      // impact cross where the shot would shatter
+      const r = [];
+      for (let i = -2; i <= 2; i++) r.push([tx1 + i, ty1 + i, 1, 1], [tx1 + i, ty1 - i, 1, 1]);
+      drawOutlinedRects(r, col, 0.9);
+    } else {
+      // range cap: a short bar square to the flight line
+      const r = [];
+      for (let i = -2; i <= 2; i++) r.push([Math.round(tx1 - ny * i), Math.round(ty1 + nx * i), 1, 1]);
+      drawOutlinedRects(r, col, 0.55);
+    }
+  }
+
 
   // small overhead bar shared by every living unit; color shifts as hp drains
   function drawHealthBar(cxp, topY, hp, maxHp, w) {
@@ -3089,13 +3283,13 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 186;
+  const SET_W = 240, SET_H = 202;
   let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
   let SET_Y = Math.round((VIEW_H - SET_H) / 2);
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
   let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92;
+    ROW_FPS = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -3149,20 +3343,21 @@
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
+    drawPixelText(g, 'CURSOR', 14, ROW_CURSOR - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 110, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 126, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 113, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 113, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'USE TOOL'], ['1-3', 'TOOLS'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 124;
+      let y = 140;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -3172,7 +3367,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 176, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 192, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -3186,31 +3381,32 @@
     }
   }
 
+  // which settings widget is under the pointer (null for none); shared by the
+  // click handler and the cursor so the hand cursor can never disagree with a click
+  function settingsHit() {
+    const mx = mouse.x, my = mouse.y;
+    if (mx < SL_X - 4 || mx > SL_X + SL_W + 6) return null;
+    const inRow = (y) => my >= y - 4 && my <= y + 11;
+    if (inRow(ROW_SOUND)) return 'vol';
+    if (inRow(ROW_MUTE)) return 'mute';
+    if (inRow(ROW_MAP)) return 'map';
+    if (inRow(ROW_SHAKE)) return 'shake';
+    if (inRow(ROW_FPS)) return 'fps';
+    if (inRow(ROW_CURSOR)) return 'cursor';
+    return null;
+  }
+
   function settingsMouseDown() {
     SFX.unlock();
-    const mx = mouse.x, my = mouse.y;
-    const inRow = (y) => my >= y - 4 && my <= y + 11;
-    const onWidget = mx >= SL_X - 4 && mx <= SL_X + SL_W + 6;
-    if (inRow(ROW_SOUND) && onWidget) { dragSlider = 'vol'; applySliderDrag(); return; }
-    if (inRow(ROW_MAP) && onWidget) { dragSlider = 'map'; applySliderDrag(); return; }
-    if (inRow(ROW_MUTE) && onWidget) {
-      settings.muted = SFX.toggleMute();
-      SFX.pickup();
-      saveSettings();
-      return;
-    }
-    if (inRow(ROW_SHAKE) && onWidget) {
-      settings.shake = !settings.shake;
-      SFX.pickup();
-      saveSettings();
-      return;
-    }
-    if (inRow(ROW_FPS) && onWidget) {
-      settings.fps = !settings.fps;
-      SFX.pickup();
-      saveSettings();
-      return;
-    }
+    const hit = settingsHit();
+    if (!hit) return;
+    if (hit === 'vol' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
+    if (hit === 'mute') settings.muted = SFX.toggleMute();
+    else if (hit === 'shake') settings.shake = !settings.shake;
+    else if (hit === 'fps') settings.fps = !settings.fps;
+    else if (hit === 'cursor') settings.pixelCursor = !settings.pixelCursor;
+    SFX.pickup();
+    saveSettings();
   }
 
   function drawSliderRow(y, t, txt) {
@@ -3223,11 +3419,12 @@
     drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
   }
 
-  function drawToggleRow(y, on) {
+  function drawToggleRow(y, on, onTxt, offTxt) {
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X, y - 1, 9, 9);
     ctx.fillStyle = '#121a3a'; ctx.fillRect(SL_X + 1, y, 7, 7);
     if (on) { ctx.fillStyle = '#ffd95c'; ctx.fillRect(SL_X + 2, y + 1, 5, 5); }
-    drawPixelTextShadow(ctx, on ? 'ON' : 'OFF', SL_X + 14, y, on ? '#cfe0ff' : '#7a8bb8', 'rgba(8,12,28,0.9)');
+    drawPixelTextShadow(ctx, on ? (onTxt || 'ON') : (offTxt || 'OFF'), SL_X + 14, y,
+      on ? '#cfe0ff' : '#7a8bb8', 'rgba(8,12,28,0.9)');
   }
 
   function renderSettings(now) {
@@ -3242,6 +3439,7 @@
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
+    drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
   }
 
   function renderUI(now) {
@@ -3395,7 +3593,7 @@
   window.DBG = {
     SEED, state, player, inv, animals, objects, ground, lights, mouse, keys, drops, footprints,
     fish, iceCracks, holes, crackIce, addFish,
-    settings, perf, treeRare,
+    settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     placeObj, rebuildLights, idx, objAt, clickAction, trySwing, fireArrow, tryDodge,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
