@@ -51,7 +51,7 @@ beside `relayout()`**, not down in their own sections, so `relayout()` never rea
 into a temporal dead zone; the offsets *within* each baked panel stay fixed in their own
 sections), `fitFlakes()`, which keeps snow density constant by topping up/trimming
 the `flakes` array, and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
-code against a literal 480/270; `renderTitle()` shows the pattern for recentering a 270-authored
+code against a literal 480/270; `menuLayout()` shows the pattern for recentering a 270-authored
 layout (`toy` offset).
 
 `render()` keeps two camera offsets: tiles and other statics subtract the rounded `ox`/`oy`,
@@ -72,7 +72,9 @@ stump / finished structure, or the wheel's target) → the E work prompt (`drawW
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows → turret tracers → swing arcs (one per swinging player) → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
-map/settings/title/death overlays → fps/seed tags → the pixel cursor (always last). The bow's
+map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
+fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) → the screen fade
+(`state.fade`, the reroll whiteout) → the pixel cursor (always last). The bow's
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
@@ -85,8 +87,8 @@ canvas with `source-in` — sprites larger than 32×32 will clip.
 
 ## UI panels are baked once
 
-`buildMapPanel()` and `buildSettingsPanel()` draw the static chrome (parchment, compass, labels)
-into offscreen canvases at boot; per-frame code blits them and draws only the live parts on top.
+`buildMapPanel()`, `buildSettingsPanel()` and `buildHelpPanel()` draw the static chrome (parchment,
+compass, labels) into offscreen canvases at boot (the two frost slabs share `bakeFrostSlab()`); per-frame code blits them and draws only the live parts on top.
 Their layout variables (`PANEL_*`, `MAP_*`, `SET_*`, `SL_X`, `ROW_*`) are shared between the bake
 function and the per-frame code, so both sides move together — but a bake-side change only appears
 after the panel is rebuilt. They are declared **up in the `canvas` banner next to `relayout()`**
@@ -134,8 +136,8 @@ frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the
 both the pixel cursor and the browser-cursor fallback read from it. It returns
 `{ kind, mode, dim, frac }`:
 
-- `kind` **arrow** — title, dead, paused, map, and anywhere in the settings/wheel that isn't
-  a widget; **hand** — over a settings widget (`settingsHit()`, shared with the click handler
+- `kind` **arrow** — dead, paused, map, and anywhere in the title/settings/wheel that isn't
+  a widget; **hand** — over a main-menu item (`menuHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree) or a live wheel segment; **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
@@ -155,6 +157,51 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
   `canvas.style.cursor` only on change. `mouse.inside` (set by mousemove, cleared by
   `mouseleave` on the canvas and document) hides the drawn cursor when the pointer leaves,
   and `DBG.hideUI` hides it for captures.
+
+## Main menu (title)
+
+`state.mode === 'title'` is a real menu, not a splash: the sim's ambient half keeps running
+behind it (`updateTitle()` steps animals and fish and advances the menu timers; players, arrows
+and structures do not tick and `state.time` is frozen), snow falls as usual, and the camera is
+driven by `titleCamTarget()` — a slow lissajous drift around the open interior that stays
+`BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
+`state.menu`:
+
+- **Items** `MENU_ITEMS` (PLAY / SETTINGS / HOW TO PLAY) plus the seed row (`SEED N` + an 11×11
+  die) as a fourth selectable; `menuLayout()` is the single source of rects for hit-testing
+  (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
+  when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.
+  Up/Down/W/S move, Enter/Space activate, Esc/Backspace close a panel; `menuKey()` and
+  `menuClick()` are the only entry points (`keydown`/`mousedown` route there in title mode,
+  and `mousedown` re-reads the pointer position from its own event).
+- **Buttons** are procedural frost planks (`drawMenuButton`): chamfered slab with hashed
+  wood-grain, a snow cap along the top, icicles off the bottom, ember gems and a gold rule
+  when hot. `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
+  shadow stays on the ground), the warm fill, and a pulsing ember glow behind; `menu.pressT`
+  sinks it for a beat. The selector is a pair of bobbing pixel arrows (`drawSelector`).
+- **Die** (`drawDie`): shows `SEED % 6`, cycles faces and jitters while hovered, tumbles while
+  `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`
+  (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the seed tag) and then
+  navigates to `?seed=<new>` — `SEED` is a const everything closes over, so a new world is a
+  new page. Boot checks `sessionStorage['emberfrost.reroll']` and lands with the fade
+  clearing from white and the die still settling.
+- **Panels** slide up from the bottom edge over the still-visible world (`menu.panel`,
+  `menu.panelT` over `PANEL_SLIDE_T`, `menu.closing` on the way out); the menu chrome ducks to
+  zero alpha underneath. SETTINGS is the existing panel via `renderSettings(now, { bare, slide })`
+  (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
+  `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
+  slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands).
+- **Entrance**: `menu.t` staggers the logo and items in at boot.
+- **Play intro** (`beginIntro`, what `startGame` now calls): the sim starts immediately, but
+  for `INTRO_T` (1.6 s) `state.intro` counts down while `renderTitle` keeps drawing — the tint
+  dissolves over the first 70 % and the chrome sinks away in the first 35 % — `update()` eases
+  the camera from `state.introFrom` (where the drift left it) onto the player with
+  `easeInOut` instead of the play lerp, and `renderUI` slides the HUD in over the last
+  `HUD_IN_T` (0.7 s): the left stack from the left, the gold/minimap stack from the top. The
+  first-run hint message fires when the intro ends.
+
+`DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and
+`layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
 
 ## Lighting
 

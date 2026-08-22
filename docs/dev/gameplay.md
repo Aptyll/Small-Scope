@@ -244,7 +244,8 @@ reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sor
 with i-frames. Only the local slot's death sets `state.mode = 'dead'` for the overlay.
 `state.mode` is `title | play | dead`, and `updatePlay()` runs in **both** `play` and `dead` — the
 match carries on while you are down. Only the local overlays (paused, map, settings) stop the sim;
-`update()` (time, darkness, camera, fx) always keeps running.
+`update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
+runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-menu-title).
 
 ## Settings
 

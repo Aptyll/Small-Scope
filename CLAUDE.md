@@ -41,7 +41,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 | Working on | Read |
 | --- | --- |
-| camera, zoom, a draw pass, HUD, baked panels, cursor, lighting | [docs/dev/rendering.md](docs/dev/rendering.md) |
+| camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish | [docs/dev/world.md](docs/dev/world.md) |
 | movement, bow and tools, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
@@ -105,6 +105,7 @@ don't cite line numbers here, they go stale within a session.
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
+| the title screen: buttons, die, panels, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `beginIntro`, `renderTitle` | `main menu` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 
 ## Hard rules

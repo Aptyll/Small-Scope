@@ -291,6 +291,13 @@
     mapOpen: false,
     settingsOpen: false,
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
+    // main menu (mode === 'title'): keyboard selection, per-item hover eases,
+    // the open sub-panel ('settings' | 'help' | null) and its slide progress
+    menu: { sel: 0, hover: [0, 0, 0, 0], t: 0, panel: null, panelT: 0, closing: false,
+      moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0 },
+    intro: 0,            // seconds left of the title -> play transition (0 = none)
+    introFrom: null,     // camera position the transition started from
+    fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
   const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false, pixelCursor: true };
@@ -459,6 +466,7 @@
   window.addEventListener('keydown', (e) => {
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
+    if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode !== 'play') return;
     // edge-triggered intents go into the local player's input struct; the sim
     // reads and clears them, exactly as it does for an AI slot
@@ -481,11 +489,18 @@
     mouse.x = (e.clientX - r.left) / scale;
     mouse.y = (e.clientY - r.top) / scale;
     mouse.inside = true;
+    state.menu.moved = true; // the menu only lets the mouse steal the selection when it actually moves
   });
   // the in-canvas cursor must vanish when the pointer leaves the page
   canvas.addEventListener('mouseleave', () => { mouse.inside = false; });
   document.addEventListener('mouseleave', () => { mouse.inside = false; });
   canvas.addEventListener('mousedown', (e) => {
+    // a press carries its own position - don't trust the last mousemove (touch,
+    // synthetic clicks and pointer-lock all press without moving first)
+    const r = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - r.left) / scale;
+    mouse.y = (e.clientY - r.top) / scale;
+    mouse.inside = true;
     if (e.button === 2) {
       if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
       SFX.unlock();
@@ -499,7 +514,7 @@
       return;
     }
     if (e.button !== 0) return;
-    if (state.mode === 'title') { startGame(); return; }
+    if (state.mode === 'title') { menuClick(); return; }
     if (state.mode !== 'play') return;
     if (state.wheel) return;
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
@@ -2141,17 +2156,47 @@
       updatePlay(dt);
     } else if (state.mode === 'play' || state.mode === 'dead') {
       sampleHumanInput(player); // still drops a held draw when an overlay opens
+    } else if (state.mode === 'title') {
+      updateTitle(dt); // menu timers, camera drift, and the ambient world behind it
     }
 
     // camera
-    const lookX = (mouse.x - VIEW_W / 2) * 0.12;
-    const lookY = (mouse.y - VIEW_H / 2) * 0.12;
-    const tx = player.x - VIEW_W / 2 + lookX;
-    const ty = player.y - VIEW_H / 2 + lookY;
-    camX += (tx - camX) * Math.min(1, dt * 7);
-    camY += (ty - camY) * Math.min(1, dt * 7);
+    if (state.mode === 'title') {
+      const c = titleCamTarget();
+      camX = c.x; camY = c.y;
+    } else {
+      const lookX = (mouse.x - VIEW_W / 2) * 0.12;
+      const lookY = (mouse.y - VIEW_H / 2) * 0.12;
+      const tx = player.x - VIEW_W / 2 + lookX;
+      const ty = player.y - VIEW_H / 2 + lookY;
+      if (state.intro > 0) {
+        // title -> play: glide from wherever the drift left the camera onto the
+        // player with an ease, instead of the play lerp's snap
+        state.intro = Math.max(0, state.intro - dt);
+        const q = easeInOut(1 - state.intro / INTRO_T);
+        camX = state.introFrom.x + (tx - state.introFrom.x) * q;
+        camY = state.introFrom.y + (ty - state.introFrom.y) * q;
+        if (state.intro === 0) showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
+      } else {
+        camX += (tx - camX) * Math.min(1, dt * 7);
+        camY += (ty - camY) * Math.min(1, dt * 7);
+      }
+    }
     camX = Math.max(0, Math.min(WORLD * TILE - VIEW_W, camX));
     camY = Math.max(0, Math.min(WORLD * TILE - VIEW_H, camY));
+
+    // screen fades (the reroll whiteout)
+    if (state.fade) {
+      const f = state.fade;
+      const up = f.to > f.a;
+      f.a += (up ? 1 : -1) * f.spd * dt;
+      if (up ? f.a >= f.to : f.a <= f.to) {
+        f.a = f.to;
+        const then = f.then; f.then = null;
+        if (f.a === 0) state.fade = null;
+        if (then) then();
+      }
+    }
 
     state.shake = Math.max(0, state.shake - dt * 12);
     state.msgT = Math.max(0, state.msgT - dt);
@@ -2852,10 +2897,17 @@
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
-    if (state.mode === 'title') renderTitle(now);
+    if (state.mode === 'title' || state.intro > 0) renderTitle(now);
     if (state.mode === 'dead') renderDead();
     if (settings.fps) drawFps();
-    if (!window.DBG.hideUI) drawSeedTag();
+    // the menu prints the seed itself (with the reroll die) - don't double it up
+    if (!window.DBG.hideUI && state.mode !== 'title') drawSeedTag();
+    if (state.fade && state.fade.a > 0) {
+      ctx.globalAlpha = Math.min(1, state.fade.a);
+      ctx.fillStyle = state.fade.color;
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.globalAlpha = 1;
+    }
     // pointer, last of all so it sits above every overlay
     const cur = cursorInfo();
     applyCursorStyle(cur);
@@ -2884,6 +2936,15 @@
   //   mode  (reticle only) idle | lock | hunt | fish | ice | bow
   //   dim   the action under the pointer is currently blocked / out of reach
   function cursorInfo() {
+    if (state.mode === 'title') {
+      const m = state.menu;
+      if (m.panel === 'settings' && m.panelT >= 1 && !m.closing) {
+        if (dragSlider) return { kind: 'grab' };
+        return { kind: settingsHit() ? 'hand' : 'arrow' };
+      }
+      if (!m.panel && menuHit() >= 0) return { kind: 'hand' };
+      return { kind: 'arrow' };
+    }
     if (state.mode !== 'play') return { kind: 'arrow' };
     if (state.settingsOpen) {
       if (dragSlider) return { kind: 'grab' };
@@ -3892,47 +3953,52 @@
   const setPanelCv = document.createElement('canvas');
   setPanelCv.width = SET_W; setPanelCv.height = SET_H;
 
-  function buildSettingsPanel() {
-    const g = setPanelCv.getContext('2d');
-    const cham = (x, y, w, h) => {
-      g.fillRect(x + 2, y, w - 4, h);
-      g.fillRect(x, y + 2, w, h - 4);
-      g.fillRect(x + 1, y + 1, w - 2, h - 2);
+  // the dark frost slab every baked panel sits on: chamfered, mottled, bevelled,
+  // crystal corners, and a gold title between ornament dashes. Shared by the
+  // settings panel and the main menu's HOW TO PLAY panel so they read as a set.
+  function bakeFrostSlab(g, w, h, title) {
+    const cham = (x, y, ww, hh) => {
+      g.fillRect(x + 2, y, ww - 4, hh);
+      g.fillRect(x, y + 2, ww, hh - 4);
+      g.fillRect(x + 1, y + 1, ww - 2, hh - 2);
     };
-    // dark frost slab
-    g.fillStyle = '#0a0e23'; cham(0, 0, SET_W, SET_H);
-    g.fillStyle = '#141c3c'; cham(1, 1, SET_W - 2, SET_H - 2);
+    g.fillStyle = '#0a0e23'; cham(0, 0, w, h);
+    g.fillStyle = '#141c3c'; cham(1, 1, w - 2, h - 2);
     // subtle mottling
-    for (let y = 3; y < SET_H - 3; y += 3) {
-      for (let x = 3; x < SET_W - 3; x += 3) {
-        const h = hash2(x * 11 + 3, y * 7 + 19);
-        if (h > 0.86) { g.fillStyle = '#182148'; g.fillRect(x, y, 3, 3); }
-        else if (h < 0.10) { g.fillStyle = '#111834'; g.fillRect(x, y, 3, 3); }
+    for (let y = 3; y < h - 3; y += 3) {
+      for (let x = 3; x < w - 3; x += 3) {
+        const hv = hash2(x * 11 + 3, y * 7 + 19);
+        if (hv > 0.86) { g.fillStyle = '#182148'; g.fillRect(x, y, 3, 3); }
+        else if (hv < 0.10) { g.fillStyle = '#111834'; g.fillRect(x, y, 3, 3); }
       }
     }
     // bevel: icy top light, deep bottom shade
     g.fillStyle = '#35426e';
-    g.fillRect(2, 1, SET_W - 4, 1); g.fillRect(1, 2, 1, SET_H - 4);
+    g.fillRect(2, 1, w - 4, 1); g.fillRect(1, 2, 1, h - 4);
     g.fillStyle = '#080c1c';
-    g.fillRect(2, SET_H - 2, SET_W - 4, 1); g.fillRect(SET_W - 2, 2, 1, SET_H - 4);
+    g.fillRect(2, h - 2, w - 4, 1); g.fillRect(w - 2, 2, 1, h - 4);
     // ice-crystal corner accents
     g.fillStyle = '#5a7fb8';
-    for (const [cx2, cy2] of [[7, 7], [SET_W - 8, 7], [7, SET_H - 8], [SET_W - 8, SET_H - 8]]) {
+    for (const [cx2, cy2] of [[7, 7], [w - 8, 7], [7, h - 8], [w - 8, h - 8]]) {
       g.fillRect(cx2 - 2, cy2, 5, 1); g.fillRect(cx2, cy2 - 2, 1, 5);
       g.fillRect(cx2 - 1, cy2 - 1, 3, 3);
     }
     g.fillStyle = '#a8c8e8';
-    for (const [cx2, cy2] of [[7, 7], [SET_W - 8, 7], [7, SET_H - 8], [SET_W - 8, SET_H - 8]]) {
+    for (const [cx2, cy2] of [[7, 7], [w - 8, 7], [7, h - 8], [w - 8, h - 8]]) {
       g.fillRect(cx2, cy2, 1, 1);
     }
     // title with dashes
-    const title = 'SETTINGS';
     const tw = pixelTextWidth(title);
-    const tx0 = Math.round((SET_W - tw) / 2);
+    const tx0 = Math.round((w - tw) / 2);
     drawPixelTextShadow(g, title, tx0, 8, '#ffd95c', 'rgba(8,12,28,0.9)');
     g.fillStyle = '#4a5480';
     g.fillRect(tx0 - 26, 11, 18, 1); g.fillRect(tx0 + tw + 8, 11, 18, 1);
     g.fillRect(tx0 - 30, 10, 2, 3); g.fillRect(tx0 + tw + 28, 10, 2, 3);
+  }
+
+  function buildSettingsPanel() {
+    const g = setPanelCv.getContext('2d');
+    bakeFrostSlab(g, SET_W, SET_H, 'SETTINGS');
     // row labels
     const L = '#cfe0ff';
     drawPixelText(g, 'VOLUME', 14, ROW_SOUND - SET_Y, L);
@@ -4024,12 +4090,18 @@
       on ? '#cfe0ff' : '#7a8bb8', 'rgba(8,12,28,0.9)');
   }
 
-  function renderSettings(now) {
+  // opts.slide (px): draw the panel shifted down by that much - the main menu
+  // slides it in over the living world and skips the dim + minimap preview
+  function renderSettings(now, opts) {
     if (dragSlider && mouse.down) applySliderDrag();
-    ctx.fillStyle = 'rgba(6,10,24,0.6)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    // live minimap preview while resizing
-    renderMinimap(now);
+    const slide = opts && opts.slide ? Math.round(opts.slide) : 0;
+    if (!opts || !opts.bare) {
+      ctx.fillStyle = 'rgba(6,10,24,0.6)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      // live minimap preview while resizing
+      renderMinimap(now);
+    }
+    if (slide) { ctx.save(); ctx.translate(0, slide); }
     ctx.drawImage(setPanelCv, SET_X, SET_Y);
     drawSliderRow(ROW_SOUND, settings.volume, String(Math.round(settings.volume * 100)));
     drawToggleRow(ROW_MUTE, SFX.isMuted());
@@ -4037,10 +4109,18 @@
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
     drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
+    if (slide) ctx.restore();
   }
 
   function renderUI(now) {
     if (state.mode === 'title' || window.DBG.hideUI) return;
+
+    // title -> play: the HUD slides in over the last part of the intro - the
+    // left stack from the left, the minimap stack from the top, messages from below
+    const hudIn = state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
+    const slide = 1 - hudIn;
+    ctx.save();
+    ctx.translate(Math.round(-slide * 60), 0);
 
     // berries: consumable indicator, top-left (health lives on the in-world bar)
     if (inv.berry > 0) {
@@ -4054,6 +4134,10 @@
       drawPixelTextShadow(ctx, String(inv.fish), 15, 17, '#f4f7ff', 'rgba(15,22,50,0.8)');
       drawPixelTextShadow(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', 'rgba(15,22,50,0.8)');
     }
+
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, Math.round(-slide * (MM_R * 2 + 40)));
 
     // the one currency - left of the minimap
     const res = [
@@ -4075,6 +4159,7 @@
 
     // minimap with day/night ring
     renderMinimap(now);
+    ctx.restore();
 
     // (the bottom strip is deliberately empty: reserved for combat abilities)
 
@@ -4095,33 +4180,418 @@
     }
   }
 
-  function renderTitle(now) {
-    ctx.fillStyle = 'rgba(10,16,42,0.55)';
-    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    // layout was authored for a 270px-tall view; recenter it vertically
+  // ------------------------------------------------------------ main menu
+  // The title screen is a real menu over the living world: the camera drifts
+  // around the interior while animals, fish and snow keep running, four items
+  // (PLAY / SETTINGS / HOW TO PLAY / the reroll die) take mouse or arrows+enter,
+  // and every mode change is a transition rather than a cut.
+  const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
+  const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
+  const PANEL_SLIDE_T = 0.32;
+  const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY'];
+  const MENU_BW = 112, MENU_BH = 20;
+
+  function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
+  function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+  // layout was authored for a 270px-tall view; recenter it vertically
+  function menuLayout() {
     const toy = Math.round((VIEW_H - 270) / 2);
+    const bx = Math.round((VIEW_W - MENU_BW) / 2);
+    const rects = MENU_ITEMS.map((_, i) => ({ x: bx, y: toy + 112 + i * 26, w: MENU_BW, h: MENU_BH }));
+    // the seed row: text + die, one selectable item
+    const sw = pixelTextWidth(SEED_TXT) + 6 + 11;
+    const sx = Math.round((VIEW_W - sw) / 2);
+    rects.push({ x: sx - 3, y: toy + 196, w: sw + 6, h: 13, seed: true });
+    return { toy, rects };
+  }
+
+  function menuHit() {
+    if (state.menu.panel) return -1;
+    const { rects } = menuLayout();
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
+    }
+    return -1;
+  }
+
+  function menuSelect(i) {
+    const m = state.menu;
+    const n = ((i % 4) + 4) % 4;
+    if (n === m.sel) return;
+    m.sel = n;
+    SFX.pickup();
+  }
+
+  function menuActivate(i) {
+    SFX.unlock();
+    if (i === 0) beginIntro();
+    else if (i === 1) openMenuPanel('settings');
+    else if (i === 2) openMenuPanel('help');
+    else if (i === 3) rerollWorld();
+  }
+
+  function openMenuPanel(kind) {
+    const m = state.menu;
+    m.panel = kind; m.panelT = 0; m.closing = false;
+    SFX.place();
+  }
+  function closeMenuPanel() {
+    const m = state.menu;
+    if (!m.panel || m.closing) return;
+    m.closing = true;
+    dragSlider = null;
+    saveSettings();
+    SFX.pickup();
+  }
+  function menuPanelReady() {
+    const m = state.menu;
+    return !!m.panel && m.panelT >= 1 && !m.closing;
+  }
+  function overMenuPanel() {
+    return mouse.x >= SET_X && mouse.x < SET_X + SET_W && mouse.y >= SET_Y && mouse.y < SET_Y + SET_H;
+  }
+
+  function menuKey(e) {
+    const m = state.menu;
+    const k = e.key.toLowerCase();
+    if (state.fade) return; // a reroll is already leaving
+    if (m.panel) {
+      if (k === 'escape' || k === 'backspace' || (m.panel === 'help' && (k === 'enter' || k === ' '))) closeMenuPanel();
+      return;
+    }
+    if (k === 'arrowup' || k === 'w') menuSelect(m.sel - 1);
+    else if (k === 'arrowdown' || k === 's') menuSelect(m.sel + 1);
+    else if (k === 'enter' || k === ' ') { m.pressT = 0.12; menuActivate(m.sel); }
+  }
+
+  function menuClick() {
+    const m = state.menu;
+    SFX.unlock();
+    if (state.fade) return;
+    if (m.panel) {
+      if (!menuPanelReady()) return;
+      if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
+      if (!overMenuPanel()) closeMenuPanel();
+      return;
+    }
+    const h = menuHit();
+    if (h < 0) return;
+    m.sel = h;
+    m.pressT = 0.12;
+    menuActivate(h);
+  }
+
+  // PLAY: the sim starts now; the menu tint dissolves while the camera eases
+  // from the drift onto the player, then the HUD slides in (renderUI)
+  function beginIntro() {
+    state.introFrom = { x: camX, y: camY };
+    state.intro = INTRO_T;
+    state.mode = 'play';
+    state.menu.panel = null;
+    SFX.dawnChime();
+  }
+
+  // the die: whiteout, then reload on a fresh seed (SEED is a const every
+  // deterministic value closes over, so a new world is a new page)
+  function rerollWorld() {
+    const m = state.menu;
+    if (state.fade) return;
+    m.rolling = 0.6;
+    SFX.dodge();
+    const next = ((Date.now() ^ Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0) || 1;
+    state.fade = {
+      a: 0, to: 1, spd: 1 / 0.55, color: '#f4f7ff',
+      then: () => {
+        try { sessionStorage.setItem('emberfrost.reroll', '1'); } catch (e) { }
+        location.href = location.pathname + '?seed=' + next;
+      },
+    };
+  }
+
+  // slow lissajous drift around the open interior, never into the border forest
+  function titleCamTarget() {
+    const c = WORLD * TILE / 2;
+    const t = state.menu.camT;
+    const rx = Math.max(0, (WORLD / 2 - BORDER_MAX - 6) * TILE - VIEW_W / 2);
+    const ry = Math.max(0, Math.min(rx * 0.8, (WORLD / 2 - BORDER_MAX - 6) * TILE - VIEW_H / 2));
+    return {
+      x: c + Math.cos(t * 0.045 + 0.7) * rx - VIEW_W / 2,
+      y: c + Math.sin(t * 0.031 + 0.7) * ry - VIEW_H / 2,
+    };
+  }
+
+  function updateTitle(dt) {
+    const m = state.menu;
+    m.t += dt;
+    m.camT += dt;
+    m.dieT += dt;
+    if (m.rolling > 0) m.rolling -= dt;
+    if (m.pressT > 0) m.pressT -= dt;
+    // the mouse only takes the selection when it moves (so arrows aren't fought)
+    if (m.moved) {
+      m.moved = false;
+      const h = menuHit();
+      if (h >= 0 && h !== m.sel) m.sel = h;
+    }
+    for (let i = 0; i < 4; i++) {
+      const target = m.sel === i ? 1 : 0;
+      m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
+    }
+    if (m.panel) {
+      if (m.closing) {
+        m.panelT -= dt / PANEL_SLIDE_T;
+        if (m.panelT <= 0) { m.panelT = 0; m.panel = null; m.closing = false; }
+      } else m.panelT = Math.min(1, m.panelT + dt / PANEL_SLIDE_T);
+    }
+    // the ambient world: wildlife and the shoal keep living behind the menu
+    for (const a of animals) updateAnimal(a, dt);
+    for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
+    updateFish(dt);
+  }
+
+  // chamfered rect on the main ctx (2px corner cut)
+  function chamRect(x, y, w, h) {
+    ctx.fillRect(x + 2, y, w - 4, h);
+    ctx.fillRect(x, y + 2, w, h - 4);
+    ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  }
+
+  // a frost plank: snow-capped slab with icicles hanging off it. hv (0..1) is the
+  // hover ease - it lifts, warms, and grows an ember glow; pressed sinks it a px
+  function drawMenuButton(r, label, hv, now, pressed) {
+    const lift = Math.round(hv * 2) - (pressed ? 2 : 0);
+    const x = r.x, y = r.y - lift, w = r.w, h = r.h;
+    // ember glow behind the hovered plank
+    if (hv > 0.02) {
+      ctx.globalAlpha = 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
+      ctx.fillStyle = '#ffb347';
+      chamRect(x - 4, y - 4, w + 8, h + 8);
+      ctx.globalAlpha = 1;
+    }
+    // shadow stays on the ground while the plank lifts
+    ctx.fillStyle = 'rgba(4,6,18,0.55)';
+    chamRect(x + 2, r.y + 2, w, h);
+    // slab
+    ctx.fillStyle = '#0a0e23'; chamRect(x, y, w, h);
+    ctx.fillStyle = hv > 0.5 ? '#1f2b5c' : '#141c3c'; chamRect(x + 1, y + 1, w - 2, h - 2);
+    // wood-grain mottling
+    for (let yy = 3; yy < h - 3; yy += 3) {
+      for (let xx = 3; xx < w - 3; xx += 3) {
+        const hb = hash2(xx * 11 + r.y, yy * 7 + 19);
+        if (hb > 0.86) { ctx.fillStyle = hv > 0.5 ? '#263470' : '#182148'; ctx.fillRect(x + xx, y + yy, 3, 3); }
+        else if (hb < 0.10) { ctx.fillStyle = '#111834'; ctx.fillRect(x + xx, y + yy, 3, 3); }
+      }
+    }
+    // bevel
+    ctx.fillStyle = hv > 0.5 ? '#5a7fb8' : '#35426e';
+    ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
+    ctx.fillStyle = '#080c1c';
+    ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
+    // gold inner rule when hot
+    if (hv > 0.5) {
+      ctx.globalAlpha = (hv - 0.5) * 2;
+      ctx.fillStyle = '#c89a3c';
+      ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
+      ctx.globalAlpha = 1;
+    }
+    // snow cap along the top edge: ragged drift, shaded underside
+    for (let px = 2; px < w - 2; px++) {
+      const hb = hash2(px * 3 + 5, r.y * 13);
+      const sh = 1 + (hb > 0.5 ? 1 : 0) + (hb > 0.85 ? 1 : 0);
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(x + px, y + 1 - sh, 1, sh);
+      if (hb > 0.3 && hb < 0.5) { ctx.fillStyle = '#b8cce6'; ctx.fillRect(x + px, y + 1, 1, 1); }
+    }
+    // icicles off the bottom edge, tips glinting when hot
+    for (let px = 4; px < w - 4; px++) {
+      const hb = hash2(px * 7 + 1, r.y * 17 + 3);
+      if (hb < 0.84) continue;
+      const len = 2 + Math.floor((hb - 0.84) * 25); // 2..5
+      ctx.fillStyle = '#a8c8e8';
+      ctx.fillRect(x + px, y + h, 1, len);
+      ctx.fillStyle = '#e8f4ff';
+      ctx.fillRect(x + px, y + h, 1, 1);
+      if (hv > 0.5 && ((now * 6 + px) | 0) % 5 === 0) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + px, y + h + len - 1, 1, 1); }
+    }
+    // ember gems at both ends when hot
+    if (hv > 0.5) {
+      ctx.globalAlpha = (hv - 0.5) * 2;
+      for (const gx of [x + 6, x + w - 7]) {
+        const gy = y + Math.floor(h / 2);
+        ctx.fillStyle = '#0a0e23';
+        ctx.fillRect(gx - 2, gy, 5, 1); ctx.fillRect(gx, gy - 2, 1, 5); ctx.fillRect(gx - 1, gy - 1, 3, 3);
+        ctx.fillStyle = '#ff8a3c';
+        ctx.fillRect(gx - 1, gy, 3, 1); ctx.fillRect(gx, gy - 1, 1, 3);
+        ctx.fillStyle = '#ffd95c';
+        ctx.fillRect(gx, gy, 1, 1);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // label
+    const tw = pixelTextWidth(label, 2);
+    const lx = Math.round(x + (w - tw) / 2), ly = y + Math.round((h - 10) / 2) + (pressed ? 1 : 0);
+    drawPixelTextShadow(ctx, label, lx, ly, hv > 0.5 ? '#ffd95c' : '#cfe0ff', '#0a0e23', 2);
+  }
+
+  // the selector: a pair of pixel arrows (shaft, gold head, fletching) bobbing
+  // toward the selected item from both sides. dir = 1 points right, -1 left.
+  function drawSelector(r, lift, now) {
+    const bob = Math.round(Math.sin(now * 7) * 1.5);
+    const cy = r.y - lift + Math.floor(r.h / 2);
+    const draw = (tipX, dir) => {
+      // rows run from the tip (dx = 0) back along the shaft (dx < 0)
+      const px = (dx, dy, c, ww) => {
+        ctx.fillStyle = c;
+        const x0 = dir > 0 ? tipX + dx - (ww - 1) : tipX - dx;
+        ctx.fillRect(x0, cy + dy, ww, 1);
+      };
+      // outline
+      for (const [dx, dy, ww] of [[1, 0, 1], [0, -1, 1], [0, 1, 1], [-1, -2, 1], [-1, 2, 1], [-2, -3, 1], [-2, 3, 1],
+        [-3, -2, 1], [-3, 2, 1], [-3, -1, 1], [-3, 1, 1], [-13, -2, 4], [-13, 2, 4], [-14, -1, 1], [-14, 1, 1], [-15, 0, 1]]) px(dx, dy, '#0a0e23', ww);
+      px(-4, 0, '#d8c8a0', 11);  // shaft
+      px(-12, -1, '#b48a5a', 3); px(-12, 1, '#b48a5a', 3); // fletching
+      px(0, 0, '#ffd95c', 1); px(-1, -1, '#ffd95c', 1); px(-1, 1, '#ffd95c', 1);
+      px(-2, -2, '#ffd95c', 1); px(-2, 2, '#ffd95c', 1); px(-2, 0, '#ffd95c', 3);
+      px(0, 0, '#ffffff', 1);
+    };
+    draw(r.x - 6 + bob, 1);
+    draw(r.x + r.w + 5 - bob, -1);
+  }
+
+  // the reroll die (11x11): face cycles while hovered, tumbles while rolling
+  function drawDie(x, y, hv, now) {
+    const m = state.menu;
+    const rolling = m.rolling > 0;
+    let face = 1 + (SEED % 6);
+    if (rolling) face = 1 + ((m.dieT * 16) | 0) % 6;
+    else if (hv > 0.5) face = 1 + ((m.dieT * 7) | 0) % 6;
+    let jx = 0, jy = 0;
+    if (rolling) { jy = -Math.round(Math.abs(Math.sin(m.dieT * 18)) * 4); jx = ((m.dieT * 30) | 0) % 3 - 1; }
+    else if (hv > 0.5) { jx = ((now * 14) | 0) % 3 - 1; }
+    x += jx; y += jy;
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(x + 1, y + 2 - jy, 11, 11);
+    ctx.fillStyle = '#0a0e23'; chamRect(x, y, 11, 11);
+    ctx.fillStyle = hv > 0.5 ? '#fff8dc' : '#f4f7ff'; chamRect(x + 1, y + 1, 9, 9);
+    ctx.fillStyle = hv > 0.5 ? '#e0c890' : '#b8cce6';
+    ctx.fillRect(x + 2, y + 9, 7, 1); ctx.fillRect(x + 9, y + 2, 1, 7);
+    const pips = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]],
+      5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] }[face];
+    ctx.fillStyle = hv > 0.5 ? '#8a3a1a' : '#1a2040';
+    for (const [c, r] of pips) ctx.fillRect(x + 2 + c * 3, y + 2 + r * 3, 2, 2);
+  }
+
+  const helpPanelCv = document.createElement('canvas');
+  helpPanelCv.width = SET_W; helpPanelCv.height = SET_H;
+  function buildHelpPanel() {
+    const g = helpPanelCv.getContext('2d');
+    bakeFrostSlab(g, SET_W, SET_H, 'HOW TO PLAY');
+    const cols = [
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
+      [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
+    ];
+    for (let c = 0; c < 2; c++) {
+      let y = 24;
+      const x0 = c === 0 ? 14 : 134;
+      for (const [k, desc] of cols[c]) {
+        drawPixelText(g, k, x0, y, '#ffd95c');
+        drawPixelText(g, desc, x0 + 32, y, '#9fb6d8');
+        y += 10;
+      }
+    }
+    // divider + the rules of the frostlands
+    const ct = 'THE FROSTLANDS';
+    const cw = pixelTextWidth(ct);
+    const cx0 = Math.round((SET_W - cw) / 2);
+    drawPixelText(g, ct, cx0, 92, '#7a8bb8');
+    g.fillStyle = '#2c3a68';
+    g.fillRect(14, 95, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 95, SET_W - cx0 - cw - 22, 1);
+    const lines = [
+      ['GOLD IS THE ONLY CURRENCY', '#cfe0ff'],
+      ['TREES ROCKS AND GAME ALL PAY IT', '#9fb6d8'],
+      ['RIGHT CLICK A STUMP TO RAISE A BASE', '#9fb6d8'],
+      ['CRACK THE ICE TO SPEAR FISH BELOW', '#9fb6d8'],
+      ['RIVERS ARE FAST - CHAIN DODGES TO FLY', '#9fb6d8'],
+      ['RIVALS SHARE THE MAP - ARROWS HURT THEM', '#ff9a8a'],
+    ];
+    let y = 106;
+    for (const [l, col] of lines) {
+      drawPixelText(g, l, Math.round((SET_W - pixelTextWidth(l)) / 2), y, col);
+      y += 11;
+    }
+    const hint = 'ESC BACK';
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
+  }
+
+  function renderTitle(now) {
+    const m = state.menu;
+    // leaving: 0 while the menu is up, 0->1 over the intro
+    const outQ = state.intro > 0 ? 1 - state.intro / INTRO_T : 0;
+    const tintA = 0.55 * (1 - easeOut(outQ / 0.7));
+    if (tintA > 0.005) {
+      ctx.fillStyle = 'rgba(10,16,42,' + tintA.toFixed(3) + ')';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    }
+    const out = easeOut(outQ / 0.35);           // menu chrome drops away first
+    const pan = m.panel ? easeOut(m.panelT) : 0; // and ducks while a panel is up
+    const { toy, rects } = menuLayout();
+
+    // logo: drops in at boot, lifts away on play
+    const logoIn = easeOut(m.t / 0.6);
     const t1 = 'EMBERFROST';
     const bob = Math.sin(now * 1.5) * 2;
-    drawPixelTextShadow(ctx, t1, (VIEW_W - pixelTextWidth(t1, 4)) / 2, toy + 62 + bob, '#ffd95c', '#3c2a1e', 4);
-    const t2 = 'A COZY WINTER SURVIVAL';
-    drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, toy + 96 + bob, '#cfe0ff', 'rgba(15,22,50,0.9)');
+    const ly = Math.round(toy + 46 + bob - (1 - logoIn) * 30 - out * 40);
+    ctx.globalAlpha = logoIn * (1 - out) * (1 - pan * 0.85);
+    const lx = Math.round((VIEW_W - pixelTextWidth(t1, 4)) / 2);
+    drawPixelText(ctx, t1, lx + 1, ly + 1, '#ff7a2a', 4); // ember under-glow
+    drawPixelTextShadow(ctx, t1, lx, ly, '#ffd95c', '#3c2a1e', 4);
+    const t2 = 'A COZY WINTER FREE-FOR-ALL';
+    drawPixelTextShadow(ctx, t2, Math.round((VIEW_W - pixelTextWidth(t2)) / 2), ly + 34, '#cfe0ff', 'rgba(15,22,50,0.9)');
+    ctx.globalAlpha = 1;
 
-    const lines = [
-      'WASD MOVE - SPACE DODGE - SHIFT SLIDE',
-      'HOLD CLICK TO DRAW THE BOW',
-      'HOLD E TO CHOP, MINE, AND PICK',
-      'SCROLL TO ZOOM',
-      'RIGHT CLICK A STUMP TO BUILD',
-      'Q BERRY  M MAP  N MUTE  P PAUSE',
-    ];
-    let ly = toy + 130;
-    for (const l of lines) {
-      drawPixelTextShadow(ctx, l, (VIEW_W - pixelTextWidth(l)) / 2, ly, '#9fb6d8', 'rgba(15,22,50,0.9)');
-      ly += 12;
+    // items: stagger in from the left, sink away on play, fade under a panel
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      const inT = easeOut((m.t - 0.25 - i * 0.12) / 0.45);
+      const a = inT * (1 - out) * (1 - pan);
+      if (a <= 0.005) continue;
+      ctx.globalAlpha = a;
+      const rr = { x: r.x - Math.round((1 - inT) * 60), y: r.y + Math.round(out * 25), w: r.w, h: r.h };
+      const hv = m.hover[i];
+      const pressed = m.sel === i && (m.pressT > 0 || (mouse.down && menuHit() === i));
+      if (r.seed) {
+        const lift = Math.round(hv * 2);
+        const tx = rr.x + 3, ty = rr.y + 3 - lift;
+        drawPixelTextShadow(ctx, SEED_TXT, tx, ty, hv > 0.5 ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
+        drawDie(tx + pixelTextWidth(SEED_TXT) + 6, rr.y - lift, hv, now);
+        if (hv > 0.5) {
+          ctx.globalAlpha = a * (hv - 0.5) * 2;
+          const ht = 'ROLL A NEW WORLD';
+          drawPixelTextShadow(ctx, ht, Math.round((VIEW_W - pixelTextWidth(ht)) / 2), rr.y + 16, '#ffd95c', 'rgba(15,22,50,0.9)');
+          ctx.globalAlpha = a;
+        }
+      } else {
+        drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed);
+      }
+      if (m.sel === i && hv > 0.3 && !m.panel) drawSelector(rr, Math.round(hv * 2), now);
+      ctx.globalAlpha = 1;
     }
-    if (((now * 1.6) | 0) % 2 === 0) {
-      const t3 = 'CLICK TO BEGIN';
-      drawPixelTextShadow(ctx, t3, (VIEW_W - pixelTextWidth(t3, 2)) / 2, toy + 196, '#ffffff', 'rgba(15,22,50,0.9)', 2);
+
+    // footer hint
+    const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);
+    if (fin > 0.005) {
+      ctx.globalAlpha = fin;
+      const t3 = 'ARROWS SELECT - ENTER CONFIRM';
+      drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 250, '#5a6690', 'rgba(15,22,50,0.9)');
+      ctx.globalAlpha = 1;
+    }
+
+    // sub-panels slide up from the bottom edge over the still-visible world
+    if (m.panel) {
+      const slide = Math.round((1 - easeOut(m.panelT)) * (VIEW_H - SET_Y + 6));
+      if (m.panel === 'settings') renderSettings(now, { bare: true, slide });
+      else ctx.drawImage(helpPanelCv, SET_X, SET_Y + slide);
     }
   }
 
@@ -4140,8 +4610,7 @@
   // ------------------------------------------------------------ boot
   function startGame() {
     SFX.unlock();
-    state.mode = 'play';
-    showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
+    beginIntro();
   }
 
   loadSettings();
@@ -4155,9 +4624,18 @@
   renderGround();
   buildMapPanel();
   buildSettingsPanel();
+  buildHelpPanel();
   rebuildLights();
   camX = player.x - VIEW_W / 2;
   camY = player.y - VIEW_H / 2;
+  // landing from a reroll: the whiteout the die left behind clears to the new world
+  try {
+    if (sessionStorage.getItem('emberfrost.reroll')) {
+      sessionStorage.removeItem('emberfrost.reroll');
+      state.fade = { a: 1, to: 0, spd: 1 / 0.8, color: '#f4f7ff', then: null };
+      state.menu.rolling = 0.5;
+    }
+  } catch (e) { }
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
@@ -4200,7 +4678,8 @@
     setTool: (i, p) => { (p || player).tool = i; },
     getTool: (p) => (p || player).tool,
     cam: () => ({ x: camX, y: camY }),
-    startGame,
+    startGame, beginIntro, menu: state.menu, menuHit, menuClick, menuKey, settingsHit,
+    layout: () => ({ VIEW_W, VIEW_H, SET_X, SET_Y, SL_X, ROW_SHAKE, PANEL_X, PANEL_Y, MM_CX, MM_CY }),
     hideUI: false,
     step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },
   };
