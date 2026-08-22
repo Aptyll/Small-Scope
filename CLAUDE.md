@@ -92,7 +92,7 @@ don't cite line numbers here, they go stale within a session.
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
 | floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` |
-| collision and entity movement | `moveEntity`, `isSolidTile` | `movement & collision` |
+| tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` |
 | build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
 | wildlife behaviour | `updateAnimal`, `nearestBerryBush` | `animals` |
@@ -127,6 +127,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   neighbours into the prerendered ground canvas. Never call `renderGround()` per frame; it bakes
   the entire 3712×3712 world and is a boot-time cost.
 - **Added or removed a light-emitting object?** Call `rebuildLights()`.
+- **Units are solid to each other.** `separateUnits()` runs once per sim step after every mover
+  has stepped and pushes overlapping players/animals/robots apart; a new kind of thing that walks
+  must be added to its list (and to `UNIT_MASS`) or it will walk through everyone.
 - **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is

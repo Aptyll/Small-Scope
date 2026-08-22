@@ -53,6 +53,29 @@ underfoot sets friction and speed caps. All the tuning constants live in the con
   ice-gliding use the standing pose. `die(p)` and `Player.reset()` zero `vx/vy` and clear
   `sliding`. Footprints and slide trails from every slot share the one `footprints` decal array.
 
+## Unit collisions
+
+Players, animals and robots are solid circles to each other (`PLAYER_R` 4.5, deer 5, rabbit
+2.5, robot 3 — `unitRadius`). Tile collision stays per-mover in `moveEntity`; unit-vs-unit is a
+separate relaxation pass, `separateUnits()` in the `movement & collision` banner, that
+`updatePlay` runs once after every player, animal and robot has stepped. For each overlapping
+pair it splits the overlap by inverse mass (`UNIT_MASS`: player 3, deer 2.2, robot 0.7, rabbit
+0.5 — a player shoves a rabbit aside and barely notices, two players split it evenly). Every
+push goes through `moveEntity(…, strict)`, which treats open water as a wall even for players
+(a shove never dunks anyone), and **any push a wall refuses is handed to the other unit** — the
+player's share is tried first, so a small unit can never pin a player in a corner: the pinner
+is the one that gets moved (a rabbit wedged between you and a rock squirts out sideways).
+Two passes settle piles; the pass is deterministic (fixed order, no `rng`).
+
+Momentum: on the first pass a unit closing on the contact loses only its *share* of the
+velocity component along the normal — tangential speed is untouched, so a slide into a deer
+deflects along it and carries on rather than sticking — the rest of that component is handed to
+the other unit as knockback (`kbx/kby`, the same channel arrows use), and the lighter side of
+a contact gets a 0.3 bounce. Players carry `vx/vy`; animals and robots only carry their
+knockback (their walk is a direction re-chosen each tick), and an idle animal/robot now applies
+its knockback too, so a shoved deer actually moves. Measured: a 150 px/s slide into a deer
+comes out at ~60 px/s with a sideways kick and the deer shoved ~14 px.
+
 ## Tools and the bow
 
 There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
@@ -153,7 +176,8 @@ rabbit picks a new wander it drifts toward the nearest berried bush within 7 til
 player comes within 26 px, and a hit sends either species fleeing directly away from the nearest
 one (`fleeT`). Deaths pay out in `updateAnimal` from the `YIELD` table: rabbits drop 1 berry plus
 `YIELD.rabbit` coins, deer drop `YIELD.deer` coins plus a `GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
-animals join the y-sorted `draws` pass via `drawAnimal()`, and
+animals are solid to players, robots and each other (see
+[Unit collisions](#unit-collisions)), join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
 map.
 
@@ -238,7 +262,8 @@ Mechanics, all in `game.js`:
 jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
 floater at 8+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
-Robots use `moveEntity`, abandon a target after ~5 s stuck, die with their spawner, and are
+Robots use `moveEntity` (and are solid to players and animals — see
+[Unit collisions](#unit-collisions)), abandon a target after ~5 s stuck, die with their spawner, and are
 reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sorted draws via
 `drawRobot()` in team colours, and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.

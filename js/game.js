@@ -984,10 +984,12 @@
   }
 
   // ------------------------------------------------------------ movement & collision
-  function moveEntity(e, dx, dy, r) {
+  // strict = treat open water as a wall for players too (a shove must never
+  // dunk someone; only their own movement can)
+  function moveEntity(e, dx, dy, r, strict) {
     // only players can enter open water holes (they fall in - see updatePlayer);
     // animals and robots treat those tiles as walls
-    const solid = e instanceof Player ? isSolidTile :
+    const solid = e instanceof Player && !strict ? isSolidTile :
       (tx, ty) => isSolidTile(tx, ty) || (inWorld(tx, ty) && ground[idx(tx, ty)] === 2);
     let blockedX = false, blockedY = false;
     // X axis
@@ -1015,6 +1017,70 @@
       if (!hit) e.y = ny; else blockedY = true;
     }
     return { blockedX, blockedY };
+  }
+
+  // ---- unit collisions ---------------------------------------------------
+  // Players, animals and robots are solid circles to each other. After every
+  // mover has taken its step, separateUnits() pushes overlapping pairs apart,
+  // splitting the overlap by inverse mass (a player shoves a rabbit aside and
+  // barely notices; two players split it evenly). Each push goes through
+  // moveEntity (strict), so nobody is shoved into a wall or a hole - and any
+  // push the wall refused is handed to the other unit instead, which is what
+  // keeps a small unit from ever pinning a player in a corner: the player's
+  // share is tried first, and whatever it cannot take, the pinner takes.
+  // Momentum: a player moving into the contact loses only its *share* of the
+  // normal velocity component per tick (tangential speed is untouched, so a
+  // slide into a deer deflects along it rather than sticking), the rest of
+  // that component is handed to the other unit as knockback, and a lighter
+  // unit gets a small bounce off a heavier one. Two relaxation passes settle
+  // piles. Deterministic: fixed iteration order, no rng.
+  const UNIT_MASS = { player: 3, deer: 2.2, rabbit: 0.5, robot: 0.7 };
+  const UNIT_BOUNCE = 0.3; // restitution for the lighter side of a contact
+  function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : 3; }
+  function separateUnits() {
+    const us = [];
+    for (const p of players) if (p.active && !p.dead && !inAir(p)) us.push({ e: p, r: PLAYER_R, m: UNIT_MASS.player, vel: true });
+    for (const a of animals) if (!a.dead) us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false });
+    for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS.robot, vel: false });
+    // velocity a unit carries into a contact: players their momentum, the
+    // rest their knockback (their walk is direction-only and re-chosen each tick)
+    const vx = (u) => u.vel ? u.e.vx + u.e.kbx : u.e.kbx;
+    const vy = (u) => u.vel ? u.e.vy + u.e.kby : u.e.kby;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
+        const a = us[i], b = us[j];
+        let dx = b.e.x - a.e.x, dy = b.e.y - a.e.y;
+        let d = Math.hypot(dx, dy);
+        const min = a.r + b.r;
+        if (d >= min) continue;
+        if (d < 0.01) { dx = 1; dy = 0; d = 1; } // dead-centre stack: part along +x
+        const nx = dx / d, ny = dy / d, overlap = min - d;
+        const sa = b.m / (a.m + b.m), sb = 1 - sa; // a's share of the push (lighter moves more)
+        // positions: a's share first, then b takes its own share plus what a's wall refused
+        const ax = a.e.x, ay = a.e.y;
+        moveEntity(a.e, -nx * overlap * sa, -ny * overlap * sa, a.r, true);
+        const left = overlap - Math.hypot(a.e.x - ax, a.e.y - ay);
+        const bx = b.e.x, by = b.e.y;
+        moveEntity(b.e, nx * left, ny * left, b.r, true);
+        // and if b's wall refused some, a tries once more with the remainder
+        const left2 = left - Math.hypot(b.e.x - bx, b.e.y - by);
+        if (left2 > 0.01) moveEntity(a.e, -nx * left2, -ny * left2, a.r, true);
+        if (pass) continue; // velocities settle on the first pass only
+        // velocities along the contact normal (positive = closing)
+        const va = vx(a) * nx + vy(a) * ny, vb = -(vx(b) * nx + vy(b) * ny);
+        if (va > 0) bump(a, b, va, nx, ny, sa);
+        if (vb > 0) bump(b, a, vb, -nx, -ny, sb);
+      }
+    }
+    // u is closing on o at speed vn along (nx, ny); it keeps (1 - share) of that
+    // component, o is knocked along it, and a lighter u bounces a little
+    function bump(u, o, vn, nx, ny, share) {
+      const lose = vn * share * (1 + (u.m < o.m ? UNIT_BOUNCE : 0));
+      if (u.vel) { u.e.vx -= lose * nx; u.e.vy -= lose * ny; }
+      else { u.e.kbx -= lose * nx; u.e.kby -= lose * ny; }
+      const give = vn * share * 0.8;
+      o.e.kbx += give * nx; o.e.kby += give * ny;
+    }
   }
 
   // ------------------------------------------------------------ actions
@@ -1548,6 +1614,8 @@
       if (a.moveT <= 0) a.idleT = rabbit ? rand(0.8, 2.2) : rand(1.6, 4);
     } else {
       a.idleT -= dt;
+      // a shove (arrow or unit collision) still moves an idle animal
+      if (Math.abs(a.kbx) + Math.abs(a.kby) > 1) moveEntity(a, a.kbx * dt, a.kby * dt, r);
       if (a.idleT <= 0) {
         // pick a new wander; rabbits drift toward the nearest berry bush
         let ang = rng() * Math.PI * 2;
@@ -1718,6 +1786,7 @@
         if (mv.blockedX || mv.blockedY) b.moveT = 0;
       } else {
         b.idleT -= dt;
+        if (Math.abs(b.kbx) + Math.abs(b.kby) > 1) moveEntity(b, b.kbx * dt, b.kby * dt, 3); // shoved while idle
         if (b.idleT <= 0) {
           let ang = rng() * Math.PI * 2;
           if (Math.hypot(hx - b.x, hy - b.y) > 2.5 * TILE) ang = Math.atan2(hy - b.y, hx - b.x) + rand(-0.5, 0.5);
@@ -2346,6 +2415,9 @@
     updateStructures(dt);
     for (const b of robots) updateRobot(b, dt);
     for (let i = robots.length - 1; i >= 0; i--) if (robots[i].dead) robots.splice(i, 1);
+
+    // everyone has stepped: push overlapping units apart (players, animals, robots)
+    separateUnits();
 
     // drops
     for (let i = drops.length - 1; i >= 0; i--) {
