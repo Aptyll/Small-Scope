@@ -351,6 +351,7 @@
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
     ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
     fitFlakes();
+    fitClouds();
     renderBars();
   }
 
@@ -2758,8 +2759,63 @@
     while (flakes.length < target) flakes.push(makeFlake(fxRng));
   }
 
+  // ---- cloud shadows ------------------------------------------------------
+  // A few snow clouds drift high above the camera - never drawn themselves,
+  // only the shadows they throw on the ground. Same world-space + wrap model
+  // as the flakes, on a field one view plus a cloud wide so a cloud is fully
+  // off-screen when it wraps. Shapes are baked once at boot: a clump of
+  // ellipses rasterised at half resolution and blown up 2x, so the edge is
+  // chunky 2px pixel steps rather than a smooth blob. Own seeded stream so
+  // neither rng (worldgen) nor fxRng (flake top-ups) is perturbed.
+  const CLOUD_W = 72, CLOUD_H = 36, CLOUD_ALPHA = 0.13, CLOUD_SPD = 7; // world px/s
+  const cloudRng = mulberry32((SEED ^ 0x51ed27a3) >>> 0);
+  const cloudShapes = [];
+  for (let n = 0; n < 3; n++) {
+    const hw = CLOUD_W / 2, hh = CLOUD_H / 2;
+    const lo = document.createElement('canvas'); lo.width = hw; lo.height = hh;
+    const g = lo.getContext('2d'); g.fillStyle = '#18203a';
+    const blobs = 5 + Math.floor(cloudRng() * 4);
+    for (let b = 0; b < blobs; b++) {
+      const cx = hw * (0.22 + cloudRng() * 0.56), cy = hh * (0.35 + cloudRng() * 0.4);
+      const rx = hw * (0.16 + cloudRng() * 0.2), ry = hh * (0.22 + cloudRng() * 0.24);
+      // rasterise the ellipse by hand: every half-res pixel is in or out
+      for (let y = 0; y < hh; y++) for (let x = 0; x < hw; x++) {
+        const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+        if (dx * dx + dy * dy <= 1) g.fillRect(x, y, 1, 1);
+      }
+    }
+    const cv = document.createElement('canvas'); cv.width = CLOUD_W; cv.height = CLOUD_H;
+    const c2 = cv.getContext('2d'); c2.imageSmoothingEnabled = false;
+    c2.drawImage(lo, 0, 0, CLOUD_W, CLOUD_H);
+    cloudShapes.push(cv);
+  }
+  const clouds = []; // { x, y (world), shape, dir: unit drift vector }
+  function makeCloud(r) {
+    const a = -0.35 + r() * 0.5; // drifting roughly east, each on its own heading
+    return { x: r() * (VIEW_W + CLOUD_W), y: r() * (VIEW_H + CLOUD_H), shape: cloudShapes[Math.floor(r() * cloudShapes.length)], dx: Math.cos(a), dy: Math.sin(a) };
+  }
+  // a few per base view, scaled with the view area like the flakes (so the
+  // zoomed-out drop view keeps the same world density instead of 3 tiny shadows)
+  function fitClouds() {
+    const target = Math.max(2, Math.round(3 * (VIEW_W * VIEW_H) / (480 * 270)));
+    while (clouds.length > target) clouds.pop();
+    while (clouds.length < target) clouds.push(makeCloud(cloudRng));
+  }
+  // shadows on the ground only: drawn right after the ground, under every sprite
+  function renderCloudShadows(ex, ey) {
+    const fw = VIEW_W + CLOUD_W, fh = VIEW_H + CLOUD_H;
+    ctx.globalAlpha = CLOUD_ALPHA;
+    for (const c of clouds) {
+      const sx = ((c.x - ex) % fw + fw) % fw - CLOUD_W;
+      const sy = ((c.y - ey) % fh + fh) % fh - CLOUD_H;
+      ctx.drawImage(c.shape, Math.round(sx), Math.round(sy));
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function updateFx(dt) {
     const now = performance.now() / 1000;
+    for (const c of clouds) { c.x += c.dx * CLOUD_SPD * dt; c.y += c.dy * CLOUD_SPD * dt; }
     for (const f of flakes) {
       if (f.rest > 0) {
         f.rest -= dt;
@@ -2823,8 +2879,9 @@
     const ex = camX + shx;
     const ey = camY + shy;
 
-    // ground
+    // ground, then the cloud shadows that lie on it
     ctx.drawImage(groundCv, ox, oy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+    renderCloudShadows(ex, ey);
 
     // fish: silhouettes drifting under the thin ice, crisp in open holes
     for (const f of fish) {
@@ -5289,7 +5346,7 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes,
+    SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes, clouds,
     fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
