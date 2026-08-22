@@ -137,6 +137,15 @@ push. It prints bottom-right of the title screen, so a screenshot carries its bu
 commit adds **one sentence** to the top of `PATCH_NOTES` (right below `PATCH_TXT`) — plain English,
 uppercase, the biggest change only, no matter how large the patch; clicking the tag opens them.
 
+## UI rule: show, don't label
+
+**Communicate through visuals and visual indicators wherever possible; avoid text labels and
+explanatory text.** An icon beside a number, an arrow that is clickable, a colour that carries the
+team, a plank that lifts on hover — not "CLICK OR ARROWS TO SWAP", not "PLAYERS LEFT: 5". Text
+is for names, numbers and the rare headline (a death, a landmark), and a control must read as
+what it does by its shape and its hover state alone. If you catch yourself writing a hint
+string, build the affordance instead.
+
 ## Hard rules
 
 Cross-file invariants — breaking one produces a bug that looks unrelated to its cause.

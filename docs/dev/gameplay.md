@@ -364,9 +364,12 @@ rival to have beaten), which ends the match as a win. Either way the local slot 
 `endMatch('lost' | 'won')` (the `death & spectate` banner): `state.mode = 'dead'`, every local
 overlay closed, and the death overlay takes the screen with two planks — **SPECTATE** (lost) or
 **KEEP PLAYING** (won), and **LOBBY**. Spectating sets `state.spec` to a living rival's id and
-`viewPlayer()` — the one place the camera and minimap ask who to frame — returns it; click or the
-arrows cycle (`specNext`, slot order, skipping the dead), ESC returns to the planks, and a
-watched slot that dies hands the view to the next. LOBBY (`toLobby`) fades to dark and reloads
+`viewPlayer()` — the one place the camera and minimap ask who to frame — returns it. The control is
+a top-centre `[<] NAME [>]` strip (`specLayout`/`specHit`, sized to the widest slot name so the
+arrows never shift): clicking an arrow or pressing the arrow keys cycles (`specNext`, slot order,
+skipping the dead), ESC returns to the planks, and a watched slot that dies hands the view to the
+next. There is deliberately no hint text — the arrows are the whole explanation (CLAUDE.md's
+"show, don't label" rule); with nobody left the plate shows a dash instead of a name. LOBBY (`toLobby`) fades to dark and reloads
 the page on the same seed, which boots into the title screen. **TAB still opens the standings
 while you are out**, which is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**

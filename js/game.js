@@ -3777,7 +3777,7 @@
       if (!m.panel && menuHit() >= 0) return { kind: 'hand' };
       return { kind: 'arrow' };
     }
-    if (state.mode === 'dead') return { kind: deadHit() >= 0 ? 'hand' : 'arrow' };
+    if (state.mode === 'dead') return { kind: deadHit() >= 0 || specHit() ? 'hand' : 'arrow' };
     if (state.mode !== 'play') return { kind: 'arrow' };
     if (state.settingsOpen) {
       if (dragSlider) return { kind: 'grab' };
@@ -5412,9 +5412,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.06'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.07'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.07', 'SPECTATING IS A PAIR OF ARROWS AROUND THE NAME AT THE TOP OF THE SCREEN - NO HINT TEXT.'],
     ['1.06', 'DEATH IS FINAL: YOU SPECTATE OR GO BACK TO THE LOBBY, AND THE HUD COUNTS WHO IS LEFT.'],
     ['1.05', 'THE PATCH NOTES SCROLL, AND THE TITLE HIDES WHILE A PANEL IS OPEN.'],
     ['1.04', 'THE PATCH TAG NOW OPENS THESE NOTES.'],
@@ -6243,9 +6244,10 @@
   // ------------------------------------------------------------ death & spectate
   // Death is final: the local slot's death (or its win, once every rival is
   // gone) puts the game in mode 'dead' with the match running on underneath.
-  // The overlay offers two planks - SPECTATE follows a living slot (click or
-  // the arrows cycle, ESC comes back), LOBBY fades out and reloads into the
-  // title screen on the same seed. viewPlayer() is who the camera and minimap
+  // The overlay offers two planks - SPECTATE follows a living slot through a
+  // top-centre control: two pixel arrows around the name, clickable, the arrow
+  // keys do the same, ESC comes back (no hint text: the arrows are the
+  // explanation). LOBBY fades out and reloads into the title screen on the same seed. viewPlayer() is who the camera and minimap
   // frame, and the only thing the rest of the file needs to know about any of it.
   const DEAD_BW = 112, DEAD_BH = 20, DEAD_GAP = 12; // the title menu plank, side by side
   const DEAD_ITEMS = { lost: ['SPECTATE', 'LOBBY'], won: ['KEEP PLAYING', 'LOBBY'] };
@@ -6260,6 +6262,27 @@
     const w = items.length * DEAD_BW + (items.length - 1) * DEAD_GAP;
     const x0 = Math.round((VIEW_W - w) / 2), y = Math.round(VIEW_H / 2) + 10;
     return items.map((label, i) => ({ x: x0 + i * (DEAD_BW + DEAD_GAP), y, w: DEAD_BW, h: DEAD_BH, label }));
+  }
+
+  // the spectate control, top centre: [<] NAME [>]. Arrow boxes are SPEC_AW
+  // wide; the name plate between them is sized to the widest slot name so the
+  // arrows never jump as the target changes.
+  const SPEC_Y = 6, SPEC_H = 13, SPEC_AW = 11;
+  function specLayout() {
+    let nw = 0;
+    for (const p of players) if (p.active) nw = Math.max(nw, pixelTextWidth(p.name));
+    const w = SPEC_AW + 6 + nw + 6 + SPEC_AW;
+    const x = Math.round((VIEW_W - w) / 2);
+    return { x, y: SPEC_Y, w, h: SPEC_H,
+      left: { x, y: SPEC_Y, w: SPEC_AW, h: SPEC_H },
+      right: { x: x + w - SPEC_AW, y: SPEC_Y, w: SPEC_AW, h: SPEC_H } };
+  }
+  // which spectate arrow the pointer is on: -1 left, 1 right, 0 neither
+  function specHit() {
+    if (state.deadView !== 'spec') return 0;
+    const L = specLayout();
+    const inR = (r) => mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 2 && mouse.y < r.y + r.h + 2;
+    return inR(L.left) ? -1 : inR(L.right) ? 1 : 0;
   }
 
   // which plank is under the pointer (-1 for none); the overlay must have faded in
@@ -6319,7 +6342,7 @@
 
   function deadClick() {
     if (state.fade) return;
-    if (state.deadView === 'spec') { specNext(1); SFX.pickup(); return; }
+    if (state.deadView === 'spec') { const d = specHit(); if (d) { specNext(d); SFX.pickup(); } return; }
     const h = deadHit();
     if (h >= 0) { state.deadSel = h; deadActivate(h); }
   }
@@ -6328,19 +6351,41 @@
     const rs = deadLayout();
     const hot = deadHit();
     if (state.deadView === 'spec') {
-      // a thin plate along the bottom: who is being watched and how to leave
+      // top centre: [<] NAME [>]. The name sits on a plate in the target's
+      // team colour; each arrow is its own box that lights gold under the
+      // pointer, so the control explains itself without a word of hint.
       const vp = viewPlayer();
-      const name = vp === player ? 'NOBODY LEFT TO WATCH' : vp.name;
-      const hint = 'CLICK OR ARROWS  NEXT   ESC  BACK';
-      const w = Math.max(pixelTextWidth(name), pixelTextWidth(hint)) + 24;
-      const bx = Math.round((VIEW_W - w) / 2), by = VIEW_H - 36;
-      ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(bx, by, w, 24);
-      ctx.fillStyle = vp === player ? '#8f9cc4' : TEAMS[vp.team].mark;
-      ctx.fillRect(bx, by, w, 1); ctx.fillRect(bx, by + 23, w, 1);
-      drawPixelTextShadow(ctx, name, Math.round((VIEW_W - pixelTextWidth(name)) / 2), by + 4,
-        vp === player ? '#8f9cc4' : playerTint(vp), '#0a0e23');
-      drawPixelTextShadow(ctx, hint, Math.round((VIEW_W - pixelTextWidth(hint)) / 2), by + 14, '#7a8bb8', '#0a0e23');
+      const L = specLayout();
+      const hit = specHit();
+      ctx.fillStyle = 'rgba(12,18,42,0.82)';
+      ctx.fillRect(L.x, L.y, L.w, L.h);
+      const mark = vp === player ? '#8f9cc4' : TEAMS[vp.team].mark;
+      ctx.fillStyle = mark;
+      ctx.fillRect(L.x + SPEC_AW, L.y, L.w - SPEC_AW * 2, 1);
+      ctx.fillRect(L.x + SPEC_AW, L.y + L.h - 1, L.w - SPEC_AW * 2, 1);
+      for (const dir of [-1, 1]) {
+        const r = dir < 0 ? L.left : L.right;
+        const hot = hit === dir;
+        ctx.fillStyle = hot ? '#1f2b5c' : '#141c3c';
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+        ctx.fillStyle = hot ? '#c89a3c' : '#35426e';
+        ctx.fillRect(r.x, r.y, r.w, 1); ctx.fillRect(r.x, r.y + r.h - 1, r.w, 1);
+        ctx.fillRect(dir < 0 ? r.x : r.x + r.w - 1, r.y, 1, r.h);
+        // a 4-wide chevron, pointing out of the plate
+        const cx = r.x + (r.w >> 1), cy = r.y + (r.h >> 1);
+        ctx.fillStyle = hot ? '#ffd95c' : '#cfe0ff';
+        for (let i = 0; i < 4; i++) {
+          const px = dir < 0 ? cx - 2 + i : cx + 1 - i;
+          ctx.fillRect(px, cy - i, 1, 1); ctx.fillRect(px, cy + i, 1, 1);
+        }
+      }
+      if (vp !== player) {
+        drawPixelTextShadow(ctx, vp.name, Math.round(L.x + (L.w - pixelTextWidth(vp.name)) / 2), L.y + 4, playerTint(vp), '#0a0e23');
+      } else {
+        // nobody left to watch: an empty plate with a dim dash where a name would be
+        ctx.fillStyle = '#5a6690';
+        ctx.fillRect(Math.round(L.x + L.w / 2) - 3, L.y + 6, 6, 1);
+      }
       return;
     }
     const a = Math.min(0.75, state.deadTimer * 0.6);
