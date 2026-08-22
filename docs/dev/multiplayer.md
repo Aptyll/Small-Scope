@@ -190,20 +190,23 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    dodge when hurt. Only shoots when `aiLineClear()` says the flight path is open.
 3. **wolves** — a wolf within 92 px (or any wolf already hunting this bot): shoot it and give
    ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
-4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s give-up timer per animal. Birds are
-   excluded: with no pathfinding, a flushed flock is a wild goose chase.
-5. **unwedge** — after being stuck, walk back toward its landing site before doing anything else.
-6. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
-7. **spend** — with gold in hand, build a generator (or, 30% of the time and only where
+4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
+   outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
+5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
+6. **spend** — with gold in hand, build a generator (or, 30% of the time and only where
    `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
-8. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
-9. **roam** — wander between its landing site and the map centre.
+7. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
+8. **roam** — wander between its landing site and the map centre.
 
-**Nothing here paths around an obstacle**, so every pursuit carries a give-up timer and a short
-blacklist (`ai.avoid`, `ai.huntAvoid`), and `aiOpenSides()` keeps bots from targeting work buried
-inside the treeline. Those guards are what stop a bot freezing against a wall forever — keep them
-when you extend the ladder.
+Every walk goes through `steerTo(x, y, reach)`, which is `navTo` on the bot's own slot
+([gameplay.md](gameplay.md#pathfinding)) — it routes around trees, rocks, buildings and water,
+and returns **-1 when there is no route** (or the bot has been pinned for a while). That, not a
+timer, is what makes a bot drop a goal: harvest puts the target on `ai.avoid` for 12 s, hunt on
+`ai.huntAvoid`, loot lets the drop lie, spend backs off for 15 s, roam re-picks. Harvest routes
+with reach `WORK_REACH` (any open tile beside the target), so `aiOpenSides() >= 1` is the only
+prefilter on work; a build site still wants `>= 3` open sides. Keep the -1 branches when you
+extend the ladder — a goal that is never dropped is a bot that stands still forever.
 
 ## Where players start
 

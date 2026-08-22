@@ -469,9 +469,9 @@
       // bot brain (unused by a human slot): current job, give-up timers and the
       // short blacklists that keep a bot from re-picking work it cannot reach
       this.ai = {
-        tgt: null, tgtT: 0, stuckT: 0, avoid: null, avoidT: 0, thinkT: 0,
+        tgt: null, avoid: null, avoidT: 0, thinkT: 0,
         huntTgt: null, huntT: 0, huntAvoid: null, huntAvoidT: 0,
-        lootT: 0, spendT: 0, buildT: 0, escapeT: 0,
+        lootT: 0, spendT: 0, buildT: 0,
         wx: 0, wy: 0, roam: 0,
       };
       this.reset(true);
@@ -1175,6 +1175,208 @@
     }
   }
 
+  // ------------------------------------------------------------ pathfinding
+  // Grid A* over the tile map for everything that walks on its own: robots,
+  // animals, bot slots and any future enemy. A tile is walkable when it is
+  // in-world, not solid and not open water (players can enter a hole, but
+  // nothing steers into one on purpose). Eight-connected with no corner
+  // cutting - a diagonal step needs both orthogonal neighbours open, so a unit
+  // of radius <= 5 walking tile centre to tile centre never clips a tree.
+  // Deterministic: fixed neighbour order, stable heap, no rng.
+  //
+  //   findPath(sx, sy, gx, gy, reach, budget) -> [[x, y], ...] | null
+  //     world-space waypoints (tile centres, start excluded), done when a tile
+  //     within `reach` (Chebyshev) of the goal tile is reached - reach 1 lets a
+  //     robot path to a tree it cannot stand on. A search that runs out of
+  //     budget returns the route to the closest tile it saw (path.partial), so
+  //     a far goal still gets a first leg; only an enclosed goal returns null.
+  //   navTo(e, gx, gy, r, reach, dt)  -> { dx, dy, d, ok }
+  //     the direction to move this frame along e.nav's route, replanning when
+  //     the goal moves a tile, every NAV_REPLAN s, or when moveEntity reports a
+  //     block. d is the straight-line distance to the goal (callers keep their
+  //     own arrive radius). ok = false means the goal is unreachable or the
+  //     unit has made no progress for NAV_STALL s (pinned by other units) -
+  //     that is the signal to drop the target; there is no give-up timer.
+  //   navStep(e, gx, gy, r, spd, dt, reach) -> navTo + moveEntity + mvx/mvy
+  //     for the animal/robot movers (players move through their momentum).
+  //   navClear(e) forgets the route; call it when a unit changes its mind.
+  const NAV_BUDGET = 700;      // A* expansions per search (~a 25-tile detour)
+  const NAV_REPLAN = 0.6;      // s between replans toward a goal that sits still
+  const NAV_STALL = 1.6;       // s of no progress on a route before it counts as pinned
+  const NAV_N = WORLD * WORLD;
+  const navG = new Float32Array(NAV_N);
+  const navParent = new Int32Array(NAV_N);
+  const navSeen = new Uint32Array(NAV_N);   // generation stamp: node has a g
+  const navDone = new Uint32Array(NAV_N);   // generation stamp: node is closed
+  let navGen = 0;
+  // binary heap keyed by f, parallel arrays, lazy deletion of stale entries
+  const heapN = [], heapF = [];
+  function heapPush(n, f) {
+    let i = heapN.length; heapN.push(n); heapF.push(f);
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heapF[p] <= f) break;
+      heapN[i] = heapN[p]; heapF[i] = heapF[p]; i = p;
+    }
+    heapN[i] = n; heapF[i] = f;
+  }
+  function heapPop() {
+    const n = heapN[0], ln = heapN.pop(), lf = heapF.pop();
+    if (heapN.length) {
+      let i = 0;
+      const len = heapN.length;
+      for (;;) {
+        let c = i * 2 + 1;
+        if (c >= len) break;
+        if (c + 1 < len && heapF[c + 1] < heapF[c]) c++;
+        if (heapF[c] >= lf) break;
+        heapN[i] = heapN[c]; heapF[i] = heapF[c]; i = c;
+      }
+      heapN[i] = ln; heapF[i] = lf;
+    }
+    return n;
+  }
+  const NAV_DX = [1, -1, 0, 0, 1, 1, -1, -1];
+  const NAV_DY = [0, 0, 1, -1, 1, -1, 1, -1];
+  const NAV_COST = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
+  function walkable(tx, ty) {
+    return inWorld(tx, ty) && !isSolidTile(tx, ty) && ground[idx(tx, ty)] !== 2;
+  }
+  function navH(tx, ty, gx, gy) {
+    const dx = Math.abs(tx - gx), dy = Math.abs(ty - gy);
+    return dx > dy ? dx + dy * (Math.SQRT2 - 1) : dy + dx * (Math.SQRT2 - 1);
+  }
+  function findPath(sx, sy, gx, gy, reach, budget) {
+    reach = reach || 0;
+    budget = budget || NAV_BUDGET;
+    let stx = Math.floor(sx / TILE), sty = Math.floor(sy / TILE);
+    const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE);
+    if (!inWorld(gtx, gty)) return null;
+    if (!reach && !walkable(gtx, gty)) return null;
+    // a unit shoved half into a wall starts from the nearest open tile instead
+    if (!walkable(stx, sty)) {
+      let found = false;
+      for (let k = 0; k < 8 && !found; k++) {
+        if (walkable(stx + NAV_DX[k], sty + NAV_DY[k])) { stx += NAV_DX[k]; sty += NAV_DY[k]; found = true; }
+      }
+      if (!found) return null;
+    }
+    navGen++;
+    if (navGen === 0xffffffff) { navSeen.fill(0); navDone.fill(0); navGen = 1; }
+    heapN.length = 0; heapF.length = 0;
+    const s = idx(stx, sty);
+    navG[s] = 0; navParent[s] = -1; navSeen[s] = navGen;
+    heapPush(s, navH(stx, sty, gtx, gty));
+    let best = s, bestH = navH(stx, sty, gtx, gty), expanded = 0, goal = -1;
+    while (heapN.length) {
+      const n = heapPop();
+      if (navDone[n] === navGen) continue;
+      navDone[n] = navGen;
+      const tx = n % WORLD, ty = (n / WORLD) | 0;
+      if (Math.max(Math.abs(tx - gtx), Math.abs(ty - gty)) <= reach) { goal = n; break; }
+      const h = navH(tx, ty, gtx, gty);
+      if (h < bestH) { bestH = h; best = n; }
+      if (++expanded > budget) break;
+      const g = navG[n];
+      for (let k = 0; k < 8; k++) {
+        const nx = tx + NAV_DX[k], ny = ty + NAV_DY[k];
+        if (!walkable(nx, ny)) continue;
+        if (k >= 4 && !(walkable(tx + NAV_DX[k], ty) && walkable(tx, ty + NAV_DY[k]))) continue;
+        const m = idx(nx, ny);
+        if (navDone[m] === navGen) continue;
+        const ng = g + NAV_COST[k];
+        if (navSeen[m] === navGen && navG[m] <= ng) continue;
+        navG[m] = ng; navParent[m] = n; navSeen[m] = navGen;
+        heapPush(m, ng + navH(nx, ny, gtx, gty));
+      }
+    }
+    const end = goal >= 0 ? goal : best;
+    if (end === s) return goal >= 0 ? [] : null;
+    const path = [];
+    for (let n = end; n !== s && n >= 0; n = navParent[n]) path.push([(n % WORLD) * TILE + 8, ((n / WORLD) | 0) * TILE + 8]);
+    path.reverse();
+    path.partial = goal < 0;
+    return path;
+  }
+
+  // can a circle of radius r slide from (x0,y0) to (x1,y1) without touching a
+  // wall or a hole? the same four-corner test moveEntity makes, every 4 px
+  function navLineClear(x0, y0, x1, y1, r) {
+    const dx = x1 - x0, dy = y1 - y0, d = Math.hypot(dx, dy);
+    const steps = Math.ceil(d / 4) || 1;
+    for (let i = 1; i <= steps; i++) {
+      const x = x0 + dx * i / steps, y = y0 + dy * i / steps;
+      const tx0 = Math.floor((x - r) / TILE), tx1 = Math.floor((x + r) / TILE);
+      const ty0 = Math.floor((y - r) / TILE), ty1 = Math.floor((y + r) / TILE);
+      for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) if (!walkable(tx, ty)) return false;
+    }
+    return true;
+  }
+  // string-pull: keep only the waypoints the unit cannot see past (bounded
+  // look-ahead so a long route stays cheap)
+  function navSmooth(path, x, y, r) {
+    const out = [];
+    let i = 0, fx = x, fy = y;
+    while (i < path.length) {
+      let j = i;
+      for (let k = i + 1; k < path.length && k <= i + 10; k++) {
+        if (navLineClear(fx, fy, path[k][0], path[k][1], r)) j = k;
+      }
+      out.push(path[j]);
+      fx = path[j][0]; fy = path[j][1];
+      i = j + 1;
+    }
+    out.partial = path.partial;
+    return out;
+  }
+
+  function navClear(e) { if (e.nav) { e.nav.path = null; e.nav.fail = false; e.nav.stallT = 0; } }
+  function navTo(e, gx, gy, r, reach, dt) {
+    reach = reach || 0;
+    const nav = e.nav || (e.nav = { path: null, i: 0, gtx: -1, gty: -1, replanT: 0, fail: false, stallT: 0, lx: 0, ly: 0, reach: 0 });
+    const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE);
+    nav.replanT -= dt;
+    const moved = Math.abs(gtx - nav.gtx) + Math.abs(gty - nav.gty);
+    const far = Math.hypot(gx - e.x, gy - e.y);
+    // a goal that just proved unreachable is not searched again every frame
+    if (!nav.path && nav.fail && nav.replanT > 0 && moved <= 1 && nav.reach === reach) return { dx: 0, dy: 0, d: far, ok: false };
+    if (!nav.path || moved > 1 || nav.replanT <= 0 || nav.reach !== reach) {
+      nav.gtx = gtx; nav.gty = gty; nav.reach = reach; nav.replanT = NAV_REPLAN; nav.i = 0;
+      if (navLineClear(e.x, e.y, gx, gy, r)) {
+        nav.path = [[gx, gy]];
+      } else {
+        const p = findPath(e.x, e.y, gx, gy, reach);
+        nav.path = p ? navSmooth(p, e.x, e.y, r) : null;
+        if (nav.path && !nav.path.length) nav.path = [[gx, gy]]; // already within reach
+      }
+      if (!nav.path) { nav.fail = true; return { dx: 0, dy: 0, d: far, ok: false }; }
+      nav.fail = false;
+      if (moved > 1) nav.stallT = 0;
+    }
+    // progress watch: a unit pinned by other units drifts nowhere; a route
+    // that stalls this long is handed back as unreachable
+    const prog = Math.hypot(e.x - nav.lx, e.y - nav.ly);
+    nav.lx = e.x; nav.ly = e.y;
+    nav.stallT = prog > 6 * dt ? 0 : nav.stallT + dt;
+    if (nav.stallT > NAV_STALL) { nav.stallT = 0; nav.path = null; nav.fail = true; nav.replanT = 0; return { dx: 0, dy: 0, d: far, ok: false }; }
+    const path = nav.path;
+    while (nav.i < path.length - 1 && Math.hypot(path[nav.i][0] - e.x, path[nav.i][1] - e.y) < 5) nav.i++;
+    const wp = path[nav.i];
+    const dx = wp[0] - e.x, dy = wp[1] - e.y;
+    const wd = Math.hypot(dx, dy) || 1;
+    return { dx: dx / wd, dy: dy / wd, d: far, ok: true };
+  }
+  // walk an animal/robot one step along its route; a wall hit on a route
+  // older than a moment replans at once (a fresh one is left to the stall watch)
+  function navStep(e, gx, gy, r, spd, dt, reach) {
+    const n = navTo(e, gx, gy, r, reach, dt);
+    if (!n.ok) return n;
+    e.mvx = n.dx; e.mvy = n.dy;
+    const mv = moveEntity(e, (n.dx * spd + e.kbx) * dt, (n.dy * spd + e.kby) * dt, r);
+    if ((mv.blockedX || mv.blockedY) && e.nav.replanT < NAV_REPLAN - 0.2) e.nav.replanT = 0;
+    return n;
+  }
+
   // ------------------------------------------------------------ actions
   // Every action takes the player performing it, so the local human, an AI fill
   // and a future network peer all reach the world through the same calls.
@@ -1600,7 +1802,8 @@
       kind, x, y, hp, maxHp: hp,
       dir: rng() < 0.5 ? 'left' : 'right',
       moveT: 0, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
-      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, fleeT: 0, jinkA: 0,
+      animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
+      fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
       home: null,                          // the landmark it belongs to, if any
       target: null, biteCd: 0,           // wolf: its quarry and its bite rhythm
       perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
@@ -1730,6 +1933,22 @@
     if (a.hp <= 0 && !a.dead) animalDies(a);
   }
 
+  // where a frightened animal runs next: ~6 tiles off, as straight away from
+  // the threat as the ground allows (fanning out, then sideways, then past it),
+  // the first open tile it can actually route to
+  function fleeGoal(a, from) {
+    const base = Math.atan2(a.y - from.y, a.x - from.x) + rand(-0.4, 0.4);
+    const dist = 6 * TILE;
+    for (const k of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, 2.6, -2.6, Math.PI]) {
+      const gx = a.x + Math.cos(base + k) * dist, gy = a.y + Math.sin(base + k) * dist;
+      const tx = Math.floor(gx / TILE), ty = Math.floor(gy / TILE);
+      if (!walkable(tx, ty)) continue;
+      const x = tx * TILE + 8, y = ty * TILE + 8;
+      if (navLineClear(a.x, a.y, x, y, 5) || findPath(a.x, a.y, x, y, 0, 250)) return { x, y };
+    }
+    return null;
+  }
+
   // rabbits and deer: wander, nibble, and bolt from anyone who gets close
   function updatePrey(a, dt) {
     const rabbit = a.kind === 'rabbit';
@@ -1748,19 +1967,17 @@
     if (a.fleeT > 0) {
       a.fleeT -= dt;
       const from = scare || player;
-      let dx = a.x - from.x, dy = a.y - from.y;
-      const d = Math.hypot(dx, dy) || 1;
-      dx /= d; dy /= d;
-      if (a.jinkA) { // slight zig-zag so the flight path reads alive
-        const ca = Math.cos(a.jinkA), sa = Math.sin(a.jinkA);
-        const nx = dx * ca - dy * sa; dy = dx * sa + dy * ca; dx = nx;
+      // the flight is a chain of routed legs a few tiles long, each picked
+      // away from the threat; a leg that fails or arrives hands over to the next
+      if (!a.fleeGoal) a.fleeGoal = fleeGoal(a, from);
+      if (a.fleeGoal) {
+        const n = navStep(a, a.fleeGoal.x, a.fleeGoal.y, r, rabbit ? 80 : 92, dt);
+        if (!n.ok || n.d < 6) a.fleeGoal = null;
+        moving = true;
+      } else {
+        a.fleeT = 0; // cornered: nowhere to run
       }
-      a.mvx = dx; a.mvy = dy;
-      moving = true;
-      const spd = rabbit ? 80 : 92;
-      const mv = moveEntity(a, (dx * spd + a.kbx) * dt, (dy * spd + a.kby) * dt, r);
-      if (mv.blockedX || mv.blockedY) a.jinkA = rand(-1.2, 1.2);
-      if (a.fleeT <= 0) { a.jinkA = 0; a.idleT = rand(0.4, 1); a.moveT = 0; }
+      if (a.fleeT <= 0) { a.fleeGoal = null; navClear(a); a.idleT = rand(0.4, 1); a.moveT = 0; }
     } else if (a.moveT > 0) {
       a.moveT -= dt;
       moving = true;
@@ -1847,7 +2064,7 @@
     // keep the current quarry while it is still worth keeping, else look around
     let t = a.target;
     const leashed = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_LEASH;
-    if (t && (!t.active || t.dead || inAir(t) || !leashed(t))) t = null;
+    if (t && (!t.active || t.dead || inAir(t) || !leashed(t))) { t = null; navClear(a); }
     if (!t) {
       let bd = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
       for (const p of players) {
@@ -1861,10 +2078,12 @@
 
     let moving = false;
     if (t) {
-      const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
-      a.mvx = dx / d; a.mvy = dy / d;
-      moveEntity(a, (a.mvx * WOLF_SPD + a.kbx) * dt, (a.mvy * WOLF_SPD + a.kby) * dt, 4.5);
-      moving = true;
+      // run the route to the quarry; with no route (it is out over water, or
+      // the pack has it pinned) hold and face it
+      const n = navStep(a, t.x, t.y, 4.5, WOLF_SPD, dt);
+      const d = n.d || 1;
+      if (!n.ok) { a.mvx = (t.x - a.x) / d; a.mvy = (t.y - a.y) / d; }
+      moving = n.ok;
       if (d < WOLF_BITE_R && a.biteCd <= 0) {
         a.biteCd = WOLF_BITE_CD;
         damagePlayer(t, WOLF_BITE_DMG, a.mvx, a.mvy, null, 'wolf');
@@ -2268,8 +2487,7 @@
     return {
       x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
       home: sp, team: sp.team === undefined ? 0 : sp.team, owner: sp.owner === undefined ? 0 : sp.owner,
-      tgt: null, workT: 0, stuckT: 0, atkCd: 0,
-      jitterT: 0, jitterA: 0,
+      tgt: null, workT: 0, atkCd: 0, avoid: null, avoidT: 0, nav: null,
       carry: 0, // gold held, deposited at home
       moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
       animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
@@ -2286,28 +2504,13 @@
     let moving = false;
     const SPD = 40;
 
-    const walkToward = (px, py) => {
-      let dx = px - b.x, dy = py - b.y;
-      const d = Math.hypot(dx, dy) || 1;
-      dx /= d; dy /= d;
-      if (b.jitterT > 0) {
-        b.jitterT -= dt;
-        const ca = Math.cos(b.jitterA), sa = Math.sin(b.jitterA);
-        const nx = dx * ca - dy * sa; dy = dx * sa + dy * ca; dx = nx;
-      }
-      b.mvx = dx; b.mvy = dy;
-      const mv = moveEntity(b, (dx * SPD + b.kbx) * dt, (dy * SPD + b.kby) * dt, 3);
-      if (mv.blockedX || mv.blockedY) {
-        b.stuckT += dt;
-        if (b.jitterT <= 0) {
-          b.jitterT = rand(0.4, 0.9);
-          b.jitterA = (rng() < 0.5 ? 1 : -1) * rand(0.6, 1.3);
-        }
-      } else {
-        b.stuckT = Math.max(0, b.stuckT - dt * 0.5);
-      }
+    // route there (reach 1 = stop beside a tile it cannot stand on); an
+    // unreachable goal comes back as -1 and the caller drops it
+    const walkToward = (px, py, reach) => {
+      const n = navStep(b, px, py, 3, SPD, dt, reach);
+      if (!n.ok) return -1;
       moving = true;
-      return d;
+      return n.d;
     };
 
     const wander = () => {
@@ -2369,35 +2572,38 @@
 
     const carryTotal = b.carry;
 
-    if (b.stuckT > 5) { b.tgt = null; b.stuckT = 0; }
-
     if (home.mode === 'guard') {
       // no raiders to fight: guard mode just loiters near home
       b.tgt = null;
       if (carryTotal > 0) {
-        if (walkToward(hx, hy) < 14) deposit();
+        const d = walkToward(hx, hy);
+        if (d >= 0 && d < 14) deposit();
       } else {
         wander();
       }
     } else if (carryTotal >= 8) {
-      if (walkToward(hx, hy) < 14) deposit();
+      const d = walkToward(hx, hy);
+      if (d >= 0 && d < 14) deposit();
     } else {
       if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
+      if (b.avoidT > 0) b.avoidT -= dt; else b.avoid = null;
       if (!b.tgt) {
         b.tgt = nearestObj(hx, hy, 8, (o) =>
-          o.type === 'tree' || o.type === 'rock');
+          (o.type === 'tree' || o.type === 'rock') && o !== b.avoid);
       }
       if (b.tgt) {
         const txp = b.tgt.tx * TILE + 8, typ = b.tgt.ty * TILE + 8;
         const d = Math.hypot(txp - b.x, typ - b.y);
         if (d > 20) {
-          walkToward(txp, typ);
+          // no route to it (walled in, or pinned on the way): leave it alone a while
+          if (walkToward(txp, typ, 1) < 0) { b.avoid = b.tgt; b.avoidT = 12; b.tgt = null; }
         } else {
           b.workT += dt;
           if (b.workT >= 0.9) { b.workT = 0; harvest(); }
         }
       } else if (carryTotal > 0) {
-        if (walkToward(hx, hy) < 14) deposit();
+        const d = walkToward(hx, hy);
+        if (d >= 0 && d < 14) deposit();
       } else {
         wander();
       }
@@ -2564,8 +2770,9 @@
   // movement axis, aim point, fire / work / slide / dodge and the odd build
   // order - so it can never do anything a player couldn't. The brain is a small
   // priority ladder, re-picked a few times a second: eat, fight, wolves, hunt,
-  // unwedge, loot, spend, harvest, roam. Every pursuit carries a give-up timer, because
-  // nothing here paths around an obstacle.
+  // loot, spend, harvest, roam. Every walk goes through steerTo(), which routes
+  // around obstacles (see pathfinding) and reports an unreachable goal as -1 -
+  // that, not a timer, is what makes a bot drop a target.
   const AI_SIGHT = 150;   // px: how far a bot notices a rival
   const AI_HUNT = 120;    // px: how far it will go after an animal
   const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
@@ -2594,7 +2801,7 @@
   function aiNearestAnimal(p) {
     let best = null, bd = AI_HUNT;
     for (const a of animals) {
-      // a flushed bird is a wild goose chase for something with no pathfinding
+      // birds fly: no route on the ground catches a flushed flock
       if (a.dead || a.kind === 'bird' || a === p.ai.huntAvoid) continue;
       const d = Math.hypot(a.x - p.x, a.y - p.y);
       if (d < bd) { bd = d; best = a; }
@@ -2611,9 +2818,8 @@
     return true;
   }
 
-  // Bots have no pathfinding, so they only take work they can stand beside in
-  // the open: a target ringed by solids is a dead end inside the treeline, and
-  // chasing one walks the bot in and wedges it there.
+  // open tiles around a target: work needs at least one to stand on (the
+  // route finds the way to it), and a build site wants room around it
   function aiOpenSides(tx, ty) {
     let n = 0;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -2629,10 +2835,14 @@
     inp.mx = 0; inp.my = 0; inp.work = false; inp.slide = false;
     if (p.dead || p.fallT > 0) { inp.fire = false; return; }
 
-    const steerTo = (x, y) => {
-      const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy) || 1;
-      inp.mx = dx / d; inp.my = dy / d;
-      return d;
+    // walk the route to (x, y) - reach 1 stops beside a tile it cannot stand
+    // on, which is exactly WORK_REACH - and return the straight-line distance,
+    // or -1 when there is no route (drop the goal, do not wait on it)
+    const steerTo = (x, y, reach) => {
+      const n = navTo(p, x, y, PLAYER_R, reach || 0, dt);
+      if (!n.ok) return -1;
+      inp.mx = n.dx; inp.my = n.dy;
+      return n.d;
     };
     const aimAt = (x, y) => { inp.aimX = x; inp.aimY = y; };
 
@@ -2676,20 +2886,20 @@
     }
 
     // 4. meat is gold: chase and shoot the nearest animal, but give up on one
-    //    it cannot corner - a bot pinned against a treeline would chase forever
+    //    it cannot catch in 6 s (prey outruns a walk) or cannot route to at all
     if (ai.huntAvoidT > 0) { ai.huntAvoidT -= dt; if (ai.huntAvoidT <= 0) ai.huntAvoid = null; }
     const prey = aiNearestAnimal(p);
     if (prey) {
       if (prey !== ai.huntTgt) { ai.huntTgt = prey; ai.huntT = 0; }
       ai.huntT += dt;
-      if (ai.huntT > 6) {
+      const clear = aiLineClear(p, prey.x, prey.y - 3);
+      const d = Math.hypot(prey.x - p.x, prey.y - p.y);
+      const lost = ai.huntT > 6 || ((d > 55 || !clear) && steerTo(prey.x, prey.y) < 0);
+      if (lost) {
         ai.huntAvoid = prey; ai.huntAvoidT = 15;
         ai.huntTgt = null; ai.huntT = 0;
       } else {
-        const clear = aiLineClear(p, prey.x, prey.y - 3);
-        const d = Math.hypot(prey.x - p.x, prey.y - p.y);
         aimAt(prey.x, prey.y - 3);
-        if (d > 55 || !clear) steerTo(prey.x, prey.y);
         inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.8;
         ai.tgt = null;
         return;
@@ -2697,25 +2907,21 @@
     }
     inp.fire = false;
 
-    // 5. wedged a moment ago: head back to open ground before doing anything else
-    if (ai.escapeT > 0) {
-      ai.escapeT -= dt;
-      steerTo(ai.wx, ai.wy);
-      aimAt(p.x + inp.mx * 24, p.y + inp.my * 24);
-      return;
-    }
-
-    // 6. loot on the ground is neutral and first-come: pick up what is close
+    // 5. loot on the ground is neutral and first-come: pick up what is close
     let loot = null, ld = 72;
     for (const d of drops) {
       if (d.t < 0.35) continue;
       const dd = Math.hypot(d.x - p.x, d.y - p.y);
       if (dd < ld) { ld = dd; loot = d; }
     }
-    if (loot && ai.lootT < 4) { ai.lootT += dt; aimAt(loot.x, loot.y); steerTo(loot.x, loot.y); return; }
+    if (loot && ai.lootT < 4) {
+      ai.lootT += dt; aimAt(loot.x, loot.y);
+      if (steerTo(loot.x, loot.y) < 0) ai.lootT = 4; // no way to it: let it lie
+      return;
+    }
     if (!loot) ai.lootT = 0;
 
-    // 7. spend the purse: building is the only gold sink, so a bot with money
+    // 6. spend the purse: building is the only gold sink, so a bot with money
     //    looks for a stump to build on, then for its own work to upgrade
     if (ai.buildT <= 0 && p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold) {
       const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
@@ -2723,10 +2929,8 @@
         const sx = st.tx * TILE + 8, sy = st.ty * TILE + 8;
         const d = Math.hypot(sx - p.x, sy - p.y);
         if (d > 40) {
-          steerTo(sx, sy);
-          // a site it cannot actually walk to must not pin it there
-          ai.spendT += dt;
-          if (ai.spendT > 6) { ai.buildT = 15; ai.spendT = 0; }
+          // a site it cannot route to must not pin it there
+          if (steerTo(sx, sy) < 0) { ai.buildT = 15; ai.spendT = 0; }
           return;
         }
         if (d > 16) { // clear of the site: order it
@@ -2761,7 +2965,7 @@
       ai.buildT = 4; // nothing worth spending on nearby; look again shortly
     }
 
-    // 8. harvest: walk to a tree/rock/berry bush and hold E on it
+    // 7. harvest: walk to a tree/rock/berry bush and hold E on it
     // (a stripped bush stops being work, so drop it the moment it empties)
     if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
       (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
@@ -2771,8 +2975,7 @@
       ai.thinkT = 0.6;
       ai.tgt = nearestObj(p.x, p.y, AI_FORAGE, (o) => o !== ai.avoid &&
         (o.type === 'tree' || o.type === 'rock' || (o.type === 'bush' && o.berries > 0)) &&
-        aiOpenSides(o.tx, o.ty) >= 3);
-      ai.tgtT = 0;
+        aiOpenSides(o.tx, o.ty) >= 1);
     }
     if (ai.tgt) {
       const t = ai.tgt;
@@ -2780,39 +2983,18 @@
       const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
       if (Math.max(Math.abs(t.tx - ptx), Math.abs(t.ty - pty)) <= WORK_REACH) {
         inp.work = true;
-        ai.stuckT = 0;
-        ai.tgtT = 0; // swinging counts as progress
         return;
       }
-      // head for the nearest OPEN tile beside it - always approaching from one
-      // fixed side walks bots into the treeline and pins them there
-      let bx = t.tx, by = t.ty, bd = 1e9;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-        if (!dx && !dy) continue;
-        const nx = t.tx + dx, ny = t.ty + dy;
-        if (!inWorld(nx, ny) || isSolidTile(nx, ny) || ground[idx(nx, ny)] === 2) continue;
-        const d = Math.hypot((nx + 0.5) * TILE - p.x, (ny + 0.5) * TILE - p.y);
-        if (d < bd) { bd = d; bx = nx; by = ny; }
-      }
-      steerTo((bx + 0.5) * TILE, (by + 0.5) * TILE);
-      // there is no pathfinding, so anything it grinds against or simply cannot
-      // reach in time gets dropped and left alone for a while
-      ai.stuckT = Math.hypot(p.vx, p.vy) < 25 ? ai.stuckT + dt : 0;
-      ai.tgtT += dt;
-      if (ai.stuckT > 2 || ai.tgtT > 8) {
+      // route to any tile within WORK_REACH of it, whichever side is open;
+      // one with no route (walled in, or pinned on the way) is left alone a while
+      if (steerTo(t.tx * TILE + 8, t.ty * TILE + 8, WORK_REACH) < 0) {
         ai.avoid = t; ai.avoidT = 12;
-        ai.tgt = null; ai.stuckT = 0; ai.tgtT = 0;
-        // back out to open ground before trying anything else: with no
-        // pathfinding, the only way out of a dead end is to leave it
-        ai.escapeT = 3;
-        ai.wx = (p.spawn.tx + 0.5) * TILE + rand(-5, 5) * TILE;
-        ai.wy = (p.spawn.ty + 0.5) * TILE + rand(-5, 5) * TILE;
-        ai.roam = 3;
+        ai.tgt = null;
       }
       return;
     }
 
-    // 9. nothing to do: roam between its camp and the middle of the map
+    // 8. nothing to do: roam between its camp and the middle of the map
     ai.roam -= dt;
     if (ai.roam <= 0) {
       ai.roam = rand(3, 7);
@@ -2821,7 +3003,8 @@
       ai.wx = toward.x + rand(-14, 14) * TILE;
       ai.wy = toward.y + rand(-14, 14) * TILE;
     }
-    if (steerTo(ai.wx, ai.wy) < 20) ai.roam = 0;
+    const rd = steerTo(ai.wx, ai.wy);
+    if (rd < 20) ai.roam = 0; // arrived, or no route (a point in the treeline): pick another
     aimAt(p.x + inp.mx * 24, p.y + inp.my * 24);
   }
 
@@ -3562,6 +3745,7 @@
     for (const b of robots) draws.push({ y: b.y + 4, r: b });
     draws.sort((a, b) => a.y - b.y);
 
+    if (window.DBG.showPaths) drawNavPaths(ex, ey);
     for (const d of draws) {
       if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
@@ -3743,6 +3927,25 @@
     const cur = cursorInfo();
     applyCursorStyle(cur);
     if (settings.pixelCursor && mouse.inside && !window.DBG.hideUI) drawCursor(cur, now);
+  }
+
+  // debug: every walker's live route (DBG.showPaths), waypoints joined from the unit
+  function drawNavPaths(ex, ey) {
+    ctx.save();
+    ctx.lineWidth = 1;
+    const one = (e, col) => {
+      const nav = e.nav;
+      if (!nav || !nav.path) return;
+      ctx.strokeStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(e.x - ex) + 0.5, Math.round(e.y - ey) + 0.5);
+      for (let i = nav.i; i < nav.path.length; i++) ctx.lineTo(Math.round(nav.path[i][0] - ex) + 0.5, Math.round(nav.path[i][1] - ey) + 0.5);
+      ctx.stroke();
+    };
+    for (const p of players) if (p.active && !p.dead && !inAir(p)) one(p, '#ffe27a');
+    for (const a of animals) if (!a.dead) one(a, a.kind === 'wolf' ? '#ff6a6a' : '#8ef0a0');
+    for (const b of robots) if (!b.dead) one(b, '#7fc8ff');
+    ctx.restore();
   }
 
   // fps readout, very top-right corner, above every overlay
@@ -5412,9 +5615,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.10'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.11'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.11', 'ROBOTS, FLEEING ANIMALS, WOLVES AND BOTS NOW ROUTE AROUND TREES, ROCKS, BUILDINGS AND WATER INSTEAD OF BUMPING INTO THEM.'],
     ['1.10', 'THE GAME IS CALLED SOFTFALL EVERYWHERE NOW; SAVED SETTINGS RESET ONCE.'],
     ['1.09', 'HOUSEKEEPING: THE DEV NOTES OPEN WITH A SHORT PITCH; NOTHING IN THE GAME CHANGED.'],
     ['1.08', 'HOUSEKEEPING: THE DEV NOTES WERE TRIMMED; NOTHING IN THE GAME CHANGED.'],
@@ -6747,6 +6951,8 @@
     // hand a slot to an AI, a human, or nobody (a ghost at its camp)
     setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
     placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
+    // routes: the search itself, and showPaths = true draws every unit's live route
+    findPath, walkable, navTo, showPaths: false,
     // hero levels: pay a slot gold (and XP) the way a pickup would
     gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
     // the match readouts: stage feed lines without staging the kills behind

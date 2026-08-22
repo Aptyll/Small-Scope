@@ -98,6 +98,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
 - **Units are solid to each other.** `separateUnits()` runs once per sim step after every mover
   has stepped and pushes overlapping players/animals/robots apart; a new kind of thing that walks
   must be added to its list (and to `UNIT_MASS`) or it will walk through everyone.
+- **Anything that walks to a goal routes there** through `navTo`/`navStep` (the `pathfinding`
+  banner), never by steering straight at it, and **drops the goal when they return `ok = false`**
+  (no route, or pinned) — there are no stuck timers; a caller that ignores `ok` stands still forever.
 - **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is

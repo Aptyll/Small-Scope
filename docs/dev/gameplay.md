@@ -69,6 +69,39 @@ player's share is tried first, so a small unit can never pin a player in a corne
 is the one that gets moved (a rabbit wedged between you and a rock squirts out sideways).
 Two passes settle piles; the pass is deterministic (fixed order, no `rng`).
 
+## Pathfinding
+
+Everything that walks to a goal on its own — robots, fleeing prey, hunting wolves, bot slots,
+any future enemy — routes through the `pathfinding` banner rather than steering straight at it.
+`findPath(sx, sy, gx, gy, reach, budget)` is grid A* over the tile map: a tile is `walkable()`
+when it is in-world, not `isSolidTile`, and not open water (ground 2); eight-connected with no
+corner cutting (a diagonal needs both orthogonal neighbours open, so a unit of radius ≤ 5 never
+clips a tree walking centre to centre); octile heuristic; typed-array scores stamped by a
+generation counter so nothing is cleared between searches; a binary heap; no `rng`, so it is
+deterministic. `reach` is the Chebyshev distance at which the goal counts as reached — 1 lets a
+unit path to a tree it cannot stand on (and is exactly `WORK_REACH` for a bot's swing). A search
+that exhausts `NAV_BUDGET` (700 expansions, ~a 25-tile detour) returns the route to the closest
+tile it saw with `path.partial = true`, so a far goal still gets a first leg and a later replan
+finishes it; only an enclosed goal (or an unwalkable one with reach 0) returns `null`. Measured:
+~12 µs per full search, so dozens of units replanning several times a second is noise.
+
+Units do not call `findPath` directly. `navTo(e, gx, gy, r, reach, dt)` keeps a route on
+`e.nav` (`{ path, i, gtx, gty, replanT, fail, stallT, … }`, created lazily on any entity) and
+returns `{ dx, dy, d, ok }` — the unit direction to move this frame, the straight-line distance
+to the goal (callers keep their own arrive radius), and `ok`. A plan first tries
+`navLineClear()` (the same four-corner test `moveEntity` makes, every 4 px) and takes a direct
+line when it is open, else A* plus `navSmooth()` string-pulling; it replans when the goal moves
+more than a tile, every `NAV_REPLAN` (0.6 s), or — through `navStep()` — when `moveEntity`
+reports a wall. **`ok = false` is the give-up signal**: the goal is unreachable, or the unit has
+made no progress for `NAV_STALL` (1.6 s — pinned by other units, which routes ignore and
+`separateUnits` resolves). There are no stuck timers anywhere else; a caller that gets `false`
+drops the goal (robots and bots blacklist it for 12 s). A failed goal is not searched again until
+`replanT` runs out. `navStep(e, gx, gy, r, spd, dt, reach)` wraps `navTo` with the
+`moveEntity` call and `mvx/mvy` for the animal/robot movers; players (bots) take `navTo`'s
+direction into `p.input` and move through their momentum. `navClear(e)` forgets a route.
+`DBG.showPaths = true` draws every live route (`drawNavPaths`: bots gold, prey green, wolves
+red, robots blue), and `DBG.findPath`/`DBG.walkable`/`DBG.navTo` are exposed for staging.
+
 Momentum: on the first pass a unit closing on the contact loses only its *share* of the
 velocity component along the normal — tangential speed is untouched, so a slide into a deer
 deflects along it and carries on rather than sticking — the rest of that component is handed to
@@ -185,8 +218,11 @@ hunt reticle, and joins the y-sorted draws.
 Prey behaviour lives in `updatePrey()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when **any**
-player comes within 26 px, and a hit sends either species fleeing directly away from the nearest
-one (`fleeT`). Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
+player comes within 26 px, and a hit sends either species fleeing from the nearest one
+(`fleeT`). A flight is a chain of routed legs: `fleeGoal(a, from)` picks a tile ~6 tiles off, as
+straight away from the threat as the ground allows (fanning out, then sideways, then past it),
+the first it can route to, and `navStep` runs it ([Pathfinding](#pathfinding)); a leg that
+arrives or fails hands over to the next, and an animal with nowhere to run stops fleeing. Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
 floater. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
 to players, robots and each other except birds, which fly (see
 [Unit collisions](#unit-collisions)), and sprites are side-view only (`dir` is `left|right`).
@@ -205,7 +241,9 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   plays `SFX.howl()` — spotting you, or an arrow, wakes all four (a wolf shot from cover does
   **not** flee like a deer; the den comes for the shooter).
 - **The chase.** `WOLF_SPD` (96 px/s) is faster than the 72 px/s walk and slower than a slide or
-  the ice cap, so the answer is the momentum system, not distance. Bites do `WOLF_BITE_DMG` (9)
+  the ice cap, so the answer is the momentum system, not distance — and the wolf routes around
+  trees and water ([Pathfinding](#pathfinding)), so a treeline is not cover; a quarry it cannot
+  route to (out on a hole) it holds and faces. Bites do `WOLF_BITE_DMG` (9)
   inside `WOLF_BITE_R` (13 px) every `WOLF_BITE_CD` (1 s) per wolf, through
   `damagePlayer(t, dmg, dx, dy, null, 'wolf')` — whose own 0.7 s of i-frames is what keeps four
   wolves from deleting anyone: measured, standing in a den costs ~9 hp/s, so a level-1 slot has
@@ -229,7 +267,7 @@ A **rookery** keeps 9 birds perched in its dead trees. `updateBird()`:
   skipped by `separateUnits`, and `drawBird` lifts the sprite off its own shadow.
 - **The shot.** 3 hp (any arrow kills) but a 5 px body instead of 8, moving, at altitude, with
   the flock scattering — `YIELD.bird` pays 8 gold and there are nine of them. It is the archery
-  range of the map, and bots deliberately don't hunt them (no pathfinding, no chance).
+  range of the map, and bots deliberately don't hunt them (they fly; no ground route catches a flock).
 
 ## Economy (one currency)
 
@@ -346,9 +384,10 @@ tiles of the bay's mouth (`structMouth`, also where they deposit)
 jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
 floater at 8+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
-Robots use `moveEntity` (and are solid to players and animals — see
-[Unit collisions](#unit-collisions)), abandon a target after ~5 s stuck, die with their bay, and are
-reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted draws via
+Robots drive on `navStep` ([Pathfinding](#pathfinding): reach 1 to a tree or rock, reach 0
+home) and are solid to players and animals (see [Unit collisions](#unit-collisions)); a target
+with no route, or one they get pinned on the way to, goes on `b.avoid` for 12 s. They die with
+their bay and are reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted draws via
 `drawRobot()` in team colours (the whole sprite bobs while driving, the tool swings at a target,
 carried gold shows as a nugget up front), and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
