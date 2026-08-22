@@ -135,7 +135,7 @@ were removed in the HUD redesign (their sprites are still baked, unreferenced). 
 drawn, a second small meter renders just above it: yellow while charging,
 turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px) — drawn
 for **everyone**, because it is the tell that a shot is coming. The overhead stack floats clear of
-the sprite: stamina plate at `py - 4` (local slot only), health at `py - 7`, draw meter at
+the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both bars), health at `py - 7`, draw meter at
 `py - 12`, and a rival's name tag in team colour above that.
 
 ## Text over the world

@@ -3416,11 +3416,12 @@
         TEAMS[p.team].mark, '#0f1632');
     }
     // dodge stamina: one clean unsegmented bar under the health bar - charges
-    // stay discrete in the sim, the bar just shows the pooled total. Only the
-    // local player needs it; a rival's tells are their draw meter and position.
+    // stay discrete in the sim, the bar just shows the pooled total. Drawn for
+    // every slot (a rival out of rolls is a tell, and the level badge spans
+    // both bars, so a lone hp bar would look broken).
     // The track is painted one row taller than the fill so the gap between the two
     // bars is track grey, not frame colour - one clean outline around both.
-    if (local) {
+    {
       const bx = Math.round(p.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
