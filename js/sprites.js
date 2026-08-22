@@ -778,77 +778,39 @@
     '................',
   ];
 
-  // Worker bot: a compact boxy chassis on two treads with stub arms and a
-  // binocular head on a short neck. Three pieces, composed in drawRobot():
-  //   botTop    16x10 - neck + body. The team stripe (T/t) is an 8x4 painted
-  //             band across the front, the one team-coloured sprite piece.
-  //   botTreads 16x4  - two frames, tread notches shifted so they roll.
-  //   botEye*   6xN   - one eye housing, drawn twice; the height is the
-  //             expression (wide 5 / normal 4 / narrow 3) and drawRobot picks
-  //             the per-eye offsets, so tilt and squint are free.
-  // Flat planes, hard edges, no glow: the eyes do the acting.
+  // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
+  // arms at the sides, no face. One 16x12 grid, two frames (the tread notches
+  // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
+  // never part. The body (L/T/t) is painted in the team colour.
   const BOTPAL = {
     '.': null,
     'o': '#1c2130', // outline
-    'L': '#e2e6ec', // top plate
-    'M': '#c3c9d3', // body
-    'D': '#98a1b0', // body shade
+    'L': '#df7358', // top plate (team light)
+    'T': '#c9524e', // body (team)
+    't': '#96393f', // body shade (team dark)
     'a': '#b5bcc8', // arm
     'A': '#7d8595', // claw
     'k': '#3b4150', // tread
     'n': '#6c7486', // tread notch
-    'T': '#c9524e', // team stripe
-    't': '#96393f', // stripe shade
   };
-  const botTop = [
-    '......oDDo......',
-    '......oDDo......',
+  const botA = [
     '...oooooooooo...',
     '..oLLLLLLLLLLo..',
     '..oLLLLLLLLLLo..',
-    '.ooMTTTTTTTTMoo.',
-    'oaoMTTTTTTTTMoao',
-    'oaoMTTTTTTTTMoao',
-    'oAoMttttttttMoAo',
-    '.ooDDDDDDDDDDoo.',
+    '.ooTTTTTTTTTToo.',
+    'oaoTTTTTTTTTToao',
+    'oaoTTTTTTTTTToao',
+    'oAoTTTTTTTTTToAo',
+    '.oottttttttttoo.',
+    'oooooooooooooooo',
+    'okkkkkkkkkkkkkko',
+    'oknkknkknkknkkno',
+    'oooooooooooooooo',
   ];
-  const botTreadsA = [
-    'ooooooo..ooooooo',
-    'okkkkko..okkkkko',
-    'oknkkno..oknkkno',
-    'ooooooo..ooooooo',
-  ];
-  const botTreadsB = [
-    'ooooooo..ooooooo',
-    'okkkkko..okkkkko',
-    'okknkko..okknkko',
-    'ooooooo..ooooooo',
-  ];
-  const EYEPAL = {
-    '.': null,
-    'o': '#1c2130', // housing
-    'e': '#3a5280', // lens
-    'p': '#0b1020', // pupil
-    'w': '#dcecff', // highlight
-  };
-  const botEyeWide = [
-    'oooooo',
-    'oweeeo',
-    'oeppeo',
-    'oeeeeo',
-    'oooooo',
-  ];
-  const botEyeNorm = [
-    'oooooo',
-    'oweeeo',
-    'oeppeo',
-    'oooooo',
-  ];
-  const botEyeNarrow = [
-    'oooooo',
-    'oeppeo',
-    'oooooo',
-  ];
+  const botB = botA.slice(0, 10).concat([
+    'okknkknkknkknkko',
+    'oooooooooooooooo',
+  ]);
 
   // ---------------------------------------------------------------- spikes
   const SPAL = {
@@ -1264,7 +1226,7 @@
     r: t.coat, R: t.coatL, d: t.coatD, t: t.hat, T: t.hatL, m: t.trim, M: t.trimD,
   });
   const teamBuildPal = (base, t) => Object.assign({}, base, { k: t.fit, K: t.fitL, e: t.glow });
-  const teamRobotPal = (t) => Object.assign({}, BOTPAL, { T: t.coat, t: t.coatD });
+  const teamRobotPal = (t) => Object.assign({}, BOTPAL, { L: t.coatL, T: t.coat, t: t.coatD });
   const playerSet = (pal) => ({
     down: [bake(playerDownIdle, pal), bake(playerDownA, pal), bake(playerDownB, pal)],
     up: [bake(playerUpIdle, pal), bake(playerUpA, pal), bake(playerUpB, pal)],
@@ -1290,7 +1252,7 @@
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: TIER_PALS.map((b) => bake(spawner, teamBuildPal(b, t))),
   }));
-  const teamRobots = TEAM_SKINS.map((t) => bake(botTop, teamRobotPal(t)));
+  const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
 
   // ---------------------------------------------------------------- eagle
   // The drop eagle, seen from above, flying along +x (the game rotates it to
@@ -1676,8 +1638,6 @@
     spawner: [bake(spawner, WPAL), bake(spawner, WPAL_STONE), bake(spawner, WPAL_GOLD)],
     scaffold: [bake(scaffold1, SCPAL), bake(scaffold2, SCPAL), bake(scaffold3, SCPAL)],
     robot: teamRobots[0],
-    robotTreads: [bake(botTreadsA, BOTPAL), bake(botTreadsB, BOTPAL)],
-    robotEyes: { wide: bake(botEyeWide, EYEPAL), norm: bake(botEyeNorm, EYEPAL), narrow: bake(botEyeNarrow, EYEPAL) },
     spikes: bake(spikes, SPAL),
     fire: [bake(fire1, FPAL), bake(fire2, FPAL), bake(fire3, FPAL)],
     torch: [bake(torch1, TOPAL), bake(torch2, TOPAL)],

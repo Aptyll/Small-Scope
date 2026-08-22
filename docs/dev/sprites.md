@@ -11,11 +11,11 @@ trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked wit
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
-and the worker bot is three pieces on `BOTPAL`/`EYEPAL` that `drawRobot()` composes: `botTop` (16×10
-neck + chassis, the only team-coloured piece — the 8×4 `T`/`t` stripe is the team paint),
-`botTreads` (16×4, two notch frames) and three eye housings (`botEyeWide`/`Norm`/`Narrow`, 6 px
-wide, height = expression), each drawn twice with its own offset so tilt, glance and squint cost
-no frames. Exported as `SPRITES.robotTeam[team]` / `robot` / `robotTreads` / `robotEyes`.
+and the worker bot is one 16×12 grid on `BOTPAL` (`botA`/`botB`: a faceless boxy chassis with
+stub arms sitting on a single full-width tread, the two frames differing only in the tread
+notches). The body chars `L`/`T`/`t` are the team paint (`teamRobotPal` → `coatL`/`coat`/`coatD`),
+so `robotTeam[team]` is the whole bot in that colour; `drawRobot()` bobs the entire sprite while
+driving and adds the tool swing and the carried nugget in code.
 
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (four presets, also exported
 as `SPRITES.teams` so game.js can read the names and marker colours) drives three baked sets:
