@@ -132,7 +132,9 @@ and shop are meant to land here.
 
 **Every commit that is pushed to main bumps the patch number by 0.01** — `PATCH_TXT` next to
 `MENU_ITEMS` in [js/game.js](js/game.js) (`PATCH 1.01` → `PATCH 1.02`), in the same commit, before the
-push. It prints bottom-right of the title screen, so a screenshot carries its build.
+push. It prints bottom-right of the title screen, so a screenshot carries its build. The same
+commit adds **one sentence** to the top of `PATCH_NOTES` (right below `PATCH_TXT`) — plain English,
+uppercase, the biggest change only, no matter how large the patch; clicking the tag opens them.
 
 ## Hard rules
 

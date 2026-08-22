@@ -5354,7 +5354,25 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.03'; // printed bottom-right of the title screen
+  const PATCH_TXT = 'PATCH 1.04'; // printed bottom-right of the title screen; click it for the notes
+  // one sentence per patch, newest first - the biggest change only, in plain english
+  const PATCH_NOTES = [
+    ['1.04', 'THE PATCH TAG NOW OPENS THESE NOTES.'],
+    ['1.03', 'A FOURTH PLACEHOLDER BUTTON JOINS THE MENU AND THE WHOLE COLUMN SITS HIGHER.'],
+    ['1.02', 'THE SEED ROW NO LONGER SHOWS A CAPTION WHEN HOVERED.'],
+    ['1.01', 'THE SELECTION ARROWS ARE GONE - A LIT PLANK IS THE CUE.'],
+    ['1.00', 'THE GAME IS NOW SOFTFALL, WITH A CINEMATIC TITLE SCREEN OF PILLARS AND BRAZIERS.'],
+  ];
+
+  // the patch tag's hit rect (bottom-right); the notes panel opens from it
+  function patchTagRect() {
+    const w = pixelTextWidth(PATCH_TXT);
+    return { x: VIEW_W - w - 5, y: VIEW_H - 9, w, h: 5 };
+  }
+  function overPatchTag() {
+    const r = patchTagRect();
+    return mouse.x >= r.x - 3 && mouse.x < r.x + r.w + 3 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3;
+  }
 
   function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
   function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -5426,7 +5444,7 @@
     if (state.fade) return; // a reroll is already leaving
     if (m.screen === 'select') { if (m.screenT >= 1) selectKey(k); return; }
     if (m.panel) {
-      if (k === 'escape' || k === 'backspace' || (m.panel === 'help' && (k === 'enter' || k === ' '))) closeMenuPanel();
+      if (k === 'escape' || k === 'backspace' || (m.panel !== 'settings' && (k === 'enter' || k === ' '))) closeMenuPanel();
       return;
     }
     if (k === 'arrowup' || k === 'w') menuSelect(m.sel - 1);
@@ -5445,6 +5463,7 @@
       if (!overMenuPanel()) closeMenuPanel();
       return;
     }
+    if (overPatchTag()) { openMenuPanel('patch'); return; }
     const h = menuHit();
     if (h < 0) return;
     m.sel = h;
@@ -5803,6 +5822,32 @@
     drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
   }
 
+  // the patch notes: one line per patch, version in gold, sentence wrapped
+  // beside it; newest first, and whatever does not fit the slab is dropped
+  const patchPanelCv = document.createElement('canvas');
+  patchPanelCv.width = SET_W; patchPanelCv.height = SET_H;
+  function buildPatchPanel() {
+    const g = patchPanelCv.getContext('2d');
+    bakeFrostSlab(g, SET_W, SET_H, 'PATCH NOTES');
+    const x0 = 14, x1 = 40, maxW = SET_W - x1 - 14, yMax = SET_H - 24;
+    let y = 24;
+    for (const [v, text] of PATCH_NOTES) {
+      const lines = [];
+      let line = '';
+      for (const word of text.split(' ')) {
+        const next = line ? line + ' ' + word : word;
+        if (pixelTextWidth(next) > maxW && line) { lines.push(line); line = word; } else line = next;
+      }
+      if (line) lines.push(line);
+      if (y + lines.length * 8 > yMax) break;
+      drawPixelText(g, v, x0, y, '#ffd95c');
+      for (const l of lines) { drawPixelText(g, l, x1, y, '#9fb6d8'); y += 8; }
+      y += 4;
+    }
+    const hint = 'ESC BACK';
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
+  }
+
   // ---- champion select ----------------------------------------------------
   // PLAY goes here first (menu.screen = 'select'): champion cards on the left,
   // the chosen one big in the middle with name, role, blurb and stat pips, and
@@ -6044,7 +6089,10 @@
     if (fin > 0.005) {
       ctx.globalAlpha = fin;
       drawGoldRule(cx, toy + 256, 52, fin);
-      drawPixelTextShadow(ctx, PATCH_TXT, VIEW_W - pixelTextWidth(PATCH_TXT) - 5, VIEW_H - 9, '#5a6690', 'rgba(15,22,50,0.9)');
+      const pr = patchTagRect();
+      const phot = !m.panel && overPatchTag();
+      drawPixelTextShadow(ctx, PATCH_TXT, pr.x, pr.y, phot ? '#ffd95c' : '#5a6690', 'rgba(15,22,50,0.9)');
+      if (phot) { ctx.fillStyle = '#c89a3c'; ctx.fillRect(pr.x, pr.y + 7, pr.w, 1); }
       ctx.globalAlpha = 1;
     }
 
@@ -6054,7 +6102,7 @@
     if (m.panel) {
       const slide = Math.round((1 - easeOut(m.panelT)) * (VIEW_H - SET_Y + 6));
       if (m.panel === 'settings') renderSettings(now, { bare: true, slide });
-      else ctx.drawImage(helpPanelCv, SET_X, SET_Y + slide);
+      else ctx.drawImage(m.panel === 'patch' ? patchPanelCv : helpPanelCv, SET_X, SET_Y + slide);
     }
   }
 
@@ -6374,6 +6422,7 @@
   buildMapPanel();
   buildSettingsPanel();
   buildHelpPanel();
+  buildPatchPanel();
   rebuildLights();
   camX = player.x - VIEW_W / 2;
   camY = player.y - VIEW_H / 2;

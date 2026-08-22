@@ -296,7 +296,10 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   zero alpha underneath. SETTINGS is the existing panel via `renderSettings(now, { bare, slide })`
   (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
-  slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands).
+  slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands); PATCH
+  NOTES is `patchPanelCv`, opened by clicking the `PATCH_TXT` tag bottom-right (`patchTagRect` /
+  `overPatchTag`; the tag turns gold with an underline on hover) and baked from `PATCH_NOTES`,
+  newest first, word-wrapped, entries that would overflow the slab dropped.
 - **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
   over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on
   the left (`drawChampCard`: portrait well + name + role), the highlighted one drawn 6× in the
