@@ -54,7 +54,7 @@ positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — `let`s **declared in the 
 beside `relayout()`**, not down in their own sections, so `relayout()` never reaches forward
 into a temporal dead zone; the offsets *within* each baked panel stay fixed in their own
 sections), `fitFlakes()`, which keeps snow density constant by topping up/trimming
-the `flakes` array (see [Snow](#snow)), `fitClouds()` (same for the cloud shadows), and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
+the `flakes` array (see [Snow](#snow)), and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
 code against a literal 480/270; `menuLayout()` shows the pattern for recentering a 270-authored
 layout (`toy` offset).
 
@@ -67,7 +67,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 
 ## Render pass order
 
-`render()` runs: ground blit → cloud shadows (`renderCloudShadows`, see below) → under-ice fish → ice-crack decals → footprints → flat objects
+`render()` runs: ground blit → under-ice fish → ice-crack decals → footprints → flat objects
 (stumps) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
@@ -106,19 +106,6 @@ rests on the ground fading out for `FLAKE_REST` (0.7 s), and is then reborn (`ma
 fresh spot in the field. Boot flakes and rebirths draw from `rng`; resize/zoom top-ups draw from
 `fxRng` (see [world.md](world.md)). Drawn after `renderLighting` (never darkened) and before the
 vignettes and HUD. `DBG.flakes` and `DBG.cam()` expose the array and the exact camera.
-
-### Cloud shadows
-
-A few snow clouds drift above the camera, out of sight — only their shadows show, on the
-ground. `clouds` (right under the flakes block) uses the same world-space + wrap model on a field
-one view plus one cloud wide, so a cloud is fully off-screen when it wraps; `fitClouds()` keeps
-about 3 per 480×270 of view area (scaled like the flakes, minimum 2), each drifting ~7 px/s on
-its own roughly-eastward heading. `cloudShapes` are 3 canvases (`CLOUD_W×CLOUD_H` = 72×36)
-baked once at boot: a clump of ellipses rasterised by hand at half resolution and blown up 2×
-without smoothing, so the outline steps in chunky 2 px pixels. Drawn by `renderCloudShadows`
-**immediately after the ground**, under every sprite, at `CLOUD_ALPHA` 0.13 — shadows lie on the
-ground; trees and units stay crisp. Shapes and positions come from their own seeded stream
-(`cloudRng`, `SEED ^ 0x51ed27a3`), so neither `rng` nor `fxRng` is perturbed. `DBG.clouds`.
 
 ## UI panels are baked once
 
