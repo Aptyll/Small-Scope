@@ -91,8 +91,8 @@ Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile
 stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
 a tree on the tile below hides it almost completely.
 
-Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 32×32 `scratch`
-canvas with `source-in` — sprites larger than 32×32 will clip.
+Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 64×64 `scratch`
+canvas with `source-in` — sprites larger than 64×64 will clip (the 48×43 bot bay is the biggest).
 
 ### Snow
 

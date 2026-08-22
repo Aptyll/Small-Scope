@@ -157,8 +157,11 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   that must stay stable per tile, and never call `hash2` before the `SEED` const it closes over.
 - **At most one object per tile.** Create with `placeObj`, read with `objAt`, and route structures
   through `placeStruct`/`destroyStructure` so the `structures` registry and lights stay in sync.
-- **Anything drawn through `drawSpriteFlash()` must fit in 32×32** — it recolours through a shared
-  32×32 scratch canvas and larger sprites clip.
+  A building with `w`/`h` in `STRUCTS` (the bot bay, 3×2) fills its other tiles with `part`
+  objects pointing at the anchor — **read a building off a tile with `structOf(objAt(...))`**, and
+  create/remove only through `createStruct`/`removeStruct`, which place and clear the footprint.
+- **Anything drawn through `drawSpriteFlash()` must fit in 64×64** — it recolours through a shared
+  64×64 scratch canvas and larger sprites clip.
 - **[js/sprites.js](js/sprites.js) has a UTF-8 BOM** and one row that repairs a mangled byte via
   `.replace()`. Preserve the file's encoding or the grids corrupt.
 

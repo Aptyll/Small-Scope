@@ -115,7 +115,8 @@ A team colour drives both **characters** and **buildings**:
 - `SPRITES.teamBuild[team][type][tier]` — the tier material (wood → stone → gold) with the iron
   fittings and glow repainted in team colour, so tier still reads as tier. `structSprite(o)` is the
   lookup; it falls back to team 0 for an object with no `team`.
-- `SPRITES.robotTeam[team]` — spawner robots wear their owner's colour.
+- `SPRITES.robotTeam[team]` — bay robots wear their owner's colour, and the bay itself is one
+  palette per team (`bayTeamPal`: its lintel band), not a tier material.
 
 Structures carry `owner` (slot id) and `team`, set by `placeStruct()`. `ownsStruct(o, p)` gates the
 manage wheel, upgrades and demolition; the right-click handler and `cursorInfo()` only offer the
@@ -190,7 +191,8 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    excluded: with no pathfinding, a flushed flock is a wild goose chase.
 5. **unwedge** — after being stuck, walk back toward its landing site before doing anything else.
 6. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
-7. **spend** — with gold in hand, build a generator/spawner on a nearby stump, else upgrade its own
+7. **spend** — with gold in hand, build a generator (or, 30% of the time and only where
+   `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
 8. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
 9. **roam** — wander between its landing site and the map centre.

@@ -778,6 +778,101 @@
     '................',
   ];
 
+  // ---------------------------------------------------------------- bot bay
+  // The spawner: a 48x43 bot garage on a 3x2 tile footprint (see STRUCTS.spawner
+  // w/h), drawn with its snow skirt on the footprint's bottom edge. Steel
+  // plate walls under a deep snow cap (mounds on top, icicles off the fascia),
+  // a team-painted lintel band (L/T/t) above a 20px-wide bay with a dark
+  // interior and a lit floor lip, riveted flanks with a vent grille and a
+  // hazard stripe, the mouth open to the ground. One tier, so no WPAL swap -
+  // bayTeamPal only paints the band. bayIcon is the 16x16 wheel glyph.
+  const BAYPAL = {
+    '.': null,
+    'o': '#1c2130', // outline
+    'S': '#f4f7fc', // snow
+    's': '#dce5f0', // snow shade
+    'z': '#b9c9db', // snow edge / icicle
+    'P': '#b9c1cd', // plate light
+    'p': '#98a1b0', // plate
+    'q': '#7d8696', // plate shade
+    'n': '#5b6473', // seam
+    'r': '#d3d9e2', // rivet
+    'g': '#3f4755', // grille slot
+    'k': '#2c3340', // bay wall
+    'K': '#1b202a', // bay deep
+    'f': '#3b4150', // bay floor
+    'F': '#6c7486', // floor lip
+    'y': '#e0b83f', // hazard yellow
+    'Y': '#2a2f3a', // hazard dark
+    'L': '#df7358', // team light
+    'T': '#c9524e', // team
+    't': '#96393f', // team dark
+    'w': '#c9dcee', // snow skirt
+  };
+  const bay = [
+    '...oSSSSSSSSo...oSSSSSSSSSSSSSSo..oSSSSSSSSSSo..',
+    '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
+    '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
+    '.oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo.',
+    'oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo',
+    'osssssssssssssssssssssssssssssssssssssssssssssso',
+    'ozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzo',
+    'oppppppppppppppppppppppppppppppppppppppppppppppo',
+    'oqqqzqqqqqqqqqzqqqqqqzqqqqqqqqqqqzqqqqqqqqzqqqqo',
+    '.onzooooooooooooooozoooooooooooooozoooooooooono.',
+    '..oPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPo..',
+    '..opLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLpo..',
+    '..opTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTpo..',
+    '..opTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTpo..',
+    '..opTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTpo..',
+    '..opttttttttttttttttttttttttttttttttttttttttpo..',
+    '..onnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnno..',
+    '..oPPPPPPPPPPooooooooooooooooooooooPPPPPPPPPPo..',
+    '..orpppppppproKKKKKKKKKKKKKKKKKKKKorqqqqqqqqro..',
+    '..oppppppppppoKKKKKKKKKKKKKKKKKKKKoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppggggggppokkkkkkKkkkkkkKkkkkkkoqqggggggqqo..',
+    '..oppnnnnnnppokkkkkkKkkkkkkKkkkkkkoqqnnnnnnqqo..',
+    '..oppggggggppokkkkkkKkkkkkkKkkkkkkoqqggggggqqo..',
+    '..oppnnnnnnppokkkkkkKkkkkkkKkkkkkkoqqnnnnnnqqo..',
+    '..oppggggggppokkkkkkKkkkkkkKkkkkkkoqqggggggqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..opnnnnnnnnpokkkkkkKkkkkkkKkkkkkkoqnnnnnnnnqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oppppppppppokkkkkkKkkkkkkKkkkkkkoqqqqqqqqqqo..',
+    '..oyyYYyyYYyyokkkkkkKkkkkkkKkkkkkkoyyYYyyYYyyo..',
+    '..oyYYyyYYyyYokkkkkkKkkkkkkKkkkkkkoyYYyyYYyyYo..',
+    '..oYYyyYYyyYYoKKKKKKKKKKKKKKKKKKKKoYYyyYYyyYYo..',
+    '..oYyyYYyyYYyoFFFFFFFFFFFFFFFFFFFFoYyyYYyyYYyo..',
+    '..oppppppppppoffffffffffffffffffffoqqqqqqqqqqo..',
+    '..orpppppppprofffffffffffffffffffforqqqqqqqqro..',
+    '..oooooooooooffffffffffffffffffffffooooooooooo..',
+    '..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..',
+  ];
+  const bayIcon = [
+    '..oSSSSSSSSSSo..',
+    '.oSSSSSSSSSSSSo.',
+    'oSSSSSSSSSSSSSSo',
+    'oqqqqqqqqqqqqqqo',
+    '.oLLLLLLLLLLLLo.',
+    '.oTTTTTTTTTTTTo.',
+    '.oPPPooooooPPPo.',
+    '.opppoKKKKoqqqo.',
+    '.opppokkkkoqqqo.',
+    '.opppokkkkoqqqo.',
+    '.oyYyokkkkoyYyo.',
+    '.oYyYokkkkoYyYo.',
+    '.opppoffffoqqqo.',
+    '.ooooffffffoooo.',
+    '.wwwwwwwwwwwwww.',
+    '................',
+  ];
+
   // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
   // arms at the sides, no face. One 12x10 grid, two frames (the tread notches
   // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
@@ -1224,6 +1319,7 @@
     r: t.coat, R: t.coatL, d: t.coatD, t: t.hat, T: t.hatL, m: t.trim, M: t.trimD,
   });
   const teamBuildPal = (base, t) => Object.assign({}, base, { k: t.fit, K: t.fitL, e: t.glow });
+  const bayTeamPal = (t) => Object.assign({}, BAYPAL, { L: t.coatL, T: t.coat, t: t.coatD });
   const teamRobotPal = (t) => Object.assign({}, BOTPAL, { L: t.coatL, T: t.coat, t: t.coatD });
   const playerSet = (pal) => ({
     down: [bake(playerDownIdle, pal), bake(playerDownA, pal), bake(playerDownB, pal)],
@@ -1248,7 +1344,8 @@
     wall: TIER_PALS.map((b) => bake(wall, teamBuildPal(b, t))),
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
-    spawner: TIER_PALS.map((b) => bake(spawner, teamBuildPal(b, t))),
+    spawner: [bake(bay, bayTeamPal(t))],
+    icon: { spawner: bake(bayIcon, bayTeamPal(t)) }, // wheel glyphs for sprites too big to be their own icon
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
 

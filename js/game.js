@@ -109,10 +109,10 @@
       { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 2, period: 10 },
       { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 4, period: 10 },
     ]},
-    spawner: { name: 'SPAWNER', tiers: [
-      { cost: { gold: 15 }, hp: 60,  buildT: 10, bots: 1, botHp: 18 },
-      { cost: { gold: 30 }, hp: 100, buildT: 6,  bots: 2, botHp: 24 },
-      { cost: { gold: 60 }, hp: 150, buildT: 6,  bots: 3, botHp: 30 },
+    // the bot bay is the one big build: a single tier on a 3x2 tile footprint
+    // (w/h - see footprint()/findSite()), its three bots rolling out one by one
+    spawner: { name: 'BOT BAY', w: 3, h: 2, tiers: [
+      { cost: { gold: 45 }, hp: 220, buildT: 16, bots: 3, botHp: 24 },
     ]},
   };
   const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner']; // wheel: up, right, down, left
@@ -248,7 +248,7 @@
 
   // scratch canvas for white hit-flash sprites
   const scratch = document.createElement('canvas');
-  scratch.width = 32; scratch.height = 32;
+  scratch.width = 64; scratch.height = 64; // the biggest thing that flashes is the 48x43 bay
   const sctx = scratch.getContext('2d');
 
   // offscreen minimap canvas (1px per world tile)
@@ -608,7 +608,7 @@
       if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
       SFX.unlock();
       const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
-      const o = objAt(tx, ty);
+      const o = structOf(objAt(tx, ty));
       if (!o) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
       // ax/ay: the press point every later pointer move is measured against
@@ -693,7 +693,52 @@
     if (!o) return false;
     return o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock' ||
       o.type === 'den' || o.type === 'wall' ||
-      o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
+      o.type === 'turret' || o.type === 'generator' || o.type === 'spawner' || o.type === 'part';
+  }
+
+  // Multi-tile buildings. STRUCTS[type].w/h > 1 means the anchor tile (top-left)
+  // holds the building object and every other footprint tile holds a 'part'
+  // filler { type: 'part', of } pointing back at it, so objAt() on any covered
+  // tile is solid and structOf() resolves to the building. One object per tile
+  // still holds - the fillers are the object on their tile.
+  function structW(type) { return (STRUCTS[type] && STRUCTS[type].w) || 1; }
+  function structH(type) { return (STRUCTS[type] && STRUCTS[type].h) || 1; }
+  function structOf(o) { return o && o.type === 'part' ? o.of : o; }
+  function footprint(type, tx, ty) {
+    const r = [];
+    for (let dy = 0; dy < structH(type); dy++) for (let dx = 0; dx < structW(type); dx++) r.push([tx + dx, ty + dy]);
+    return r;
+  }
+  function structCenter(o) {
+    return { x: (o.tx + structW(o.type) / 2) * TILE, y: (o.ty + structH(o.type) / 2) * TILE };
+  }
+  // where a building meets the ground in front: bots roll out of, and return to, this point
+  function structMouth(o) {
+    return { x: (o.tx + structW(o.type) / 2) * TILE, y: (o.ty + structH(o.type)) * TILE + 6 };
+  }
+  // The anchor for a w x h building that covers the stump at (tx, ty): every
+  // candidate placement containing it is tried, and the one covering the most
+  // stumps wins. A tile qualifies if it is in-world snow holding nothing or a
+  // stump, and no player is standing inside the footprint (buildings are solid).
+  function findSite(type, tx, ty) {
+    const w = structW(type), h = structH(type);
+    let best = null, bs = -1;
+    for (let ay = ty - h + 1; ay <= ty; ay++) for (let ax = tx - w + 1; ax <= tx; ax++) {
+      let ok = true, stumps = 0;
+      for (const [x, y] of footprint(type, ax, ay)) {
+        if (!inWorld(x, y) || ground[idx(x, y)] !== 0) { ok = false; break; }
+        const o = objects[idx(x, y)];
+        if (o) { if (o.type === 'stump') stumps++; else { ok = false; break; } }
+      }
+      if (!ok) continue;
+      for (const q of players) {
+        if (!q.active || q.dead || inAir(q)) continue;
+        if (q.x > ax * TILE - PLAYER_R && q.x < (ax + w) * TILE + PLAYER_R &&
+            q.y > ay * TILE - PLAYER_R && q.y < (ay + h) * TILE + PLAYER_R) { ok = false; break; }
+      }
+      if (ok && stumps > bs) { bs = stumps; best = { tx: ax, ty: ay }; }
+    }
+    return best;
   }
 
   function placeObj(tx, ty, type, extra) {
@@ -1270,7 +1315,7 @@
     if (!inWorld(tx, ty)) return;
     contest('work:' + idx(tx, ty), p, () => {
       const o = objects[idx(tx, ty)];
-      if (o) { if (o.type !== 'stump' && !STRUCTS[o.type]) hitObject(o, p); }
+      if (o) { if (o.type !== 'stump' && o.type !== 'part' && !STRUCTS[o.type]) hitObject(o, p); }
       else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty, p);
     });
   }
@@ -1409,7 +1454,7 @@
   function destroyStructure(o, refund) {
     if (STRUCTS[o.type]) removeStruct(o);
     else objects[idx(o.tx, o.ty)] = null;
-    const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+    const c = structCenter(o), ox = c.x, oy = c.y;
     if (nearPlayer(ox, oy)) SFX.break_();
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
@@ -1441,29 +1486,48 @@
     if (!site || site.type !== 'stump') { deny(); return; }
     const cxp = tx * TILE + 8, cyp = ty * TILE + 8;
     if (Math.hypot(cxp - p.x, cyp - p.y) > 60) { deny(); return; }
+    const big = structW(type) > 1 || structH(type) > 1;
     // all four buildings are solid - never let a player entomb themselves
-    if (Math.abs(cxp - p.x) < 8 + PLAYER_R && Math.abs(cyp - p.y) < 8 + PLAYER_R) {
+    // (findSite does the same check over a big footprint)
+    if (!big && Math.abs(cxp - p.x) < 8 + PLAYER_R && Math.abs(cyp - p.y) < 8 + PLAYER_R) {
       deny('STEP OFF THE STUMP FIRST', 1.6);
       return;
     }
     const t0 = STRUCTS[type].tiers[0];
     if (!canAfford(t0.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
+    let anchor = { tx, ty };
+    if (big) {
+      anchor = findSite(type, tx, ty);
+      if (!anchor) { deny('NO ROOM - NEEDS 3X2 CLEAR SNOW', 1.8); return; }
+    }
     contest('site:' + idx(tx, ty), p, () => {
       const s = objAt(tx, ty);
       if (!s || s.type !== 'stump' || !canAfford(t0.cost, p)) return;
+      if (big) { anchor = findSite(type, tx, ty); if (!anchor) return; }
       pay(t0.cost, p);
-      const o = placeObj(tx, ty, type, {
-        tier: 0, hp: Math.ceil(t0.hp * 0.3), maxHp: t0.hp,
-        building: true, buildT: 0, buildTotal: t0.buildT, dustT: 0,
-        owner: p.id, team: p.team, // paints the sprite and gates the manage wheel
-      });
-      if (type === 'turret') o.cd = 0;
-      if (type === 'generator') o.payT = 0;
-      if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
-      structures.push(o);
+      createStruct(anchor.tx, anchor.ty, type, 0, p, true);
       if (nearPlayer(cxp, cyp)) SFX.place();
       burst(cxp, cyp, '#eef4fb', 8, 40, 0.4, true);
     });
+  }
+
+  // The one place a building object is made (placeStruct and DBG.buildStruct):
+  // the anchor object, its footprint fillers, the registry and per-type state.
+  function createStruct(tx, ty, type, tier, p, building) {
+    const t = STRUCTS[type].tiers[tier];
+    const o = placeObj(tx, ty, type, {
+      tier, hp: building ? Math.ceil(t.hp * 0.3) : t.hp, maxHp: t.hp,
+      building: !!building, buildT: 0, buildTotal: t.buildT, dustT: 0,
+      owner: p.id, team: p.team, // paints the sprite and gates the manage wheel
+    });
+    for (const [x, y] of footprint(type, tx, ty)) {
+      if (x !== tx || y !== ty) objects[idx(x, y)] = { type: 'part', tx: x, ty: y, of: o, flash: 0, shake: 0 };
+    }
+    if (type === 'turret') o.cd = 0;
+    if (type === 'generator') o.payT = 0;
+    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 1; }
+    structures.push(o);
+    return o;
   }
 
   // only the owning side may upgrade or demolish
@@ -1473,7 +1537,7 @@
     p = p || player;
     const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
     if (o.building || !ownsStruct(o, p)) { deny(); return; }
-    if (o.tier >= 2) { deny('MAX TIER', 1.4); return; }
+    if (o.tier >= STRUCTS[o.type].tiers.length - 1) { deny('MAX TIER', 1.4); return; }
     const t = STRUCTS[o.type].tiers[o.tier + 1];
     if (!canAfford(t.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
     pay(t.cost, p);
@@ -1493,13 +1557,13 @@
   }
 
   function removeStruct(o) {
-    objects[idx(o.tx, o.ty)] = null;
+    for (const [x, y] of footprint(o.type, o.tx, o.ty)) objects[idx(x, y)] = null;
     const i = structures.indexOf(o);
     if (i >= 0) structures.splice(i, 1);
     if (o.bots) for (const b of o.bots) {
       if (!b.dead) {
         b.dead = true;
-        burst(b.x, b.y - 4, '#8a6142', 8, 45, 0.5, true);
+        burst(b.x, b.y - 4, '#98a1b0', 8, 45, 0.5, true);
       }
     }
   }
@@ -2109,7 +2173,7 @@
           if (nearPlayer(ox, oy)) { SFX.place(); state.shake = Math.max(state.shake, 1.5); }
           if (o.type === 'turret') o.cd = 0;
           if (o.type === 'generator') o.payT = STRUCTS.generator.tiers[o.tier].period;
-          if (o.type === 'spawner') o.respawnT = 0;
+          if (o.type === 'spawner') o.respawnT = 1;
         }
         continue;
       }
@@ -2129,11 +2193,14 @@
           }
         }
       } else if (o.type === 'spawner') {
-        o.bots = o.bots.filter((b) => !b.dead);
+        // bots roll out one after another (4 s apart); a lost bot takes 12 s to replace
+        const alive = o.bots.filter((b) => !b.dead);
+        if (alive.length < o.bots.length) o.respawnT = Math.max(o.respawnT, 12);
+        o.bots = alive;
         if (o.bots.length < t.bots) {
           o.respawnT -= dt;
           if (o.respawnT <= 0) {
-            o.respawnT = 12;
+            o.respawnT = 4;
             const b = makeRobot(o);
             o.bots.push(b);
             robots.push(b);
@@ -2146,13 +2213,16 @@
 
   function makeRobot(sp) {
     const t = STRUCTS.spawner.tiers[sp.tier];
-    let sx = sp.tx * TILE + 8, sy = (sp.ty + 1) * TILE + 8;
-    const dirs = [[0, 1], [1, 0], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
-    for (const [dx, dy] of dirs) {
-      if (!isSolidTile(sp.tx + dx, sp.ty + dy)) {
-        sx = (sp.tx + dx) * TILE + 8;
-        sy = (sp.ty + dy) * TILE + 8;
-        break;
+    const m = structMouth(sp);
+    let sx = m.x, sy = m.y;
+    if (isSolidTile(Math.floor(sx / TILE), Math.floor(sy / TILE))) {
+      // mouth blocked: the first free tile in the rings around the footprint
+      const w = structW(sp.type), h = structH(sp.type);
+      outer: for (let r = 1; r <= 3; r++) {
+        for (let dy = -r; dy < h + r; dy++) for (let dx = -r; dx < w + r; dx++) {
+          if (dx > -r && dx < w + r - 1 && dy > -r && dy < h + r - 1) continue;
+          if (!isSolidTile(sp.tx + dx, sp.ty + dy)) { sx = (sp.tx + dx) * TILE + 8; sy = (sp.ty + dy) * TILE + 8; break outer; }
+        }
       }
     }
     return {
@@ -2172,7 +2242,7 @@
     b.kbx *= Math.pow(0.02, dt);
     b.kby *= Math.pow(0.02, dt);
     const home = b.home;
-    const hx = home.tx * TILE + 8, hy = home.ty * TILE + 8;
+    const hm = structMouth(home), hx = hm.x, hy = hm.y;
     let moving = false;
     const SPD = 40;
 
@@ -2321,7 +2391,7 @@
         id: type, ang: [-Math.PI / 2, 0, Math.PI / 2, Math.PI][i],
       }));
     }
-    const o = objAt(w.tx, w.ty);
+    const o = structOf(objAt(w.tx, w.ty));
     const opts = [
       { id: 'upgrade', ang: -Math.PI / 2 },
       { id: 'demolish', ang: Math.PI / 2 },
@@ -2366,15 +2436,16 @@
   // run a queued build/manage order for any player
   function runCmd(p, c) {
     if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
-    const o = objAt(c.tx, c.ty);
+    const o = structOf(objAt(c.tx, c.ty));
     if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
     if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
     if (c.kind === 'upgrade') startUpgrade(o, p);
     else if (c.kind === 'demolish') demolishStruct(o, p);
     else if (c.kind === 'mode') {
       o.mode = o.mode === 'gather' ? 'guard' : 'gather';
-      addFloater(o.tx * TILE + 8, o.ty * TILE - 4, o.mode.toUpperCase(), '#ffd95c');
-      if (nearPlayer(o.tx * TILE + 8, o.ty * TILE + 8)) SFX.pickup();
+      const c0 = structCenter(o);
+      addFloater(c0.x, o.ty * TILE - 4, o.mode.toUpperCase(), '#ffd95c');
+      if (nearPlayer(c0.x, c0.y)) SFX.pickup();
     }
   }
 
@@ -2608,7 +2679,8 @@
         }
         if (d > 16) { // clear of the site: order it
           ai.spendT = 0;
-          inp.cmd = { kind: 'build', tx: st.tx, ty: st.ty, id: rng() < 0.3 ? 'spawner' : 'generator' };
+          const bay = rng() < 0.3 && !!findSite('spawner', st.tx, st.ty); // same rng draw as before
+          inp.cmd = { kind: 'build', tx: st.tx, ty: st.ty, id: bay ? 'spawner' : 'generator' };
           ai.buildT = 12;
           return;
         }
@@ -2628,7 +2700,7 @@
         return;
       }
       const up = nearestObj(p.x, p.y, 3, (o) => STRUCTS[o.type] && !o.building &&
-        o.team === p.team && o.tier < 2 && canAfford(STRUCTS[o.type].tiers[o.tier + 1].cost, p));
+        o.team === p.team && o.tier < STRUCTS[o.type].tiers.length - 1 && canAfford(STRUCTS[o.type].tiers[o.tier + 1].cost, p));
       if (up) {
         inp.cmd = { kind: 'upgrade', tx: up.tx, ty: up.ty, id: 'upgrade' };
         ai.buildT = 10;
@@ -3285,12 +3357,12 @@
   function drawSpriteFlash(spr, x, y, flash) {
     ctx.drawImage(spr, x, y);
     if (flash > 0) {
-      sctx.clearRect(0, 0, 32, 32);
+      sctx.clearRect(0, 0, 64, 64);
       sctx.globalCompositeOperation = 'source-over';
       sctx.drawImage(spr, 0, 0);
       sctx.globalCompositeOperation = 'source-in';
       sctx.fillStyle = 'rgba(255,255,255,0.8)';
-      sctx.fillRect(0, 0, 32, 32);
+      sctx.fillRect(0, 0, 64, 64);
       ctx.drawImage(scratch, 0, 0, spr.width, spr.height, x, y, spr.width, spr.height);
     }
   }
@@ -3413,13 +3485,21 @@
       ctx.drawImage(spr, Math.round(d.x - ex) - 4, Math.round(d.y - d.z - ey) - 4);
     }
 
-    // y-sorted entities
+    // y-sorted entities. A building sorts by the bottom of its footprint; a
+    // filler whose anchor is outside the scanned tiles stands in for it so a
+    // big building still draws when only its lower tiles are on screen.
     const draws = [];
+    const seen = new Set();
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
-        const o = objects[idx(tx, ty)];
+        let o = objects[idx(tx, ty)];
         if (!o || o.type === 'stump') continue;
-        draws.push({ y: ty * TILE + 16, o, tx, ty });
+        if (o.type === 'part') {
+          o = o.of;
+          if ((o.tx >= tx0 && o.tx <= tx1 && o.ty >= ty0 && o.ty <= ty1) || seen.has(o)) continue;
+          seen.add(o);
+        }
+        draws.push({ y: (o.ty + structH(o.type)) * TILE, o, tx: o.tx, ty: o.ty });
       }
     }
     for (const p of players) {
@@ -3449,20 +3529,31 @@
         drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
       } else if (STRUCTS[o.type]) {
         const spr = structSprite(o);
+        const sy = py + structH(o.type) * TILE - spr.height; // skirt on the footprint's bottom edge
         if (o.building) {
           const p = o.buildT / o.buildTotal;
-          if (p < 1 / 3) ctx.drawImage(SPRITES.scaffold[0], px, py);
+          if (spr.width > 16) {
+            // a big build rises out of the ground: the sprite revealed bottom-up
+            const rows = Math.round(spr.height * Math.min(1, p * 1.05));
+            ctx.save();
+            ctx.beginPath(); ctx.rect(px - 2, sy + spr.height - rows, spr.width + 4, rows); ctx.clip();
+            drawSpriteFlash(spr, px + sh, sy, o.flash);
+            ctx.restore();
+          } else if (p < 1 / 3) ctx.drawImage(SPRITES.scaffold[0], px, py);
           else if (p < 2 / 3) ctx.drawImage(SPRITES.scaffold[1], px, py);
           else {
             drawSpriteFlash(spr, px + sh, py, o.flash);
             ctx.drawImage(SPRITES.scaffold[2], px, py);
           }
         } else {
-          drawSpriteFlash(spr, px + sh, py, o.flash);
+          drawSpriteFlash(spr, px + sh, sy, o.flash);
+          if (o.type === 'spawner') drawBayRollout(o, px + sh, sy);
           if (o.hp < o.maxHp * 0.6) {
+            // four crack marks, placed as fractions of the sprite so they fit any size
+            const w = spr.width, h = spr.height;
             ctx.fillStyle = 'rgba(40,25,15,0.5)';
-            ctx.fillRect(px + 4, py + 5, 1, 3); ctx.fillRect(px + 5, py + 8, 1, 2);
-            ctx.fillRect(px + 10, py + 3, 1, 4); ctx.fillRect(px + 11, py + 7, 1, 2);
+            ctx.fillRect(px + (w >> 2), sy + (h * 5 >> 4), 1, 3); ctx.fillRect(px + (w >> 2) + 1, sy + (h >> 1), 1, 2);
+            ctx.fillRect(px + (w * 5 >> 3), sy + (h * 3 >> 4), 1, 4); ctx.fillRect(px + (w * 5 >> 3) + 1, sy + (h * 7 >> 4), 1, 2);
           }
         }
       }
@@ -3621,7 +3712,7 @@
 
     const wx = mouse.x + camX, wy = mouse.y + camY;
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
-    const o = objAt(tx, ty);
+    const o = structOf(objAt(tx, ty));
     const busy = player.fallT > 0 || player.dodgeT > 0; // tools locked out
     // build sites (right-click) outrank tool hints; beyond the 60px reach they dim
     if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building && o.team === player.team))) {
@@ -3801,6 +3892,21 @@
     ctx.fillRect(x, y, w, 2);
     ctx.fillStyle = frac > 0.55 ? '#7ce87a' : frac > 0.25 ? '#f2cc6a' : '#ff6a5a';
     ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
+  }
+
+  // The next bot slides down out of the bay over the last 0.8 s of its timer,
+  // clipped to the doorway, so the real one appears at the mouth mid-motion.
+  // Bay geometry is the sprite's: doorway cols 14-33, rows 18-40, floor row 41.
+  function drawBayRollout(o, px, sy) {
+    const t = STRUCTS.spawner.tiers[o.tier];
+    if (o.bots.length >= t.bots || o.respawnT > 0.8) return;
+    const set = SPRITES.robotTeam[o.team === undefined ? 0 : o.team] || SPRITES.robot;
+    const spr = set[Math.floor(performance.now() / 125) % 2];
+    const k = 1 - o.respawnT / 0.8;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(px + 14, sy + 18, 20, 24); ctx.clip();
+    ctx.drawImage(spr, px + 18, sy + 31 - Math.round(12 * (1 - k)));
+    ctx.restore();
   }
 
   // a building wears its owner's team palette over its tier material
@@ -4081,20 +4187,24 @@
     } else {
       tx = Math.floor((mouse.x + camX) / TILE);
       ty = Math.floor((mouse.y + camY) / TILE);
-      const o = objAt(tx, ty);
+      const o = structOf(objAt(tx, ty));
       if (!o) return;
       if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) return;
     }
-    const bx = tx * TILE - ox, by = ty * TILE - oy;
+    // a big building brackets its whole footprint, from its anchor
+    const o2 = structOf(objAt(tx, ty));
+    const big = o2 && STRUCTS[o2.type] && (structW(o2.type) > 1 || structH(o2.type) > 1);
+    const bx = (big ? o2.tx : tx) * TILE - ox, by = (big ? o2.ty : ty) * TILE - oy;
+    const bw = (big ? structW(o2.type) : 1) * TILE, bh = (big ? structH(o2.type) : 1) * TILE;
     ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now * 6);
     // four 3px corner brackets, dark shadow first so white reads on snow
     const corners = (c, px, py) => {
       ctx.fillStyle = c;
       ctx.fillRect(px, py, 3, 1); ctx.fillRect(px, py, 1, 3);
-      ctx.fillRect(px + 13, py, 3, 1); ctx.fillRect(px + 15, py, 1, 3);
-      ctx.fillRect(px, py + 15, 3, 1); ctx.fillRect(px, py + 13, 1, 3);
-      ctx.fillRect(px + 13, py + 15, 3, 1); ctx.fillRect(px + 15, py + 13, 1, 3);
+      ctx.fillRect(px + bw - 3, py, 3, 1); ctx.fillRect(px + bw - 1, py, 1, 3);
+      ctx.fillRect(px, py + bh - 1, 3, 1); ctx.fillRect(px, py + bh - 3, 1, 3);
+      ctx.fillRect(px + bw - 3, py + bh - 1, 3, 1); ctx.fillRect(px + bw - 1, py + bh - 3, 1, 3);
     };
     corners('rgba(15,22,50,0.9)', bx + 1, by + 1);
     corners('#ffffff', bx, by);
@@ -4239,7 +4349,8 @@
       const iy = L.cy + Math.sin(opt.ang) * (WHEEL_R - 9);
       if (w.kind === 'build') {
         const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
-        const spr = SPRITES.teamBuild[player.team][opt.id][0];
+        const tb = SPRITES.teamBuild[player.team];
+        const spr = (tb.icon && tb.icon[opt.id]) || tb[opt.id][0];
         ctx.globalAlpha = affordable ? 1 : 0.55;
         ctx.drawImage(spr, Math.round(ix - 8), Math.round(iy - 8));
         if (!affordable) {
@@ -4262,13 +4373,13 @@
     let label = 'CANCEL', color = '#9fb6d8';
     if (L.seg >= 0) {
       const opt = L.opts[L.seg];
-      const o = objAt(w.tx, w.ty);
+      const o = structOf(objAt(w.tx, w.ty));
       if (w.kind === 'build') {
         const t0 = STRUCTS[opt.id].tiers[0];
         label = STRUCTS[opt.id].name + ' : ' + costText(t0.cost);
         color = canAfford(t0.cost) ? '#ffd95c' : '#ff8a7a';
       } else if (opt.id === 'upgrade') {
-        if (!o || o.tier >= 2) { label = 'MAX TIER'; color = '#9fb6d8'; }
+        if (!o || o.tier >= STRUCTS[o.type].tiers.length - 1) { label = 'MAX TIER'; color = '#9fb6d8'; }
         else {
           const t = STRUCTS[o.type].tiers[o.tier + 1];
           label = 'UPGRADE : ' + costText(t.cost);
@@ -4424,7 +4535,7 @@
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
-        else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
+        else if (o.type === 'spawner' || o.type === 'part') { r = 170; g = 140; b = 220; }
         else { r = 188; g = 200; b = 218; } // stump
       } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
       else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
@@ -4864,7 +4975,7 @@
         else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
-        else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
+        else if (o && (o.type === 'spawner' || o.type === 'part')) { r = 128; g = 104; b = 160; }
         else if (ground[i] === 2) { r = 44; g = 74; b = 104; } // carved water hole
         else if (ground[i] === 1) {
           // inked pond with darker shoreline
@@ -6098,19 +6209,10 @@
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {
-      const t = Math.min(2, tier || 0);
-      const spec = STRUCTS[type].tiers[t];
-      const o = placeObj(tx, ty, type, {
-        tier: t, hp: Math.ceil(spec.hp * 0.3), maxHp: spec.hp,
-        building: true, buildT: 0, buildTotal: spec.buildT, dustT: 0,
-      });
-      if (type === 'turret') o.cd = 0;
-      if (type === 'generator') o.payT = 0;
-      if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
-      o.owner = player.id; o.team = player.team;
-      structures.push(o);
-      return o;
+      const t = Math.min(STRUCTS[type].tiers.length - 1, tier || 0);
+      return createStruct(tx, ty, type, t, player, true); // anchor = top-left for a big footprint
     },
+    findSite, structOf, footprint,
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
     setZoom: (n) => { zoomStep = Math.max(0, n | 0); },
     getZoom: () => ({ step: zoomStep, applied: zoomEff, max: zoomMax }),

@@ -266,13 +266,14 @@ toward the nearest player, and everyone standing on one contests it
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
 screen position (clamped to stay on-screen): up = wall, right = turret, down = generator, left =
-spawner (`STRUCT_ORDER`); release over a segment to build, release without having moved to
-cancel. Right-clicking a **finished** structure opens a **manage wheel**: up = upgrade, down =
-demolish, and (spawners only) right = mode toggle. This wheel is the **only** way to build —
-there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers per
-type (the wood → stone → gold *look* is just the sprite palette) with a gold `cost`, `hp`,
-`buildT`, and per-type stats. `tiers[0]` is what the wheel builds; upgrading pays the next
-tier's cost and re-runs a shorter construction. Building is the only gold sink.
+bot bay (`STRUCT_ORDER`, type `spawner`); release over a segment to build, release without having moved to
+cancel. Right-clicking a **finished** structure (any tile of it) opens a **manage wheel**: up = upgrade, down =
+demolish, and (bays only) right = mode toggle. This wheel is the **only** way to build —
+there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers for
+wall/turret/generator (the wood → stone → gold *look* is just the sprite palette) and **one for the
+bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats. `tiers[0]` is what the wheel
+builds; upgrading pays the next tier's cost and re-runs a shorter construction, and the last tier
+(`tiers.length - 1`) reports MAX TIER. Building is the only gold sink.
 
 Mechanics, all in `game.js`:
 
@@ -292,23 +293,34 @@ Mechanics, all in `game.js`:
   knob is a compact readout, not a 1:1 echo — it caps at 12 px, inside the option icons, so it
   never sits under the cursor.
 - `placeStruct(tx, ty, type, p)` consumes the stump (the tile is **empty** after demolition —
-  stumps are a finite site resource), pays `tiers[0].cost` from that player's wallet, and drops the
-  object into `building` state at 30% hp, stamped with `owner`/`team`. It enforces the 60 px reach
+  stumps are a finite site resource), pays `tiers[0].cost` from that player's wallet, and has
+  `createStruct()` drop the object into `building` state at 30% hp, stamped with `owner`/`team`
+  (`createStruct` is the one constructor — `DBG.buildStruct` uses it too — and lays the `part`
+  fillers for a big footprint). It enforces the 60 px reach
   and the don't-entomb-yourself AABB check, and the placement itself is
   [contested](multiplayer.md#contested-orders) so two players can't claim one stump.
+- **The bay needs room**: `findSite(type, tx, ty)` tries every 3×2 anchor that covers the clicked
+  stump and takes the one covering the most stumps, where every tile is in-world snow holding
+  nothing or a stump and no player stands inside it; none → "NO ROOM" and the order is denied (the
+  AI only orders a bay where `findSite` succeeds). The anchor is the top-left tile.
 - **Ownership**: a building wears its team's palette (`structSprite`), and `ownsStruct(o, p)`
   means only its side can open the manage wheel, upgrade or demolish it. Stumps are neutral.
 - **Construction**: `updateStructures()` (called from `updatePlay`, iterating only the
   `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
   shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
-  lattice, and completion fires a particle burst + `SFX.place` + screen shake. A yellow progress
-  bar renders above every site. Sites are solid from placement.
+  lattice (a sprite wider than 16 px — the bay — instead rises out of the ground, revealed
+  bottom-up), and completion fires a particle burst + `SFX.place` + screen shake. A yellow progress
+  bar renders above every site. Sites are solid from placement. A big building y-sorts by the
+  bottom of its footprint and sits its snow skirt on that edge.
 - **Turret**: currently idle — its targeting/firing tick was removed with the raiders, so it is
   a decorative buildable until a new threat exists (the `tracers` array and its render pass are
   kept for that). **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
-  coin drop at its base, capped at 6 uncollected drops nearby. **Spawner**:
-  keeps `tiers[tier].bots` robots alive (first fill immediate, replacements every 12 s), and
-  `removeStruct()` kills its robots with it.
+  coin drop at its base, capped at 6 uncollected drops nearby. **Bot bay** (`spawner`):
+  keeps `tiers[0].bots` (3) robots alive, rolling them out **one at a time** — the first 1 s after
+  completion, then 4 s apart; a lost bot takes 12 s to replace. Over the last 0.8 s of each timer
+  `drawBayRollout()` draws the next bot sliding down the doorway, and `makeRobot` then spawns it at
+  `structMouth()` (the ring around the footprint if that is blocked). `removeStruct()` clears the
+  whole footprint and kills its robots with it.
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`); the
   `hitObject()` structure-damage branch and `destroyStructure(o, true)` refund path still
   exist but nothing reaches them now that E ignores structures. `canAfford`/`pay`/`costText` are generic over every `inv` key.
@@ -316,18 +328,20 @@ Mechanics, all in `game.js`:
 
 ## Robots
 
-`robots` holds the spawner-owned wooden units (re-baked `imp` grids, front-facing, 2 frames).
-`updateRobot()` mirrors the animal state machine plus jobs, driven live by the owning spawner's
-`mode`: **gather** — pick the nearest tree/rock within 8 tiles of the spawner
+`robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
+tread frames — see [sprites.md](sprites.md)). `updateRobot()` mirrors the animal state machine plus
+jobs, driven live by the owning bay's `mode`: **gather** — pick the nearest tree/rock within 8
+tiles of the bay's mouth (`structMouth`, also where they deposit)
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
 `carry` gold count (same `YIELD` numbers as `hitObject`, tree-fall leaves a stump and pays the
 jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
 floater at 8+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
 Robots use `moveEntity` (and are solid to players and animals — see
-[Unit collisions](#unit-collisions)), abandon a target after ~5 s stuck, die with their spawner, and are
-reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sorted draws via
-`drawRobot()` in team colours, and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
+[Unit collisions](#unit-collisions)), abandon a target after ~5 s stuck, die with their bay, and are
+reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted draws via
+`drawRobot()` in team colours (the whole sprite bobs while driving, the tool swings at a target,
+carried gold shows as a nugget up front), and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
 
 ## Death is not game over

@@ -86,7 +86,8 @@ the template), and remember `genWorld()`'s `free()` helper treats "ground must b
 placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator pay/period, spawner bot counts/HP), the `YIELD` table (every gold
+range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint; the roll-out
+cadence is inline in `updateStructures()`'s spawner branch), the `YIELD` table (every gold
 payout), `WORK_REACH`, `BOW_CHARGE`, and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
 the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
@@ -102,6 +103,8 @@ the arrow speed/damage formulas in `fireArrow()`,
   [CLAUDE.md](../../CLAUDE.md) and these dev docs.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
+- The flat `SPRITES.spawner` (the old 16×16 hut grid in the three tier palettes) is baked but
+  unreferenced since the bot bay; the live sprite is `teamBuild[team].spawner[0]`.
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
   unreferenced since the buildables/HUD removal — kept in case those features return (the heart
   grids also carry the file's mangled-byte repair).

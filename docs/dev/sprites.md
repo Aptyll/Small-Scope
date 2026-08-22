@@ -7,9 +7,15 @@ Sprites are literal ASCII grids paired with a palette object mapping character �
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the raider set (`SPRITES.raider`, `RDPAL`) is baked from the exact
 same grids as the player, so a player pose edit changes both. The tiered structures use the same
-trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked with `WPAL` /
+trick: one 16×16 grid each (`wall`, `turret`, `generator`) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
+**bot bay** (`spawner`) is the one big sprite: a single-tier 48×43 grid (`bay`, `BAYPAL`) on a 3×2
+tile footprint — steel plates under a snow cap with icicles, a team-painted lintel band (`L`/`T`/`t`
+via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols
+14–33, rows 18–40, floor row 41 — `drawBayRollout` in game.js clips to it). Its 16×16 wheel glyph is
+a separate grid, `bayIcon`, exported as `teamBuild[team].icon.spawner`; the old 16×16 `spawner` grid
+is still baked as the flat `SPRITES.spawner` but unreferenced. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
 and the worker bot is one 12×10 grid on `BOTPAL` (`botA`/`botB`: a faceless boxy chassis with
 stub arms sitting on a single full-width tread, the two frames differing only in the tread
@@ -31,7 +37,7 @@ frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — 
 `flipH` of the right-facing grids. The two [landmark](world.md#landmarks) props are
 `deadTree` (two 16×24 snags on `DTPAL`, the same footprint as a pine so they draw in the same
 band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
-Anything drawn through `drawSpriteFlash` must stay within 32×32.
+Anything drawn through `drawSpriteFlash` must stay within 64×64.
 
 `js/sprites.js` has a UTF-8 BOM and one heart row that repairs a mangled byte via
 `'...'.replace('о', 'g')`. Preserve the file's encoding when editing — re-saving it as something

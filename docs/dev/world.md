@@ -23,18 +23,24 @@ anything that must stay stable per tile.
   so rivers gap naturally around them.
 - `objects` — flat `Array(WORLD*WORLD)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `deadTree`, `stump`, `rock`,
-  `bush`, `den`, `wall`, `turret`, `generator`, `spawner`. `deadTree` (a 3 hp snag, chopped like a
+  `bush`, `den`, `wall`, `turret`, `generator`, `spawner`, `part`. `deadTree` (a 3 hp snag, chopped like a
   tree for `YIELD.deadTreeHit`/`deadTreeFall`, leaves a stump) and `den` (solid, inert scenery)
-  exist only inside [landmarks](#landmarks).
+  exist only inside [landmarks](#landmarks). `part` is the filler a multi-tile building leaves on
+  every footprint tile but its anchor (`{ type: 'part', of: <building> }`): solid, coloured like its
+  building on both maps, ignored by work swings, and resolved by `structOf()` for every "what building
+  is here" read (right-click, cursor, wheel, orders).
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
-- `wall`, `turret`, `generator`, `spawner` are the **stump-built tiered structures** (see
-  [Base building](gameplay.md#base-building)). Each carries `{ tier: 0|1|2, maxHp, building, buildT,
+- `wall`, `turret`, `generator`, `spawner` are the **stump-built structures** (see
+  [Base building](gameplay.md#base-building)). Each carries `{ tier, maxHp, building, buildT,
   buildTotal, dustT }` plus per-type fields (turret `cd`; generator `payT`; spawner `mode`,
   `bots`, `respawnT`), and every live one is also referenced from the module-scope `structures`
-  array so per-frame ticks never scan the 36k grid. Stumps are **consumable build anchors**:
-  building on one replaces it, and demolition/destruction leaves the tile empty, not a stump.
+  array so per-frame ticks never scan the 36k grid. The first three have three tiers; the spawner
+  (the bot bay) has one and a **3×2 footprint** — `STRUCTS.spawner.w/h`, with `footprint()`,
+  `structCenter()` and `structMouth()` (the ground point in front of the doorway) as the geometry
+  helpers. Stumps are **consumable build anchors**: building on one replaces it (a bay consumes
+  every stump under it), and demolition/destruction leaves the tiles empty, not stumps.
 - The world center is an empty clearing (the old gold-ore ring is gone); `CENTER_R` in
   `genWorld()` still keeps ice ponds, rocks, and bushes clear of it so the river spokes meet in
   open ground, and the ore loop's two `rand()` draws per spot are kept as no-ops so existing
