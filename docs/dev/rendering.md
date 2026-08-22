@@ -269,6 +269,16 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   Up/Down/W/S move, Enter/Space activate, Esc/Backspace close a panel; `menuKey()` and
   `menuClick()` are the only entry points (`keydown`/`mousedown` route there in title mode,
   and `mousedown` re-reads the pointer position from its own event).
+- **Dressing** (the Frozen-Throne-style frame, all procedural, every piece taking its alpha from the
+  caller so it fades with the chrome): `drawTitleBackdrop` replaces the flat tint with one that
+  weighs on the top/bottom edges plus a corner vignette, leaving the centre clear; `drawPillar`
+  draws the two stone pillars `TITLE_PILLAR_DX` either side of the column (coursed shaft, frost
+  at the base, snow-capped capital, an iron brazier whose flame flickers and throws an additive
+  warm light); `drawMenuSlab` is the translucent slab with gilt corner brackets behind the items;
+  `drawGoldRule` the gold rule with diamond finials under the subtitle, above the footer and
+  under the select header; `drawEmbers` the sparks rising off the logo and the braziers. The logo
+  gets a pulsing ember glow behind it and a 1px ice rim along its top edges. Pillars rise from
+  below at boot and sink away with the items on play.
 - **Buttons** are procedural frost planks (`drawMenuButton`): chamfered slab with hashed
   wood-grain, a snow cap along the top, icicles off the bottom, ember gems and a gold rule
   when hot. `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the

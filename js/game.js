@@ -5577,6 +5577,10 @@
       ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
       ctx.globalAlpha = a0;
     }
+    // corner rivets (iron, gilt when hot)
+    ctx.fillStyle = hv > 0.5 ? '#ffd95c' : '#5a7fb8';
+    ctx.fillRect(x + 3, y + 3, 1, 1); ctx.fillRect(x + w - 4, y + 3, 1, 1);
+    ctx.fillRect(x + 3, y + h - 4, 1, 1); ctx.fillRect(x + w - 4, y + h - 4, 1, 1);
     // snow cap along the top edge: ragged drift, shaded underside
     for (let px = 2; px < w - 2; px++) {
       const hb = hash2(px * 3 + 5, r.y * 13);
@@ -5661,6 +5665,141 @@
       5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] }[face];
     ctx.fillStyle = hv > 0.5 ? '#8a3a1a' : '#1a2040';
     for (const [c, r] of pips) ctx.fillRect(x + 2 + c * 3, y + 2 + r * 3, 2, 2);
+  }
+
+  // ---- title dressing -------------------------------------------------------
+  // The cinematic frame around the menu: a tint that weighs on the edges and
+  // leaves the centre clear, two stone pillars with burning braziers flanking
+  // the menu column (their light is additive, like the world's lanterns), a
+  // frosted slab that gathers the items into one column, gold rules with
+  // diamond finials, and embers drifting up off the logo and the flames. All of
+  // it is procedural - hash2() for the static grain, now for the flicker - and
+  // every piece takes its alpha from the caller so it fades with the chrome.
+  const TITLE_PILLAR_DX = 106; // pillar centres either side of the menu column
+
+  function drawTitleBackdrop(tintA) {
+    ctx.fillStyle = 'rgba(10,16,42,' + tintA.toFixed(3) + ')';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const dark = (k) => 'rgba(3,5,16,' + Math.min(1, tintA * k).toFixed(3) + ')';
+    // the cinematic band: heavier along the top and bottom edges
+    const v = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+    v.addColorStop(0, dark(1.1)); v.addColorStop(0.2, dark(0)); v.addColorStop(0.8, dark(0)); v.addColorStop(1, dark(1.25));
+    ctx.fillStyle = v; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // corner vignette
+    const r = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.35, VIEW_W / 2, VIEW_H / 2, VIEW_W * 0.6);
+    r.addColorStop(0, dark(0)); r.addColorStop(1, dark(1.3));
+    ctx.fillStyle = r; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  }
+
+  // a gold rule with diamond finials at both ends and an ember-set one in the middle
+  function drawGoldRule(cx, y, half, a) {
+    ctx.globalAlpha = a;
+    const dia = (x, r, c) => {
+      ctx.fillStyle = c;
+      for (let d = -r; d <= r; d++) { const w = r - Math.abs(d); ctx.fillRect(x - w, y + d, w * 2 + 1, 1); }
+    };
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - half, y + 1, half * 2 + 1, 1);
+    ctx.fillStyle = '#c89a3c'; ctx.fillRect(cx - half, y, half * 2 + 1, 1);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(cx - 16, y, 33, 1);
+    for (const ex of [cx - half, cx + half]) { dia(ex, 2, '#0a0e23'); dia(ex, 1, '#ffd95c'); }
+    dia(cx, 3, '#0a0e23'); dia(cx, 2, '#c89a3c');
+    ctx.fillStyle = '#ff8a3c'; ctx.fillRect(cx, y, 1, 1);
+  }
+
+  // a stone pillar: plinth, coursed shaft with a lit left edge and frost creeping
+  // up from the base, a snow-capped capital and an iron brazier whose flame
+  // flickers and throws warm light on whatever is near
+  function drawPillar(cx, top, bot, now, a) {
+    const w = 14, x = cx - 7, shaftTop = top + 7, shaftH = bot - shaftTop - 4;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(4,6,18,0.45)'; ctx.fillRect(x + 3, shaftTop + 2, w + 2, shaftH + 2);
+    // shaft
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 1, shaftTop - 1, w + 2, shaftH + 2);
+    ctx.fillStyle = '#222c52'; ctx.fillRect(x, shaftTop, w, shaftH);
+    ctx.fillStyle = '#3a4878'; ctx.fillRect(x, shaftTop, 2, shaftH);
+    ctx.fillStyle = '#161d3c'; ctx.fillRect(x + w - 2, shaftTop, 2, shaftH);
+    for (let y = shaftTop + 8; y < bot - 6; y += 9) {
+      ctx.fillStyle = '#121834'; ctx.fillRect(x, y, w, 1);
+      const hb = hash2(y, cx);
+      ctx.fillRect(x + 3 + ((hb * 8) | 0), y - 8, 1, 8); // a vertical joint in the course above
+    }
+    for (let y = shaftTop + 1; y < bot - 5; y++) {
+      for (let xx = 1; xx < w - 1; xx++) {
+        const hb = hash2(xx * 5 + y * 3, cx + 11);
+        const frost = (bot - y) < 20 && hb > 0.86 - (20 - (bot - y)) * 0.014;
+        if (frost) { ctx.fillStyle = hb > 0.9 ? '#f4f7ff' : '#b8cce6'; ctx.fillRect(x + xx, y, 1, 1); }
+        else if (hb < 0.035) { ctx.fillStyle = '#2e3a6a'; ctx.fillRect(x + xx, y, 1, 1); }
+      }
+    }
+    // plinth
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 3, bot - 5, w + 6, 5);
+    ctx.fillStyle = '#2a3560'; ctx.fillRect(x - 2, bot - 4, w + 4, 3);
+    ctx.fillStyle = '#4a5a90'; ctx.fillRect(x - 2, bot - 4, w + 4, 1);
+    ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x - 2, bot - 5, 4, 1); ctx.fillRect(x + w - 4, bot - 5, 6, 1);
+    // capital: a snow-capped ledge under the bowl
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 3, top + 3, w + 6, 4);
+    ctx.fillStyle = '#2a3560'; ctx.fillRect(x - 2, top + 5, w + 4, 1);
+    ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x - 2, top + 3, w + 4, 2);
+    ctx.fillStyle = '#b8cce6'; ctx.fillRect(x - 2, top + 4, w + 4, 1);
+    // iron brazier
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 1, top - 2, w - 2, 6); ctx.fillRect(x + 3, top - 3, w - 6, 1);
+    ctx.fillStyle = '#3a2a22'; ctx.fillRect(x + 2, top - 1, w - 4, 3);
+    ctx.fillStyle = '#5a4434'; ctx.fillRect(x + 2, top - 1, w - 4, 1);
+    ctx.fillStyle = '#ff8a3c'; ctx.fillRect(x + 4, top - 2, w - 8, 1); // coals showing over the rim
+    // the flame: a wobbling stack of ember rows
+    const fl = now * 11 + cx;
+    const hgt = 5 + Math.round(Math.sin(fl) + Math.sin(fl * 0.37) * 0.8);
+    const rows = [[6, '#ffe37a'], [6, '#ffd95c'], [4, '#ffb347'], [4, '#ff8a3c'], [2, '#ff6a30'], [2, '#ff4a28'], [1, '#ff4a28']];
+    for (let i = 0; i < Math.min(rows.length, hgt); i++) {
+      const [ww, c] = rows[i];
+      const dx = i > 2 ? Math.round(Math.sin(fl * 1.3 + i * 1.7)) : 0;
+      ctx.fillStyle = c; ctx.fillRect(cx - (ww >> 1) + dx, top - 3 - i, ww, 1);
+    }
+    // warm light, additive like the lanterns in play
+    ctx.globalCompositeOperation = 'lighter';
+    const flick = 1 + Math.sin(now * 9 + cx) * 0.08;
+    const gr = 60 * flick, gy = top - 4;
+    const grd = ctx.createRadialGradient(cx, gy, 1, cx, gy, gr);
+    grd.addColorStop(0, 'rgba(255,170,80,' + (0.42 * a).toFixed(3) + ')');
+    grd.addColorStop(0.45, 'rgba(255,140,60,' + (0.14 * a).toFixed(3) + ')');
+    grd.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = grd; ctx.fillRect(cx - gr, gy - gr, gr * 2, gr * 2);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // n embers rising from (ox, oy) across spread px, each on its own loop
+  function drawEmbers(now, a, ox, oy, spread, n, k) {
+    for (let i = 0; i < n; i++) {
+      const h1 = hash2(i * 13 + k, 71), h2 = hash2(i * 7 + k, 93), h3 = hash2(i * 3 + k, 29);
+      const ph = ((now / (2 + h1 * 1.8)) + h2) % 1;
+      const al = a * (1 - ph) * Math.min(1, ph * 10);
+      if (al <= 0.01) continue;
+      const x = Math.round(ox + (h3 - 0.5) * spread + Math.sin(now * 2.1 + i) * 2.5);
+      const y = Math.round(oy - ph * (26 + h1 * 22));
+      ctx.globalAlpha = al;
+      ctx.fillStyle = (i & 1) ? '#ffd95c' : '#ff8a3c';
+      const sz = ph < 0.45 ? 2 : 1;
+      ctx.fillRect(x, y, sz, sz);
+    }
+  }
+
+  // the frosted slab behind the menu column: translucent so the world still
+  // shows, iron rim and gilt corner brackets
+  function drawMenuSlab(x, y, w, h, a) {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(5,8,22,0.58)'; chamRect(x, y, w, h);
+    ctx.fillStyle = '#2c3a68';
+    ctx.fillRect(x + 2, y, w - 4, 1); ctx.fillRect(x + 2, y + h - 1, w - 4, 1);
+    ctx.fillRect(x, y + 2, 1, h - 4); ctx.fillRect(x + w - 1, y + 2, 1, h - 4);
+    ctx.fillRect(x + 1, y + 1, 1, 1); ctx.fillRect(x + w - 2, y + 1, 1, 1);
+    ctx.fillRect(x + 1, y + h - 2, 1, 1); ctx.fillRect(x + w - 2, y + h - 2, 1, 1);
+    ctx.fillStyle = '#c89a3c';
+    for (const [bx, sx] of [[x + 3, 1], [x + w - 4, -1]]) {
+      for (const [by, sy] of [[y + 3, 1], [y + h - 4, -1]]) {
+        ctx.fillRect(sx > 0 ? bx : bx - 5, by, 6, 1);
+        ctx.fillRect(bx, sy > 0 ? by : by - 5, 1, 6);
+      }
+    }
   }
 
   const helpPanelCv = document.createElement('canvas');
@@ -5827,6 +5966,7 @@
     ctx.globalAlpha = a;
     const t0 = 'CHOOSE YOUR CHAMPION';
     drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 30 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
+    drawGoldRule(cx, toy + 45 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
 
     // cards, from the left
     for (let i = 0; i < cards.length; i++) {
@@ -5878,26 +6018,57 @@
     // leaving: 0 while the menu is up, 0->1 over the intro
     const outQ = state.intro > 0 ? 1 - state.intro / INTRO_T : 0;
     const tintA = 0.55 * (1 - easeOut(outQ / 0.45));
-    if (tintA > 0.005) {
-      ctx.fillStyle = 'rgba(10,16,42,' + tintA.toFixed(3) + ')';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    }
+    if (tintA > 0.005) drawTitleBackdrop(tintA);
     const out = easeOut(outQ / 0.22);           // menu chrome drops away first
     const sc = easeInOut(m.screenT);             // champion select cross-fade
     const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc); // chrome ducks under a panel or the select screen
     const { toy, rects } = menuLayout();
+    const cx = Math.round(VIEW_W / 2);
+    const chromeA = (1 - out) * (1 - pan);
+
+    // the frame: pillars rise from below at boot and sink away on play; the
+    // slab behind the column fades with the items
+    const frameIn = easeOut((m.t - 0.1) / 0.6);
+    const frameA = frameIn * chromeA;
+    const sink = Math.round((1 - frameIn) * 30 + out * 25);
+    if (frameA > 0.005) {
+      const last = rects[rects.length - 1];
+      const ptop = rects[0].y - 22 + sink, pbot = last.y + last.h + 14 + sink;
+      drawPillar(cx - TITLE_PILLAR_DX, ptop, pbot, now, frameA);
+      drawPillar(cx + TITLE_PILLAR_DX, ptop, pbot, now, frameA);
+      drawEmbers(now, frameA * 0.9, cx - TITLE_PILLAR_DX, ptop - 6, 8, 6, 17);
+      drawEmbers(now, frameA * 0.9, cx + TITLE_PILLAR_DX, ptop - 6, 8, 6, 43);
+      const slabIn = easeOut((m.t - 0.2) / 0.45);
+      drawMenuSlab(cx - 78, rects[0].y - 14 + Math.round(out * 25), 156, last.y + last.h + 8 - rects[0].y + 14, slabIn * chromeA);
+      ctx.globalAlpha = 1;
+    }
 
     // logo: drops in at boot, lifts away on play
     const logoIn = easeOut(m.t / 0.6);
     const t1 = 'EMBERFROST';
     const bob = Math.sin(now * 1.5) * 2;
     const ly = Math.round(toy + 46 + bob - (1 - logoIn) * 30 - out * 40);
-    ctx.globalAlpha = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
-    const lx = Math.round((VIEW_W - pixelTextWidth(t1, 4)) / 2);
+    const logoA = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
+    const lw = pixelTextWidth(t1, 4);
+    const lx = Math.round((VIEW_W - lw) / 2);
+    // a pulsing ember glow behind the letters
+    ctx.globalCompositeOperation = 'lighter';
+    const pulse = 0.8 + 0.2 * Math.sin(now * 2.2);
+    const gr = 84;
+    const grd = ctx.createRadialGradient(cx, ly + 10, 2, cx, ly + 10, gr);
+    grd.addColorStop(0, 'rgba(255,150,60,' + (0.26 * logoA * pulse).toFixed(3) + ')');
+    grd.addColorStop(0.5, 'rgba(255,120,50,' + (0.08 * logoA * pulse).toFixed(3) + ')');
+    grd.addColorStop(1, 'rgba(255,100,40,0)');
+    ctx.fillStyle = grd; ctx.fillRect(cx - gr, ly + 10 - gr, gr * 2, gr * 2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = logoA;
     drawPixelText(ctx, t1, lx + 1, ly + 1, '#ff7a2a', 4); // ember under-glow
+    drawPixelText(ctx, t1, lx, ly - 1, '#fff1c2', 4);     // ice rim along every top edge
     drawPixelTextShadow(ctx, t1, lx, ly, '#ffd95c', '#3c2a1e', 4);
     const t2 = 'A COZY WINTER FREE-FOR-ALL';
     drawPixelTextShadow(ctx, t2, Math.round((VIEW_W - pixelTextWidth(t2)) / 2), ly + 34, '#cfe0ff', 'rgba(15,22,50,0.9)');
+    drawGoldRule(cx, ly + 45, Math.round(lw / 2) + 6, logoA);
+    drawEmbers(now, logoA * 0.85, cx, ly + 26, lw, 22, 5);
     ctx.globalAlpha = 1;
 
     // items: stagger in from the left, sink away on play, fade under a panel
@@ -5932,6 +6103,7 @@
     const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);
     if (fin > 0.005) {
       ctx.globalAlpha = fin;
+      drawGoldRule(cx, toy + 242, 52, fin);
       const t3 = 'ARROWS SELECT - ENTER CONFIRM';
       drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 250, '#5a6690', 'rgba(15,22,50,0.9)');
       ctx.globalAlpha = 1;
