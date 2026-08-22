@@ -5353,7 +5353,7 @@
   const PANEL_SLIDE_T = 0.32;
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY'];
   const MENU_BW = 112, MENU_BH = 20;
-  const PATCH_TXT = 'PATCH 1.00'; // printed bottom-right of the title screen
+  const PATCH_TXT = 'PATCH 1.01'; // printed bottom-right of the title screen
 
   function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
   function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -5598,31 +5598,6 @@
     const tw = pixelTextWidth(label, 2);
     const lx = Math.round(x + (w - tw) / 2), ly = y + Math.round((h - 10) / 2) + (pressed ? 1 : 0);
     drawPixelTextShadow(ctx, label, lx, ly, hv > 0.5 ? '#ffd95c' : '#cfe0ff', '#0a0e23', 2);
-  }
-
-  // the selector: a pair of pixel arrows (shaft, gold head, fletching) bobbing
-  // toward the selected item from both sides. dir = 1 points right, -1 left.
-  function drawSelector(r, lift, now, single) {
-    const bob = Math.round(Math.sin(now * 7) * 1.5);
-    const cy = r.y - lift + Math.floor(r.h / 2);
-    const draw = (tipX, dir) => {
-      // rows run from the tip (dx = 0) back along the shaft (dx < 0)
-      const px = (dx, dy, c, ww) => {
-        ctx.fillStyle = c;
-        const x0 = dir > 0 ? tipX + dx - (ww - 1) : tipX - dx;
-        ctx.fillRect(x0, cy + dy, ww, 1);
-      };
-      // outline
-      for (const [dx, dy, ww] of [[1, 0, 1], [0, -1, 1], [0, 1, 1], [-1, -2, 1], [-1, 2, 1], [-2, -3, 1], [-2, 3, 1],
-        [-3, -2, 1], [-3, 2, 1], [-3, -1, 1], [-3, 1, 1], [-13, -2, 4], [-13, 2, 4], [-14, -1, 1], [-14, 1, 1], [-15, 0, 1]]) px(dx, dy, '#0a0e23', ww);
-      px(-4, 0, '#d8c8a0', 11);  // shaft
-      px(-12, -1, '#b48a5a', 3); px(-12, 1, '#b48a5a', 3); // fletching
-      px(0, 0, '#ffd95c', 1); px(-1, -1, '#ffd95c', 1); px(-1, 1, '#ffd95c', 1);
-      px(-2, -2, '#ffd95c', 1); px(-2, 2, '#ffd95c', 1); px(-2, 0, '#ffd95c', 3);
-      px(0, 0, '#ffffff', 1);
-    };
-    draw(r.x - 6 + bob, 1);
-    if (!single) draw(r.x + r.w + 5 - bob, -1);
   }
 
   // the reroll die (11x11): face cycles while hovered, tumbles while rolling
@@ -5946,7 +5921,6 @@
       const rr = { x: r.x - Math.round(slideIn * 80), y: r.y, w: r.w, h: r.h };
       ctx.globalAlpha = a;
       drawChampCard(rr, i, m.chover[i], now, m.csel === i);
-      if (m.csel === i) drawSelector({ x: rr.x + 4, y: rr.y, w: 0, h: rr.h }, Math.round(m.chover[i] * 2), now, true);
     }
     ctx.globalAlpha = a;
 
@@ -6065,7 +6039,6 @@
       } else {
         drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed);
       }
-      if (m.sel === i && hv > 0.3 && !m.panel) drawSelector(rr, Math.round(hv * 2), now);
       ctx.globalAlpha = 1;
     }
 

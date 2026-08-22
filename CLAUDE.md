@@ -128,6 +128,12 @@ chart, and announced when a player walks in. Only a *new object type* it stamps 
 elsewhere (see [checklists](docs/dev/checklists.md)). The abandoned mine, frozen fort, shipwreck
 and shop are meant to land here.
 
+## Versioning
+
+**Every commit that is pushed to main bumps the patch number by 0.01** — `PATCH_TXT` next to
+`MENU_ITEMS` in [js/game.js](js/game.js) (`PATCH 1.01` → `PATCH 1.02`), in the same commit, before the
+push. It prints bottom-right of the title screen, so a screenshot carries its build.
+
 ## Hard rules
 
 Cross-file invariants — breaking one produces a bug that looks unrelated to its cause.

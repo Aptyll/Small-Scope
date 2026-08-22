@@ -283,7 +283,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   wood-grain, a snow cap along the top, icicles off the bottom, corner rivets and a gold rule
   when hot (no glow behind the hot plank - it lifts and warms only). `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
   shadow stays on the ground) and the warm fill; `menu.pressT`
-  sinks it for a beat. The selector is a pair of bobbing pixel arrows (`drawSelector`).
+  sinks it for a beat; the lift, warm fill and gold rule are the whole selection cue (no selector arrows).
 - **Die** (`drawDie`): shows `SEED % 6`, cycles faces and jitters while hovered, tumbles while
   `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`
   (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the seed tag) and then
