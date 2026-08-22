@@ -322,7 +322,7 @@
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
     // the open sub-panel ('settings' | 'help' | null) and its slide progress
-    menu: { sel: 0, hover: [0, 0, 0, 0], t: 0, panel: null, panelT: 0, closing: false,
+    menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row panel: null, panelT: 0, closing: false,
       moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
       // champion select: which screen the menu shows, its cross-fade, the
       // highlighted champion, per-card hover eases, swap pop, lock-in hold
@@ -5351,9 +5351,10 @@
   const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
   const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
   const PANEL_SLIDE_T = 0.32;
-  const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY'];
-  const MENU_BW = 112, MENU_BH = 20;
-  const PATCH_TXT = 'PATCH 1.02'; // printed bottom-right of the title screen
+  const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
+  const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
+  const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
+  const PATCH_TXT = 'PATCH 1.03'; // printed bottom-right of the title screen
 
   function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
   function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -5362,11 +5363,11 @@
   function menuLayout() {
     const toy = Math.round((VIEW_H - 270) / 2);
     const bx = Math.round((VIEW_W - MENU_BW) / 2);
-    const rects = MENU_ITEMS.map((_, i) => ({ x: bx, y: toy + 112 + i * 26, w: MENU_BW, h: MENU_BH }));
+    const rects = MENU_ITEMS.map((_, i) => ({ x: bx, y: toy + MENU_Y0 + i * MENU_PITCH, w: MENU_BW, h: MENU_BH }));
     // the seed row: text + die, one selectable item
     const sw = pixelTextWidth(SEED_TXT) + 6 + 11;
     const sx = Math.round((VIEW_W - sw) / 2);
-    rects.push({ x: sx - 3, y: toy + 196, w: sw + 6, h: 13, seed: true });
+    rects.push({ x: sx - 3, y: toy + MENU_Y0 + MENU_ITEMS.length * MENU_PITCH + 6, w: sw + 6, h: 13, seed: true });
     return { toy, rects };
   }
 
@@ -5382,7 +5383,8 @@
 
   function menuSelect(i) {
     const m = state.menu;
-    const n = ((i % 4) + 4) % 4;
+    const N = MENU_ITEMS.length + 1;
+    const n = ((i % N) + N) % N;
     if (n === m.sel) return;
     m.sel = n;
     SFX.pickup();
@@ -5393,7 +5395,8 @@
     if (i === 0) beginSelect();
     else if (i === 1) openMenuPanel('settings');
     else if (i === 2) openMenuPanel('help');
-    else if (i === 3) rerollWorld();
+    else if (i === MENU_ITEMS.length) rerollWorld();
+    // any other item is a placeholder: it sounds and lights up but does nothing yet
   }
 
   function openMenuPanel(kind) {
@@ -5503,7 +5506,7 @@
       const h = menuHit();
       if (h >= 0 && h !== m.sel) m.sel = h;
     }
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i <= MENU_ITEMS.length; i++) {
       const target = m.sel === i ? 1 : 0;
       m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
     }
@@ -5993,7 +5996,7 @@
     const logoIn = easeOut(m.t / 0.6);
     const t1 = 'SOFTFALL';
     const bob = Math.sin(now * 1.5) * 2;
-    const ly = Math.round(toy + 46 + bob - (1 - logoIn) * 30 - out * 40);
+    const ly = Math.round(toy + 34 + bob - (1 - logoIn) * 30 - out * 40);
     const logoA = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
     const lw = pixelTextWidth(t1, 4);
     const lx = Math.round((VIEW_W - lw) / 2);
@@ -6040,7 +6043,7 @@
     const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);
     if (fin > 0.005) {
       ctx.globalAlpha = fin;
-      drawGoldRule(cx, toy + 246, 52, fin);
+      drawGoldRule(cx, toy + 256, 52, fin);
       drawPixelTextShadow(ctx, PATCH_TXT, VIEW_W - pixelTextWidth(PATCH_TXT) - 5, VIEW_H - 9, '#5a6690', 'rgba(15,22,50,0.9)');
       ctx.globalAlpha = 1;
     }

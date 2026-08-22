@@ -262,8 +262,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
 `state.menu`:
 
-- **Items** `MENU_ITEMS` (PLAY / SETTINGS / HOW TO PLAY) plus the seed row (`SEED N` + an 11×11
-  die) as a fourth selectable; `menuLayout()` is the single source of rects for hit-testing
+- **Items** `MENU_ITEMS` (PLAY / SETTINGS / HOW TO PLAY / PLACEHOLDER — the last is a stub that
+  only sounds) plus the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
+  `MENU_PITCH` apart from `MENU_Y0`; the slab and pillars size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
   (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
   when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.
   Up/Down/W/S move, Enter/Space activate, Esc/Backspace close a panel; `menuKey()` and
