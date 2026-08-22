@@ -1525,7 +1525,8 @@
     }
     if (type === 'turret') o.cd = 0;
     if (type === 'generator') o.payT = 0;
-    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 1; }
+    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
+    o.sparkT = 0;
     structures.push(o);
     return o;
   }
@@ -2160,20 +2161,43 @@
         // SC2-style: hp grows from the 30% floor toward max as the site rises
         o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.7 * dt / o.buildTotal);
         o.dustT -= dt;
+        const big = structW(o.type) > 1 || structH(o.type) > 1;
         if (o.dustT <= 0) {
           o.dustT = 0.8;
-          burst(ox, oy + 4, '#c9d0e2', 3, 25, 0.35, true);
+          if (big) {
+            // dust off the whole footprint's front edge
+            const c = structCenter(o);
+            burst(c.x + rand(-18, 18), (o.ty + structH(o.type)) * TILE - 2, '#c9d0e2', 3, 25, 0.35, true);
+          } else burst(ox, oy + 4, '#c9d0e2', 3, 25, 0.35, true);
+        }
+        if (big) {
+          // sparks off the weld line while the walls rise (see bigBuildReveal)
+          const r = bigBuildReveal(o);
+          o.sparkT -= dt;
+          if (r.rows > 0 && r.rows < r.h && o.sparkT <= 0) {
+            o.sparkT = 0.11;
+            const x = o.tx * TILE + 3 + rng() * (structW(o.type) * TILE - 6);
+            burst(x, r.edgeY, rng() < 0.5 ? '#fff1b0' : '#ffb347', 2, 45, 0.28, true);
+          }
         }
         if (o.buildT >= o.buildTotal) {
           o.building = false;
           o.hp = o.maxHp;
-          burst(ox, oy - 4, '#8a6142', 12, 55, 0.6, true);
-          burst(ox, oy - 4, '#eef4fb', 10, 50, 0.6, true);
-          burst(ox, oy - 4, o.tier === 2 ? '#f2cc6a' : o.tier === 1 ? '#a8b0c4' : '#c9a06a', 6, 45, 0.5, true);
-          if (nearPlayer(ox, oy)) { SFX.place(); state.shake = Math.max(state.shake, 1.5); }
+          o.flash = 0.3; // the completion flash
+          if (big) {
+            // snow settles along the whole roofline
+            const top = (o.ty + structH(o.type)) * TILE - structSprite(o).height + 4;
+            for (let i = 0; i < 6; i++) burst(o.tx * TILE + 4 + i * 8, top, '#f4f7fc', 3, 35, 0.6, true);
+            burst(structCenter(o).x, top + 12, '#aeb6c4', 8, 50, 0.5, true);
+          } else {
+            burst(ox, oy - 4, '#8a6142', 12, 55, 0.6, true);
+            burst(ox, oy - 4, '#eef4fb', 10, 50, 0.6, true);
+            burst(ox, oy - 4, o.tier === 2 ? '#f2cc6a' : o.tier === 1 ? '#a8b0c4' : '#c9a06a', 6, 45, 0.5, true);
+          }
+          if (nearPlayer(ox, oy)) { SFX.place(); state.shake = Math.max(state.shake, big ? 2.5 : 1.5); }
           if (o.type === 'turret') o.cd = 0;
           if (o.type === 'generator') o.payT = STRUCTS.generator.tiers[o.tier].period;
-          if (o.type === 'spawner') o.respawnT = 1;
+          if (o.type === 'spawner') { o.respawnT = o.respawnTotal = 1; }
         }
         continue;
       }
@@ -2195,18 +2219,23 @@
       } else if (o.type === 'spawner') {
         // bots roll out one after another (4 s apart); a lost bot takes 12 s to replace
         const alive = o.bots.filter((b) => !b.dead);
-        if (alive.length < o.bots.length) o.respawnT = Math.max(o.respawnT, 12);
+        if (alive.length < o.bots.length && o.respawnT < 12) { o.respawnT = o.respawnTotal = 12; }
         o.bots = alive;
-        if (o.bots.length < t.bots) {
+        const due = o.bots.length < t.bots;
+        if (due) {
           o.respawnT -= dt;
           if (o.respawnT <= 0) {
-            o.respawnT = 4;
+            o.respawnT = o.respawnTotal = 4;
             const b = makeRobot(o);
             o.bots.push(b);
             robots.push(b);
             burst(b.x, b.y - 4, '#c3c9d3', 6, 35, 0.4, true);
+            burst(b.x, b.y + 2, '#e4e8ee', 5, 30, 0.45, true); // exhaust off the mouth
           }
         }
+        // the shutter: open to gather, shut on guard, and always open for a roll-out
+        const want = (o.mode === 'gather' || (due && o.respawnT < 1.4)) ? 1 : 0;
+        o.door += Math.sign(want - o.door) * Math.min(Math.abs(want - o.door), dt * 2.2);
       }
     }
   }
@@ -3533,12 +3562,32 @@
         if (o.building) {
           const p = o.buildT / o.buildTotal;
           if (spr.width > 16) {
-            // a big build rises out of the ground: the sprite revealed bottom-up
-            const rows = Math.round(spr.height * Math.min(1, p * 1.05));
-            ctx.save();
-            ctx.beginPath(); ctx.rect(px - 2, sy + spr.height - rows, spr.width + 4, rows); ctx.clip();
-            drawSpriteFlash(spr, px + sh, sy, o.flash);
-            ctx.restore();
+            // a big build: the foundation is staked out first, then the walls
+            // rise out of it behind a weld line (bigBuildReveal for the split)
+            const fw = structW(o.type) * TILE, fh = structH(o.type) * TILE;
+            ctx.fillStyle = 'rgba(58,66,82,0.5)';
+            ctx.fillRect(px + 1, py + 1, fw - 2, fh - 2);
+            ctx.fillStyle = '#1c2130';
+            ctx.fillRect(px, py, fw, 1); ctx.fillRect(px, py + fh - 1, fw, 1);
+            ctx.fillRect(px, py, 1, fh); ctx.fillRect(px + fw - 1, py, 1, fh);
+            for (const [cx, cy] of [[px + 1, py - 2], [px + fw - 3, py - 2], [px + 1, py + fh - 5], [px + fw - 3, py + fh - 5]]) {
+              ctx.fillStyle = '#1c2130'; ctx.fillRect(cx, cy, 2, 4);
+              ctx.fillStyle = '#e0b83f'; ctx.fillRect(cx, cy, 2, 1);
+            }
+            const r = bigBuildReveal(o);
+            if (r.rows > 0) {
+              ctx.save();
+              ctx.beginPath(); ctx.rect(px - 2, sy + spr.height - r.rows, spr.width + 4, r.rows); ctx.clip();
+              drawSpriteFlash(spr, px + sh, sy, o.flash);
+              ctx.restore();
+              if (r.rows < spr.height) {
+                const ey = sy + spr.height - r.rows;
+                ctx.fillStyle = '#fff1b0'; ctx.fillRect(px + 2, ey, spr.width - 4, 1);
+                ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now * 40);
+                ctx.fillStyle = '#ffd95c'; ctx.fillRect(px + 4, ey - 1, spr.width - 8, 1);
+                ctx.globalAlpha = 1;
+              }
+            }
           } else if (p < 1 / 3) ctx.drawImage(SPRITES.scaffold[0], px, py);
           else if (p < 2 / 3) ctx.drawImage(SPRITES.scaffold[1], px, py);
           else {
@@ -3547,7 +3596,7 @@
           }
         } else {
           drawSpriteFlash(spr, px + sh, sy, o.flash);
-          if (o.type === 'spawner') drawBayRollout(o, px + sh, sy);
+          if (o.type === 'spawner') drawBayOverlay(o, px + sh, sy, now);
           if (o.hp < o.maxHp * 0.6) {
             // four crack marks, placed as fractions of the sprite so they fit any size
             const w = spr.width, h = spr.height;
@@ -3569,10 +3618,13 @@
       const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
       if (px < -20 || px > VIEW_W + 4 || py < -20 || py > VIEW_H + 4) continue;
       const p = Math.min(1, o.buildT / o.buildTotal);
+      const big = structW(o.type) > 1;
+      const bw = big ? 24 : 12, bx = big ? px + structW(o.type) * 8 - 12 : px + 2;
+      const by = big ? (o.ty + structH(o.type)) * TILE - oy - structSprite(o).height - 12 : py - 7;
       ctx.fillStyle = 'rgba(15,22,50,0.8)';
-      ctx.fillRect(px + 2, py - 7, 12, 4);
+      ctx.fillRect(bx, by, bw, 4);
       ctx.fillStyle = '#ffd95c';
-      ctx.fillRect(px + 3, py - 6, Math.round(10 * p), 2);
+      ctx.fillRect(bx + 1, by + 1, Math.round((bw - 2) * p), 2);
     }
 
     // particles
@@ -3894,19 +3946,66 @@
     ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
   }
 
-  // The next bot slides down out of the bay over the last 0.8 s of its timer,
-  // clipped to the doorway, so the real one appears at the mouth mid-motion.
-  // Bay geometry is the sprite's: doorway cols 14-33, rows 18-40, floor row 41.
-  function drawBayRollout(o, px, sy) {
+  // A big build's reveal: the first 12% of the timer is the staked foundation
+  // alone, then the sprite rises bottom-up. Shared by the draw pass (the clip)
+  // and updateStructures (sparks along the edge), so the two can't disagree.
+  function bigBuildReveal(o) {
+    const spr = structSprite(o), h = spr.height;
+    const p = o.buildT / o.buildTotal;
+    const rows = p < 0.12 ? 0 : Math.min(h, Math.max(1, Math.round(h * (p - 0.12) / 0.86)));
+    return { rows, h, edgeY: (o.ty + structH(o.type)) * TILE - rows };
+  }
+
+  // Everything the bay animates or reports, drawn over the baked sprite. Bay
+  // geometry is the sprite's: doorway cols 14-33, rows 18-40, floor row 41;
+  // the right flank's plain plate rows 28-34 carry the readouts.
+  //   roll-out - the next bot slides down the doorway over the last 0.8 s of its
+  //              timer, so the real one appears at the mouth mid-motion
+  //   shutter  - rolls down over the doorway as o.door -> 0 (guard mode)
+  //   pips     - one per bot slot: lit = alive, blinking = being built, dark = empty
+  //   bar      - the roll-out timer, under the pips
+  //   vents    - a slat flickers across each grille
+  //   beacon   - roof corner, amber blink while a bot is due, grey otherwise
+  //   hp       - a bar over the roof, only once damaged
+  function drawBayOverlay(o, px, sy, now) {
     const t = STRUCTS.spawner.tiers[o.tier];
-    if (o.bots.length >= t.bots || o.respawnT > 0.8) return;
-    const set = SPRITES.robotTeam[o.team === undefined ? 0 : o.team] || SPRITES.robot;
-    const spr = set[Math.floor(performance.now() / 125) % 2];
-    const k = 1 - o.respawnT / 0.8;
-    ctx.save();
-    ctx.beginPath(); ctx.rect(px + 14, sy + 18, 20, 24); ctx.clip();
-    ctx.drawImage(spr, px + 18, sy + 31 - Math.round(12 * (1 - k)));
-    ctx.restore();
+    const due = o.bots.length < t.bots;
+    if (due && o.respawnT <= 0.8) {
+      const set = SPRITES.robotTeam[o.team === undefined ? 0 : o.team] || SPRITES.robot;
+      const spr = set[Math.floor(now * 8) % 2];
+      const k = 1 - o.respawnT / 0.8;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(px + 14, sy + 18, 20, 24); ctx.clip();
+      ctx.drawImage(spr, px + 18, sy + 31 - Math.round(12 * (1 - k)));
+      ctx.restore();
+    }
+    const shut = Math.round(23 * (1 - o.door));
+    for (let i = 0; i < shut; i++) {
+      ctx.fillStyle = i === shut - 1 ? '#1c2130' : (i % 3 === 2 ? '#5b6473' : '#98a1b0');
+      ctx.fillRect(px + 14, sy + 18 + i, 20, 1);
+    }
+    // readouts on the right flank
+    ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 35, sy + 28, 10, 9);
+    for (let i = 0; i < t.bots; i++) {
+      let c = '#3b4150';
+      if (i < o.bots.length) c = '#9ce87a';
+      else if (i === o.bots.length && due) c = Math.floor(now * 3) % 2 ? '#ffd95c' : '#6b5a1c';
+      ctx.fillStyle = c; ctx.fillRect(px + 36 + i * 3, sy + 29, 2, 2);
+    }
+    ctx.fillStyle = '#3b4150'; ctx.fillRect(px + 36, sy + 33, 8, 2);
+    if (due) {
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(px + 36, sy + 33, Math.max(1, Math.round(8 * (1 - o.respawnT / (o.respawnTotal || 1)))), 2);
+    }
+    // vent slat flicker
+    const slat = sy + 22 + (Math.floor(now * 5) % 3) * 2;
+    ctx.fillStyle = '#6c7486';
+    ctx.fillRect(px + 5, slat, 6, 1); ctx.fillRect(px + 37, slat, 6, 1);
+    // beacon on the roof corner
+    ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 44, sy - 4, 2, 5); ctx.fillRect(px + 42, sy - 7, 6, 4);
+    ctx.fillStyle = due ? (Math.floor(now * 4) % 2 ? '#ff9a3c' : '#7a3a1c') : '#6c7486';
+    ctx.fillRect(px + 43, sy - 6, 4, 2);
+    if (o.hp < o.maxHp) drawHealthBar(px + 24, sy - 11, o.hp, o.maxHp, 24);
   }
 
   // a building wears its owner's team palette over its tier material

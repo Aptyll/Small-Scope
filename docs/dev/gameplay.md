@@ -308,19 +308,28 @@ Mechanics, all in `game.js`:
 - **Construction**: `updateStructures()` (called from `updatePlay`, iterating only the
   `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
   shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
-  lattice (a sprite wider than 16 px — the bay — instead rises out of the ground, revealed
-  bottom-up), and completion fires a particle burst + `SFX.place` + screen shake. A yellow progress
-  bar renders above every site. Sites are solid from placement. A big building y-sorts by the
-  bottom of its footprint and sits its snow skirt on that edge.
+  lattice. A sprite wider than 16 px — the bay — builds differently: the first 12% of the timer
+  shows only a staked-out foundation pad over the footprint, then the sprite rises bottom-up behind
+  a weld line that throws sparks from `updateStructures` (`bigBuildReveal()` is the shared split so
+  the sparks sit on the drawn edge), and completion flashes the sprite white (`o.flash`), puffs
+  snow along the roofline and shakes harder. Small builds keep their burst + `SFX.place` + shake. A
+  yellow progress bar renders above every site (centred over the roof for a big one). Sites are
+  solid from placement. A big building y-sorts by the bottom of its footprint and sits its snow
+  skirt on that edge.
 - **Turret**: currently idle — its targeting/firing tick was removed with the raiders, so it is
   a decorative buildable until a new threat exists (the `tracers` array and its render pass are
   kept for that). **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
   coin drop at its base, capped at 6 uncollected drops nearby. **Bot bay** (`spawner`):
   keeps `tiers[0].bots` (3) robots alive, rolling them out **one at a time** — the first 1 s after
-  completion, then 4 s apart; a lost bot takes 12 s to replace. Over the last 0.8 s of each timer
-  `drawBayRollout()` draws the next bot sliding down the doorway, and `makeRobot` then spawns it at
-  `structMouth()` (the ring around the footprint if that is blocked). `removeStruct()` clears the
-  whole footprint and kills its robots with it.
+  completion, then 4 s apart; a lost bot takes 12 s to replace (`respawnT`/`respawnTotal`).
+  `makeRobot` spawns at `structMouth()` (the ring around the footprint if that is blocked) with an
+  exhaust puff. `drawBayOverlay()` draws everything live on top of the baked sprite: the next bot
+  sliding down the doorway over the last 0.8 s of its timer; a roll-up **shutter** over the doorway
+  (`o.door`, lerped in the tick — open in gather, shut in guard, and always open for a roll-out);
+  three **bot pips** on the right flank (lit = alive, blinking = being built, dark = empty) with the
+  roll-out timer as a bar under them; a flickering slat across each vent grille; a roof **beacon**
+  that blinks amber while a bot is due; and an hp bar over the roof once damaged. `removeStruct()`
+  clears the whole footprint and kills its robots with it.
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`); the
   `hitObject()` structure-damage branch and `destroyStructure(o, true)` refund path still
   exist but nothing reaches them now that E ignores structures. `canAfford`/`pay`/`costText` are generic over every `inv` key.

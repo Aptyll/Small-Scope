@@ -34,8 +34,8 @@ anything that must stay stable per tile.
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
 - `wall`, `turret`, `generator`, `spawner` are the **stump-built structures** (see
   [Base building](gameplay.md#base-building)). Each carries `{ tier, maxHp, building, buildT,
-  buildTotal, dustT }` plus per-type fields (turret `cd`; generator `payT`; spawner `mode`,
-  `bots`, `respawnT`), and every live one is also referenced from the module-scope `structures`
+  buildTotal, dustT, sparkT }` plus per-type fields (turret `cd`; generator `payT`; spawner `mode`,
+  `bots`, `respawnT`/`respawnTotal`, `door`), and every live one is also referenced from the module-scope `structures`
   array so per-frame ticks never scan the 36k grid. The first three have three tiers; the spawner
   (the bot bay) has one and a **3×2 footprint** — `STRUCTS.spawner.w/h`, with `footprint()`,
   `structCenter()` and `structMouth()` (the ground point in front of the doorway) as the geometry
