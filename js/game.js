@@ -4416,14 +4416,15 @@
   // a frost plank: snow-capped slab with icicles hanging off it. hv (0..1) is the
   // hover ease - it lifts, warms, and grows an ember glow; pressed sinks it a px
   function drawMenuButton(r, label, hv, now, pressed) {
+    const a0 = ctx.globalAlpha; // respect the caller's fade (the menu and select screens animate alpha)
     const lift = Math.round(hv * 2) - (pressed ? 2 : 0);
     const x = r.x, y = r.y - lift, w = r.w, h = r.h;
     // ember glow behind the hovered plank
     if (hv > 0.02) {
-      ctx.globalAlpha = 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
+      ctx.globalAlpha = a0 * 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
       ctx.fillStyle = '#ffb347';
       chamRect(x - 4, y - 4, w + 8, h + 8);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = a0;
     }
     // shadow stays on the ground while the plank lifts
     ctx.fillStyle = 'rgba(4,6,18,0.55)';
@@ -4446,10 +4447,10 @@
     ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
     // gold inner rule when hot
     if (hv > 0.5) {
-      ctx.globalAlpha = (hv - 0.5) * 2;
+      ctx.globalAlpha = a0 * (hv - 0.5) * 2;
       ctx.fillStyle = '#c89a3c';
       ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = a0;
     }
     // snow cap along the top edge: ragged drift, shaded underside
     for (let px = 2; px < w - 2; px++) {
@@ -4472,7 +4473,7 @@
     }
     // ember gems at both ends when hot
     if (hv > 0.5) {
-      ctx.globalAlpha = (hv - 0.5) * 2;
+      ctx.globalAlpha = a0 * (hv - 0.5) * 2;
       for (const gx of [x + 6, x + w - 7]) {
         const gy = y + Math.floor(h / 2);
         ctx.fillStyle = '#0a0e23';
@@ -4482,7 +4483,7 @@
         ctx.fillStyle = '#ffd95c';
         ctx.fillRect(gx, gy, 1, 1);
       }
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = a0;
     }
     // label
     const tw = pixelTextWidth(label, 2);
