@@ -781,7 +781,7 @@
   // ---------------------------------------------------------------- bot bay
   // The spawner: a 48x38 bot garage on a 3x2 tile footprint (see STRUCTS.spawner
   // w/h), drawn with its snow skirt on the footprint's bottom edge. Steel
-  // plate walls under a flat two-row snow cap (a few 1px drips - readability over detail),
+  // plate walls; the outline runs along the roof's top edge and a plain two-row snow cap sits on it unoutlined (a few 1px drips),
   // a team-painted lintel band (L/T/t) above a 20px-wide bay with a dark
   // interior and a lit floor lip (doorway cols 14-33, rows 13-35, floor row 36), riveted flanks with a vent grille and a
   // hazard stripe, the mouth open to the ground. One tier, so no WPAL swap -
@@ -810,9 +810,9 @@
     'w': '#c9dcee', // snow skirt
   };
   const bay = [
-    '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
-    '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
-    '..osssssssssssssssssssssssssssssssssssssssssso..',
+    '...SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS...',
+    '...ssssssssssssssssssssssssssssssssssssssssss...',
+    '..oooooooooooooooooooooooooooooooooooooooooooo..',
     '..ozPPPPPPPPPzPPPPPPPPPPPPPPPPzPPPPPPPPPPPPPzo..',
     '..oqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo..',
     '..oPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPo..',
@@ -850,8 +850,8 @@
     '..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..',
   ];
   const bayIcon = [
-    '.oSSSSSSSSSSSSo.',
-    '.oSSSSSSSSSSSSo.',
+    '..ssssssssssss..',
+    '.oooooooooooooo.',
     '.oqqqqqqqqqqqqo.',
     '.oPPPPPPPPPPPPo.',
     '.oLLLLLLLLLLLLo.',
