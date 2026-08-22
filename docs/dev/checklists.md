@@ -17,14 +17,21 @@ and name it in the entry's `icon` field, map the object types it works in `workT
 (that is the only selection logic — there are no keys or bar slots), and give its `key`
 behavior in `hitObject()`'s gating.
 
+**Adding an ability or input** — it belongs to *every* slot, not to the local player. Add the
+field to `makeInput()`, fill it for the human in `sampleHumanInput()` (edge-triggered flags are
+set by the event handlers and cleared by the sim), consume it in `updatePlayer(p, dt)`, and give
+bots a way to use it in `updateAI()`. If only one player can have the result, queue it through
+`contest()`. See [multiplayer.md](multiplayer.md).
+
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
-`STRUCT_ORDER` (the build wheel draws `SPRITES[type][0]` directly), a `[wood, stone, gold]`
-sprite array, entries in `isSolidTile()`, both map colour tables, and a functional tick branch in
-`updateStructures()`. `hitObject()`, the draws pass, construction, and
-refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
+`STRUCT_ORDER` (the build wheel draws the local team's `SPRITES.teamBuild[team][type][0]`), a
+16×16 grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), entries in
+`isSolidTile()`, both map colour tables, and a functional tick branch in
+`updateStructures()`. `hitObject()`, the draws pass (via `structSprite`), construction, ownership
+and refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
 
 **Adding a ground type** — extend `paintGroundTile()`, `updateMinimap()`, and `buildWorldMapImg()`,
-give it a surface branch in `updatePlay()`'s momentum block (steer/decay/target rates — ice is
+give it a surface branch in `updatePlayer()`'s momentum block (steer/decay/target rates — ice is
 the template), and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the
 placement rule.
 
@@ -32,7 +39,8 @@ placement rule.
 range/dmg/rate, generator pay/period, spawner bot counts/HP), the `YIELD` table (every gold
 payout), `WORK_REACH`, `BOW_CHARGE`, and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
-the per-surface steer/decay rates inline in `updatePlay()`'s movement block,
+the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
+the slot count (`MAX_PLAYER_SLOTS`) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
 the arrow speed/damage formulas in `fireArrow()`,
 `TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
 `update()`.
@@ -50,11 +58,12 @@ the arrow speed/damage formulas in `fireArrow()`,
 - The `<` and `>` glyphs in [js/font.js](../../js/font.js) were added for the removed resolution
   cycle control and are currently unreferenced — kept as generic font coverage.
 - `SPRITES.raider` (+ `RDPAL`) and `SPRITES.mine` are still baked but unreferenced since the
-  raider/mine removal — kept in case a threat returns; the raider set shares the player grids.
+  raider/mine removal — kept in case a threat returns; the raider set shares the player grids
+  (as do the four `playerTeam` sets, which are the live ones).
 - `SPRITES.goldOre`, `SPRITES.itemWood`, and `SPRITES.itemStone` are baked but unreferenced since
   the single-currency change (no ore object, no wood/stone drops or HUD counters).
 - `SFX.nightSting` and `SFX.monsterDie` in [js/audio.js](../../js/audio.js) are unreferenced since
   the raider removal.
-- With nothing hostile, `damagePlayer`/`die`/`respawn`, the turret type (its tick is an idle
-  no-op), the spawner's guard mode (loiters), and the `tracers` pass are all kept working but
-  currently have no trigger.
+- The turret type (its tick is an idle no-op), the spawner's guard mode (loiters), and the
+  `tracers` pass are kept working but have no trigger — they went idle with the raiders, and
+  nothing but players is hostile now.

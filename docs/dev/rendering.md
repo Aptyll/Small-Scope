@@ -65,11 +65,12 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 
 `render()` runs: ground blit → under-ice fish → ice-crack decals → footprints → flat objects
 (stumps) → item drops → **y-sorted
-`draws` array** (tall objects + player + animals + robots, sorted by feet Y) →
+`draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
+slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
-arrows → turret tracers → swing arc → floaters → `renderLighting` → `renderWeather` →
+arrows → turret tracers → swing arcs (one per swinging player) → floaters → `renderLighting` → `renderWeather` →
 `renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
 map/settings/title/death overlays → fps/seed tags → the pixel cursor (always last). The bow's
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
@@ -103,19 +104,21 @@ view.
 ## Overhead health bars
 
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
-unit, always visible: the player (in `drawPlayer`, play mode only), animals (in `drawAnimal`),
+unit, always visible: every player (in `drawPlayer`), animals (in `drawAnimal`),
 and robots (in `drawRobot`).
-The player's bar is the **only** player health display — the old top-left Minecraft-style hearts
+The overhead bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
-drawn, a second small meter renders just above the player's bar: yellow while charging,
-turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px). The player's overhead stack floats clear of the sprite: stamina plate at `py - 4`,
-health at `py - 7`, draw meter at `py - 12`.
+drawn, a second small meter renders just above it: yellow while charging,
+turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px) — drawn
+for **everyone**, because it is the tell that a shot is coming. The overhead stack floats clear of
+the sprite: stamina plate at `py - 4` (local slot only), health at `py - 7`, draw meter at
+`py - 12`, and a rival's name tag in team colour above that.
 
 ## Damage feedback
 
 `addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`
-array: **gold** for damage the player's side deals (arrows), **red `-N`** for damage
-taken (`damagePlayer` — currently unreachable, since nothing hostile exists). Numbers of 10+
+array: **gold** for damage dealt (arrows, whoever fired them), **red `-N`** for damage the local
+player takes (`damagePlayer`). Numbers of 10+
 render at 2× scale, and each gets a small random x-drift so rapid repeat hits stay readable.
 Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floaters render pass;
 plain `addFloater` entries default to the old look. Units also flash white on hit via

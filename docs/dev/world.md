@@ -9,13 +9,15 @@ anything that must stay stable per tile.
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world. The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
-  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `SPAWN_D` is derived
-  (`WORLD / 2 - 55`) so the camps stay 55 tiles from the world edge, nestled at the treeline.
+  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `spawnPts` is one camp
+  per player slot, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre, so
+  every camp sits at the treeline and no start is favoured — changing `MAX_PLAYER_SLOTS` changes
+  worldgen. Every camp gets the same cleared pocket and the same starter ring of rocks and bushes.
 - `ground` — `Uint8Array(WORLD²)`: `0` snow, `1` ice, `2` open-water hole (runtime-only, see
   [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
-  [Momentum movement](gameplay.md#momentum-movement-player-only)), and worldgen carves it as a travel
+  [Momentum movement](gameplay.md#momentum-movement-players-only)), and worldgen carves it as a travel
   network: 14 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
-  a spoke from each camp to the central clearing and a ring linking adjacent camps. The
+  a spoke from each camp to the central clearing and a ring linking each camp to its neighbour. The
   shared `carveIce` rule skips existing objects, the camps, and the clearing, so rivers gap
   naturally around them.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
@@ -82,14 +84,14 @@ ramp: dusk over the last 12 s of day, full dark, then a 10 s dawn.
 With the raider waves removed, night is purely visual pressure (darkness + lighting). What still
 keys off the cycle:
 
-- `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlay()`.
+- `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every slot.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
 - Carved ice holes refreeze at dawn (cracks heal too) and the fish shoal tops back up to
   `FISH_COUNT` — see [Ice holes and fishing](#ice-holes-and-fishing).
 
 `state.day` no longer drives any difficulty — nothing hostile exists, so nothing currently
-damages the player (`damagePlayer`/`die`/`respawn` are kept intact for whatever threat comes
-next).
+damages a player except another player's arrows and a plunge through the ice (see
+[PvP](multiplayer.md#pvp)).
 
 ## Ice holes and fishing
 
@@ -107,7 +109,8 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   slide (`clickAction`, `tryWork`, and `tryDodge` all check `fallT`). `drawPlayer` clips
   the sprite to the waterline with ripple rects. The climb-out teleports to
   `nearestDryTile()` with brief i-frames. An **active dodge roll crosses holes safely**
-  (the fall check skips while `dodgeT > 0`). `die()`/`respawn()` clear `fallT`.
+  (the fall check skips while `dodgeT > 0`). Every player falls in; `die(p)` and `Player.reset()`
+  clear `fallT`.
 - **Everyone else avoids water**: `moveEntity` treats hole tiles as solid for every entity
   except the player, so animals and robots never wade in. `isSolidTile` itself is unchanged —
   arrows still fly over holes.
@@ -123,9 +126,10 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   overlap the shoreline. They render as translucent silhouettes
   through the ice — brighter and surfaced inside an open hole — in a pass right after the
   ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
-- **Bow-fishing**: `fireArrow()` first checks whether the player stands on an ice tile with a
+- **Bow-fishing**: `fireArrow(p)` first checks whether that player stands on an ice tile with a
   fish within `FISH_CATCH_R` (16 px); if so the shot becomes the catch (any charge level):
-  `inv.fish++`, splash, no arrow. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
+  `p.inv.fish++`, splash, no arrow — and the catch is
+  [contested](multiplayer.md#contested-orders), so two players can't land the same fish. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
   cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
   prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
   pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, hot orange while
@@ -134,6 +138,6 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
   the berry's Q/+20), with a count indicator under the berry indicator top-left
   (`SPRITES.itemFish`, 8×8, own `FIPAL`). The shoal tops back up to `FISH_COUNT` each dawn,
-  never within 120 px of the player. `SFX.splash()` was added for the water sounds. `DBG`
+  never within 120 px of any player. `SFX.splash()` was added for the water sounds. `DBG`
   exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`.
 

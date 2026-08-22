@@ -1,11 +1,13 @@
 # CLAUDE.md
 
-Emberfrost — a browser canvas pixel-art winter survival game. Fight with an always-in-hand bow,
-harvest with **E** (the axe/pickaxe come out on their own for whatever's under the cursor), build
-structures on stumps, and travel fast via a momentum system (slippery frozen rivers, chained
-dodges, shift-sliding). **Gold is the only currency**; berries and fish are food. Nothing hostile
-exists right now — the central gold mine and the night raider waves were removed, so night is
-visual-only (darkness, no threat).
+Emberfrost — a browser canvas pixel-art free-for-all on a winter survival map. Fight with an
+always-in-hand bow, harvest with **E** (the axe/pickaxe come out on their own for whatever's under
+the cursor), build structures on stumps, and travel fast via a momentum system (slippery frozen
+rivers, chained dodges, shift-sliding). **Gold is the only currency**; berries and fish are food.
+
+Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the local human, the rest
+AI fills, four team colours), and arrows hurt rival players exactly as they hurt animals. Nothing
+else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
 
 ## Commands
 
@@ -42,6 +44,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish | [docs/dev/world.md](docs/dev/world.md) |
 | movement, bow and tools, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| player slots, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 
@@ -57,11 +60,12 @@ globals. Order matters: each file's globals must exist before the next runs.
 | [js/audio.js](js/audio.js) | `SFX` | WebAudio synth; no asset files |
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
 
-All game state lives in module-scope singletons — `state`, `settings`, `player`, `inv` — plus the
+All game state lives in module-scope singletons — `state`, `settings`, `players` (with `player` /
+`inv` pointing at the local slot and its wallet) — plus the
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`.
 
-`game.js` is one ~3700-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~4100-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -78,8 +82,9 @@ don't cite line numbers here, they go stale within a session.
 | resolution, zoom, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` |
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
-| the singletons and entity arrays | `state`, `settings`, `player`, `inv` | `state` |
-| key/mouse handlers, the zoom wheel | the `addEventListener` block | `input` |
+| the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
+| slots, teams, the input struct, contested orders | `Player`, `makeInput`, `initPlayers`, `contest` | `players` |
+| key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
 | floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` |
@@ -90,10 +95,11 @@ don't cite line numbers here, they go stale within a session.
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
 | radial menu hit math | `wheelLayout`, `resolveWheel` | `radial wheel` |
-| the frame sim: momentum, day/night, timers | `update`, `updatePlay` | `update` |
+| what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` |
+| the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` |
 | render pass order | `render` | `render` |
 | pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` |
-| drawing player / animals / robots / held tool | `drawPlayer`, `drawHeldTool`, `drawAnimal`, `drawRobot`, `drawHealthBar` | `entity draw` |
+| drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel` | `selection, hints & wheel` |
 | darkness, warm glows, snow, vignette | `renderLighting`, `drawWarmGlows`, `renderWeather` | `lighting & weather` |
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
@@ -115,6 +121,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   neighbours into the prerendered ground canvas. Never call `renderGround()` per frame; it bakes
   the entire 3712×3712 world and is a boot-time cost.
 - **Added or removed a light-emitting object?** Call `rebuildLights()`.
+- **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
+  and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
+  `contest()`, which picks the winner from (SEED, player id, `state.tick`).
 - **Never add or remove an `rng()` call inside `genWorld()`** — it reshuffles every existing seed.
   Use `hash2`/`vnoise` for anything that must stay stable per tile, and never call `hash2` before
   the `SEED` const it closes over.

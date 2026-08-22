@@ -1118,13 +1118,53 @@
     'oo..........',
   ];
 
+  // ---------------------------------------------------------------- teams
+  // Four team presets. A team's colour drives its CHARACTERS (coat, hat, trim)
+  // and its BUILDINGS (fittings + glow accent, painted over the tier material)
+  // so a base and its owner read as one side at a glance. game.js reads the
+  // names/markers back out of SPRITES.teams - this table is the only place the
+  // team palette is written down.
+  const TEAM_SKINS = [
+    { name: 'EMBER', mark: '#df7358', // slot 0 - the original red/teal look
+      coat: '#c9524e', coatL: '#df7358', coatD: '#96393f', hat: '#3e8c81', hatL: '#58ab98',
+      trim: '#f6ecd4', trimD: '#d9c5a0', fit: '#5a3340', fitL: '#8c4f52', glow: '#ff9440' },
+    { name: 'FROST', mark: '#6aa8e8',
+      coat: '#3f6fb0', coatL: '#5e93d8', coatD: '#2b4d7d', hat: '#cfe4f2', hatL: '#f4faff',
+      trim: '#e8f2fb', trimD: '#bcd0e4', fit: '#2a3a56', fitL: '#4c6a94', glow: '#8fd8ff' },
+    { name: 'PINE', mark: '#6ec27a',
+      coat: '#3f8a55', coatL: '#5fb073', coatD: '#2b6039', hat: '#c9a24e', hatL: '#e8c471',
+      trim: '#eef4e4', trimD: '#c6d0b4', fit: '#2c4434', fitL: '#4e7458', glow: '#9ce87a' },
+    { name: 'DUSK', mark: '#a97fd8',
+      coat: '#6d4a9c', coatL: '#8f68c4', coatD: '#4b3070', hat: '#d8c46a', hatL: '#f2e08f',
+      trim: '#efe6fb', trimD: '#c4b6d8', fit: '#3a2c52', fitL: '#5e4a80', glow: '#d8a8ff' },
+  ];
+  const teamPlayerPal = (t) => Object.assign({}, PPAL, {
+    r: t.coat, R: t.coatL, d: t.coatD, t: t.hat, T: t.hatL, m: t.trim, M: t.trimD,
+  });
+  const teamBuildPal = (base, t) => Object.assign({}, base, { k: t.fit, K: t.fitL, e: t.glow });
+  const teamRobotPal = (t) => Object.assign({}, ROBPAL, { E: t.glow, h: t.coatL, H: t.coat });
+  const playerSet = (pal) => ({
+    down: [bake(playerDownIdle, pal), bake(playerDownA, pal), bake(playerDownB, pal)],
+    up: [bake(playerUpIdle, pal), bake(playerUpA, pal), bake(playerUpB, pal)],
+    right: [bake(playerSideIdle, pal), bake(playerSideA, pal), bake(playerSideB, pal)],
+    left: [flipH(bake(playerSideIdle, pal)), flipH(bake(playerSideA, pal)), flipH(bake(playerSideB, pal))],
+  });
+  const TIER_PALS = [WPAL, WPAL_STONE, WPAL_GOLD];
+  const teamPlayers = TEAM_SKINS.map((t) => playerSet(teamPlayerPal(t)));
+  const teamBuild = TEAM_SKINS.map((t) => ({
+    wall: TIER_PALS.map((b) => bake(wall, teamBuildPal(b, t))),
+    turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
+    generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
+    spawner: TIER_PALS.map((b) => bake(spawner, teamBuildPal(b, t))),
+  }));
+  const teamRobots = TEAM_SKINS.map((t) => [bake(imp1, teamRobotPal(t)), bake(imp2, teamRobotPal(t))]);
+
   window.SPRITES = {
-    player: {
-      down: [bake(playerDownIdle, PPAL), bake(playerDownA, PPAL), bake(playerDownB, PPAL)],
-      up: [bake(playerUpIdle, PPAL), bake(playerUpA, PPAL), bake(playerUpB, PPAL)],
-      right: [bake(playerSideIdle, PPAL), bake(playerSideA, PPAL), bake(playerSideB, PPAL)],
-      left: [flipH(bake(playerSideIdle, PPAL)), flipH(bake(playerSideA, PPAL)), flipH(bake(playerSideB, PPAL))],
-    },
+    teams: TEAM_SKINS,
+    playerTeam: teamPlayers,
+    teamBuild: teamBuild,
+    robotTeam: teamRobots,
+    player: teamPlayers[0],
     raider: {
       down: [bake(playerDownIdle, RDPAL), bake(playerDownA, RDPAL), bake(playerDownB, RDPAL)],
       up: [bake(playerUpIdle, RDPAL), bake(playerUpA, RDPAL), bake(playerUpB, RDPAL)],

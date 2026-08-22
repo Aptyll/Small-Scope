@@ -4,13 +4,17 @@ The player (momentum, tools, dodge), the entities that share the world, the gold
 you can build, and the supporting subsystems. Read this before changing how an input resolves,
 what something pays out, or what a structure does.
 
-## Momentum movement (player-only)
+Everything below describes **a player**, not *the* player: each mechanic runs per slot off
+`p.input`, and `player` is only the local slot. [multiplayer.md](multiplayer.md) covers the slot
+model, the input struct, teams, bots and how two players' orders are resolved.
 
-The player moves on a real velocity (`player.vx/vy`): input accelerates, and the surface
+## Momentum movement (players only)
+
+A player moves on a real velocity (`p.vx/vy`): `p.input.mx/my` accelerates, and the surface
 underfoot sets friction and speed caps. All the tuning constants live in the constants banner
 (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) and the per-surface rates inline in
-`updatePlay()`'s movement block. **Momentum is deliberately player-only** — animals, robots,
-and knockback still use the old direct-move idiom.
+`updatePlayer()`'s movement block, which every slot runs. **Momentum is deliberately players-only**
+— animals, robots, and knockback still use the old direct-move idiom.
 
 - **Snow at walking speed** uses a near-instant vector approach (settles in ~3 frames) tuned to
   feel exactly like the old fixed `PLAYER_SPEED` — crisp starts and stops, nothing floaty.
@@ -42,26 +46,29 @@ and knockback still use the old direct-move idiom.
 - **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
   normal movement, so you never grind along a treeline at full speed.
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
-  ice-gliding use the standing pose. `die()`/`respawn()` zero `vx/vy` and clear `sliding`.
+  ice-gliding use the standing pose. `die(p)` and `Player.reset()` zero `vx/vy` and clear
+  `sliding`. Footprints and slide trails from every slot share the one `footprints` decal array.
 
 ## Tools and the bow
 
 There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
-`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `player.tool` is the *held*
+`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `p.tool` is that player's *held*
 index, which is the bow at rest. The bottom strip of the HUD is deliberately empty — it is reserved
 for combat abilities. Two verbs, two inputs:
 
-- **Left click = bow**, always (`clickAction`).
-- **E = work** (`tryWork`, auto-repeating every swing cooldown while held — `updatePlay`
-  calls it whenever `keys['e']` is down). It resolves `workTarget()`: the tile under the
-  cursor, if it holds a tree (→ axe), rock (→ pick), a berried bush (→ axe), or is
+- **Left click = bow**, always. The press only records intent (`clickAction` sets `input.fire`);
+  `updatePlayer` starts the draw on the rising edge and looses on the falling one.
+- **E = work** (`tryWork(p)`, auto-repeating every swing cooldown while held — `updatePlayer`
+  calls it whenever `p.input.work` is set). It resolves `workTarget(p)`: the tile that player is
+  aiming at, if it holds a tree (→ axe), rock (→ pick), a berried bush (→ axe), or is
   bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
   within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
   ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
-  does nothing. A valid target swaps `player.tool` to the right one, drops any bow draw, faces the
-  tile, and starts the swing; `swingHit()` lands on the locked tile (`player.workTx/Ty`) —
-  whatever is there by then — via `hitObject()`/`crackIce()`. Once `swingT` and `swingCd`
-  both reach 0, `updatePlay` puts the bow back (`player.tool = TOOL_BOW`), so the axe only exists
+  does nothing. A valid target swaps `p.tool` to the right one, drops any bow draw, faces the
+  tile, and starts the swing; `swingHit(p)` **contests** the locked tile (`p.workTx/Ty`) so only
+  one player's swing lands on it in a step, then hits whatever is there via
+  `hitObject(o, p)`/`crackIce()`. Once `swingT` and `swingCd`
+  both reach 0, `updatePlayer` puts the bow back (`p.tool = TOOL_BOW`), so the axe only exists
   visually for the duration of the work. `workTarget()` is shared with the cursor, so the
   lock ring is exactly "E will do something here".
 
@@ -69,7 +76,8 @@ Whenever `workTarget()` is non-null and `near` (and tools aren't blocked or the 
 `drawWorkHint()` — called right after `drawSelection` in the overlay pass — floats a
 Fortnite-style key prompt over the target: a 9×10 pixel key-cap with an **E** plus the verb
 (CHOP / MINE / PICK / CRACK ICE), lifted above trees by 20 px and short objects by 10. The cap
-visibly presses (face drops a pixel, highlight gone, label goes gold) while `keys['e']` is down.
+visibly presses (face drops a pixel, highlight gone, label goes gold) while the local player's
+`input.work` is set.
 If the prompt would overlap the player sprite (an adjacent target) it flips under the tile
 instead. Since it only appears in reach, it doubles as the "you're close enough" signal.
 
@@ -79,12 +87,13 @@ always picks the right tool it is no longer reachable in normal play. Stumps and
 are **not** E targets — they are the right-click wheel's domain — and there is no melee against
 animals anymore: the bow is the only weapon.
 
-The bow is **hold-to-charge**: mousedown starts `player.charging`/`player.chargeT` (movement
+The bow is **hold-to-charge**: the press edge starts `p.charging`/`p.chargeT` (movement
 targets scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter
 renders above the player's health bar),
-and mouseup fires via `fireArrow()` — power scales speed (170–360 px/s) and damage (4–13).
-Arrows live in the `arrows` array, updated in `updatePlay()`: they die on solid tiles, on any
-animal hit (knockback scales with power), or after 0.85 s. They render as short
+and the release edge fires via `fireArrow(p)` — power scales speed (170–360 px/s) and damage
+(4–13). Arrows carry their shooter's `owner`/`team`, live in the `arrows` array, and are updated
+in `updatePlay()`: they die on solid tiles, on a **rival player** (tested before animals — see
+[PvP](multiplayer.md#pvp)), on any animal hit (knockback scales with power), or after 0.85 s. They render as short
 velocity-aligned lines in their own pass (using `ex`/`ey`) and never hit robots or structures.
 Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
 (0.9 s) is a full draw.
@@ -110,22 +119,24 @@ bow is drawn — the bow icon fires along −x (arc on the left), so aim rotatio
 
 ## Dodge roll
 
-**Space** (`tryDodge()`) dashes the player in the held 8-way WASD direction (facing direction
-if nothing is held): an impulse of `max(DODGE_SPEED (215), current speed)` into `player.vx/vy`
-for `DODGE_T` (0.28 s), with i-frames for the roll only (`player.invuln` — momentum carried
+**Space** (`tryDodge(p)`, driven by the edge-triggered `input.dodge`) dashes a player along its
+`input.mx/my` (facing direction if nothing is held): an impulse of
+`max(DODGE_SPEED (215), current speed)` into `p.vx/vy`
+for `DODGE_T` (0.28 s), with i-frames for the roll only (`p.invuln` — momentum carried
 past the roll gets no i-frames). Two charges (`DODGE_CHARGES`), refilling **one at a time**
-every `DODGE_CD` (3.5 s); state lives on `player` as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
+every `DODGE_CD` (3.5 s); state lives on the player as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
 dodgeRegenT/dodgeDustT` (`dodgeVX/VY` exist only for the spin/ghost render — movement runs on
 `vx/vy`). While rolling, movement input, friction, footprints, walk animation, and the held
 tool are suppressed (still collides with solids; a wall zeroes that axis), and `drawPlayer`
 swaps to a full 360° sprite spin with two afterimage ghosts trailing the velocity plus dust
 bursts. The roll's exit speed is spent by the surface — see
-[Momentum movement](#momentum-movement-player-only). The charge meter is a single unsegmented cyan stamina
+[Momentum movement](#momentum-movement-players-only). The charge meter is a single unsegmented cyan stamina
 bar on a plate directly beneath the overhead health bar — charges stay discrete in the sim,
 the bar shows the pooled total (full charges + regen progress). Spending a charge leaves a
 pale ghost of the lost chunk (`player.stamGhost`/`stamGhostT`): it holds ~0.3 s, then drains
 into the live fill souls-style. Death cancels the roll, respawn refills
-charges; overlays (map/settings/wheel/pause) block the input.
+charges; overlays (map/settings/wheel/pause) block the local player's input. The bar is drawn for
+the local slot only — a rival's tells are their draw meter and their position.
 
 ## Wildlife
 
@@ -134,9 +145,9 @@ charges; overlays (map/settings/wheel/pause) block the input.
 spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or respawns.
 Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
-(`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when the player
-comes within 26 px, and an arrow hit sends either species fleeing directly away from the player
-(`fleeT`). Deaths pay out in `updateAnimal` from the `YIELD` table: rabbits drop 1 berry plus
+(`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when **any**
+player comes within 26 px, and a hit sends either species fleeing directly away from the nearest
+one (`fleeT`). Deaths pay out in `updateAnimal` from the `YIELD` table: rabbits drop 1 berry plus
 `YIELD.rabbit` coins, deer drop `YIELD.deer` coins plus a `GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
 animals join the y-sorted `draws` pass via `drawAnimal()`, and
 sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
@@ -144,7 +155,8 @@ map.
 
 ## Economy (one currency)
 
-`inv` is `{ gold, berry, fish }`. **Gold is the only resource** — there is no wood or stone —
+Every player owns a wallet: `p.inv` is `{ gold, berry, fish }` (and `inv` is an alias for the
+local slot's, which is what the HUD draws). **Gold is the only resource** — there is no wood or stone —
 and berries/fish are consumables (Q/F heals), never spent on anything. The whole economy is the
 `YIELD` table in the constants banner, which gives every source a different **yield profile**
 rather than a different resource (the League model: one number, many ways to earn it):
@@ -161,9 +173,11 @@ rather than a different resource (the League model: one number, many ways to ear
 Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
 (`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` and floats
 `+n` in `RES_COLORS[type]`. Only `gold` and `berry` drops exist (fish go straight to `inv`).
-The HUD shows one gold counter (`itemGold`) left of the minimap; the berry/fish indicators sit
-top-left as before. `die()` keeps 60% of all three. Robots carry a single gold number
-(`b.carry`) and deposit at 8+.
+The HUD shows the local wallet's gold counter (`itemGold`) left of the minimap; the berry/fish
+indicators sit top-left as before. `die(p)` keeps 60% of all three. Robots carry a single gold
+number (`b.carry`) and deposit at 8+ into their **owner's** wallet. Drops are neutral: they drift
+toward the nearest player, and everyone standing on one contests it
+(`canAfford`/`pay` also take the player whose wallet is meant).
 
 ## Base building
 
@@ -182,10 +196,16 @@ Mechanics, all in `game.js`:
 - `state.wheel` (`{kind:'build'|'manage', tx, ty, seg}`) is the open wheel; ESC/M/settings/death
   close it, left-click is swallowed while it's open, and the game **keeps running** — opening the
   wheel mid-night is deliberate pressure. `wheelLayout()` is shared by `resolveWheel()` and
-  `renderWheel()` so hover math and pixels can never disagree.
-- `placeStruct()` consumes the stump (the tile is **empty** after demolition — stumps are a
-  finite site resource), pays `tiers[0].cost`, and drops the object into `building` state at 30%
-  hp. It enforces the 60 px reach and the don't-entomb-yourself AABB check.
+  `renderWheel()` so hover math and pixels can never disagree. `resolveWheel()` does not act: it
+  writes `player.input.cmd`, and `runCmd(p, c)` performs it in the next sim step (re-checking
+  ownership and the 60 px reach).
+- `placeStruct(tx, ty, type, p)` consumes the stump (the tile is **empty** after demolition —
+  stumps are a finite site resource), pays `tiers[0].cost` from that player's wallet, and drops the
+  object into `building` state at 30% hp, stamped with `owner`/`team`. It enforces the 60 px reach
+  and the don't-entomb-yourself AABB check, and the placement itself is
+  [contested](multiplayer.md#contested-orders) so two players can't claim one stump.
+- **Ownership**: a building wears its team's palette (`structSprite`), and `ownsStruct(o, p)`
+  means only its side can open the manage wheel, upgrade or demolish it. Stumps are neutral.
 - **Construction**: `updateStructures()` (called from `updatePlay`, iterating only the
   `structures` registry) advances `buildT`, grows hp toward max, and puffs dust; the draws pass
   shows `SPRITES.scaffold[0|1]` under 2/3 progress, then the real sprite under the `scaffold[2]`
@@ -209,22 +229,22 @@ Mechanics, all in `game.js`:
 `mode`: **gather** — pick the nearest tree/rock within 8 tiles of the spawner
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
 `carry` gold count (same `YIELD` numbers as `hitObject`, tree-fall leaves a stump and pays the
-jackpot, minus the physical drops), and walk home to deposit into `inv.gold` with a floater at
-8+ carried; **guard** — with
+jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
+floater at 8+ carried; **guard** — with
 raiders removed it just loiters near home (the mode toggle is kept for a future threat).
 Robots use `moveEntity`, abandon a target after ~5 s stuck, die with their spawner, and are
-reaped like animals. They join the y-sorted draws via `drawRobot()` and show a health bar;
-nothing the player does can hit them (no friendly fire). Their SFX are gated on player proximity
+reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sorted draws via
+`drawRobot()` in team colours, and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
 
 ## Death is not game over
 
-`die()` sets `mode = 'dead'`, drops any bow draw, keeps `ceil(60%)` of each resource, and after
-2.6 s `respawn()` puts the player back at the original spawn pocket (`playerSpawn`).
-`state.mode` is
-`title | play | dead`; `updatePlay()` is skipped entirely while paused, dead, or with the map or
-settings overlay open, but `update()` (time, darkness, camera, fx) keeps running. With nothing
-hostile in the game, `die()` is currently unreachable but kept working.
+`die(p)` marks that slot dead, drops its bow draw, keeps `ceil(60%)` of each resource and starts a
+2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back at **its own** camp
+with i-frames. Only the local slot's death sets `state.mode = 'dead'` for the overlay.
+`state.mode` is `title | play | dead`, and `updatePlay()` runs in **both** `play` and `dead` — the
+match carries on while you are down. Only the local overlays (paused, map, settings) stop the sim;
+`update()` (time, darkness, camera, fx) always keeps running.
 
 ## Settings
 

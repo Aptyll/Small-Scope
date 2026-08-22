@@ -29,6 +29,14 @@
   const DODGE_CHARGES = 2;
   const DODGE_CD = 3.5;     // seconds to refill one charge
 
+  // Player slots. Every combatant in the match - the local human, the AI fills,
+  // and (later) network peers - is a Player in `players`, so anything written
+  // for "the player" is automatically something every slot can do. Only the
+  // camera, HUD and cursor address one specific slot (`player`, the local one).
+  const MAX_PLAYER_SLOTS = 6;
+  const TEAM_COUNT = 4;      // colour presets; slots past the 4th double up (slot % TEAM_COUNT)
+  const PVP = true;          // arrows hit players on another team (friendly fire is off)
+
   // momentum (player-only): input accelerates vx/vy, the surface underfoot sets
   // friction and speed caps. Walking on snow is tuned to feel like the old fixed
   // PLAYER_SPEED; everything faster than that is earned via ice, dodges, or sliding.
@@ -273,6 +281,7 @@
     time: DAY_LEN * 0.25, // start mid-morning
     elapsed: 0,
     day: 1,
+    tick: 0,       // sim steps taken; with SEED + player id it decides contested orders
     darkness: 0,
     shake: 0,
     deadTimer: 0,
@@ -321,25 +330,113 @@
     renderBars();
   }
 
-  const player = {
-    x: (WORLD / 2 + 0.5) * TILE, y: (WORLD / 2 + 0.5) * TILE,
-    vx: 0, vy: 0,
-    dir: 'down', moving: false, animT: 0,
-    hp: 100, maxHp: 100,
-    charging: false, chargeT: 0, // bow draw state
-    dodgeT: 0, dodgeVX: 0, dodgeVY: 0, dodgeDustT: 0, // active roll
-    dodgeCharges: 2, dodgeRegenT: 0,
-    stamGhost: 0, stamGhostT: 0, // spent-stamina ghost: lingers, then drains
-    sliding: false, slideT: 0, trailD: 0, slideDustT: 0, // shift-slide state
-    swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
-    tool: TOOL_BOW, // held TOOLS index: the bow, except mid-work (see tryWork)
-    workTx: -1, workTy: -1, // tile the current E swing is aimed at
-    hurtT: 0, invuln: 0,
-    fallT: 0, fallRipT: 0, // floundering in an ice hole
-    footT: 0, footSide: 0,
-  };
+  // ------------------------------------------------------------ players
+  // Every slot in the match is a Player. They all carry identical state and are
+  // all driven from the same `input` struct, so a feature written for "the
+  // player" is a feature every slot has: the local human (slot 0), the AI fills,
+  // and eventually a network peer are only different in who fills that struct.
+  // Sim code takes a `p` argument; `player` (the local slot) is for the camera,
+  // HUD, cursor and audio only.
+  const TEAMS = SPRITES.teams; // 4 colour presets, baked into the sprites
 
-  const inv = { gold: 0, berry: 0, fish: 0 };
+  // one frame of intent - the whole interface between a controller and the sim
+  function makeInput() {
+    return {
+      mx: 0, my: 0,        // movement axis (the sim normalises)
+      aimX: 0, aimY: 0,    // world-space aim point (cursor, for the human)
+      fire: false,         // bow held: press draws, release looses
+      work: false,         // E held
+      slide: false,        // shift held
+      dodge: false,        // edge-triggered, cleared once the sim reads it
+      eatBerry: false, eatFish: false, // edge-triggered
+      cmd: null,           // one-shot order: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
+    };
+  }
+
+  class Player {
+    constructor(slot, control) {
+      this.id = slot;
+      this.team = slot % TEAM_COUNT;
+      this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
+      this.name = control === 'human' ? 'YOU' : TEAMS[this.team].name + '-' + (slot + 1);
+      this.spawn = spawnPts[slot % spawnPts.length];
+      this.inv = { gold: 0, berry: 0, fish: 0 };
+      this.maxHp = 100;
+      // bot brain (unused by a human slot): current job, give-up timers and the
+      // short blacklists that keep a bot from re-picking work it cannot reach
+      this.ai = {
+        tgt: null, tgtT: 0, stuckT: 0, avoid: null, avoidT: 0, thinkT: 0,
+        huntTgt: null, huntT: 0, huntAvoid: null, huntAvoidT: 0,
+        lootT: 0, spendT: 0, buildT: 0, escapeT: 0,
+        wx: 0, wy: 0, roam: 0,
+      };
+      this.reset(true);
+    }
+    get active() { return this.control !== 'none'; }
+    // camp placement + every transient cleared; used at boot and on respawn
+    reset(first) {
+      this.x = (this.spawn.tx + 0.5) * TILE;
+      this.y = (this.spawn.ty + 0.5) * TILE;
+      this.vx = 0; this.vy = 0;
+      this.dir = 'down'; this.moving = false; this.animT = 0;
+      this.hp = this.maxHp;
+      this.dead = false; this.respawnT = 0;
+      this.charging = false; this.chargeT = 0;      // bow draw state
+      this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
+      this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
+      this.stamGhost = 0; this.stamGhostT = 0;      // spent-stamina ghost
+      this.sliding = false; this.slideT = 0; this.trailD = 0; this.slideDustT = 0;
+      this.swingT = 0; this.swingCd = 0; this.swingDir = 0; this.swingHitDone = false;
+      this.tool = TOOL_BOW;                          // held TOOLS index (bow at rest)
+      this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
+      this.hurtT = 0; this.invuln = first ? 0 : 3;
+      this.kbx = 0; this.kby = 0;
+      this.fallT = 0; this.fallRipT = 0;             // floundering in an ice hole
+      this.footT = 0; this.footSide = 0;
+      this.firePrev = false;
+      this.input = makeInput();
+    }
+  }
+
+  const players = [];  // every slot; filled by initPlayers() at boot (it needs spawnPts)
+  let player = null;   // the local slot - camera, HUD, cursor and audio follow this one
+  let inv = null;      // === player.inv, the counters the HUD draws
+
+  // one human (this session) and an AI in every other slot
+  function initPlayers() {
+    players.length = 0;
+    for (let i = 0; i < MAX_PLAYER_SLOTS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
+    player = players[0];
+    inv = player.inv;
+  }
+
+  // who p is allowed to shoot: another live slot on another team (this is the
+  // one place the FFA/friendly-fire rule lives)
+  function enemyOf(p, q) { return q !== p && q.active && !q.dead && (!PVP || q.team !== p.team); }
+
+  // ---- contested orders --------------------------------------------------
+  // Several players can order the same tile, drop or fish inside one sim step,
+  // and only one of those can happen. Each such action queues a claim here;
+  // resolveContests() runs exactly one per key, picked from (SEED, player id,
+  // sim tick) - so the same step resolves the same way on every machine.
+  const contests = new Map();
+  function contest(key, p, fn) {
+    let list = contests.get(key);
+    if (!list) { list = []; contests.set(key, list); }
+    list.push({ p, fn });
+  }
+  function contestRank(p) { return hash2(p.id * 131 + 7, state.tick); }
+  function resolveContests() {
+    for (const list of contests.values()) {
+      let win = list[0], wr = contestRank(win.p);
+      for (let i = 1; i < list.length; i++) {
+        const r = contestRank(list[i].p);
+        if (r < wr) { win = list[i]; wr = r; }
+      }
+      win.fn();
+    }
+    contests.clear();
+  }
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
@@ -363,9 +460,11 @@
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode !== 'play') return;
-    if (e.key === ' ') tryDodge();
-    if (e.key.toLowerCase() === 'q') eatBerry();
-    if (e.key.toLowerCase() === 'f') eatFish();
+    // edge-triggered intents go into the local player's input struct; the sim
+    // reads and clears them, exactly as it does for an AI slot
+    if (e.key === ' ') player.input.dodge = true;
+    if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
+    if (e.key.toLowerCase() === 'f') player.input.eatFish = true;
     if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
       if (state.wheel) state.wheel = null;
@@ -395,7 +494,8 @@
       if (!o) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
       if (o.type === 'stump') state.wheel = { kind: 'build', tx, ty, seg: -1 };
-      else if (STRUCTS[o.type] && !o.building) state.wheel = { kind: 'manage', tx, ty, seg: -1 };
+      else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1 };
+      else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
       return;
     }
     if (e.button !== 0) return;
@@ -405,15 +505,13 @@
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
     mouse.down = true;
-    clickAction();
+    clickAction(player);
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 2 && state.wheel) { resolveWheel(); state.wheel = null; return; }
-    if (e.button === 0 && player.charging) {
-      player.charging = false;
-      if (state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen && !state.wheel) fireArrow();
-      player.chargeT = 0;
-    }
+    // releasing the button just drops the held intent; updatePlayer looses the
+    // arrow on that falling edge, the same way an AI's shot is timed
+    if (e.button === 0) player.input.fire = false;
     if (dragSlider) { saveSettings(); SFX.pickup(); }
     mouse.down = false;
     dragSlider = null;
@@ -426,6 +524,33 @@
     // scroll up = zoom in, scroll down = back out toward the 270-row baseline
     zoomStep = Math.max(0, Math.min(zoomMax, zoomStep + (e.deltaY > 0 ? -1 : 1)));
   }, { passive: false });
+
+  // The local human's controller: keyboard + mouse folded into the same input
+  // struct an AI writes, once per sim step. Overlays, the wheel and pause zero
+  // it (and drop any draw) so nothing leaks through a stopped sim.
+  function sampleHumanInput(p) {
+    const inp = p.input;
+    inp.aimX = mouse.x + camX;
+    inp.aimY = mouse.y + camY;
+    if (state.mode !== 'play' || state.paused || state.mapOpen || state.settingsOpen) {
+      inp.mx = inp.my = 0;
+      inp.fire = inp.work = inp.slide = false;
+      inp.dodge = inp.eatBerry = inp.eatFish = false;
+      inp.cmd = null;
+      if (p.charging) { p.charging = false; p.chargeT = 0; }
+      p.firePrev = false;
+      return;
+    }
+    let mx = 0, my = 0;
+    if (keys['w'] || keys['arrowup']) my -= 1;
+    if (keys['s'] || keys['arrowdown']) my += 1;
+    if (keys['a'] || keys['arrowleft']) mx -= 1;
+    if (keys['d'] || keys['arrowright']) mx += 1;
+    inp.mx = mx; inp.my = my;
+    inp.slide = !!keys['shift'];
+    inp.work = !!keys['e'] && !state.wheel;
+    if (state.wheel) { inp.fire = false; inp.dodge = false; } // the wheel swallows the bow
+  }
 
   // ------------------------------------------------------------ world
   const ground = new Uint8Array(WORLD * WORLD); // 0 snow, 1 ice, 2 hole (open water)
@@ -451,13 +576,18 @@
 
   const cx = WORLD / 2, cy = WORLD / 2;
 
-  // four quadrant spawn pockets (FFA start positions); player takes slot 0
-  const SPAWN_D = WORLD / 2 - 55;  // camps keep their 55-tile distance from the world edge (nestled at the treeline)
-  const spawnPts = [
-    { tx: cx - SPAWN_D, ty: cy - SPAWN_D }, { tx: cx + SPAWN_D, ty: cy - SPAWN_D },
-    { tx: cx - SPAWN_D, ty: cy + SPAWN_D }, { tx: cx + SPAWN_D, ty: cy + SPAWN_D },
-  ];
-  const playerSpawn = spawnPts[0];
+  // one spawn pocket per player slot, evenly spaced on a ring 55 tiles in from
+  // the world edge (nestled at the treeline) so no start position is favoured.
+  // The local human takes slot 0.
+  const SPAWN_D = WORLD / 2 - 55;
+  const spawnPts = [];
+  for (let i = 0; i < MAX_PLAYER_SLOTS; i++) {
+    const a = -Math.PI / 2 + (i / MAX_PLAYER_SLOTS) * Math.PI * 2;
+    spawnPts.push({
+      tx: Math.round(cx + Math.cos(a) * SPAWN_D),
+      ty: Math.round(cy + Math.sin(a) * SPAWN_D),
+    });
+  }
 
   // depth of the forest boundary at a given tile: smooth irregular inner edge,
   // always solid from the world edge inward (variation eats into the interior)
@@ -551,10 +681,10 @@
       }
     };
     for (const p of spawnPts) carveRiver(p.tx, p.ty, cx, cy); // spokes
-    carveRiver(spawnPts[0].tx, spawnPts[0].ty, spawnPts[1].tx, spawnPts[1].ty); // ring
-    carveRiver(spawnPts[1].tx, spawnPts[1].ty, spawnPts[3].tx, spawnPts[3].ty);
-    carveRiver(spawnPts[3].tx, spawnPts[3].ty, spawnPts[2].tx, spawnPts[2].ty);
-    carveRiver(spawnPts[2].tx, spawnPts[2].ty, spawnPts[0].tx, spawnPts[0].ty);
+    for (let i = 0; i < spawnPts.length; i++) { // ring, camp to neighbouring camp
+      const a = spawnPts[i], b = spawnPts[(i + 1) % spawnPts.length];
+      carveRiver(a.tx, a.ty, b.tx, b.ty);
+    }
 
     function free(tx, ty) {
       return inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0;
@@ -584,16 +714,18 @@
       }
     }
 
-    // guaranteed starter ring at the player's spawn pocket
+    // guaranteed starter ring in every camp - each slot opens with the same kit
     const ring = [
       ['rock', 4, 4], ['rock', -4, 5],
       ['bush', 3, -5], ['bush', -3, -5],
     ];
-    for (const [type, dx, dy] of ring) {
-      const tx = playerSpawn.tx + dx, ty = playerSpawn.ty + dy;
-      if (free(tx, ty)) {
-        if (type === 'rock') placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
-        if (type === 'bush') placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
+    for (const sp of spawnPts) {
+      for (const [type, dx, dy] of ring) {
+        const tx = sp.tx + dx, ty = sp.ty + dy;
+        if (free(tx, ty)) {
+          if (type === 'rock') placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
+          if (type === 'bush') placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
+        }
       }
     }
   }
@@ -754,37 +886,38 @@
     drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, n: n || 1, t: 0 });
   }
 
-  function canAfford(cost) { for (const k in cost) if ((inv[k] || 0) < cost[k]) return false; return true; }
-  function pay(cost) { for (const k in cost) inv[k] -= cost[k]; }
+  // wallets are per player: every cost check and payment names whose it is
+  function canAfford(cost, p) { const w = (p || player).inv; for (const k in cost) if ((w[k] || 0) < cost[k]) return false; return true; }
+  function pay(cost, p) { const w = (p || player).inv; for (const k in cost) w[k] -= cost[k]; }
   function costText(cost) {
     const parts = [];
     for (const k in cost) if (cost[k] > 0) parts.push(cost[k] + ' ' + k.toUpperCase());
     return parts.join('  ');
   }
 
-  function eatBerry() {
-    if (inv.berry <= 0 || player.hp >= player.maxHp) return;
-    inv.berry--;
-    player.hp = Math.min(player.maxHp, player.hp + 20);
-    SFX.eat(); setTimeout(() => SFX.heal(), 90);
-    addFloater(player.x, player.y - 14, '+20', '#8fe08a');
-    burst(player.x, player.y - 8, '#f2707a', 6, 30, 0.4);
+  function eatBerry(p) {
+    if (p.inv.berry <= 0 || p.hp >= p.maxHp) return;
+    p.inv.berry--;
+    p.hp = Math.min(p.maxHp, p.hp + 20);
+    if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
+    addFloater(p.x, p.y - 14, '+20', '#8fe08a');
+    burst(p.x, p.y - 8, '#f2707a', 6, 30, 0.4);
   }
 
-  function eatFish() {
-    if (inv.fish <= 0 || player.hp >= player.maxHp) return;
-    inv.fish--;
-    player.hp = Math.min(player.maxHp, player.hp + 50);
-    SFX.eat(); setTimeout(() => SFX.heal(), 90);
-    addFloater(player.x, player.y - 14, '+50', '#8fe08a');
-    burst(player.x, player.y - 8, '#7ac0e8', 6, 30, 0.4);
+  function eatFish(p) {
+    if (p.inv.fish <= 0 || p.hp >= p.maxHp) return;
+    p.inv.fish--;
+    p.hp = Math.min(p.maxHp, p.hp + 50);
+    if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
+    addFloater(p.x, p.y - 14, '+50', '#8fe08a');
+    burst(p.x, p.y - 8, '#7ac0e8', 6, 30, 0.4);
   }
 
   // ------------------------------------------------------------ movement & collision
   function moveEntity(e, dx, dy, r) {
-    // everyone but the player treats open water holes as walls - animals and
-    // robots never wade in; the player falls in instead (handled in updatePlay)
-    const solid = e === player ? isSolidTile :
+    // only players can enter open water holes (they fall in - see updatePlayer);
+    // animals and robots treat those tiles as walls
+    const solid = e instanceof Player ? isSolidTile :
       (tx, ty) => isSolidTile(tx, ty) || (inWorld(tx, ty) && ground[idx(tx, ty)] === 2);
     let blockedX = false, blockedY = false;
     // X axis
@@ -815,18 +948,20 @@
   }
 
   // ------------------------------------------------------------ actions
-  // left click is the bow, always
-  function clickAction() {
+  // Every action takes the player performing it, so the local human, an AI fill
+  // and a future network peer all reach the world through the same calls.
+
+  // left click is the bow, always: the press only records the intent
+  function clickAction(p) {
     SFX.unlock();
-    if (player.fallT > 0) return; // no tool use in the water (sliding is fine - shoot on the move)
-    if (!player.charging && player.swingT <= 0) { player.charging = true; player.chargeT = 0; SFX.bowDraw(); }
+    p.input.fire = true;
   }
 
-  // what E would work right now: the tile under the cursor, if it holds
+  // what E would work right now for p: the tile p is aiming at, if it holds
   // something a tool can harvest (bare ice counts, for the pick). Shared by
-  // tryWork() and the cursor so the lock ring can never lie about E.
-  function workTarget() {
-    const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
+  // tryWork(), the AI and the cursor, so the lock ring can never lie about E.
+  function workTarget(p) {
+    const tx = Math.floor(p.input.aimX / TILE), ty = Math.floor(p.input.aimY / TILE);
     if (!inWorld(tx, ty)) return null;
     const o = objects[idx(tx, ty)];
     let t = -1;
@@ -837,7 +972,7 @@
     } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
     if (t < 0) return null;
     // tile-based, not a radius: only the ring of tiles around the one you stand on
-    const ptx = Math.floor(player.x / TILE), pty = Math.floor(player.y / TILE);
+    const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
     const near = Math.max(Math.abs(tx - ptx), Math.abs(ty - pty)) <= WORK_REACH;
     return { o, tx, ty, tool: t, near };
   }
@@ -849,123 +984,128 @@
     return null;
   }
   // bow-fishing works when the player stands on ice with the fish in FISH_CATCH_R
-  function fishInRange(f) {
-    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+  function fishInRange(f, p) {
+    p = p || player;
+    const ftx = Math.floor(p.x / TILE), fty = Math.floor((p.y + 4) / TILE);
     return inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1 &&
-      Math.hypot(f.x - player.x, f.y - player.y) < FISH_CATCH_R;
+      Math.hypot(f.x - p.x, f.y - p.y) < FISH_CATCH_R;
   }
 
   // E: swing the right tool at the cursor's tile. Held E repeats every swing
   // cooldown; the bow comes back on its own once the cooldown runs out.
-  function tryWork() {
-    if (player.swingCd > 0 || player.fallT > 0 || player.dodgeT > 0) return;
-    const t = workTarget();
+  function tryWork(p) {
+    if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0) return;
+    const t = workTarget(p);
     if (!t || !t.near) return;
-    if (player.charging) { player.charging = false; player.chargeT = 0; } // work drops the draw
-    player.tool = t.tool;
-    player.workTx = t.tx; player.workTy = t.ty;
-    const dx = t.tx * TILE + 8 - player.x, dy = t.ty * TILE + 8 - player.y;
-    player.swingDir = Math.atan2(dy, dx);
-    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
-    else player.dir = dy > 0 ? 'down' : 'up';
-    player.swingT = 0.18;
-    player.swingCd = 0.34;
-    player.swingHitDone = false;
-    SFX.swing();
+    if (p.charging) { p.charging = false; p.chargeT = 0; } // work drops the draw
+    p.tool = t.tool;
+    p.workTx = t.tx; p.workTy = t.ty;
+    const dx = t.tx * TILE + 8 - p.x, dy = t.ty * TILE + 8 - p.y;
+    p.swingDir = Math.atan2(dy, dx);
+    if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+    else p.dir = dy > 0 ? 'down' : 'up';
+    p.swingT = 0.18;
+    p.swingCd = 0.34;
+    p.swingHitDone = false;
+    if (nearPlayer(p.x, p.y)) SFX.swing();
   }
 
   // dodge roll: dash with i-frames in the held movement direction (8-way),
   // falling back to the facing direction when no key is down
-  function tryDodge() {
-    if (state.paused || state.mapOpen || state.settingsOpen || state.wheel) return;
-    if (player.dodgeT > 0 || player.dodgeCharges <= 0 || player.fallT > 0) return;
-    let dx = 0, dy = 0;
-    if (keys['w'] || keys['arrowup']) dy -= 1;
-    if (keys['s'] || keys['arrowdown']) dy += 1;
-    if (keys['a'] || keys['arrowleft']) dx -= 1;
-    if (keys['d'] || keys['arrowright']) dx += 1;
+  function tryDodge(p) {
+    if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead) return;
+    let dx = p.input.mx, dy = p.input.my;
     if (!dx && !dy) {
-      dx = player.dir === 'left' ? -1 : player.dir === 'right' ? 1 : 0;
-      dy = player.dir === 'up' ? -1 : player.dir === 'down' ? 1 : 0;
+      dx = p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0;
+      dy = p.dir === 'up' ? -1 : p.dir === 'down' ? 1 : 0;
     }
     const d = Math.hypot(dx, dy) || 1;
     // impulse into the shared velocity: a dash never slows you below the speed
     // you already carry, so on ice dashes chain into real speed
-    const v = Math.max(DODGE_SPEED, Math.hypot(player.vx, player.vy));
-    player.dodgeVX = dx / d * v; // kept for the roll spin/ghost render
-    player.dodgeVY = dy / d * v;
-    player.vx = player.dodgeVX;
-    player.vy = player.dodgeVY;
-    player.dodgeT = DODGE_T;
-    player.dodgeDustT = 0;
+    const v = Math.max(DODGE_SPEED, Math.hypot(p.vx, p.vy));
+    p.dodgeVX = dx / d * v; // kept for the roll spin/ghost render
+    p.dodgeVY = dy / d * v;
+    p.vx = p.dodgeVX;
+    p.vy = p.dodgeVY;
+    p.dodgeT = DODGE_T;
+    p.dodgeDustT = 0;
     // remember the fill level before the spend so the bar can ghost the lost chunk
-    const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
-    player.stamGhost = Math.max(player.stamGhost, (player.dodgeCharges + regenP) / DODGE_CHARGES);
-    player.stamGhostT = 0.3;
-    player.dodgeCharges--;
-    if (player.dodgeRegenT <= 0) player.dodgeRegenT = DODGE_CD;
-    player.invuln = Math.max(player.invuln, DODGE_T + 0.05);
-    player.kbx = player.kby = 0;
-    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
-    else if (dy !== 0) player.dir = dy > 0 ? 'down' : 'up';
-    burst(player.x, player.y + 4, '#dfe8f4', 6, 40, 0.35, true);
-    SFX.dodge();
+    const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+    p.stamGhost = Math.max(p.stamGhost, (p.dodgeCharges + regenP) / DODGE_CHARGES);
+    p.stamGhostT = 0.3;
+    p.dodgeCharges--;
+    if (p.dodgeRegenT <= 0) p.dodgeRegenT = DODGE_CD;
+    p.invuln = Math.max(p.invuln, DODGE_T + 0.05);
+    p.kbx = p.kby = 0;
+    if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+    else if (dy !== 0) p.dir = dy > 0 ? 'down' : 'up';
+    burst(p.x, p.y + 4, '#dfe8f4', 6, 40, 0.35, true);
+    if (nearPlayer(p.x, p.y)) SFX.dodge();
   }
 
-  function fireArrow() {
+  function fireArrow(p) {
     // bow-fishing: standing on ice with a fish right underfoot spears it
-    // through the sheet instead of loosing the arrow
-    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
+    // through the sheet instead of loosing the arrow. Two players can reach the
+    // same fish in one step, so the catch is contested, not first-come.
+    const ftx = Math.floor(p.x / TILE), fty = Math.floor((p.y + 4) / TILE);
     if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
       let bi = -1, bd = FISH_CATCH_R;
       for (let i = 0; i < fish.length; i++) {
-        const d = Math.hypot(fish[i].x - player.x, fish[i].y - player.y);
+        const d = Math.hypot(fish[i].x - p.x, fish[i].y - p.y);
         if (d < bd) { bd = d; bi = i; }
       }
       if (bi >= 0) {
         const f = fish[bi];
-        fish.splice(bi, 1);
-        inv.fish++;
-        addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
-        burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
-        burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
-        SFX.splash();
-        SFX.pickup();
+        contest('fish:' + bi, p, () => {
+          const j = fish.indexOf(f);
+          if (j < 0) return;
+          fish.splice(j, 1);
+          p.inv.fish++;
+          addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
+          burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
+          burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
+          if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.pickup(); }
+        });
         return;
       }
     }
-    const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
+    const pw = Math.min(1, Math.max(0.18, p.chargeT / BOW_CHARGE));
     // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise the
-    // flight runs parallel to the cursor line, a few px above it, and never meets it
-    const dx = mouse.x + camX - player.x;
-    const dy = mouse.y + camY - (player.y - BOW_Y);
+    // flight runs parallel to the aim line, a few px above it, and never meets it
+    const dx = p.input.aimX - p.x;
+    const dy = p.input.aimY - (p.y - BOW_Y);
     const d = Math.hypot(dx, dy) || 1;
-    const spd = 170 + 190 * p;
+    const spd = 170 + 190 * pw;
     arrows.push({
-      x: player.x, y: player.y - BOW_Y,
+      x: p.x, y: p.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
-      t: 0, life: 0.85, dmg: Math.round(4 + 9 * p), pow: p,
+      t: 0, life: 0.85, dmg: Math.round(4 + 9 * pw), pow: pw,
+      owner: p.id, team: p.team, // whose shot it is - it never hits its own side
     });
-    if (Math.abs(dx) > Math.abs(dy)) player.dir = dx > 0 ? 'right' : 'left';
-    else player.dir = dy > 0 ? 'down' : 'up';
-    SFX.arrow();
+    if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+    else p.dir = dy > 0 ? 'down' : 'up';
+    if (nearPlayer(p.x, p.y)) SFX.arrow();
   }
 
   // the swing lands on the tile tryWork() locked, whatever is there by now
-  // (a robot may have felled the tree mid-swing: then it's just air)
-  function swingHit() {
-    const tx = player.workTx, ty = player.workTy;
+  // (a robot may have felled the tree mid-swing: then it's just air). Two
+  // players can land on the same tile in one step - only one swing counts.
+  function swingHit(p) {
+    const tx = p.workTx, ty = p.workTy;
     if (!inWorld(tx, ty)) return;
-    const o = objects[idx(tx, ty)];
-    if (o) { if (o.type !== 'stump' && !STRUCTS[o.type]) hitObject(o); }
-    else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty);
+    contest('work:' + idx(tx, ty), p, () => {
+      const o = objects[idx(tx, ty)];
+      if (o) { if (o.type !== 'stump' && !STRUCTS[o.type]) hitObject(o, p); }
+      else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty, p);
+    });
   }
 
-  function crackIce(tx, ty) {
+  function crackIce(tx, ty, p) {
+    p = p || player;
     const i = idx(tx, ty);
     const px = tx * TILE + 8, py = ty * TILE + 8;
     const hits = (iceCracks.get(i) || 0) + 1;
-    SFX.mine();
+    if (nearPlayer(px, py)) SFX.mine();
     burst(px, py, '#ddf1f8', 6, 45, 0.4, true);
     if (hits >= ICE_HOLE_HITS) {
       // broken through: the tile becomes open water
@@ -973,8 +1113,8 @@
       ground[i] = 2;
       holes.push(i);
       repaintGround(tx, ty);
-      SFX.splash();
-      state.shake = Math.max(state.shake, 2);
+      if (nearPlayer(px, py)) SFX.splash();
+      if (p === player) state.shake = Math.max(state.shake, 2);
       burst(px, py, '#3a6080', 10, 50, 0.5, true);
       burst(px, py, '#ddf1f8', 8, 55, 0.5, true);
       // the noise sends nearby fish darting away
@@ -989,8 +1129,8 @@
     }
   }
 
-  // nearest tile the player can stand on - used to climb out of a hole
-  function nearestDryTile(x, y) {
+  // nearest tile a player can stand on - used to climb out of a hole
+  function nearestDryTile(x, y, p) {
     const ctx0 = Math.floor(x / TILE), cty0 = Math.floor(y / TILE);
     for (let r = 1; r <= 8; r++) {
       let best = null, bd = 1e9;
@@ -1003,16 +1143,18 @@
       }
       if (best) return best;
     }
-    return playerSpawn;
+    return (p || player).spawn;
   }
 
-  function hitObject(o) {
+  function hitObject(o, p) {
+    p = p || player;
     const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+    const near = nearPlayer(ox, oy); // remote players' work must not spam the mix
     // hard tool gating: the wrong tool bounces off instead of harvesting
-    const k = TOOLS[player.tool].key;
+    const k = TOOLS[p.tool].key;
     if ((o.type === 'tree' && k !== 'axe') ||
         (o.type === 'rock' && k !== 'pick')) {
-      SFX.deny();
+      if (near) SFX.deny();
       addFloater(ox, oy - 14, o.type === 'tree' ? 'NEEDS AXE' : 'NEEDS PICKAXE', '#9fb6d8');
       return;
     }
@@ -1020,15 +1162,15 @@
     o.shake = 0.22;
     if (o.type === 'tree') {
       o.hp--;
-      SFX.chop();
+      if (near) SFX.chop();
       spawnDrop(ox, oy, 'gold', YIELD.treeHit);
       burst(ox, oy - 10, '#eef4fb', 6, 40, 0.5, true);
       burst(ox, oy - 12, '#3f7a5c', 3, 30, 0.4, true);
       if (o.hp <= 0) {
         objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
-        SFX.treeFall();
-        state.shake = Math.max(state.shake, 2.5);
-        if (!state.hints.stump) {
+        if (near) SFX.treeFall();
+        if (p === player) state.shake = Math.max(state.shake, 2.5);
+        if (p === player && !state.hints.stump) {
           state.hints.stump = true;
           showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
         }
@@ -1039,18 +1181,18 @@
           spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2); spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2);
           burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
           addFloater(ox, oy - 18, 'JACKPOT!', '#f2cc6a');
-          SFX.pickup();
+          if (near) SFX.pickup();
         }
       }
     } else if (o.type === 'rock') {
       o.hp--;
-      SFX.mine();
+      if (near) SFX.mine();
       spawnDrop(ox, oy, 'gold', YIELD.rockHit);
       burst(ox, oy - 4, '#a8b0c4', 6, 45, 0.4, true);
       if (o.hp <= 0) {
         objects[idx(o.tx, o.ty)] = null;
-        SFX.break_();
-        state.shake = Math.max(state.shake, 2);
+        if (near) SFX.break_();
+        if (p === player) state.shake = Math.max(state.shake, 2);
         spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2);
         burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
       }
@@ -1058,15 +1200,15 @@
       if (o.berries > 0) {
         o.berries = 0;
         o.regrow = 70;
-        SFX.pickup();
+        if (near) SFX.pickup();
         spawnDrop(ox, oy, 'berry'); spawnDrop(ox, oy, 'berry');
         burst(ox, oy - 4, '#4c8560', 5, 35, 0.4, true);
-      } else {
+      } else if (near) {
         SFX.swing();
       }
     } else if (STRUCTS[o.type]) {
       o.hp -= 10;
-      SFX.hit();
+      if (near) SFX.hit();
       burst(ox, oy - 4, '#a3794f', 5, 40, 0.4, true);
       if (o.hp <= 0) destroyStructure(o, true);
     }
@@ -1076,7 +1218,7 @@
     if (STRUCTS[o.type]) removeStruct(o);
     else objects[idx(o.tx, o.ty)] = null;
     const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
-    SFX.break_();
+    if (nearPlayer(ox, oy)) SFX.break_();
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
     if (refund && STRUCTS[o.type]) {
@@ -1097,57 +1239,64 @@
     return total;
   }
 
-  function placeStruct(tx, ty, type) {
+  // Building is a contested order: two players can claim the same stump in one
+  // step. The claim is checked and paid for when it wins, so a loser keeps its
+  // gold. p defaults to the local player (DBG staging).
+  function placeStruct(tx, ty, type, p) {
+    p = p || player;
+    const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
     const site = objAt(tx, ty);
-    if (!site || site.type !== 'stump') { SFX.deny(); return; }
+    if (!site || site.type !== 'stump') { deny(); return; }
     const cxp = tx * TILE + 8, cyp = ty * TILE + 8;
-    if (Math.hypot(cxp - player.x, cyp - player.y) > 60) { SFX.deny(); return; }
-    // all four buildings are solid - never let the player entomb themselves
-    if (Math.abs(cxp - player.x) < 8 + PLAYER_R && Math.abs(cyp - player.y) < 8 + PLAYER_R) {
-      SFX.deny();
-      showMsg('STEP OFF THE STUMP FIRST', 1.6);
+    if (Math.hypot(cxp - p.x, cyp - p.y) > 60) { deny(); return; }
+    // all four buildings are solid - never let a player entomb themselves
+    if (Math.abs(cxp - p.x) < 8 + PLAYER_R && Math.abs(cyp - p.y) < 8 + PLAYER_R) {
+      deny('STEP OFF THE STUMP FIRST', 1.6);
       return;
     }
     const t0 = STRUCTS[type].tiers[0];
-    if (!canAfford(t0.cost)) {
-      SFX.deny();
-      showMsg('NOT ENOUGH RESOURCES', 1.6);
-      return;
-    }
-    pay(t0.cost);
-    const o = placeObj(tx, ty, type, {
-      tier: 0, hp: Math.ceil(t0.hp * 0.3), maxHp: t0.hp,
-      building: true, buildT: 0, buildTotal: t0.buildT, dustT: 0,
+    if (!canAfford(t0.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
+    contest('site:' + idx(tx, ty), p, () => {
+      const s = objAt(tx, ty);
+      if (!s || s.type !== 'stump' || !canAfford(t0.cost, p)) return;
+      pay(t0.cost, p);
+      const o = placeObj(tx, ty, type, {
+        tier: 0, hp: Math.ceil(t0.hp * 0.3), maxHp: t0.hp,
+        building: true, buildT: 0, buildTotal: t0.buildT, dustT: 0,
+        owner: p.id, team: p.team, // paints the sprite and gates the manage wheel
+      });
+      if (type === 'turret') o.cd = 0;
+      if (type === 'generator') o.payT = 0;
+      if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
+      structures.push(o);
+      if (nearPlayer(cxp, cyp)) SFX.place();
+      burst(cxp, cyp, '#eef4fb', 8, 40, 0.4, true);
     });
-    if (type === 'turret') o.cd = 0;
-    if (type === 'generator') o.payT = 0;
-    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
-    structures.push(o);
-    SFX.place();
-    burst(cxp, cyp, '#eef4fb', 8, 40, 0.4, true);
   }
 
-  function startUpgrade(o) {
-    if (o.building) return;
-    if (o.tier >= 2) { SFX.deny(); showMsg('MAX TIER', 1.4); return; }
+  // only the owning side may upgrade or demolish
+  function ownsStruct(o, p) { return o.team === undefined || o.team === p.team; }
+
+  function startUpgrade(o, p) {
+    p = p || player;
+    const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
+    if (o.building || !ownsStruct(o, p)) { deny(); return; }
+    if (o.tier >= 2) { deny('MAX TIER', 1.4); return; }
     const t = STRUCTS[o.type].tiers[o.tier + 1];
-    if (!canAfford(t.cost)) {
-      SFX.deny();
-      showMsg('NOT ENOUGH RESOURCES', 1.6);
-      return;
-    }
-    pay(t.cost);
+    if (!canAfford(t.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
+    pay(t.cost, p);
     o.tier++;
     o.maxHp = t.hp;
     o.building = true;
     o.buildT = 0;
     o.buildTotal = t.buildT;
     o.dustT = 0;
-    SFX.place();
+    if (nearPlayer(o.tx * TILE + 8, o.ty * TILE + 8)) SFX.place();
     burst(o.tx * TILE + 8, o.ty * TILE + 8, '#eef4fb', 8, 40, 0.4, true);
   }
 
-  function demolishStruct(o) {
+  function demolishStruct(o, p) {
+    if (!ownsStruct(o, p || player)) { if ((p || player) === player) SFX.deny(); return; }
     destroyStructure(o, true);
   }
 
@@ -1239,7 +1388,7 @@
     while (fish.length < FISH_COUNT && spots.length && guard++ < 400) {
       const i = spots[randi(0, spots.length - 1)];
       const x = (i % WORLD + 0.5) * TILE, y = ((i / WORLD | 0) + 0.5) * TILE;
-      if (minPlayerDist && Math.hypot(x - player.x, y - player.y) < minPlayerDist) continue;
+      if (minPlayerDist && players.some((p) => p.active && Math.hypot(x - p.x, y - p.y) < minPlayerDist)) continue;
       addFish(x, y);
     }
   }
@@ -1291,15 +1440,20 @@
     const rabbit = a.kind === 'rabbit';
     const r = rabbit ? 2.5 : 5;
 
-    // rabbits are skittish: a player closing in sends them bolting
-    if (rabbit && a.fleeT <= 0 && Math.hypot(player.x - a.x, player.y - a.y) < 26) {
-      a.fleeT = rand(0.6, 1.1);
+    // rabbits are skittish: ANY player closing in sends them bolting
+    let scare = null, sd = 1e9;
+    for (const p of players) {
+      if (!p.active || p.dead) continue;
+      const d = Math.hypot(p.x - a.x, p.y - a.y);
+      if (d < sd) { sd = d; scare = p; }
     }
+    if (rabbit && a.fleeT <= 0 && sd < 26) a.fleeT = rand(0.6, 1.1);
 
     let moving = false;
     if (a.fleeT > 0) {
       a.fleeT -= dt;
-      let dx = a.x - player.x, dy = a.y - player.y;
+      const from = scare || player;
+      let dx = a.x - from.x, dy = a.y - from.y;
       const d = Math.hypot(dx, dy) || 1;
       dx /= d; dy /= d;
       if (a.jinkA) { // slight zig-zag so the flight path reads alive
@@ -1347,7 +1501,7 @@
 
     if (a.hp <= 0 && !a.dead) {
       a.dead = true;
-      SFX.monsterDie();
+      if (nearPlayer(a.x, a.y)) SFX.monsterDie();
       if (rabbit) {
         burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
         burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
@@ -1364,7 +1518,8 @@
 
   // ------------------------------------------------------------ structures & robots
   const RES_COLORS = { gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8' };
-  function nearPlayer(x, y, r) { return Math.hypot(player.x - x, player.y - y) < (r || 180); }
+  // audio/screen gating: is this happening near the local listener?
+  function nearPlayer(x, y, r) { return !!player && Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
   function updateStructures(dt) {
     for (let i = tracers.length - 1; i >= 0; i--) {
@@ -1388,8 +1543,7 @@
           burst(ox, oy - 4, '#8a6142', 12, 55, 0.6, true);
           burst(ox, oy - 4, '#eef4fb', 10, 50, 0.6, true);
           burst(ox, oy - 4, o.tier === 2 ? '#f2cc6a' : o.tier === 1 ? '#a8b0c4' : '#c9a06a', 6, 45, 0.5, true);
-          SFX.place();
-          state.shake = Math.max(state.shake, 1.5);
+          if (nearPlayer(ox, oy)) { SFX.place(); state.shake = Math.max(state.shake, 1.5); }
           if (o.type === 'turret') o.cd = 0;
           if (o.type === 'generator') o.payT = STRUCTS.generator.tiers[o.tier].period;
           if (o.type === 'spawner') o.respawnT = 0;
@@ -1440,7 +1594,8 @@
     }
     return {
       x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
-      home: sp, tgt: null, workT: 0, stuckT: 0, atkCd: 0,
+      home: sp, team: sp.team === undefined ? 0 : sp.team, owner: sp.owner === undefined ? 0 : sp.owner,
+      tgt: null, workT: 0, stuckT: 0, atkCd: 0,
       jitterT: 0, jitterA: 0,
       carry: 0, // gold held, deposited at home
       moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
@@ -1502,7 +1657,7 @@
 
     const deposit = () => {
       if (b.carry <= 0) return;
-      inv.gold += b.carry;
+      (players[b.owner] || player).inv.gold += b.carry;
       addFloater(hx, hy - 14, '+' + b.carry, RES_COLORS.gold);
       b.carry = 0;
       if (nearPlayer(hx, hy)) SFX.pickup();
@@ -1628,72 +1783,313 @@
     return { cx, cy, opts, seg };
   }
 
+  // the wheel writes a one-shot order into the local player's input; the sim
+  // performs it next step, so a build races other players' orders fairly
   function resolveWheel() {
     const w = state.wheel;
     const L = wheelLayout();
     if (L.seg < 0) return; // released in the deadzone = cancel
-    const opt = L.opts[L.seg];
-    if (w.kind === 'build') {
-      placeStruct(w.tx, w.ty, opt.id);
-      return;
-    }
-    const o = objAt(w.tx, w.ty);
-    if (!o || !STRUCTS[o.type] || o.building) return;
-    if (opt.id === 'upgrade') startUpgrade(o);
-    else if (opt.id === 'demolish') demolishStruct(o);
-    else if (opt.id === 'mode') {
+    player.input.cmd = { kind: w.kind === 'build' ? 'build' : L.opts[L.seg].id, tx: w.tx, ty: w.ty, id: L.opts[L.seg].id };
+  }
+
+  // run a queued build/manage order for any player
+  function runCmd(p, c) {
+    if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
+    const o = objAt(c.tx, c.ty);
+    if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
+    if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
+    if (c.kind === 'upgrade') startUpgrade(o, p);
+    else if (c.kind === 'demolish') demolishStruct(o, p);
+    else if (c.kind === 'mode') {
       o.mode = o.mode === 'gather' ? 'guard' : 'gather';
       addFloater(o.tx * TILE + 8, o.ty * TILE - 4, o.mode.toUpperCase(), '#ffd95c');
-      SFX.pickup();
+      if (nearPlayer(o.tx * TILE + 8, o.ty * TILE + 8)) SFX.pickup();
     }
   }
 
-  function damagePlayer(dmg, dx, dy) {
-    player.hp -= dmg;
-    player.hurtT = 0.25;
-    player.invuln = 0.7;
-    player.kbx = dx * 110; player.kby = dy * 110;
-    state.shake = Math.max(state.shake, 3);
-    addDmgFloater(player.x, player.y - 18, dmg, true);
-    SFX.hurt();
-    burst(player.x, player.y - 6, '#e04a54', 8, 50, 0.45);
-    if (player.hp <= 0) die();
+  function damagePlayer(p, dmg, dx, dy) {
+    if (p.dead || p.invuln > 0) return;
+    p.hp -= dmg;
+    p.hurtT = 0.25;
+    p.invuln = 0.7;
+    p.kbx = dx * 110; p.kby = dy * 110;
+    if (p === player) state.shake = Math.max(state.shake, 3);
+    addDmgFloater(p.x, p.y - 18, dmg, p === player);
+    if (nearPlayer(p.x, p.y)) SFX.hurt();
+    burst(p.x, p.y - 6, '#e04a54', 8, 50, 0.45);
+    if (p.hp <= 0) die(p);
   }
 
-  function die() {
-    state.mode = 'dead';
-    player.charging = false;
-    player.chargeT = 0;
-    player.dodgeT = 0;
-    player.vx = player.vy = 0;
-    player.sliding = false;
-    player.fallT = 0;
-    state.mapOpen = false;
-    state.settingsOpen = false;
-    state.wheel = null;
-    state.deadTimer = 0;
-    inv.gold = Math.ceil(inv.gold * 0.6);
-    inv.berry = Math.ceil(inv.berry * 0.6);
-    inv.fish = Math.ceil(inv.fish * 0.6);
+  // any slot can go down; only the local one takes the screen with it
+  function die(p) {
+    p.dead = true;
+    p.respawnT = 2.6;
+    p.charging = false;
+    p.chargeT = 0;
+    p.dodgeT = 0;
+    p.vx = p.vy = 0;
+    p.sliding = false;
+    p.fallT = 0;
+    p.swingT = p.swingCd = 0;
+    p.inv.gold = Math.ceil(p.inv.gold * 0.6);
+    p.inv.berry = Math.ceil(p.inv.berry * 0.6);
+    p.inv.fish = Math.ceil(p.inv.fish * 0.6);
+    burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
+    if (p === player) {
+      state.mode = 'dead';
+      state.mapOpen = false;
+      state.settingsOpen = false;
+      state.wheel = null;
+      state.deadTimer = 0;
+    } else {
+      addFloater(p.x, p.y - 20, p.name + ' DOWN', TEAMS[p.team].mark);
+    }
   }
 
-  function respawn() {
-    // back at the original camp pocket
-    player.x = (playerSpawn.tx + 0.5) * TILE;
-    player.y = (playerSpawn.ty + 0.5) * TILE;
-    player.hp = player.maxHp;
-    player.invuln = 3;
-    player.kbx = player.kby = 0;
-    player.vx = player.vy = 0;
-    player.sliding = false;
-    player.fallT = 0;
-    player.dodgeT = 0;
-    player.dodgeCharges = DODGE_CHARGES;
-    player.dodgeRegenT = 0;
-    player.swingT = player.swingCd = 0;
-    player.tool = TOOL_BOW;
-    state.mode = 'play';
-    showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
+  function respawn(p) {
+    p.reset(false); // back at its own camp pocket, with i-frames
+    if (p === player) {
+      state.mode = 'play';
+      showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
+    }
+  }
+
+  // ------------------------------------------------------------ ai
+  // Bot slots. A bot only ever writes the same input struct a human fills in -
+  // movement axis, aim point, fire / work / slide / dodge and the odd build
+  // order - so it can never do anything a player couldn't. The brain is a small
+  // priority ladder, re-picked a few times a second: eat, fight, hunt, unwedge,
+  // loot, spend, harvest, roam. Every pursuit carries a give-up timer, because
+  // nothing here paths around an obstacle.
+  const AI_SIGHT = 150;   // px: how far a bot notices a rival
+  const AI_HUNT = 120;    // px: how far it will go after an animal
+  const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
+
+  function aiNearestEnemy(p) {
+    let best = null, bd = AI_SIGHT;
+    for (const q of players) {
+      if (!enemyOf(p, q)) continue;
+      const d = Math.hypot(q.x - p.x, q.y - p.y);
+      if (d < bd) { bd = d; best = q; }
+    }
+    return best;
+  }
+
+  function aiNearestAnimal(p) {
+    let best = null, bd = AI_HUNT;
+    for (const a of animals) {
+      if (a.dead || a === p.ai.huntAvoid) continue;
+      const d = Math.hypot(a.x - p.x, a.y - p.y);
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+  }
+
+  // arrows die on solids, so a bot only shoots when the flight path is open
+  function aiLineClear(p, x, y) {
+    const dx = x - p.x, dy = y - (p.y - BOW_Y), d = Math.hypot(dx, dy) || 1;
+    for (let s = 10; s < d; s += 8) {
+      if (isSolidTile(Math.floor((p.x + dx / d * s) / TILE), Math.floor((p.y - BOW_Y + dy / d * s) / TILE))) return false;
+    }
+    return true;
+  }
+
+  // Bots have no pathfinding, so they only take work they can stand beside in
+  // the open: a target ringed by solids is a dead end inside the treeline, and
+  // chasing one walks the bot in and wedges it there.
+  function aiOpenSides(tx, ty) {
+    let n = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const nx = tx + dx, ny = ty + dy;
+      if (inWorld(nx, ny) && !isSolidTile(nx, ny) && ground[idx(nx, ny)] !== 2) n++;
+    }
+    return n;
+  }
+
+  function updateAI(p, dt) {
+    const inp = p.input, ai = p.ai;
+    inp.mx = 0; inp.my = 0; inp.work = false; inp.slide = false;
+    if (p.dead || p.fallT > 0) { inp.fire = false; return; }
+
+    const steerTo = (x, y) => {
+      const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy) || 1;
+      inp.mx = dx / d; inp.my = dy / d;
+      return d;
+    };
+    const aimAt = (x, y) => { inp.aimX = x; inp.aimY = y; };
+
+    ai.thinkT -= dt;
+    if (ai.buildT > 0) ai.buildT -= dt;
+
+    // 1. food, exactly as a human eats it (Q / F)
+    if (p.hp < p.maxHp * 0.5 && p.inv.fish > 0) inp.eatFish = true;
+    else if (p.hp < p.maxHp * 0.8 && p.inv.berry > 0) inp.eatBerry = true;
+
+    // 2. a rival in sight: circle at bow range and shoot
+    const foe = aiNearestEnemy(p);
+    if (foe) {
+      const d = Math.hypot(foe.x - p.x, foe.y - p.y);
+      aimAt(foe.x, foe.y - 6);
+      const side = p.id % 2 ? 1 : -1;
+      const a = Math.atan2(foe.y - p.y, foe.x - p.x);
+      // hold ~70px: close in when far, back off when crowded, strafe in between
+      const clear = aiLineClear(p, foe.x, foe.y - 6);
+      const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
+      inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
+      inp.fire = clear && p.chargeT < BOW_CHARGE * 0.95; // draw, then loose near full
+      if (p.hp < p.maxHp * 0.45 && p.dodgeCharges > 0 && rng() < dt * 2) inp.dodge = true;
+      ai.tgt = null;
+      return;
+    }
+
+    // 3. meat is gold: chase and shoot the nearest animal, but give up on one
+    //    it cannot corner - a bot pinned against a treeline would chase forever
+    if (ai.huntAvoidT > 0) { ai.huntAvoidT -= dt; if (ai.huntAvoidT <= 0) ai.huntAvoid = null; }
+    const prey = aiNearestAnimal(p);
+    if (prey) {
+      if (prey !== ai.huntTgt) { ai.huntTgt = prey; ai.huntT = 0; }
+      ai.huntT += dt;
+      if (ai.huntT > 6) {
+        ai.huntAvoid = prey; ai.huntAvoidT = 15;
+        ai.huntTgt = null; ai.huntT = 0;
+      } else {
+        const clear = aiLineClear(p, prey.x, prey.y - 3);
+        const d = Math.hypot(prey.x - p.x, prey.y - p.y);
+        aimAt(prey.x, prey.y - 3);
+        if (d > 55 || !clear) steerTo(prey.x, prey.y);
+        inp.fire = clear && p.chargeT < BOW_CHARGE * 0.8;
+        ai.tgt = null;
+        return;
+      }
+    }
+    inp.fire = false;
+
+    // 4. wedged a moment ago: head back to open ground before doing anything else
+    if (ai.escapeT > 0) {
+      ai.escapeT -= dt;
+      steerTo(ai.wx, ai.wy);
+      aimAt(p.x + inp.mx * 24, p.y + inp.my * 24);
+      return;
+    }
+
+    // 5. loot on the ground is neutral and first-come: pick up what is close
+    let loot = null, ld = 72;
+    for (const d of drops) {
+      if (d.t < 0.35) continue;
+      const dd = Math.hypot(d.x - p.x, d.y - p.y);
+      if (dd < ld) { ld = dd; loot = d; }
+    }
+    if (loot && ai.lootT < 4) { ai.lootT += dt; aimAt(loot.x, loot.y); steerTo(loot.x, loot.y); return; }
+    if (!loot) ai.lootT = 0;
+
+    // 6. spend the purse: building is the only gold sink, so a bot with money
+    //    looks for a stump to build on, then for its own work to upgrade
+    if (ai.buildT <= 0 && p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold) {
+      const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
+      if (st) {
+        const sx = st.tx * TILE + 8, sy = st.ty * TILE + 8;
+        const d = Math.hypot(sx - p.x, sy - p.y);
+        if (d > 40) {
+          steerTo(sx, sy);
+          // a site it cannot actually walk to must not pin it there
+          ai.spendT += dt;
+          if (ai.spendT > 6) { ai.buildT = 15; ai.spendT = 0; }
+          return;
+        }
+        if (d > 16) { // clear of the site: order it
+          ai.spendT = 0;
+          inp.cmd = { kind: 'build', tx: st.tx, ty: st.ty, id: rng() < 0.3 ? 'spawner' : 'generator' };
+          ai.buildT = 12;
+          return;
+        }
+        // standing on the site: step off toward the openest neighbouring tile
+        // (straight back can be a tree, and then the bot never gets to build)
+        let bx = st.tx, by = st.ty, bs = -1;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = st.tx + dx, ny = st.ty + dy;
+          if (!inWorld(nx, ny) || isSolidTile(nx, ny) || ground[idx(nx, ny)] === 2) continue;
+          const o2 = aiOpenSides(nx, ny);
+          if (o2 > bs) { bs = o2; bx = nx; by = ny; }
+        }
+        steerTo((bx + 0.5) * TILE, (by + 0.5) * TILE);
+        ai.spendT += dt;
+        if (ai.spendT > 3) { ai.buildT = 15; ai.spendT = 0; } // wedged: go do something else
+        return;
+      }
+      const up = nearestObj(p.x, p.y, 3, (o) => STRUCTS[o.type] && !o.building &&
+        o.team === p.team && o.tier < 2 && canAfford(STRUCTS[o.type].tiers[o.tier + 1].cost, p));
+      if (up) {
+        inp.cmd = { kind: 'upgrade', tx: up.tx, ty: up.ty, id: 'upgrade' };
+        ai.buildT = 10;
+        return;
+      }
+      ai.buildT = 4; // nothing worth spending on nearby; look again shortly
+    }
+
+    // 7. harvest: walk to a tree/rock/berry bush and hold E on it
+    // (a stripped bush stops being work, so drop it the moment it empties)
+    if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
+      (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
+    ai.avoidT -= dt;
+    if (ai.avoidT <= 0) ai.avoid = null;
+    if (!ai.tgt && ai.thinkT <= 0) {
+      ai.thinkT = 0.6;
+      ai.tgt = nearestObj(p.x, p.y, AI_FORAGE, (o) => o !== ai.avoid &&
+        (o.type === 'tree' || o.type === 'rock' || (o.type === 'bush' && o.berries > 0)) &&
+        aiOpenSides(o.tx, o.ty) >= 3);
+      ai.tgtT = 0;
+    }
+    if (ai.tgt) {
+      const t = ai.tgt;
+      aimAt(t.tx * TILE + 8, t.ty * TILE + 8);
+      const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+      if (Math.max(Math.abs(t.tx - ptx), Math.abs(t.ty - pty)) <= WORK_REACH) {
+        inp.work = true;
+        ai.stuckT = 0;
+        ai.tgtT = 0; // swinging counts as progress
+        return;
+      }
+      // head for the nearest OPEN tile beside it - always approaching from one
+      // fixed side walks bots into the treeline and pins them there
+      let bx = t.tx, by = t.ty, bd = 1e9;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = t.tx + dx, ny = t.ty + dy;
+        if (!inWorld(nx, ny) || isSolidTile(nx, ny) || ground[idx(nx, ny)] === 2) continue;
+        const d = Math.hypot((nx + 0.5) * TILE - p.x, (ny + 0.5) * TILE - p.y);
+        if (d < bd) { bd = d; bx = nx; by = ny; }
+      }
+      steerTo((bx + 0.5) * TILE, (by + 0.5) * TILE);
+      // there is no pathfinding, so anything it grinds against or simply cannot
+      // reach in time gets dropped and left alone for a while
+      ai.stuckT = Math.hypot(p.vx, p.vy) < 25 ? ai.stuckT + dt : 0;
+      ai.tgtT += dt;
+      if (ai.stuckT > 2 || ai.tgtT > 8) {
+        ai.avoid = t; ai.avoidT = 12;
+        ai.tgt = null; ai.stuckT = 0; ai.tgtT = 0;
+        // back out to open ground before trying anything else: with no
+        // pathfinding, the only way out of a dead end is to leave it
+        ai.escapeT = 3;
+        ai.wx = (p.spawn.tx + 0.5) * TILE + rand(-5, 5) * TILE;
+        ai.wy = (p.spawn.ty + 0.5) * TILE + rand(-5, 5) * TILE;
+        ai.roam = 3;
+      }
+      return;
+    }
+
+    // 8. nothing to do: roam between its camp and the middle of the map
+    ai.roam -= dt;
+    if (ai.roam <= 0) {
+      ai.roam = rand(3, 7);
+      const toward = rng() < 0.5 ? { x: cx * TILE, y: cy * TILE } :
+        { x: (p.spawn.tx + 0.5) * TILE, y: (p.spawn.ty + 0.5) * TILE };
+      ai.wx = toward.x + rand(-14, 14) * TILE;
+      ai.wy = toward.y + rand(-14, 14) * TILE;
+    }
+    if (steerTo(ai.wx, ai.wy) < 20) ai.roam = 0;
+    aimAt(p.x + inp.mx * 24, p.y + inp.my * 24);
   }
 
   // ------------------------------------------------------------ update
@@ -1735,12 +2131,17 @@
     else dark = 1 - (t - (CYCLE - 10)) / 10;
     state.darkness = dark;
 
-    if (state.mode === 'dead') {
-      state.deadTimer += dt;
-      if (state.deadTimer > 2.6) respawn();
-    }
+    if (state.mode === 'dead') state.deadTimer += dt; // the overlay's fade; respawn is per player
 
-    if (state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen) updatePlay(dt);
+    // the match runs on while the local player is down - other slots are still
+    // playing. Only the local overlays (pause, map, settings) stop the sim.
+    if ((state.mode === 'play' || state.mode === 'dead') &&
+      !state.paused && !state.mapOpen && !state.settingsOpen) {
+      sampleHumanInput(player);
+      updatePlay(dt);
+    } else if (state.mode === 'play' || state.mode === 'dead') {
+      sampleHumanInput(player); // still drops a held draw when an overlay opens
+    }
 
     // camera
     const lookX = (mouse.x - VIEW_W / 2) * 0.12;
@@ -1759,234 +2160,15 @@
   }
 
   function updatePlay(dt) {
-    // input
-    let mx = 0, my = 0;
-    if (keys['w'] || keys['arrowup']) my -= 1;
-    if (keys['s'] || keys['arrowdown']) my += 1;
-    if (keys['a'] || keys['arrowleft']) mx -= 1;
-    if (keys['d'] || keys['arrowright']) mx += 1;
-    const len = Math.hypot(mx, my);
-    player.moving = len > 0;
-    if (len > 0) {
-      mx /= len; my /= len;
-      if (player.swingT <= 0) {
-        if (Math.abs(mx) > Math.abs(my)) player.dir = mx > 0 ? 'right' : 'left';
-        else player.dir = my > 0 ? 'down' : 'up';
-      }
+    state.tick++; // with SEED and the player id, this decides contested orders
+
+    // every slot steps through the same code, each off its own input struct
+    for (const p of players) {
+      if (!p.active) continue;
+      if (p.control === 'ai') updateAI(p, dt);
+      updatePlayer(p, dt);
     }
-
-    player.kbx = (player.kbx || 0) * Math.pow(0.01, dt);
-    player.kby = (player.kby || 0) * Math.pow(0.01, dt);
-
-    // ---- unified momentum: input accelerates vx/vy, the surface sets friction/caps
-    const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
-    const onIce = inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1;
-    let sp = Math.hypot(player.vx, player.vy);
-
-    // shift-slide: only engages above walking speed; keeps momentum, drops the tools
-    const wantSlide = keys['shift'] && player.dodgeT <= 0;
-    if (!player.sliding && wantSlide && sp > SLIDE_MIN) {
-      player.sliding = true;
-    }
-    if (player.sliding && (!wantSlide || sp < SLIDE_EXIT)) player.sliding = false;
-    // slide fatigue: builds on snow so long slides run out of glide, recovers on
-    // ice so a snow->ice->snow chain starts the snow leg fresh-ish
-    if (player.sliding) {
-      player.slideT = onIce ? Math.max(0, player.slideT - dt * 1.5) : player.slideT + dt;
-    } else {
-      player.slideT = 0;
-    }
-
-    if (player.fallT > 0) {
-      // floundering in an ice hole: no control until the climb-out
-      player.fallT -= dt;
-      player.vx = player.vy = 0;
-      player.sliding = false;
-      player.fallRipT -= dt;
-      if (player.fallRipT <= 0) {
-        player.fallRipT = 0.16;
-        burst(player.x + rand(-3, 3), player.y + 4, '#9fc4dd', 2, 16, 0.3, true);
-      }
-      if (player.fallT <= 0) {
-        // scramble out onto the nearest walkable tile
-        const out = nearestDryTile(player.x, player.y);
-        player.x = (out.tx + 0.5) * TILE;
-        player.y = (out.ty + 0.5) * TILE;
-        player.invuln = Math.max(player.invuln, 0.8);
-        burst(player.x, player.y + 4, '#cfe4f2', 8, 40, 0.45, true);
-        SFX.dodge();
-      }
-    } else if (player.dodgeT > 0) {
-      // rolling: the dash owns the velocity; friction waits until the roll ends,
-      // so whatever speed the dash reached is carried out for the surface to spend
-      player.dodgeT -= dt;
-      const mv = moveEntity(player, player.vx * dt, player.vy * dt, PLAYER_R);
-      if (mv.blockedX) player.vx = 0;
-      if (mv.blockedY) player.vy = 0;
-      player.dodgeDustT -= dt;
-      if (player.dodgeDustT <= 0) {
-        player.dodgeDustT = 0.05;
-        burst(player.x, player.y + 5, '#dfe8f4', 2, 22, 0.3, true);
-      }
-      if (player.dodgeT <= 0) burst(player.x, player.y + 4, '#cfd8e8', 4, 30, 0.3, true);
-    } else {
-      const chargeMul = player.charging ? 0.55 : 1; // drawn bow slows you
-      const walkMax = PLAYER_SPEED * chargeMul;
-
-      if (!onIce && !player.sliding && sp <= walkMax + 6) {
-        // plain snow walking: near-instant vector approach, tuned so it feels
-        // exactly like the old fixed-speed movement (settles in ~3 frames)
-        const f = 1 - Math.exp(-25 * dt);
-        player.vx += (mx * walkMax - player.vx) * f;
-        player.vy += (my * walkMax - player.vy) * f;
-      } else {
-        // carrying momentum (ice, slide, or overspeed on snow):
-        // steer the heading toward the input, ease the speed toward the target
-        let dirx = mx, diry = my;
-        if (sp > 1) { dirx = player.vx / sp; diry = player.vy / sp; }
-        let steer, decay, target;
-        if (player.sliding) {
-          // snow friction ramps with slide fatigue: early glide is cheap, the
-          // tail drops off hard so slides end decisively
-          steer = 1.7; target = 0;
-          decay = onIce ? 0.15 : Math.min(2.6, 0.35 + 0.45 * player.slideT);
-        } else if (onIce) {
-          const cap = ICE_MAX * chargeMul;
-          if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
-          else { steer = 0; target = 0; decay = 0.18; } // idle glide
-        } else {
-          steer = 4.5; target = len > 0 ? walkMax : 0; decay = 3.5; // snow kills overspeed fast unless you slide
-        }
-        if (len > 0 && steer > 0 && (dirx !== 0 || diry !== 0)) {
-          // carve: rotate the travel direction toward the input, never snap it
-          const cur = Math.atan2(diry, dirx), want = Math.atan2(my, mx);
-          let da = want - cur;
-          if (da > Math.PI) da -= Math.PI * 2;
-          if (da < -Math.PI) da += Math.PI * 2;
-          const na = cur + Math.max(-steer * dt, Math.min(steer * dt, da));
-          dirx = Math.cos(na); diry = Math.sin(na);
-        }
-        sp = target + (sp - target) * Math.exp(-decay * dt);
-        player.vx = dirx * sp;
-        player.vy = diry * sp;
-      }
-
-      const mv = moveEntity(player,
-        (player.vx + player.kbx) * dt,
-        (player.vy + player.kby) * dt, PLAYER_R);
-      if (mv.blockedX) player.vx = 0; // a wall kills that axis instead of grinding
-      if (mv.blockedY) player.vy = 0;
-    }
-
-    player.x = Math.max(8, Math.min(WORLD * TILE - 8, player.x));
-    player.y = Math.max(8, Math.min(WORLD * TILE - 8, player.y));
-
-    // carved ice holes: standing over open water plunges you in (an active
-    // dodge roll carries across the gap)
-    if (player.fallT <= 0 && player.dodgeT <= 0) {
-      const htx = Math.floor(player.x / TILE), hty = Math.floor((player.y + 4) / TILE);
-      if (inWorld(htx, hty) && ground[idx(htx, hty)] === 2) {
-        player.fallT = HOLE_FALL_T;
-        player.fallRipT = 0;
-        player.vx = player.vy = 0;
-        player.sliding = false;
-        player.slideT = 0;
-        if (player.charging) { player.charging = false; player.chargeT = 0; }
-        SFX.splash();
-        burst(player.x, player.y + 4, '#3a6080', 10, 55, 0.5, true);
-        burst(player.x, player.y + 2, '#ddf1f8', 8, 60, 0.5, true);
-        damagePlayer(HOLE_FALL_DMG, 0, 0);
-      }
-    }
-
-    // dodge charges refill one at a time
-    if (player.dodgeCharges < DODGE_CHARGES) {
-      player.dodgeRegenT -= dt;
-      if (player.dodgeRegenT <= 0) {
-        player.dodgeCharges++;
-        player.dodgeRegenT = player.dodgeCharges < DODGE_CHARGES ? DODGE_CD : 0;
-      }
-    }
-    // spent-stamina ghost: hold briefly, then drain toward the live fill
-    {
-      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
-      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
-      if (player.stamGhostT > 0) player.stamGhostT -= dt;
-      else player.stamGhost -= dt * 1.6;
-      if (player.stamGhost < frac) player.stamGhost = frac;
-    }
-
-    const spNow = Math.hypot(player.vx, player.vy);
-    if (spNow > 8 && player.dodgeT <= 0 && !player.sliding) {
-      player.animT += dt * 9;
-      player.footT -= dt;
-      if (player.footT <= 0) {
-        player.footT = 0.16;
-        player.footSide = 1 - player.footSide;
-        const side = player.footSide ? 2 : -2;
-        const px = player.dir === 'left' || player.dir === 'right' ? player.x : player.x + side;
-        const py = player.dir === 'left' || player.dir === 'right' ? player.y + 6 + (player.footSide ? 1 : -1) : player.y + 6;
-        footprints.push({ x: px, y: py, t: 0 });
-        if (footprints.length > 400) footprints.shift();
-      }
-    } else {
-      player.animT = 0; // sliding/gliding uses the standing pose
-    }
-
-    // fast slide: carve a double trail (footprint decals, spaced ~2.5px so the
-    // marks overlap into continuous lines) and kick up snow spray. Snow gets
-    // two-tone carved grooves (k:1, lip offset toward the outer side); ice gets
-    // thin frosted skate scratches (k:2).
-    if (player.sliding && spNow > TRAIL_MIN) {
-      player.trailD -= spNow * dt;
-      const nx = -player.vy / spNow, ny = player.vx / spNow;
-      const k = onIce ? 2 : 1;
-      let emit = 0;
-      while (player.trailD <= 0 && emit++ < 6) {
-        // interpolate the mark back along the path so the spacing stays even
-        // no matter how far a single frame travelled
-        const back = -player.trailD;
-        const bx = player.x - ny * back, by = player.y + 6 + nx * back;
-        footprints.push({ x: bx + nx * 2, y: by + ny * 2, t: 0, k });
-        footprints.push({ x: bx - nx * 2, y: by - ny * 2, t: 0, k });
-        player.trailD += 2.5;
-      }
-      while (footprints.length > 800) footprints.shift();
-      player.slideDustT -= dt;
-      if (player.slideDustT <= 0) {
-        player.slideDustT = 0.1;
-        burst(player.x, player.y + 5, '#eef4fb', 1, 18, 0.3, true);
-      }
-    }
-
-    // swing
-    player.swingCd = Math.max(0, player.swingCd - dt);
-    if (player.swingT > 0) {
-      player.swingT -= dt;
-      if (!player.swingHitDone && player.swingT < 0.12) {
-        player.swingHitDone = true;
-        swingHit();
-      }
-    }
-    // the work tool goes away with the swing cooldown; held E brings it right back
-    if (player.swingT <= 0 && player.swingCd <= 0) player.tool = TOOL_BOW;
-    if (keys['e']) tryWork();
-
-    // bow draw: charge up and keep facing the mouse
-    if (player.charging) {
-      player.chargeT = Math.min(BOW_CHARGE, player.chargeT + dt);
-      const adx = mouse.x + camX - player.x, ady = mouse.y + camY - player.y;
-      if (Math.abs(adx) > Math.abs(ady)) player.dir = adx > 0 ? 'right' : 'left';
-      else player.dir = ady > 0 ? 'down' : 'up';
-    }
-
-    player.hurtT = Math.max(0, player.hurtT - dt);
-    player.invuln = Math.max(0, player.invuln - dt);
-
-    // gentle regen in daylight
-    if (player.hp < player.maxHp && state.darkness < 0.3) {
-      player.hp = Math.min(player.maxHp, player.hp + dt * 0.6);
-    }
+    resolveContests(); // this step's work swings, build orders and fish claims
 
     // arrows in flight
     for (let i = arrows.length - 1; i >= 0; i--) {
@@ -2000,6 +2182,19 @@
       }
       if (!dead) {
         const vd = Math.hypot(a.vx, a.vy) || 1;
+        // players first: the same shot that drops a deer drops a rival
+        for (const t of players) {
+          if (a.team === t.team || !t.active || t.dead || t.invuln > 0) continue;
+          if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
+            damagePlayer(t, a.dmg, a.vx / vd, a.vy / vd);
+            burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+            dead = true;
+            break;
+          }
+        }
+      }
+      if (!dead) {
+        const vd = Math.hypot(a.vx, a.vy) || 1;
         for (const an of animals) {
           if (Math.hypot(an.x - a.x, an.y - 3 - a.y) < 8) {
             an.hp -= a.dmg;
@@ -2009,7 +2204,7 @@
             const kb = 25 + 45 * a.pow;
             an.kbx = a.vx / vd * kb; an.kby = a.vy / vd * kb;
             burst(an.x, an.y - 4, an.kind === 'rabbit' ? '#eef2fa' : '#a5825a', 6, 40, 0.4);
-            SFX.hit();
+            if (nearPlayer(an.x, an.y)) SFX.hit();
             dead = true;
             break;
           }
@@ -2037,16 +2232,28 @@
       if (d.z < 0) { d.z = 0; d.vz = -d.vz * 0.4; if (Math.abs(d.vz) < 15) d.vz = 0; }
       d.x += d.vx * dt; d.y += d.vy * dt;
       d.vx *= Math.pow(0.05, dt); d.vy *= Math.pow(0.05, dt);
-      const pd = Math.hypot(d.x - player.x, d.y - player.y);
-      if (d.t > 0.35 && pd < 28) {
-        d.x += (player.x - d.x) * dt * 10;
-        d.y += (player.y - d.y) * dt * 10;
+      // drops are neutral: they drift toward whoever is closest, and everyone
+      // standing on one claims it - the contest decides who actually gets it
+      let near = null, pd = 1e9;
+      for (const p of players) {
+        if (!p.active || p.dead) continue;
+        const dd = Math.hypot(d.x - p.x, d.y - p.y);
+        if (dd < pd) { pd = dd; near = p; }
       }
-      if (d.t > 0.35 && pd < 7) {
-        inv[d.type] += d.n;
-        addFloater(player.x, player.y - 14, '+' + d.n, RES_COLORS[d.type]);
-        SFX.pickup();
-        drops.splice(i, 1);
+      if (near && d.t > 0.35 && pd < 28) {
+        d.x += (near.x - d.x) * dt * 10;
+        d.y += (near.y - d.y) * dt * 10;
+      }
+      if (d.t > 0.35) for (const p of players) {
+        if (!p.active || p.dead || Math.hypot(d.x - p.x, d.y - p.y) >= 7) continue;
+        contest('drop:' + i, p, () => {
+          const j = drops.indexOf(d);
+          if (j < 0) return;
+          drops.splice(j, 1);
+          p.inv[d.type] += d.n;
+          addFloater(p.x, p.y - 14, '+' + d.n, RES_COLORS[d.type]);
+          if (p === player) SFX.pickup();
+        });
       }
     }
 
@@ -2061,6 +2268,265 @@
       }
     }
 
+    resolveContests(); // the drop pickups queued above
+  }
+
+  // One player's step - movement, tools, timers. A human, an AI fill and (later)
+  // a network peer all run exactly this; only who wrote p.input differs.
+  function updatePlayer(p, dt) {
+    const inp = p.input;
+
+    if (p.dead) {
+      p.respawnT -= dt;
+      inp.dodge = inp.eatBerry = inp.eatFish = false;
+      inp.cmd = null;
+      if (p.respawnT <= 0) respawn(p);
+      return;
+    }
+
+    // edge-triggered intents, consumed here so a controller only has to set them
+    if (inp.dodge) { inp.dodge = false; tryDodge(p); }
+    if (inp.eatBerry) { inp.eatBerry = false; eatBerry(p); }
+    if (inp.eatFish) { inp.eatFish = false; eatFish(p); }
+    if (inp.cmd) { const c = inp.cmd; inp.cmd = null; runCmd(p, c); }
+
+    // input
+    let mx = inp.mx, my = inp.my;
+    const len = Math.hypot(mx, my);
+    p.moving = len > 0;
+    if (len > 0) {
+      mx /= len; my /= len;
+      if (p.swingT <= 0) {
+        if (Math.abs(mx) > Math.abs(my)) p.dir = mx > 0 ? 'right' : 'left';
+        else p.dir = my > 0 ? 'down' : 'up';
+      }
+    }
+
+    p.kbx = (p.kbx || 0) * Math.pow(0.01, dt);
+    p.kby = (p.kby || 0) * Math.pow(0.01, dt);
+
+    // ---- unified momentum: input accelerates vx/vy, the surface sets friction/caps
+    const ftx = Math.floor(p.x / TILE), fty = Math.floor((p.y + 4) / TILE);
+    const onIce = inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1;
+    let sp = Math.hypot(p.vx, p.vy);
+
+    // shift-slide: only engages above walking speed; keeps momentum, drops the tools
+    const wantSlide = inp.slide && p.dodgeT <= 0;
+    if (!p.sliding && wantSlide && sp > SLIDE_MIN) {
+      p.sliding = true;
+    }
+    if (p.sliding && (!wantSlide || sp < SLIDE_EXIT)) p.sliding = false;
+    // slide fatigue: builds on snow so long slides run out of glide, recovers on
+    // ice so a snow->ice->snow chain starts the snow leg fresh-ish
+    if (p.sliding) {
+      p.slideT = onIce ? Math.max(0, p.slideT - dt * 1.5) : p.slideT + dt;
+    } else {
+      p.slideT = 0;
+    }
+
+    if (p.fallT > 0) {
+      // floundering in an ice hole: no control until the climb-out
+      p.fallT -= dt;
+      p.vx = p.vy = 0;
+      p.sliding = false;
+      p.fallRipT -= dt;
+      if (p.fallRipT <= 0) {
+        p.fallRipT = 0.16;
+        burst(p.x + rand(-3, 3), p.y + 4, '#9fc4dd', 2, 16, 0.3, true);
+      }
+      if (p.fallT <= 0) {
+        // scramble out onto the nearest walkable tile
+        const out = nearestDryTile(p.x, p.y, p);
+        p.x = (out.tx + 0.5) * TILE;
+        p.y = (out.ty + 0.5) * TILE;
+        p.invuln = Math.max(p.invuln, 0.8);
+        burst(p.x, p.y + 4, '#cfe4f2', 8, 40, 0.45, true);
+        if (nearPlayer(p.x, p.y)) SFX.dodge();
+      }
+    } else if (p.dodgeT > 0) {
+      // rolling: the dash owns the velocity; friction waits until the roll ends,
+      // so whatever speed the dash reached is carried out for the surface to spend
+      p.dodgeT -= dt;
+      const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
+      if (mv.blockedX) p.vx = 0;
+      if (mv.blockedY) p.vy = 0;
+      p.dodgeDustT -= dt;
+      if (p.dodgeDustT <= 0) {
+        p.dodgeDustT = 0.05;
+        burst(p.x, p.y + 5, '#dfe8f4', 2, 22, 0.3, true);
+      }
+      if (p.dodgeT <= 0) burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true);
+    } else {
+      const chargeMul = p.charging ? 0.55 : 1; // drawn bow slows you
+      const walkMax = PLAYER_SPEED * chargeMul;
+
+      if (!onIce && !p.sliding && sp <= walkMax + 6) {
+        // plain snow walking: near-instant vector approach, tuned so it feels
+        // exactly like the old fixed-speed movement (settles in ~3 frames)
+        const f = 1 - Math.exp(-25 * dt);
+        p.vx += (mx * walkMax - p.vx) * f;
+        p.vy += (my * walkMax - p.vy) * f;
+      } else {
+        // carrying momentum (ice, slide, or overspeed on snow):
+        // steer the heading toward the input, ease the speed toward the target
+        let dirx = mx, diry = my;
+        if (sp > 1) { dirx = p.vx / sp; diry = p.vy / sp; }
+        let steer, decay, target;
+        if (p.sliding) {
+          // snow friction ramps with slide fatigue: early glide is cheap, the
+          // tail drops off hard so slides end decisively
+          steer = 1.7; target = 0;
+          decay = onIce ? 0.15 : Math.min(2.6, 0.35 + 0.45 * p.slideT);
+        } else if (onIce) {
+          const cap = ICE_MAX * chargeMul;
+          if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
+          else { steer = 0; target = 0; decay = 0.18; } // idle glide
+        } else {
+          steer = 4.5; target = len > 0 ? walkMax : 0; decay = 3.5; // snow kills overspeed fast unless you slide
+        }
+        if (len > 0 && steer > 0 && (dirx !== 0 || diry !== 0)) {
+          // carve: rotate the travel direction toward the input, never snap it
+          const cur = Math.atan2(diry, dirx), want = Math.atan2(my, mx);
+          let da = want - cur;
+          if (da > Math.PI) da -= Math.PI * 2;
+          if (da < -Math.PI) da += Math.PI * 2;
+          const na = cur + Math.max(-steer * dt, Math.min(steer * dt, da));
+          dirx = Math.cos(na); diry = Math.sin(na);
+        }
+        sp = target + (sp - target) * Math.exp(-decay * dt);
+        p.vx = dirx * sp;
+        p.vy = diry * sp;
+      }
+
+      const mv = moveEntity(p,
+        (p.vx + p.kbx) * dt,
+        (p.vy + p.kby) * dt, PLAYER_R);
+      if (mv.blockedX) p.vx = 0; // a wall kills that axis instead of grinding
+      if (mv.blockedY) p.vy = 0;
+    }
+
+    p.x = Math.max(8, Math.min(WORLD * TILE - 8, p.x));
+    p.y = Math.max(8, Math.min(WORLD * TILE - 8, p.y));
+
+    // carved ice holes: standing over open water plunges you in (an active
+    // dodge roll carries across the gap)
+    if (p.fallT <= 0 && p.dodgeT <= 0) {
+      const htx = Math.floor(p.x / TILE), hty = Math.floor((p.y + 4) / TILE);
+      if (inWorld(htx, hty) && ground[idx(htx, hty)] === 2) {
+        p.fallT = HOLE_FALL_T;
+        p.fallRipT = 0;
+        p.vx = p.vy = 0;
+        p.sliding = false;
+        p.slideT = 0;
+        if (p.charging) { p.charging = false; p.chargeT = 0; }
+        if (nearPlayer(p.x, p.y)) SFX.splash();
+        burst(p.x, p.y + 4, '#3a6080', 10, 55, 0.5, true);
+        burst(p.x, p.y + 2, '#ddf1f8', 8, 60, 0.5, true);
+        damagePlayer(p, HOLE_FALL_DMG, 0, 0);
+      }
+    }
+
+    // dodge charges refill one at a time
+    if (p.dodgeCharges < DODGE_CHARGES) {
+      p.dodgeRegenT -= dt;
+      if (p.dodgeRegenT <= 0) {
+        p.dodgeCharges++;
+        p.dodgeRegenT = p.dodgeCharges < DODGE_CHARGES ? DODGE_CD : 0;
+      }
+    }
+    // spent-stamina ghost: hold briefly, then drain toward the live fill
+    {
+      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+      const frac = (p.dodgeCharges + regenP) / DODGE_CHARGES;
+      if (p.stamGhostT > 0) p.stamGhostT -= dt;
+      else p.stamGhost -= dt * 1.6;
+      if (p.stamGhost < frac) p.stamGhost = frac;
+    }
+
+    const spNow = Math.hypot(p.vx, p.vy);
+    if (spNow > 8 && p.dodgeT <= 0 && !p.sliding) {
+      p.animT += dt * 9;
+      p.footT -= dt;
+      if (p.footT <= 0) {
+        p.footT = 0.16;
+        p.footSide = 1 - p.footSide;
+        const side = p.footSide ? 2 : -2;
+        const px = p.dir === 'left' || p.dir === 'right' ? p.x : p.x + side;
+        const py = p.dir === 'left' || p.dir === 'right' ? p.y + 6 + (p.footSide ? 1 : -1) : p.y + 6;
+        footprints.push({ x: px, y: py, t: 0 });
+        if (footprints.length > 400) footprints.shift();
+      }
+    } else {
+      p.animT = 0; // sliding/gliding uses the standing pose
+    }
+
+    // fast slide: carve a double trail (footprint decals, spaced ~2.5px so the
+    // marks overlap into continuous lines) and kick up snow spray. Snow gets
+    // two-tone carved grooves (k:1, lip offset toward the outer side); ice gets
+    // thin frosted skate scratches (k:2).
+    if (p.sliding && spNow > TRAIL_MIN) {
+      p.trailD -= spNow * dt;
+      const nx = -p.vy / spNow, ny = p.vx / spNow;
+      const k = onIce ? 2 : 1;
+      let emit = 0;
+      while (p.trailD <= 0 && emit++ < 6) {
+        // interpolate the mark back along the path so the spacing stays even
+        // no matter how far a single frame travelled
+        const back = -p.trailD;
+        const bx = p.x - ny * back, by = p.y + 6 + nx * back;
+        footprints.push({ x: bx + nx * 2, y: by + ny * 2, t: 0, k });
+        footprints.push({ x: bx - nx * 2, y: by - ny * 2, t: 0, k });
+        p.trailD += 2.5;
+      }
+      while (footprints.length > 800) footprints.shift();
+      p.slideDustT -= dt;
+      if (p.slideDustT <= 0) {
+        p.slideDustT = 0.1;
+        burst(p.x, p.y + 5, '#eef4fb', 1, 18, 0.3, true);
+      }
+    }
+
+    // swing
+    p.swingCd = Math.max(0, p.swingCd - dt);
+    if (p.swingT > 0) {
+      p.swingT -= dt;
+      if (!p.swingHitDone && p.swingT < 0.12) {
+        p.swingHitDone = true;
+        swingHit(p);
+      }
+    }
+    // the work tool goes away with the swing cooldown; held E brings it right back
+    if (p.swingT <= 0 && p.swingCd <= 0) p.tool = TOOL_BOW;
+    if (inp.work) tryWork(p);
+
+    // bow: pressing draws, releasing looses - one edge, whoever is holding it
+    if (inp.fire && !p.firePrev && !p.charging && p.fallT <= 0 && p.swingT <= 0) {
+      p.charging = true;
+      p.chargeT = 0;
+      if (nearPlayer(p.x, p.y)) SFX.bowDraw();
+    }
+    if (!inp.fire && p.charging) {
+      p.charging = false;
+      fireArrow(p);
+      p.chargeT = 0;
+    }
+    p.firePrev = inp.fire;
+
+    // bow draw: charge up and keep facing the aim point
+    if (p.charging) {
+      p.chargeT = Math.min(BOW_CHARGE, p.chargeT + dt);
+      const adx = inp.aimX - p.x, ady = inp.aimY - p.y;
+      if (Math.abs(adx) > Math.abs(ady)) p.dir = adx > 0 ? 'right' : 'left';
+      else p.dir = ady > 0 ? 'down' : 'up';
+    }
+
+    p.hurtT = Math.max(0, p.hurtT - dt);
+    p.invuln = Math.max(0, p.invuln - dt);
+
+    // gentle regen in daylight
+    if (p.hp < p.maxHp && state.darkness < 0.3) {
+      p.hp = Math.min(p.maxHp, p.hp + dt * 0.6);
+    }
   }
 
   // ------------------------------------------------------------ fx updates
@@ -2257,13 +2723,16 @@
         draws.push({ y: ty * TILE + 16, o, tx, ty });
       }
     }
-    draws.push({ y: player.y + 8, player: true });
+    for (const p of players) {
+      if (p.dead) continue;
+      draws.push({ y: p.y + 8, p, ghost: !p.active }); // empty slots stand as silhouettes
+    }
     for (const a of animals) draws.push({ y: a.y + 4, a });
     for (const b of robots) draws.push({ y: b.y + 4, r: b });
     draws.sort((a, b) => a.y - b.y);
 
     for (const d of draws) {
-      if (d.player) { drawPlayer(ex, ey, now); continue; }
+      if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
       if (d.r) { drawRobot(d.r, ex, ey); continue; }
       const o = d.o;
@@ -2276,16 +2745,17 @@
       } else if (o.type === 'bush') {
         drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
       } else if (STRUCTS[o.type]) {
+        const spr = structSprite(o);
         if (o.building) {
           const p = o.buildT / o.buildTotal;
           if (p < 1 / 3) ctx.drawImage(SPRITES.scaffold[0], px, py);
           else if (p < 2 / 3) ctx.drawImage(SPRITES.scaffold[1], px, py);
           else {
-            drawSpriteFlash(SPRITES[o.type][o.tier], px + sh, py, o.flash);
+            drawSpriteFlash(spr, px + sh, py, o.flash);
             ctx.drawImage(SPRITES.scaffold[2], px, py);
           }
         } else {
-          drawSpriteFlash(SPRITES[o.type][o.tier], px + sh, py, o.flash);
+          drawSpriteFlash(spr, px + sh, py, o.flash);
           if (o.hp < o.maxHp * 0.6) {
             ctx.fillStyle = 'rgba(40,25,15,0.5)';
             ctx.fillRect(px + 4, py + 5, 1, 3); ctx.fillRect(px + 5, py + 8, 1, 2);
@@ -2348,17 +2818,18 @@
     }
     ctx.globalAlpha = 1;
 
-    // swing arc
-    if (player.swingT > 0) {
-      const prog = 1 - player.swingT / 0.18;
-      const a0 = player.swingDir - 1.1 + prog * 2.2;
+    // swing arcs (every player who is mid-swing)
+    for (const p of players) {
+      if (!p.active || p.dead || p.swingT <= 0) continue;
+      const prog = 1 - p.swingT / 0.18;
+      const a0 = p.swingDir - 1.1 + prog * 2.2;
       ctx.fillStyle = 'rgba(255,255,255,' + (0.8 - prog * 0.6).toFixed(2) + ')';
       for (let i = 0; i < 3; i++) {
         const a = a0 - i * 0.22;
         const rr = 13 - i;
         ctx.fillRect(
-          Math.round(player.x + Math.cos(a) * rr - ex),
-          Math.round(player.y - 2 + Math.sin(a) * rr - ey), 2, 2);
+          Math.round(p.x + Math.cos(a) * rr - ex),
+          Math.round(p.y - 2 + Math.sin(a) * rr - ey), 2, 2);
       }
     }
 
@@ -2426,7 +2897,7 @@
     const o = objAt(tx, ty);
     const busy = player.fallT > 0 || player.dodgeT > 0; // tools locked out
     // build sites (right-click) outrank tool hints; beyond the 60px reach they dim
-    if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building))) {
+    if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building && o.team === player.team))) {
       const far = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60;
       return { kind: 'hammer', dim: far };
     }
@@ -2434,6 +2905,12 @@
       return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / BOW_CHARGE) };
     }
     // a living thing under the pointer: hunting reticle
+    for (const q of players) {
+      if (!enemyOf(player, q)) continue;
+      if (Math.abs(wx - q.x) <= 8 && wy >= q.y - 14 && wy <= q.y + 4) {
+        return { kind: 'reticle', mode: 'hunt', dim: busy };
+      }
+    }
     for (const a of animals) {
       const hw = a.kind === 'rabbit' ? 7 : 13, h = a.kind === 'rabbit' ? 11 : 22;
       if (Math.abs(wx - a.x) <= hw && wy >= a.y + 4 - h && wy <= a.y + 4) {
@@ -2443,7 +2920,7 @@
     // a fish under the ice: water-blue ring (the bow spears it from point-blank)
     if (hoverFish()) return { kind: 'reticle', mode: 'fish', dim: busy };
     // something E can work: lock ring (ice-blue over bare ice), dim out of reach
-    const wt = workTarget();
+    const wt = workTarget(player);
     if (wt) return { kind: 'reticle', mode: wt.o ? 'lock' : 'ice', dim: busy || !wt.near };
     return { kind: 'reticle', mode: 'idle', dim: busy };
   }
@@ -2556,6 +3033,9 @@
       if (isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
       let hit = false;
       for (const an of animals) if (Math.hypot(an.x - x, an.y - 3 - y) < 8) { hit = true; break; }
+      if (!hit) for (const q of players) {
+        if (enemyOf(player, q) && Math.hypot(q.x - x, q.y - 6 - y) < 7) { hit = true; break; }
+      }
       if (hit) { len = s; blocked = 'animal'; break; }
     }
     // static dots (no animation - it read as clutter), fading toward the end of the flight
@@ -2594,6 +3074,12 @@
     ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
   }
 
+  // a building wears its owner's team palette over its tier material
+  function structSprite(o) {
+    const set = SPRITES.teamBuild[o.team === undefined ? 0 : o.team];
+    return set ? set[o.type][o.tier] : SPRITES[o.type][o.tier];
+  }
+
   function drawAnimal(a, ox, oy, now) {
     const rabbit = a.kind === 'rabbit';
     const set = SPRITES[a.kind][a.dir];
@@ -2609,7 +3095,8 @@
   }
 
   function drawRobot(b, ox, oy) {
-    const spr = SPRITES.robot[b.moving ? Math.floor(b.animT) % 2 : 0];
+    const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
+    const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
     const px = Math.round(b.x - spr.width / 2 - ox);
     const py = Math.round(b.y + 4 - spr.height - oy);
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
@@ -2618,39 +3105,42 @@
     drawHealthBar(b.x - ox, py - 4, b.hp, b.maxHp, 10);
   }
 
-  function drawPlayer(ox, oy, now) {
-    const set = SPRITES.player[player.dir];
+  // every player draws through here - the local one, the AI fills, network
+  // peers later. Team palette on the sprite, name tag on everybody else.
+  function drawPlayer(p, ox, oy, now) {
+    const local = p === player;
+    const set = SPRITES.playerTeam[p.team][p.dir];
     let frame = 0;
-    if (player.moving) frame = 1 + (Math.floor(player.animT) % 2);
+    if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
     const spr = set[frame];
-    const px = Math.round(player.x - 8 - ox);
-    const py = Math.round(player.y - 12 - oy);
+    const px = Math.round(p.x - 8 - ox);
+    const py = Math.round(p.y - 12 - oy);
     // shadow (not while swimming in a hole)
-    if (player.fallT <= 0) {
+    if (p.fallT <= 0) {
       ctx.fillStyle = 'rgba(110,130,170,0.4)';
       ctx.fillRect(px + 5, py + 15, 6, 2);
     }
 
-    if (player.fallT > 0) {
+    if (p.fallT > 0) {
       // plunged through the ice: quick sink, only the head above the waterline
-      const sink = Math.round(Math.min(7, (HOLE_FALL_T - player.fallT) * 40));
+      const sink = Math.round(Math.min(7, (HOLE_FALL_T - p.fallT) * 40));
       ctx.save();
       ctx.beginPath(); ctx.rect(px - 2, py - 8, 20, 20); ctx.clip();
-      drawSpriteFlash(spr, px, py + sink, player.hurtT > 0.12 ? 1 : 0);
+      drawSpriteFlash(spr, px, py + sink, p.hurtT > 0.12 ? 1 : 0);
       ctx.restore();
       // ripple rings at the waterline
       ctx.fillStyle = 'rgba(207,228,242,0.75)';
       ctx.fillRect(px + 2, py + 11, 12, 1);
       ctx.fillRect(px + 4, py + 13, 8, 1);
-    } else if (player.dodgeT > 0) {
+    } else if (p.dodgeT > 0) {
       // dodge roll: full spin over the roll, trailing two afterimage ghosts.
       // Spin sign follows horizontal intent so side rolls tumble forward.
-      const prog = 1 - player.dodgeT / DODGE_T;
-      const sgn = player.dodgeVX < 0 ? -1 : player.dodgeVX > 0 ? 1 :
-        player.dodgeVY < 0 ? -1 : 1;
-      const vd = Math.hypot(player.dodgeVX, player.dodgeVY) || 1;
-      const nx = player.dodgeVX / vd, ny = player.dodgeVY / vd;
-      const rollSpr = SPRITES.player[player.dir][0];
+      const prog = 1 - p.dodgeT / DODGE_T;
+      const sgn = p.dodgeVX < 0 ? -1 : p.dodgeVX > 0 ? 1 :
+        p.dodgeVY < 0 ? -1 : 1;
+      const vd = Math.hypot(p.dodgeVX, p.dodgeVY) || 1;
+      const nx = p.dodgeVX / vd, ny = p.dodgeVY / vd;
+      const rollSpr = SPRITES.playerTeam[p.team][p.dir][0];
       const spin = (a, gx, gy) => {
         ctx.save();
         ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
@@ -2663,28 +3153,37 @@
       ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
     } else {
       // held tool: behind the body when facing away, in the hand otherwise
-      const held = state.mode === 'play';
-      const toolBehind = held && player.dir === 'up' && !player.charging && player.swingT <= 0;
-      if (toolBehind) drawHeldTool(px, py);
-      if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
-      drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
+      const held = state.mode !== 'title';
+      const toolBehind = held && p.dir === 'up' && !p.charging && p.swingT <= 0;
+      if (toolBehind) drawHeldTool(p, px, py);
+      if (p.invuln > 0 && state.mode !== 'title' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
+      drawSpriteFlash(spr, px, py, p.hurtT > 0.12 ? 1 : 0);
       ctx.globalAlpha = 1;
-      if (held && !toolBehind) drawHeldTool(px, py);
+      if (held && !toolBehind) drawHeldTool(p, px, py);
     }
 
-    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 7, player.hp, player.maxHp, 14);
-    // dodge stamina: one clean unsegmented bar under the health bar — charges
-    // stay discrete in the sim, the bar just shows the pooled total
-    if (state.mode === 'play') {
-      const bx = Math.round(player.x - ox) - 7, by = py - 4;
+    if (state.mode === 'title') return;
+
+    drawHealthBar(p.x - ox, py - 7, p.hp, p.maxHp, 14);
+    // rivals carry a name tag in their team colour so a fight stays legible
+    if (!local) {
+      drawPixelTextShadow(ctx, p.name,
+        Math.round(p.x - ox - pixelTextWidth(p.name) / 2), py - 15,
+        TEAMS[p.team].mark, 'rgba(15,22,50,0.85)');
+    }
+    // dodge stamina: one clean unsegmented bar under the health bar - charges
+    // stay discrete in the sim, the bar just shows the pooled total. Only the
+    // local player needs it; a rival's tells are their draw meter and position.
+    if (local) {
+      const bx = Math.round(p.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx, by, 14, 2);
-      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
-      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
+      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+      const frac = (p.dodgeCharges + regenP) / DODGE_CHARGES;
       // ghost of the chunk just spent: pale segment that drains into place
-      const gw = Math.round(14 * Math.max(frac, player.stamGhost)) - Math.round(14 * frac);
+      const gw = Math.round(14 * Math.max(frac, p.stamGhost)) - Math.round(14 * frac);
       if (gw > 0) {
         ctx.fillStyle = '#e6f4ff';
         ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
@@ -2693,10 +3192,11 @@
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
     // bow draw meter, just above the health bar: yellow while charging,
-    // turning hot orange the moment the draw is full
-    if (player.charging && state.mode === 'play') {
-      const frac = Math.min(1, player.chargeT / BOW_CHARGE);
-      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 12);
+    // turning hot orange the moment the draw is full. Drawn for everyone - it
+    // is the tell that says a shot is coming.
+    if (p.charging) {
+      const frac = Math.min(1, p.chargeT / BOW_CHARGE);
+      const x = Math.round(p.x - ox) - 7, y = Math.round(py - (local ? 12 : 12));
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
@@ -2706,18 +3206,34 @@
     }
   }
 
-  // the selected tool, drawn on the player: carried at the hand while idle or
-  // walking, swept along the arc during a melee swing, aimed at the mouse while
-  // the bow is drawn. px/py are the player sprite's top-left in screen space.
-  function drawHeldTool(px, py) {
-    const t = TOOLS[player.tool];
+  // an unfilled slot: a flat team-tinted silhouette standing at its camp, so
+  // the world shows who is missing rather than pretending the slot isn't there
+  function drawGhost(p, ox, oy) {
+    const spr = SPRITES.playerTeam[p.team][p.dir][0];
+    const px = Math.round(p.x - 8 - ox), py = Math.round(p.y - 12 - oy);
+    sctx.clearRect(0, 0, 32, 32);
+    sctx.globalCompositeOperation = 'source-over';
+    sctx.drawImage(spr, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = TEAMS[p.team].mark;
+    sctx.fillRect(0, 0, 32, 32);
+    ctx.globalAlpha = 0.22;
+    ctx.drawImage(scratch, 0, 0, spr.width, spr.height, px, py, spr.width, spr.height);
+    ctx.globalAlpha = 1;
+  }
+
+  // the held tool, drawn on a player: carried at the hand while idle or
+  // walking, swept along the arc during a melee swing, aimed at that player's
+  // aim point while the bow is drawn. px/py are the sprite's top-left on screen.
+  function drawHeldTool(p, px, py) {
+    const t = TOOLS[p.tool];
     const icon = SPRITES[t.icon];
     const cxp = px + 8, cyp = py + 10; // roughly the hands
 
     // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
     // rotating by a + PI points the arc at the target
-    if (t.key === 'bow' && player.charging) {
-      const a = Math.atan2(mouse.y + camY - (player.y - BOW_Y), mouse.x + camX - player.x);
+    if (t.key === 'bow' && p.charging) {
+      const a = Math.atan2(p.input.aimY - (p.y - BOW_Y), p.input.aimX - p.x);
       ctx.save();
       ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
       ctx.rotate(a + Math.PI);
@@ -2728,9 +3244,9 @@
 
     // melee swing: sweep with the same arc the swing effect uses; the icons
     // point up, so + PI/2 aligns the head with the sweep direction
-    if (t.key !== 'bow' && player.swingT > 0) {
-      const prog = 1 - player.swingT / 0.18;
-      const a = player.swingDir - 1.1 + prog * 2.2;
+    if (t.key !== 'bow' && p.swingT > 0) {
+      const prog = 1 - p.swingT / 0.18;
+      const a = p.swingDir - 1.1 + prog * 2.2;
       ctx.save();
       ctx.translate(Math.round(cxp + Math.cos(a) * 9), Math.round(cyp - 2 + Math.sin(a) * 9));
       ctx.rotate(a + Math.PI / 2);
@@ -2740,16 +3256,16 @@
     }
 
     // carried: sits in the leading hand, with a 1px walk bob
-    const bob = player.moving ? Math.floor(player.animT) % 2 : 0;
-    if (player.dir === 'left') {
+    const bob = p.moving ? Math.floor(p.animT) % 2 : 0;
+    if (p.dir === 'left') {
       ctx.save();
       ctx.translate(px + 2, cyp - 2 + bob);
       ctx.scale(-1, 1);
       ctx.drawImage(icon, -4, -4);
       ctx.restore();
-    } else if (player.dir === 'right') {
+    } else if (p.dir === 'right') {
       ctx.drawImage(icon, px + 10, cyp - 6 + bob);
-    } else if (player.dir === 'down') {
+    } else if (p.dir === 'down') {
       ctx.drawImage(icon, px + 10, cyp - 5 + bob);
     } else { // up: far hand, occluded by the body (caller draws us first)
       ctx.drawImage(icon, px - 2, cyp - 5 + bob);
@@ -2768,7 +3284,7 @@
       ty = Math.floor((mouse.y + camY) / TILE);
       const o = objAt(tx, ty);
       if (!o) return;
-      if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building)) return;
+      if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) return;
     }
     const bx = tx * TILE - ox, by = ty * TILE - oy;
@@ -2794,13 +3310,13 @@
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
     if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
     if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
-    const t = workTarget();
+    const t = workTarget(player);
     if (!t || !t.near) return;
     const verb = !t.o ? 'CRACK ICE' : t.o.type === 'tree' ? 'CHOP' :
       t.o.type === 'bush' ? 'PICK' : 'MINE';
     // sit above the sprite: trees reach 8px above their tile, short objects start 6px below
     const lift = t.o ? (t.o.type === 'tree' ? 20 : 10) : 8;
-    const pressed = !!keys['e'];
+    const pressed = !!player.input.work;
     const capW = 9, gapW = 3;
     const totalW = capW + gapW + pixelTextWidth(verb);
     const x = Math.round(t.tx * TILE + 8 - ox - totalW / 2);
@@ -2897,7 +3413,7 @@
       const iy = L.cy + Math.sin(opt.ang) * (WHEEL_R - 9);
       if (w.kind === 'build') {
         const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
-        const spr = SPRITES[opt.id][0];
+        const spr = SPRITES.teamBuild[player.team][opt.id][0];
         ctx.globalAlpha = affordable ? 1 : 0.55;
         ctx.drawImage(spr, Math.round(ix - 8), Math.round(iy - 8));
         if (!affordable) {
@@ -3098,6 +3614,16 @@
     ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R, 0, Math.PI * 2); ctx.clip();
     ctx.drawImage(mmCv, ptx - MM_R, pty - MM_R, MM_R * 2, MM_R * 2,
       MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
+    // the other slots, in team colour, wherever they fall inside the view
+    for (const p of players) {
+      if (p === player || !p.active || p.dead) continue;
+      const dx = p.x / TILE - ptx, dy = p.y / TILE - pty;
+      if (Math.hypot(dx, dy) > MM_R - 1) continue;
+      ctx.fillStyle = 'rgba(15,22,50,0.9)';
+      ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
+      ctx.fillStyle = TEAMS[p.team].mark;
+      ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
+    }
     // player dot
     ctx.fillStyle = 'rgba(15,22,50,0.9)';
     ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
@@ -3322,6 +3848,17 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(MAP_X + (camX / TILE) * MAP_S + 0.5, MAP_Y + (camY / TILE) * MAP_S + 0.5,
       (VIEW_W / TILE) * MAP_S - 1, (VIEW_H / TILE) * MAP_S - 1);
+
+    // the other slots, inked in their team colour
+    for (const p of players) {
+      if (p === player || !p.active || p.dead) continue;
+      const ox2 = MAP_X + Math.round((p.x / TILE) * MAP_S);
+      const oy2 = MAP_Y + Math.round((p.y / TILE) * MAP_S);
+      ctx.fillStyle = '#241a10';
+      ctx.fillRect(ox2 - 2, oy2 - 2, 5, 5);
+      ctx.fillStyle = TEAMS[p.team].mark;
+      ctx.fillRect(ox2 - 1, oy2 - 1, 3, 3);
+    }
 
     // player marker: inked diamond + pulsing ring
     const pmx = MAP_X + Math.round((player.x / TILE) * MAP_S);
@@ -3614,8 +4151,7 @@
   genWorld();
   spawnAnimals();
   spawnFish();
-  player.x = (playerSpawn.tx + 0.5) * TILE;
-  player.y = (playerSpawn.ty + 0.5) * TILE;
+  initPlayers(); // needs spawnPts, so it runs after the world exists
   renderGround();
   buildMapPanel();
   buildSettingsPanel();
@@ -3625,11 +4161,23 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, player, inv, animals, objects, ground, lights, mouse, keys, drops, footprints,
+    SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints,
     fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
-    placeObj, rebuildLights, idx, objAt, clickAction, tryWork, workTarget, hoverFish, fireArrow, tryDodge,
+    // multiplayer slots: every slot, the local one, and the teams table
+    players, MAX_PLAYER_SLOTS, TEAMS, Player, spawnPts, contestRank,
+    get player() { return player; },
+    get inv() { return player.inv; },
+    // hand a slot to an AI, a human, or nobody (a ghost at its camp)
+    setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
+    placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, respawn, updateAI, contest,
+    // action entry points default to the local slot, or take any player
+    clickAction: (p) => clickAction(p || player),
+    tryWork: (p) => tryWork(p || player),
+    workTarget: (p) => workTarget(p || player),
+    fireArrow: (p) => fireArrow(p || player),
+    tryDodge: (p) => tryDodge(p || player),
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {
@@ -3642,14 +4190,15 @@
       if (type === 'turret') o.cd = 0;
       if (type === 'generator') o.payT = 0;
       if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = 0; }
+      o.owner = player.id; o.team = player.team;
       structures.push(o);
       return o;
     },
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
     setZoom: (n) => { zoomStep = Math.max(0, n | 0); },
     getZoom: () => ({ step: zoomStep, applied: zoomEff, max: zoomMax }),
-    setTool: (i) => { player.tool = i; },
-    getTool: () => player.tool,
+    setTool: (i, p) => { (p || player).tool = i; },
+    getTool: (p) => (p || player).tool,
     cam: () => ({ x: camX, y: camY }),
     startGame,
     hideUI: false,
