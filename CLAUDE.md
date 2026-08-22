@@ -1,20 +1,14 @@
 # CLAUDE.md
 
-Emberfrost — a browser canvas pixel-art free-for-all on a winter survival map. Fight with an
-always-in-hand bow, harvest with **E** (the axe/pickaxe come out on their own for whatever's under
-the cursor), build structures on stumps, and travel fast via a momentum system (slippery frozen
-rivers, chained dodges, shift-sliding). **Gold is the only currency**; berries and fish are food.
+Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map.
 
-Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the local human, the rest
-AI fills, four team colours), each playing one of two champions (WREN the ranger, SKADI the
-skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
-animals. Gold earned is also XP: every slot levels 1→9 (`p.level`, flat +hp/+arrow damage per
-level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides
-a white eagle along a seed-fixed line and jumps (Space) to pick its landing; **death is final** (the local slot spectates or returns to the
-lobby). What they are picking between is **landmarks** — named places worldgen scatters
-and every map labels: a **WOLF DEN** (a pack that hunts you, the only hostile thing in the world)
-and a **ROOKERY** (dead snags full of flighty birds). Nothing else is hostile, so night is
-otherwise visual-only.
+- Always-in-hand bow; **E** harvests (axe/pickaxe come out on their own); build on stumps.
+- Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
+- **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
+- 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
+- Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to the lobby.
+- The world has named **landmarks**: a WOLF DEN (the only hostile thing) and a ROOKERY (birds).
+- Night is visual only for now.
 
 ## Commands
 
