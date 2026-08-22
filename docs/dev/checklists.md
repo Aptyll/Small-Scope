@@ -100,8 +100,8 @@ the arrow speed/damage formulas in `fireArrow()`,
 - [README.md](../../README.md) is a storefront page (hero + mechanic shots in `docs/media/`), not a
   tech guide — no run instructions, controls list, or code layout. Those live in the root
   [CLAUDE.md](../../CLAUDE.md) and these dev docs.
-- `SPRITES.imp` is still baked with its old ice palette and unreferenced, but its *grids* are
-  now the robot sprite — don't delete them.
+- `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
+  got its own grids — kept in case the imp returns.
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
   unreferenced since the buildables/HUD removal — kept in case those features return (the heart
   grids also carry the file's mangled-byte repair).

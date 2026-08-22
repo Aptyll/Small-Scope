@@ -543,7 +543,7 @@
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
-  const robots = []; // spawner-owned wooden units
+  const robots = []; // spawner-owned worker bots
   const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
   const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
   const drops = [];
@@ -2137,7 +2137,7 @@
             const b = makeRobot(o);
             o.bots.push(b);
             robots.push(b);
-            burst(b.x, b.y - 4, '#a3794f', 6, 35, 0.4, true);
+            burst(b.x, b.y - 4, '#c3c9d3', 6, 35, 0.4, true);
           }
         }
       }
@@ -2301,8 +2301,8 @@
     if (b.hp <= 0 && !b.dead) {
       b.dead = true;
       if (nearPlayer(b.x, b.y)) SFX.break_();
-      burst(b.x, b.y - 4, '#8a6142', 10, 50, 0.5, true);
-      burst(b.x, b.y - 4, '#ffd95c', 4, 35, 0.4);
+      burst(b.x, b.y - 4, '#98a1b0', 10, 50, 0.5, true);
+      burst(b.x, b.y - 4, '#3b4150', 4, 35, 0.4);
     }
   }
 
@@ -3839,15 +3839,89 @@
     drawSpriteFlash(spr, px, py, a.flash);
   }
 
+  // Worker bot: treads, a body that bounces on them, two eye housings on a
+  // neck. The body is the only team-coloured piece. The eyes carry the state -
+  // height is the expression (wide / normal / narrow), and each eye takes its
+  // own offset so the head tilts and glances without extra frames:
+  //   idle     - looks about, a small head tilt on a per-bot clock
+  //   driving  - tread frames roll, the body bobs 1px, eyes lean into the move
+  //   working  - eyes fixed on the target, the tool swings toward it
+  //   carrying - the gold held up in front of the body
+  //   guarding - narrow eyes, dead still
   function drawRobot(b, ox, oy) {
-    const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
-    const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
-    const px = Math.round(b.x - spr.width / 2 - ox);
-    const py = Math.round(b.y + 4 - spr.height - oy);
+    const body = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
+    const treads = SPRITES.robotTreads[b.moving ? Math.floor(b.animT) % 2 : 0];
+    const E = SPRITES.robotEyes;
+    const bx = Math.round(b.x - 8 - ox);
+    const ty = Math.round(b.y + 4 - oy) - 4; // tread top; tread bottom sits at b.y + 4
+    // body bobs one px every other tread tick while driving
+    const bob = b.moving ? Math.floor(b.animT / 2) % 2 : 0;
+    const by = ty - 10 - bob; // body top (neck row 0)
+
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
-    ctx.fillRect(Math.round(b.x - ox) - 5, Math.round(b.y + 2 - oy), 10, 2);
-    drawSpriteFlash(spr, px, py, b.flash);
-    drawHealthBar(b.x - ox, py - 4, b.hp, b.maxHp, 10);
+    ctx.fillRect(bx + 1, ty + 3, 14, 2);
+
+    // state
+    const home = b.home;
+    let tdx = 0, tdy = 0, working = false;
+    if (b.tgt && !b.moving) {
+      tdx = b.tgt.tx * TILE + 8 - b.x; tdy = b.tgt.ty * TILE + 8 - b.y;
+      working = Math.hypot(tdx, tdy) <= 20;
+    }
+    const guarding = home && home.mode === 'guard' && !b.moving && b.carry <= 0;
+    let eye = E.norm, lx = 0, rx = 0, ly = 0, ry = 0;
+    if (guarding) {
+      eye = E.narrow;
+    } else if (working) {
+      // focus: both eyes edge toward the target
+      const sx = Math.abs(tdx) > 6 ? Math.sign(tdx) : 0;
+      lx = rx = sx;
+      if (tdy < -6) { ly = ry = -1; }
+    } else if (b.moving) {
+      // lean: the leading eye rides a px higher
+      if (Math.abs(b.mvx) > 0.3) { if (b.mvx > 0) ry = -1; else ly = -1; }
+      else if (b.mvy < 0) eye = E.wide;
+    } else {
+      // idle: a slow per-bot clock through look-left / tilt / look-right / widen
+      const k = Math.floor((performance.now() / 1000 + b.animT * 3) / 1.1) % 6;
+      if (k === 1) { lx = rx = -1; }
+      else if (k === 2) { ly = -1; ry = 1; }
+      else if (k === 4) { lx = rx = 1; }
+      else if (k === 5) { eye = E.wide; }
+    }
+
+    drawSpriteFlash(treads, bx, ty, b.flash);
+    drawSpriteFlash(body, bx, by, b.flash);
+
+    // carried gold: a nugget held up in front, over the stripe
+    if (b.carry > 0 && !working) {
+      const gx = bx + 5, gy = by + 5;
+      ctx.fillStyle = '#1c2130'; ctx.fillRect(gx, gy, 6, 5);
+      ctx.fillStyle = '#f2cc6a'; ctx.fillRect(gx + 1, gy + 1, 4, 3);
+      ctx.fillStyle = '#fff1b0'; ctx.fillRect(gx + 1, gy + 1, 2, 1);
+      ctx.fillStyle = '#b8902e'; ctx.fillRect(gx + 3, gy + 3, 2, 1);
+    }
+
+    // eyes: bottom row sits on the neck (body rows 0-1), bridge between them
+    ctx.fillStyle = '#1c2130';
+    ctx.fillRect(bx + 7, by - 1 + Math.max(ly, ry), 2, 1);
+    drawSpriteFlash(eye, bx + 1 + lx, by + 2 - eye.height + ly, b.flash);
+    drawSpriteFlash(eye, bx + 9 + rx, by + 2 - eye.height + ry, b.flash);
+
+    // working: a wind-up then a fast chop toward the target, the player's arc
+    if (working) {
+      const icon = SPRITES[b.tgt.type === 'tree' ? 'itemAxe' : 'itemPick'];
+      const prog = Math.min(1, b.workT / 0.9);
+      const e = prog < 0.7 ? prog / 0.7 * 0.3 : 0.3 + (prog - 0.7) / 0.3 * 0.7;
+      const a = Math.atan2(tdy, tdx) - 1.1 + e * 2.2;
+      ctx.save();
+      ctx.translate(Math.round(bx + 8 + Math.cos(a) * 9), Math.round(by + 6 + Math.sin(a) * 9));
+      ctx.rotate(a + Math.PI / 2);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+    }
+
+    drawHealthBar(b.x - ox, by - 8, b.hp, b.maxHp, 10);
   }
 
   // every player draws through here - the local one, the AI fills, network

@@ -11,7 +11,11 @@ trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked wit
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
-and the robot is the old `imp1`/`imp2` grids re-baked with the wooden `ROBPAL`.
+and the worker bot is three pieces on `BOTPAL`/`EYEPAL` that `drawRobot()` composes: `botTop` (16×10
+neck + chassis, the only team-coloured piece — the 8×4 `T`/`t` stripe is the team paint),
+`botTreads` (16×4, two notch frames) and three eye housings (`botEyeWide`/`Norm`/`Narrow`, 6 px
+wide, height = expression), each drawn twice with its own offset so tilt, glance and squint cost
+no frames. Exported as `SPRITES.robotTeam[team]` / `robot` / `robotTreads` / `robotEyes`.
 
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (four presets, also exported
 as `SPRITES.teams` so game.js can read the names and marker colours) drives three baked sets:
