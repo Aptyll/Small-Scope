@@ -125,8 +125,14 @@ expressed the same way.
 The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so
 `renderWorldMap()` blits `mapCv` scaled by `MAP_S = MAP_W / WORLD` and every tile-space
 position drawn on top (grid lines, camera rect, player marker) must be multiplied by `MAP_S`.
-The minimap needs no such factor — it is a scrolling 1px-per-tile viewport, not a whole-world
-view.
+The minimap is a scrolling viewport, not a whole-world view: `renderMinimap()` blits a
+`MM_R / s`-tile square of `mmCv` around `viewPlayer()` into the disc, where `s = mmScale()` is
+px per tile — `MM_ZOOMS[settings.mmZoom]` (0.5 … 3, index 2 = the 1:1 baseline), stepped by the
+scroll wheel while `overMinimap()` (pointer inside the disc + ring), which pre-empts the camera
+zoom in the wheel handler and is saved with the settings. Every marker drawn over it (slots,
+landmark glyphs) multiplies its tile offset by `s`. The disc sits on an opaque `#0f1632`
+backing with a pale 1 px outer rim that brightens while hovered — the hover state is the whole
+affordance, there is no hint.
 
 ## Overhead health bars
 

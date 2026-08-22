@@ -419,7 +419,7 @@ runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-men
 
 ## Settings
 
-`settings` (`volume`, `mmR`, `shake`, `muted`, `fps`, `pixelCursor`) persists to
+`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `fps`, `pixelCursor`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry a `res` key from the removed resolution setting;

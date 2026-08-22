@@ -339,7 +339,12 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { volume: 0.5, mmR: 24, shake: true, muted: false, fps: false, pixelCursor: true };
+  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, fps: false, pixelCursor: true };
+  // minimap zoom steps, px per world tile: index settings.mmZoom (2 = the 1:1 baseline)
+  const MM_ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3];
+  function mmScale() { return MM_ZOOMS[Math.max(0, Math.min(MM_ZOOMS.length - 1, settings.mmZoom | 0))]; }
+  // pointer over the minimap disc (its ring included)
+  function overMinimap() { return mouse.inside && Math.hypot(mouse.x - MM_CX, mouse.y - MM_CY) <= MM_R + 7; }
 
   // performance monitor: fps averaged over half-second windows from raw
   // (unclamped) frame deltas, so sim clamping can't mask slow frames
@@ -652,6 +657,12 @@
     if (state.mode !== 'play') return;
     e.preventDefault();
     if (state.mapOpen || state.settingsOpen || state.wheel) return;
+    // over the minimap the wheel zooms the minimap instead of the camera
+    if (overMinimap()) {
+      settings.mmZoom = Math.max(0, Math.min(MM_ZOOMS.length - 1, (settings.mmZoom | 0) + (e.deltaY > 0 ? -1 : 1)));
+      saveSettings();
+      return;
+    }
     // scroll up = zoom in, scroll down = back out toward the 270-row baseline
     zoomStep = Math.max(0, Math.min(zoomMax, zoomStep + (e.deltaY > 0 ? -1 : 1)));
   }, { passive: false });
@@ -4876,20 +4887,26 @@
     updateMinimap();
     const vp = viewPlayer();
     const ptx = vp.x / TILE, pty = vp.y / TILE;
+    const s = mmScale(); // px per tile: the wheel over the disc changes it
+    const hov = overMinimap() && state.mode === 'play' && !state.mapOpen && !state.settingsOpen && !state.wheel;
 
-    // backing disc (covers ring + map)
-    ctx.fillStyle = 'rgba(12,18,42,0.85)';
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 6, 0, Math.PI * 2); ctx.fill();
+    // silhouette: an opaque dark disc under everything, rimmed by a pale line
+    // so the whole control reads as one solid shape on the snow
+    ctx.fillStyle = hov ? '#9aa8d0' : '#6f7ca8';
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0f1632';
+    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 7, 0, Math.PI * 2); ctx.fill();
 
     // circular-clipped map view centered on the player
     ctx.save();
     ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R, 0, Math.PI * 2); ctx.clip();
-    ctx.drawImage(mmCv, ptx - MM_R, pty - MM_R, MM_R * 2, MM_R * 2,
+    const half = MM_R / s; // tiles from the centre to the edge
+    ctx.drawImage(mmCv, ptx - half, pty - half, half * 2, half * 2,
       MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
     // the other slots, in team colour, wherever they fall inside the view
     for (const p of players) {
       if (p === vp || !p.active || p.dead || inAir(p)) continue;
-      const dx = p.x / TILE - ptx, dy = p.y / TILE - pty;
+      const dx = (p.x / TILE - ptx) * s, dy = (p.y / TILE - pty) * s;
       if (Math.hypot(dx, dy) > MM_R - 1) continue;
       ctx.fillStyle = 'rgba(15,22,50,0.9)';
       ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
@@ -4899,7 +4916,7 @@
     // named places, glyph only - a name would not fit inside the disc (the
     // world map and the arrival toast are where they are read by name)
     for (const L of landmarks) {
-      const dx = L.tx + 0.5 - ptx, dy = L.ty + 0.5 - pty;
+      const dx = (L.tx + 0.5 - ptx) * s, dy = (L.ty + 0.5 - pty) * s;
       if (Math.hypot(dx, dy) > MM_R - 2) continue;
       drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, 'rgba(15,22,50,0.9)');
     }
@@ -4910,9 +4927,9 @@
     ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
     ctx.restore();
 
-    // map edge
+    // map edge, opaque so the map's own rim is as crisp as the outer one
     ctx.lineWidth = 1;
-    ctx.strokeStyle = 'rgba(15,22,50,0.9)';
+    ctx.strokeStyle = '#0f1632';
     ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 0.5, 0, Math.PI * 2); ctx.stroke();
 
     // day/night cycle ring
@@ -5615,9 +5632,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.11'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.12'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.12', 'THE SCROLL WHEEL OVER THE MINIMAP ZOOMS IT, AND THE MINIMAP HAS A SOLID RIM.'],
     ['1.11', 'ROBOTS, FLEEING ANIMALS, WOLVES AND BOTS NOW ROUTE AROUND TREES, ROCKS, BUILDINGS AND WATER INSTEAD OF BUMPING INTO THEM.'],
     ['1.10', 'THE GAME IS CALLED SOFTFALL EVERYWHERE NOW; SAVED SETTINGS RESET ONCE.'],
     ['1.09', 'HOUSEKEEPING: THE DEV NOTES OPEN WITH A SHORT PITCH; NOTHING IN THE GAME CHANGED.'],
