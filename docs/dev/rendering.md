@@ -136,7 +136,9 @@ drawn, a second small meter renders just above it: yellow while charging,
 turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px) — drawn
 for **everyone**, because it is the tell that a shot is coming. The overhead stack floats clear of
 the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both bars), health at `py - 7`, draw meter at
-`py - 12`, and a rival's name tag in team colour above that.
+`py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
+the stamina bar), and a rival's name tag in team colour at `py - 18`, a clear row above the meter's
+frame. The backings are translucent, so each plate paints only its own rows - no overlap.
 
 ## Text over the world
 

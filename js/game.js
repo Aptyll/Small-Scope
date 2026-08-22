@@ -3412,7 +3412,7 @@
     // rivals carry a name tag in their team colour so a fight stays legible
     if (!local) {
       drawPixelTextOutline(ctx, p.name,
-        Math.round(p.x - ox - pixelTextWidth(p.name) / 2), py - 15,
+        Math.round(p.x - ox - pixelTextWidth(p.name) / 2), py - 18, // clear of the draw meter's frame (top row py-11) with a gap row
         TEAMS[p.team].mark, '#0f1632');
     }
     // dodge stamina: one clean unsegmented bar under the health bar - charges
@@ -3438,16 +3438,19 @@
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
-    // bow draw meter, just above the health bar: yellow while charging,
-    // turning hot orange the moment the draw is full. Drawn for everyone - it
-    // is the tell that says a shot is coming.
+    // bow draw meter: yellow while charging, turning hot orange the moment the
+    // draw is full. Drawn for everyone - it is the tell that says a shot is
+    // coming. It sits inside the shared frame directly above the hp bar, the
+    // mirror of the stamina bar below it: its backing adds the rows above the
+    // hp backing (frame top at py-11, fill py-10..-9) and the hp backing's top
+    // row py-8 becomes the track-grey gap row, so the frame stays one outline.
     if (p.charging) {
       const frac = Math.min(1, p.chargeT / kitOf(p).bowCharge);
-      const x = Math.round(p.x - ox) - 7, y = Math.round(py - (local ? 12 : 12));
+      const x = Math.round(p.x - ox) - 7, y = py - 10;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(x - 1, y - 1, 16, 4);
+      ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
       ctx.fillStyle = '#3a3448';
-      ctx.fillRect(x, y, 14, 2);
+      ctx.fillRect(x, y, 14, 3);         // fill rows + the gap row
       ctx.fillStyle = frac >= 1 ? '#ff9440' : '#ffd95c';
       ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
     }
