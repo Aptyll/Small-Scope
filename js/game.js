@@ -2727,14 +2727,27 @@
   }
 
   // ------------------------------------------------------------ fx updates
+  // Snow lives in the world, not on the glass: a flake has a world position,
+  // drifts in world px, and scrolls with the camera like everything else. The
+  // field is kept exactly one view in size and drawn wrapped modulo VIEW_W/H
+  // around the camera, so the screen is always covered at constant density
+  // whatever the zoom or view size (fitFlakes sizes the array) while a pan
+  // still slides every flake the right way. A flake falls for h world px,
+  // lands (rests on the ground fading out for FLAKE_REST s) and is reborn
+  // somewhere in the field - the fall is not screen-top to screen-bottom.
+  const FLAKE_REST = 0.7;
   const flakes = [];
-  for (let i = 0; i < 70; i++) {
-    flakes.push({
-      x: rng() * VIEW_W, y: rng() * VIEW_H,
-      spd: rand(9, 26), sway: rand(0.4, 1.4), ph: rng() * 9, size: rng() < 0.75 ? 1 : 2,
-      a: rand(0.35, 0.8),
-    });
+  // a fresh flake somewhere in the field, from the given random stream
+  function makeFlake(r) {
+    return {
+      x: r() * VIEW_W, y: r() * VIEW_H, // offset inside the field; the camera adds the rest
+      h: 30 + r() * 90,                  // world px left to fall before it lands
+      rest: 0,                           // >0: landed, seconds of rest left
+      spd: 9 + r() * 17, sway: 0.4 + r(), ph: r() * 9,
+      size: r() < 0.75 ? 1 : 2, a: 0.35 + r() * 0.45,
+    };
   }
+  for (let i = 0; i < 70; i++) flakes.push(makeFlake(rng));
 
   // keep snow density constant across view sizes; resize top-ups draw from a
   // separate seeded stream so they never perturb the main rng's worldgen prefix
@@ -2742,22 +2755,25 @@
   function fitFlakes() {
     const target = Math.round(70 * (VIEW_W * VIEW_H) / (480 * 270));
     while (flakes.length > target) flakes.pop();
-    while (flakes.length < target) {
-      flakes.push({
-        x: fxRng() * VIEW_W, y: fxRng() * VIEW_H,
-        spd: 9 + fxRng() * 17, sway: 0.4 + fxRng(), ph: fxRng() * 9,
-        size: fxRng() < 0.75 ? 1 : 2, a: 0.35 + fxRng() * 0.45,
-      });
-    }
+    while (flakes.length < target) flakes.push(makeFlake(fxRng));
   }
 
   function updateFx(dt) {
     const now = performance.now() / 1000;
     for (const f of flakes) {
-      f.y += f.spd * dt;
+      if (f.rest > 0) {
+        f.rest -= dt;
+        if (f.rest <= 0) { // reborn: same slot, new spot in the field
+          const n = makeFlake(rng);
+          n.x += camX; n.y += camY;
+          Object.assign(f, n);
+        }
+        continue;
+      }
+      const dy = f.spd * dt;
+      f.y += dy; f.h -= dy;
       f.x += Math.sin(now * f.sway + f.ph) * 8 * dt + 4 * dt;
-      if (f.y > VIEW_H + 2) { f.y = -2; f.x = rng() * VIEW_W; }
-      if (f.x > VIEW_W + 2) f.x = -2;
+      if (f.h <= 0) f.rest = FLAKE_REST;
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
@@ -3043,7 +3059,7 @@
 
     drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
     renderLighting(ox, oy, now);
-    renderWeather(now);
+    renderWeather(ex, ey);
     renderVignettes();
     renderUI(now);
     if (state.mode === 'drop') renderDropUI(now);
@@ -3782,11 +3798,15 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  function renderWeather(now) {
+  // world-space flakes wrapped into the view (see the flakes block in fx
+  // updates); a landed flake fades out where it came to rest
+  function renderWeather(ex, ey) {
+    ctx.fillStyle = '#ffffff';
     for (const f of flakes) {
-      ctx.globalAlpha = f.a;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(Math.round(f.x), Math.round(f.y), f.size, f.size);
+      const sx = ((f.x - ex) % VIEW_W + VIEW_W) % VIEW_W;
+      const sy = ((f.y - ey) % VIEW_H + VIEW_H) % VIEW_H;
+      ctx.globalAlpha = f.rest > 0 ? f.a * (f.rest / FLAKE_REST) : f.a;
+      ctx.fillRect(Math.round(sx), Math.round(sy), f.size, f.size);
     }
     ctx.globalAlpha = 1;
   }
@@ -5269,7 +5289,7 @@
 
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
-    SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints,
+    SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes,
     fish, iceCracks, holes, crackIce, addFish,
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,

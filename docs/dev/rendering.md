@@ -54,7 +54,7 @@ positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — `let`s **declared in the 
 beside `relayout()`**, not down in their own sections, so `relayout()` never reaches forward
 into a temporal dead zone; the offsets *within* each baked panel stay fixed in their own
 sections), `fitFlakes()`, which keeps snow density constant by topping up/trimming
-the `flakes` array, and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
+the `flakes` array (see [Snow](#snow)), and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
 code against a literal 480/270; `menuLayout()` shows the pattern for recentering a 270-authored
 layout (`toy` offset).
 
@@ -75,7 +75,7 @@ selection brackets (`drawSelection`: white pulsing corners with a dark shadow ov
 stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
-eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` →
+eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` (snow, see below) →
 `renderVignettes` → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
@@ -90,6 +90,22 @@ band — drop one lower and a tree on the tile below hides it almost completely.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 32×32 `scratch`
 canvas with `source-in` — sprites larger than 32×32 will clip.
+
+### Snow
+
+Flakes are **world-space**, not a screen overlay: each entry of `flakes` (the block at the top of
+the `fx updates` banner) has a world `x/y`, drifts in world px (`spd` down, a sine sway plus a
+light wind), and so scrolls with the camera like everything else. The field is kept exactly one
+view in size — `fitFlakes()` scales the count to `VIEW_W×VIEW_H` (70 at 480×270) — and
+`renderWeather(ex, ey)` draws every flake **wrapped modulo `VIEW_W`/`VIEW_H` around the exact
+camera**, so the screen is always fully covered at constant density at any zoom or view size
+(including the drop view) while a pan still slides every flake the right way; the wrap is invisible
+because it only ever happens at the screen edge. A flake does not fall screen-top to
+screen-bottom: it is born with `h` (30–120) world px left to fall, **lands** when that runs out,
+rests on the ground fading out for `FLAKE_REST` (0.7 s), and is then reborn (`makeFlake`) at a
+fresh spot in the field. Boot flakes and rebirths draw from `rng`; resize/zoom top-ups draw from
+`fxRng` (see [world.md](world.md)). Drawn after `renderLighting` (never darkened) and before the
+vignettes and HUD. `DBG.flakes` and `DBG.cam()` expose the array and the exact camera.
 
 ## UI panels are baked once
 
