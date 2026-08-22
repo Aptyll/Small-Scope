@@ -3051,9 +3051,9 @@
       const a = 1 - f.t / 0.9;
       ctx.globalAlpha = a;
       const s = f.scale || 1;
-      drawPixelTextShadow(ctx, f.txt,
+      drawPixelTextOutline(ctx, f.txt,
         Math.round(f.x + (f.vx || 0) * f.t - ex - pixelTextWidth(f.txt, s) / 2),
-        Math.round(f.y - ey - f.t * (f.rise || 14)), f.color, 'rgba(20,20,40,0.8)', s);
+        Math.round(f.y - ey - f.t * (f.rise || 14)), f.color, '#0f1632', s);
       ctx.globalAlpha = 1;
     }
 
@@ -3087,14 +3087,14 @@
   // fps readout, very top-right corner, above every overlay
   function drawFps() {
     const t = 'FPS ' + perf.fps;
-    drawPixelTextShadow(ctx, t, VIEW_W - pixelTextWidth(t) - 3, 2,
-      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', 'rgba(15,22,50,0.85)');
+    drawPixelTextOutline(ctx, t, VIEW_W - pixelTextWidth(t) - 3, 2,
+      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
   }
 
   // run seed, bottom-right corner - identifies the world and can be replayed via ?seed=N
   function drawSeedTag() {
-    drawPixelTextShadow(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
-      '#9fb6d8', 'rgba(15,22,50,0.85)');
+    drawPixelTextOutline(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
+      '#9fb6d8', '#0f1632');
   }
 
   // ------------------------------------------------------------ cursor & aim line
@@ -3411,9 +3411,9 @@
     }
     // rivals carry a name tag in their team colour so a fight stays legible
     if (!local) {
-      drawPixelTextShadow(ctx, p.name,
+      drawPixelTextOutline(ctx, p.name,
         Math.round(p.x - ox - pixelTextWidth(p.name) / 2), py - 15,
-        TEAMS[p.team].mark, 'rgba(15,22,50,0.85)');
+        TEAMS[p.team].mark, '#0f1632');
     }
     // dodge stamina: one clean unsegmented bar under the health bar - charges
     // stay discrete in the sim, the bar just shows the pooled total. Only the
@@ -3583,7 +3583,7 @@
       ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 1, y + 8, capW - 2, 1); // bottom shade = depth
     }
     drawPixelText(ctx, 'E', x + 3, cy + 3, '#0a0e23');
-    drawPixelTextShadow(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', 'rgba(10,14,35,0.9)');
+    drawPixelTextOutline(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', '#0f1632');
   }
 
   // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour
@@ -3626,7 +3626,7 @@
     const totalW = 9 + 3 + pixelTextWidth(verb);
     const x = Math.round(fx - totalW / 2), y = fy - 26; // clear of an adjacent player's bars
     drawMouseIcon(x, y, near && (mouse.down || player.charging));
-    drawPixelTextShadow(ctx, verb, x + 12, y + 3, near ? '#f4f7ff' : '#9fb6d8', 'rgba(10,14,35,0.9)');
+    drawPixelTextOutline(ctx, verb, x + 12, y + 3, near ? '#f4f7ff' : '#9fb6d8', '#0f1632');
     ctx.globalAlpha = 1;
   }
 
@@ -3670,9 +3670,9 @@
         ctx.globalAlpha = 1;
       } else {
         const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'MODE';
-        drawPixelTextShadow(ctx, label,
+        drawPixelTextOutline(ctx, label,
           Math.round(ix - pixelTextWidth(label) / 2), Math.round(iy - 2),
-          hovered ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
+          hovered ? '#ffd95c' : '#9fb6d8', '#0f1632');
       }
     }
 
@@ -3699,9 +3699,9 @@
         color = '#ffd95c';
       }
     }
-    drawPixelTextShadow(ctx, label,
+    drawPixelTextOutline(ctx, label,
       Math.round(L.cx - pixelTextWidth(label) / 2),
-      Math.round(L.cy + WHEEL_R + 20), color, 'rgba(15,22,50,0.9)');
+      Math.round(L.cy + WHEEL_R + 20), color, '#0f1632');
   }
 
   // ------------------------------------------------------------ lighting & weather
@@ -3924,7 +3924,7 @@
     const secs = Math.floor(state.elapsed % 60);
     const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
     const ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
-    drawPixelTextShadow(ctx, clock, ccx, MM_CY + MM_R + 9, '#f4f7ff', 'rgba(15,22,50,0.8)');
+    drawPixelTextOutline(ctx, clock, ccx, MM_CY + MM_R + 9, '#f4f7ff', '#0f1632');
   }
 
   // ------------------------------------------------------------ world map (M)
@@ -4314,14 +4314,14 @@
     // berries: consumable indicator, top-left (health lives on the in-world bar)
     if (inv.berry > 0) {
       ctx.drawImage(SPRITES.itemBerry, 5, 5);
-      drawPixelTextShadow(ctx, String(inv.berry), 15, 7, '#f4f7ff', 'rgba(15,22,50,0.8)');
-      drawPixelTextShadow(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', 'rgba(15,22,50,0.8)');
+      drawPixelTextOutline(ctx, String(inv.berry), 15, 7, '#f4f7ff', '#0f1632');
+      drawPixelTextOutline(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', '#0f1632');
     }
     // fish: the bigger meal, right below the berries
     if (inv.fish > 0) {
       ctx.drawImage(SPRITES.itemFish, 5, 15);
-      drawPixelTextShadow(ctx, String(inv.fish), 15, 17, '#f4f7ff', 'rgba(15,22,50,0.8)');
-      drawPixelTextShadow(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', 'rgba(15,22,50,0.8)');
+      drawPixelTextOutline(ctx, String(inv.fish), 15, 17, '#f4f7ff', '#0f1632');
+      drawPixelTextOutline(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', '#0f1632');
     }
 
     ctx.restore();
@@ -4342,7 +4342,7 @@
     const ryTop = 5;
     for (const [spr, n] of res) {
       ctx.drawImage(SPRITES[spr], rx, ryTop);
-      drawPixelTextShadow(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', 'rgba(15,22,50,0.8)');
+      drawPixelTextOutline(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', '#0f1632');
       rx += 10 + pixelTextWidth(String(n)) + resGap;
     }
 
@@ -4357,7 +4357,7 @@
       const a = Math.min(1, state.msgT * 2);
       ctx.globalAlpha = a;
       const w = pixelTextWidth(state.msg);
-      drawPixelTextShadow(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 44, '#fff4d8', 'rgba(15,22,50,0.9)');
+      drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 44, '#fff4d8', '#0f1632');
       ctx.globalAlpha = 1;
     }
 
@@ -5185,8 +5185,8 @@
     ctx.fillRect(cx0 - 1, cy0 - 1, cs + 2, cs + 2);
     ctx.drawImage(mapCv, cx0, cy0, cs, cs);
     const title = "THE EAGLE'S LINE";
-    drawPixelTextShadow(ctx, title, Math.round(cx0 + (cs - pixelTextWidth(title, ts)) / 2), cy0 - 3 - 7 * ts,
-      '#ffd95c', 'rgba(15,22,50,0.9)', ts);
+    drawPixelTextOutline(ctx, title, Math.round(cx0 + (cs - pixelTextWidth(title, ts)) / 2), cy0 - 3 - 7 * ts,
+      '#ffd95c', '#0f1632', ts);
     // the line, dashed, the flown part solid
     const mx = (x) => cx0 + (x / TILE) * k, my = (y) => cy0 + (y / TILE) * k;
     ctx.save();
@@ -5236,7 +5236,7 @@
       const pulse = 0.75 + Math.sin(now * 5) * 0.25;
       const t1 = 'SPACE - JUMP';
       ctx.globalAlpha = pulse;
-      drawPixelTextShadow(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#ffd95c', 'rgba(15,22,50,0.9)', ts);
+      drawPixelTextOutline(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#ffd95c', '#0f1632', ts);
       ctx.globalAlpha = 1;
       // time left on the line
       const left = Math.max(0, d.dur - d.t);
@@ -5248,12 +5248,12 @@
       ctx.fillStyle = left < 3 ? '#ff6a5a' : '#f4f7ff';
       ctx.fillRect(bxx, byy, Math.round(bw * (1 - d.prog)), bh);
       const t2 = Math.ceil(left) + 'S';
-      drawPixelTextShadow(ctx, t2, bxx + bw + 4 * ts, byy - ts, '#cfe0ff', 'rgba(15,22,50,0.9)', ts);
+      drawPixelTextOutline(ctx, t2, bxx + bw + 4 * ts, byy - ts, '#cfe0ff', '#0f1632', ts);
       const t3 = 'THE EAGLE DROPS YOU AT THE END OF ITS LINE';
-      drawPixelTextShadow(ctx, t3, Math.round(cxm - pixelTextWidth(t3, ts) / 2), VIEW_H - 14 * ts, '#9fb6d8', 'rgba(15,22,50,0.9)', ts);
+      drawPixelTextOutline(ctx, t3, Math.round(cxm - pixelTextWidth(t3, ts) / 2), VIEW_H - 14 * ts, '#9fb6d8', '#0f1632', ts);
     } else {
       const t1 = 'WASD - DRIFT';
-      drawPixelTextShadow(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#f4f7ff', 'rgba(15,22,50,0.9)', ts);
+      drawPixelTextOutline(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#f4f7ff', '#0f1632', ts);
     }
   }
 

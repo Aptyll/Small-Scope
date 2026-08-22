@@ -59,7 +59,7 @@ globals. Order matters: each file's globals must exist before the next runs.
 
 | File | Exposes | Role |
 | --- | --- | --- |
-| [js/font.js](js/font.js) | `drawPixelText`, `drawPixelTextShadow`, `pixelTextWidth` | 3×5 bitmap font, uppercase only, unknown chars render as `?` |
+| [js/font.js](js/font.js) | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | 3×5 bitmap font, uppercase only, unknown chars render as `?`. **Text over the world uses `Outline`** (1px dark rim on all sides, opaque colour); `Shadow` is for text on panels/planks |
 | [js/sprites.js](js/sprites.js) | `SPRITES` | every sprite as a char-grid + palette map, baked to offscreen canvases at load |
 | [js/audio.js](js/audio.js) | `SFX` | WebAudio synth; no asset files |
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |

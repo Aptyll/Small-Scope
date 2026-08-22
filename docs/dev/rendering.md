@@ -138,6 +138,20 @@ for **everyone**, because it is the tell that a shot is coming. The overhead sta
 the sprite: stamina plate at `py - 4` (local slot only), health at `py - 7`, draw meter at
 `py - 12`, and a rival's name tag in team colour above that.
 
+## Text over the world
+
+White pixel text on a white snowfield is unreadable with a drop shadow, so everything drawn over
+the world goes through `drawPixelTextOutline(ctx, text, x, y, color, outline, scale)` in
+[font.js](../../js/font.js): the glyph stamped at the eight 1-px integer offsets in the outline
+colour, then once in the text colour — a solid rim on every side, exactly 1 game px at any text
+scale, no blur. The outline colour is the opaque `#0f1632` (the eight passes overlap, so a
+translucent colour would stack unevenly). Sites: floaters (damage numbers, gold, `LEVEL n`),
+rival name tags, the E and fish prompts, the radial-wheel labels, the HUD counters (berry/fish,
+gold, the clock under the minimap), `state.msg`, the fps and seed tags, and the drop-UI text.
+`drawPixelTextShadow` (a single bottom-right 1 px shadow) remains for text sitting on a panel,
+plank or overlay — the settings/map panels, the main menu, the death overlay — where a full
+outline reads heavy. Checked at noon on open snow and at full night.
+
 ## Damage feedback
 
 `addDmgFloater(x, y, amount, taken)` pushes a combat damage number into the shared `floaters`

@@ -78,10 +78,25 @@
     return String(text).length * 4 * scale - scale;
   };
 
-  // Text with a 1px drop shadow / outline for readability over the world.
+  // Text with a 1px drop shadow (bottom-right only): for text sitting on a
+  // panel or plank, where a full outline would look heavy.
   window.drawPixelTextShadow = function (ctx, text, x, y, color, shadow, scale) {
     scale = scale || 1;
     drawPixelText(ctx, text, x + scale, y + scale, shadow, scale);
+    drawPixelText(ctx, text, x, y, color, scale);
+  };
+
+  // Text with a full dark outline, exactly 1 game px on all eight sides at any
+  // text scale (a 2x floater still gets a 1px rim, not a 2px slab), for
+  // anything drawn over the world: white on snow is unreadable with a mere
+  // shadow. Pass an opaque outline colour - the eight passes overlap, so a
+  // translucent one stacks unevenly. Crisp: it is the same glyph stamped at
+  // eight integer offsets, no blur.
+  window.drawPixelTextOutline = function (ctx, text, x, y, color, outline, scale) {
+    scale = scale || 1;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (dx || dy) drawPixelText(ctx, text, x + dx, y + dy, outline, scale);
+    }
     drawPixelText(ctx, text, x, y, color, scale);
   };
 })();
