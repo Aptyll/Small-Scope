@@ -191,6 +191,14 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
   slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands).
+- **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
+  over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on
+  the left (`drawChampCard`: portrait well + name + role), the highlighted one drawn 6× in the
+  middle over a plinth with name, role, blurb lines and four stat-pip rows, and a LOCK IN plank.
+  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
+  card clicks move `menu.csel` (`menu.cswapT` pops the big sprite), Enter/Space/LOCK IN call
+  `lockIn()` — which stamps `setChamp(player, csel)`, holds `menu.lockT` for the press, then
+  `beginIntro()`; Esc/Backspace go back to the menu.
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Play intro** (`beginIntro`, what `startGame` now calls): the sim starts immediately, but
   for `INTRO_T` (1.6 s) `state.intro` counts down while `renderTitle` keeps drawing — the tint

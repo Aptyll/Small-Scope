@@ -134,6 +134,69 @@
     '.......bb.......',
   ]);
 
+  // ---------------------------------------------------------------- skater (champion 2)
+  // Same 16x16 body plan as the player so every pose/frame lines up, but a
+  // hood instead of the pom hat, goggles, a long trailing scarf and skate
+  // blades under the boots. Extra palette chars: S blade, g/G goggles.
+  const SKPAL_EXTRA = { 'S': '#c8d8e8', 'g': '#203a52', 'G': '#8fd8ff' };
+  const skDownBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otkkkkto....',
+    '....oGgGgGto....',
+    '....otkKKkto....',
+    '....ommmmmmo....',
+    '...ommrrRRrro...',
+    '...orrrRRrrro...',
+    '...orrrRRrmmo...',
+    '...omorrrromo...',
+    '....oddddddo....',
+    '.....pp..pp.....',
+  ];
+  const skDownIdle = skDownBody.concat(['.....bb..bb.....', '.....SS..SS.....']);
+  const skDownA = skDownBody.concat(['.....bb..SS.....', '.....SS.........']);
+  const skDownB = skDownBody.concat(['.....SS..bb.....', '.........SS.....']);
+  const skUpBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otttttto....',
+    '....otttttto....',
+    '....otttttto....',
+    '....ommmmmmo....',
+    '...orrrmmrrro...',
+    '...orrrmmrrro...',
+    '...orrrmmrrro...',
+    '...omorrmromo...',
+    '....oddddddo....',
+    '.....pp..pp.....',
+  ];
+  const skUpIdle = skUpBody.concat(['.....bb..bb.....', '.....SS..SS.....']);
+  const skUpA = skUpBody.concat(['.....bb..SS.....', '.....SS.........']);
+  const skUpB = skUpBody.concat(['.....SS..bb.....', '.........SS.....']);
+  const skSideBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTtto....',
+    '....ottttkko....',
+    '....otttGgGo....',
+    '....otttkKko....',
+    '..mmommmmmmo....',
+    '.mmmorrrRRro....',
+    '....orrrRRro....',
+    '....orrommro....',
+    '....odddddo.....',
+    '....odddddo.....',
+    '......pp.pp.....',
+  ];
+  const skSideIdle = skSideBody.concat(['......bb.bb.....', '......SS.SS.....']);
+  const skSideA = skSideBody.concat(['.....bb...bb....', '.....SS...SS....']);
+  const skSideB = skSideBody.concat(['.......bb.......', '.......SS.......']);
+
   // ---------------------------------------------------------------- raider
   // Player-like night raider: same body grids, hostile palette.
   const RDPAL = {
@@ -1151,6 +1214,17 @@
   });
   const TIER_PALS = [WPAL, WPAL_STONE, WPAL_GOLD];
   const teamPlayers = TEAM_SKINS.map((t) => playerSet(teamPlayerPal(t)));
+  const skaterSet = (pal) => {
+    const sp = Object.assign({}, pal, SKPAL_EXTRA);
+    return {
+      down: [bake(skDownIdle, sp), bake(skDownA, sp), bake(skDownB, sp)],
+      up: [bake(skUpIdle, sp), bake(skUpA, sp), bake(skUpB, sp)],
+      right: [bake(skSideIdle, sp), bake(skSideA, sp), bake(skSideB, sp)],
+      left: [flipH(bake(skSideIdle, sp)), flipH(bake(skSideA, sp)), flipH(bake(skSideB, sp))],
+    };
+  };
+  // champ[c][team] - one full pose set per champion per team colour
+  const champPlayers = [teamPlayers, TEAM_SKINS.map((t) => skaterSet(teamPlayerPal(t)))];
   const teamBuild = TEAM_SKINS.map((t) => ({
     wall: TIER_PALS.map((b) => bake(wall, teamBuildPal(b, t))),
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
@@ -1162,6 +1236,7 @@
   window.SPRITES = {
     teams: TEAM_SKINS,
     playerTeam: teamPlayers,
+    champ: champPlayers,
     teamBuild: teamBuild,
     robotTeam: teamRobots,
     player: teamPlayers[0],

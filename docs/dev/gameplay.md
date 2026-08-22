@@ -8,6 +8,10 @@ Everything below describes **a player**, not *the* player: each mechanic runs pe
 `p.input`, and `player` is only the local slot. [multiplayer.md](multiplayer.md) covers the slot
 model, the input struct, teams, bots and how two players' orders are resolved.
 
+> Several numbers below (ice cap, steer, slide threshold and fatigue, draw time and speed, arrow
+> damage, dash speed, max hp) are **per champion** — the constants are champion 0's values and
+> the sim reads them through `kitOf(p)`. See [Champions](multiplayer.md#champions).
+
 ## Momentum movement (players only)
 
 A player moves on a real velocity (`p.vx/vy`): `p.input.mx/my` accelerates, and the surface

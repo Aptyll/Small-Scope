@@ -55,6 +55,28 @@ bots and future network peers can't use it.
 `workTarget(p)` reads `p.input.aimX/aimY`, not the mouse, which is why the cursor's lock ring and a
 bot's chop resolve through exactly the same function.
 
+## Champions
+
+Every slot also carries a champion (`p.champ`, an index into `CHAMPS` in the `players` banner).
+A champion is a look plus a kit — the handful of numbers the sim reads through `kitOf(p)`
+instead of the bare constants: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
+(snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
+`dmgBase`/`dmgPow` (arrow damage = base + pow × draw), `spdDmg` (extra damage scaled by the
+shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
+`updatePlayer`'s movement block, `fireArrow`, `tryDodge`, the AI's draw timing, the cursor,
+aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre-match choice).
+
+| # | Name | Look | Kit |
+| --- | --- | --- | --- |
+| 0 | **WREN**, the Ranger | the original pom-hat sprite | the original numbers, unchanged |
+| 1 | **SKADI**, the Skater | hood, goggles, trailing scarf, skate blades (`SPRITES.champ[1]`) | ice cap ×1.35, sharper carves, slide engages at 60 and fatigues half as fast, draw 0.6 s at 85 % speed, arrows 3 + 6·draw **+ up to 7 for speed**, dash 245, 85 hp |
+
+The local slot picks on the champion select screen (see
+[Main menu](rendering.md#main-menu-title)); AI slots hash theirs from the seed in `initPlayers()`
+so a replayed world fields the same roster. Sprites live in `SPRITES.champ[c][team]` — same
+16×16 body plan and frame set as the player, so `drawPlayer`/`drawGhost` just swap the set via
+`champSet(p)`; `SPRITES.playerTeam` is champion 0.
+
 ## Teams and colours
 
 Four presets live in `SPRITES.teams` (`TEAM_SKINS` in [js/sprites.js](../../js/sprites.js)):

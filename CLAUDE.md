@@ -6,7 +6,9 @@ the cursor), build structures on stumps, and travel fast via a momentum system (
 rivers, chained dodges, shift-sliding). **Gold is the only currency**; berries and fish are food.
 
 Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the local human, the rest
-AI fills, four team colours), and arrows hurt rival players exactly as they hurt animals. Nothing
+AI fills, four team colours), each playing one of two champions (WREN the ranger, SKADI the
+skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
+animals. Nothing
 else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
 
 ## Commands
@@ -44,7 +46,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish | [docs/dev/world.md](docs/dev/world.md) |
 | movement, bow and tools, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
-| player slots, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
+| player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 
@@ -83,7 +85,7 @@ don't cite line numbers here, they go stale within a session.
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
-| slots, teams, the input struct, contested orders | `Player`, `makeInput`, `initPlayers`, `contest` | `players` |
+| slots, teams, champions + kits, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `makeInput`, `initPlayers`, `contest` | `players` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
@@ -105,7 +107,7 @@ don't cite line numbers here, they go stale within a session.
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
-| the title screen: buttons, die, panels, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `beginIntro`, `renderTitle` | `main menu` |
+| the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 
 ## Hard rules

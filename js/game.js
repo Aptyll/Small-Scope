@@ -294,7 +294,10 @@
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
     // the open sub-panel ('settings' | 'help' | null) and its slide progress
     menu: { sel: 0, hover: [0, 0, 0, 0], t: 0, panel: null, panelT: 0, closing: false,
-      moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0 },
+      moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
+      // champion select: which screen the menu shows, its cross-fade, the
+      // highlighted champion, per-card hover eases, swap pop, lock-in hold
+      screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0 },
     intro: 0,            // seconds left of the title -> play transition (0 = none)
     introFrom: null,     // camera position the transition started from
     fade: null,          // screen fade: { a, to, spd, color, then }
@@ -346,6 +349,34 @@
   // HUD, cursor and audio only.
   const TEAMS = SPRITES.teams; // 4 colour presets, baked into the sprites
 
+  // ---- champions ----------------------------------------------------------
+  // Every slot plays one of these. A champion is a look (SPRITES.champ[c]) plus
+  // a kit: the handful of numbers updatePlayer / fireArrow / tryDodge read
+  // through kitOf(p) instead of the bare constants. Champion 0 is the original
+  // kit unchanged; the skater trades draw power for ice speed and shoots
+  // harder the faster she is moving. Picked on the select screen (local) or
+  // hashed from the seed (AI slots) in initPlayers().
+  const CHAMPS = [
+    {
+      name: 'WREN', role: 'THE RANGER',
+      blurb: ['STEADY DRAW, HARD HITS. THE ALL-ROUNDER.', 'AXE AND PICK COME OUT ON THEIR OWN.', 'ROLLS CHAIN INTO SPEED ON THE RIVERS.'],
+      stats: { ice: 2, draw: 3, power: 4, tough: 3 },
+      kit: { iceMax: 1, iceSteer: 2.6, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.55,
+        bowCharge: BOW_CHARGE, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 100 },
+    },
+    {
+      name: 'SKADI', role: 'THE SKATER',
+      blurb: ['BLADES ON THE ICE: FASTER CAP, SHARPER CARVES.', 'QUICK DRAW THAT BARELY SLOWS HER DOWN.', 'ARROWS HIT HARDER THE FASTER SHE FLIES.'],
+      stats: { ice: 5, draw: 5, power: 2, tough: 2 },
+      kit: { iceMax: 1.35, iceSteer: 3.8, slideMin: 60, fatigue: 0.5, chargeMul: 0.85,
+        bowCharge: 0.6, dmgBase: 3, dmgPow: 6, spdDmg: 7, dodgeSpeed: 245, maxHp: 85 },
+    },
+  ];
+  function kitOf(p) { return CHAMPS[p.champ].kit; }
+  // swap a slot's champion: kit hp applies on the spot (full heal, it's a pre-match choice)
+  function setChamp(p, c) { p.champ = c; p.maxHp = CHAMPS[c].kit.maxHp; p.hp = p.maxHp; }
+  function champSet(p) { return SPRITES.champ[p.champ][p.team]; }
+
   // one frame of intent - the whole interface between a controller and the sim
   function makeInput() {
     return {
@@ -368,6 +399,7 @@
       this.name = control === 'human' ? 'YOU' : TEAMS[this.team].name + '-' + (slot + 1);
       this.spawn = spawnPts[slot % spawnPts.length];
       this.inv = { gold: 0, berry: 0, fish: 0 };
+      this.champ = 0;                     // CHAMPS index; the select screen sets the local one
       this.maxHp = 100;
       // bot brain (unused by a human slot): current job, give-up timers and the
       // short blacklists that keep a bot from re-picking work it cannot reach
@@ -413,6 +445,8 @@
   function initPlayers() {
     players.length = 0;
     for (let i = 0; i < MAX_PLAYER_SLOTS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
+    // AI slots draw their champion from the seed so a replayed world fields the same roster
+    for (const p of players) if (p.control === 'ai') setChamp(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1);
     player = players[0];
     inv = player.inv;
   }
@@ -1037,7 +1071,7 @@
     const d = Math.hypot(dx, dy) || 1;
     // impulse into the shared velocity: a dash never slows you below the speed
     // you already carry, so on ice dashes chain into real speed
-    const v = Math.max(DODGE_SPEED, Math.hypot(p.vx, p.vy));
+    const v = Math.max(kitOf(p).dodgeSpeed, Math.hypot(p.vx, p.vy));
     p.dodgeVX = dx / d * v; // kept for the roll spin/ghost render
     p.dodgeVY = dy / d * v;
     p.vx = p.dodgeVX;
@@ -1084,7 +1118,10 @@
         return;
       }
     }
-    const pw = Math.min(1, Math.max(0.18, p.chargeT / BOW_CHARGE));
+    const kit = kitOf(p);
+    const pw = Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
+    // momentum shot: a kit with spdDmg pays extra for speed at the moment of release
+    const spdBonus = kit.spdDmg * Math.min(1, Math.hypot(p.vx, p.vy) / 200);
     // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise the
     // flight runs parallel to the aim line, a few px above it, and never meets it
     const dx = p.input.aimX - p.x;
@@ -1094,7 +1131,7 @@
     arrows.push({
       x: p.x, y: p.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
-      t: 0, life: 0.85, dmg: Math.round(4 + 9 * pw), pow: pw,
+      t: 0, life: 0.85, dmg: Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus), pow: pw,
       owner: p.id, team: p.team, // whose shot it is - it never hits its own side
     });
     if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
@@ -1952,7 +1989,7 @@
       const clear = aiLineClear(p, foe.x, foe.y - 6);
       const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
       inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
-      inp.fire = clear && p.chargeT < BOW_CHARGE * 0.95; // draw, then loose near full
+      inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.95; // draw, then loose near full
       if (p.hp < p.maxHp * 0.45 && p.dodgeCharges > 0 && rng() < dt * 2) inp.dodge = true;
       ai.tgt = null;
       return;
@@ -1973,7 +2010,7 @@
         const d = Math.hypot(prey.x - p.x, prey.y - p.y);
         aimAt(prey.x, prey.y - 3);
         if (d > 55 || !clear) steerTo(prey.x, prey.y);
-        inp.fire = clear && p.chargeT < BOW_CHARGE * 0.8;
+        inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.8;
         ai.tgt = null;
         return;
       }
@@ -2357,14 +2394,15 @@
 
     // shift-slide: only engages above walking speed; keeps momentum, drops the tools
     const wantSlide = inp.slide && p.dodgeT <= 0;
-    if (!p.sliding && wantSlide && sp > SLIDE_MIN) {
+    const kit = kitOf(p);
+    if (!p.sliding && wantSlide && sp > kit.slideMin) {
       p.sliding = true;
     }
     if (p.sliding && (!wantSlide || sp < SLIDE_EXIT)) p.sliding = false;
     // slide fatigue: builds on snow so long slides run out of glide, recovers on
     // ice so a snow->ice->snow chain starts the snow leg fresh-ish
     if (p.sliding) {
-      p.slideT = onIce ? Math.max(0, p.slideT - dt * 1.5) : p.slideT + dt;
+      p.slideT = onIce ? Math.max(0, p.slideT - dt * 1.5) : p.slideT + dt * kit.fatigue;
     } else {
       p.slideT = 0;
     }
@@ -2402,7 +2440,7 @@
       }
       if (p.dodgeT <= 0) burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true);
     } else {
-      const chargeMul = p.charging ? 0.55 : 1; // drawn bow slows you
+      const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
       const walkMax = PLAYER_SPEED * chargeMul;
 
       if (!onIce && !p.sliding && sp <= walkMax + 6) {
@@ -2423,8 +2461,8 @@
           steer = 1.7; target = 0;
           decay = onIce ? 0.15 : Math.min(2.6, 0.35 + 0.45 * p.slideT);
         } else if (onIce) {
-          const cap = ICE_MAX * chargeMul;
-          if (len > 0) { steer = 2.6; target = cap; decay = sp < cap ? 1.1 : 0.35; }
+          const cap = ICE_MAX * kit.iceMax * chargeMul;
+          if (len > 0) { steer = kit.iceSteer; target = cap; decay = sp < cap ? 1.1 : 0.35; }
           else { steer = 0; target = 0; decay = 0.18; } // idle glide
         } else {
           steer = 4.5; target = len > 0 ? walkMax : 0; decay = 3.5; // snow kills overspeed fast unless you slide
@@ -2559,7 +2597,7 @@
 
     // bow draw: charge up and keep facing the aim point
     if (p.charging) {
-      p.chargeT = Math.min(BOW_CHARGE, p.chargeT + dt);
+      p.chargeT = Math.min(kitOf(p).bowCharge, p.chargeT + dt);
       const adx = inp.aimX - p.x, ady = inp.aimY - p.y;
       if (Math.abs(adx) > Math.abs(ady)) p.dir = adx > 0 ? 'right' : 'left';
       else p.dir = ady > 0 ? 'down' : 'up';
@@ -2942,6 +2980,7 @@
         if (dragSlider) return { kind: 'grab' };
         return { kind: settingsHit() ? 'hand' : 'arrow' };
       }
+      if (m.screen === 'select') return { kind: m.screenT >= 1 && selectHit() >= 0 ? 'hand' : 'arrow' };
       if (!m.panel && menuHit() >= 0) return { kind: 'hand' };
       return { kind: 'arrow' };
     }
@@ -2963,7 +3002,7 @@
       return { kind: 'hammer', dim: far };
     }
     if (player.charging) {
-      return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / BOW_CHARGE) };
+      return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / kitOf(player).bowCharge) };
     }
     // a living thing under the pointer: hunting reticle
     for (const q of players) {
@@ -3062,7 +3101,7 @@
   // bow-fishing reach gets a catch marker instead - that shot never flies.
   function drawAimLine(ex, ey, now) {
     if (!player.charging || state.mode !== 'play') return;
-    const full = player.chargeT >= BOW_CHARGE;
+    const full = player.chargeT >= kitOf(player).bowCharge;
     const col = full ? '#ff9440' : '#ffd95c';
     const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
     if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
@@ -3081,7 +3120,7 @@
         return;
       }
     }
-    const p = Math.min(1, Math.max(0.18, player.chargeT / BOW_CHARGE));
+    const p = Math.min(1, Math.max(0.18, player.chargeT / kitOf(player).bowCharge));
     const range = (170 + 190 * p) * 0.85; // speed x lifetime, as fireArrow() sets them
     const x0 = player.x, y0 = player.y - BOW_Y; // exactly fireArrow()'s origin and direction
     const dx = mouse.x + camX - x0, dy = mouse.y + camY - y0;
@@ -3170,7 +3209,7 @@
   // peers later. Team palette on the sprite, name tag on everybody else.
   function drawPlayer(p, ox, oy, now) {
     const local = p === player;
-    const set = SPRITES.playerTeam[p.team][p.dir];
+    const set = champSet(p)[p.dir];
     let frame = 0;
     if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
     const spr = set[frame];
@@ -3201,7 +3240,7 @@
         p.dodgeVY < 0 ? -1 : 1;
       const vd = Math.hypot(p.dodgeVX, p.dodgeVY) || 1;
       const nx = p.dodgeVX / vd, ny = p.dodgeVY / vd;
-      const rollSpr = SPRITES.playerTeam[p.team][p.dir][0];
+      const rollSpr = champSet(p)[p.dir][0];
       const spin = (a, gx, gy) => {
         ctx.save();
         ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
@@ -3256,7 +3295,7 @@
     // turning hot orange the moment the draw is full. Drawn for everyone - it
     // is the tell that says a shot is coming.
     if (p.charging) {
-      const frac = Math.min(1, p.chargeT / BOW_CHARGE);
+      const frac = Math.min(1, p.chargeT / kitOf(p).bowCharge);
       const x = Math.round(p.x - ox) - 7, y = Math.round(py - (local ? 12 : 12));
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 4);
@@ -3270,7 +3309,7 @@
   // an unfilled slot: a flat team-tinted silhouette standing at its camp, so
   // the world shows who is missing rather than pretending the slot isn't there
   function drawGhost(p, ox, oy) {
-    const spr = SPRITES.playerTeam[p.team][p.dir][0];
+    const spr = champSet(p)[p.dir][0];
     const px = Math.round(p.x - 8 - ox), py = Math.round(p.y - 12 - oy);
     sctx.clearRect(0, 0, 32, 32);
     sctx.globalCompositeOperation = 'source-over';
@@ -4226,7 +4265,7 @@
 
   function menuActivate(i) {
     SFX.unlock();
-    if (i === 0) beginIntro();
+    if (i === 0) beginSelect();
     else if (i === 1) openMenuPanel('settings');
     else if (i === 2) openMenuPanel('help');
     else if (i === 3) rerollWorld();
@@ -4257,6 +4296,7 @@
     const m = state.menu;
     const k = e.key.toLowerCase();
     if (state.fade) return; // a reroll is already leaving
+    if (m.screen === 'select') { if (m.screenT >= 1) selectKey(k); return; }
     if (m.panel) {
       if (k === 'escape' || k === 'backspace' || (m.panel === 'help' && (k === 'enter' || k === ' '))) closeMenuPanel();
       return;
@@ -4270,6 +4310,7 @@
     const m = state.menu;
     SFX.unlock();
     if (state.fade) return;
+    if (m.screen === 'select') { selectClick(); return; }
     if (m.panel) {
       if (!menuPanelReady()) return;
       if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
@@ -4290,6 +4331,7 @@
     state.intro = INTRO_T;
     state.mode = 'play';
     state.menu.panel = null;
+    state.menu.screen = 'menu';
     SFX.dawnChime();
   }
 
@@ -4338,6 +4380,19 @@
     for (let i = 0; i < 4; i++) {
       const target = m.sel === i ? 1 : 0;
       m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
+    }
+    // champion select cross-fade and its own hovers
+    const st = m.screen === 'select' ? 1 : 0;
+    m.screenT = Math.max(0, Math.min(1, m.screenT + (st ? 1 : -1) * dt / 0.35));
+    m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
+    const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
+    for (let i = 0; i < CHAMPS.length; i++) {
+      const target = (m.csel === i || sh === i) ? 1 : 0;
+      m.chover[i] += (target - m.chover[i]) * Math.min(1, dt * 14);
+    }
+    if (m.lockT > 0) {
+      m.lockT -= dt;
+      if (m.lockT <= 0) { m.lockT = 0; beginIntro(); }
     }
     if (m.panel) {
       if (m.closing) {
@@ -4437,7 +4492,7 @@
 
   // the selector: a pair of pixel arrows (shaft, gold head, fletching) bobbing
   // toward the selected item from both sides. dir = 1 points right, -1 left.
-  function drawSelector(r, lift, now) {
+  function drawSelector(r, lift, now, single) {
     const bob = Math.round(Math.sin(now * 7) * 1.5);
     const cy = r.y - lift + Math.floor(r.h / 2);
     const draw = (tipX, dir) => {
@@ -4457,7 +4512,7 @@
       px(0, 0, '#ffffff', 1);
     };
     draw(r.x - 6 + bob, 1);
-    draw(r.x + r.w + 5 - bob, -1);
+    if (!single) draw(r.x + r.w + 5 - bob, -1);
   }
 
   // the reroll die (11x11): face cycles while hovered, tumbles while rolling
@@ -4524,6 +4579,173 @@
     drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
   }
 
+  // ---- champion select ----------------------------------------------------
+  // PLAY goes here first (menu.screen = 'select'): champion cards on the left,
+  // the chosen one big in the middle with name, role, blurb and stat pips, and
+  // a LOCK IN plank. Up/Down browse, Enter/Space lock, Esc returns to the menu;
+  // the mouse does the same through selectHit(). Lock-in stamps player.champ
+  // and hands off to beginIntro(), so the camera settle / HUD slide are shared.
+  const SEL_CARD_W = 78, SEL_CARD_H = 28;
+
+  function selectLayout() {
+    const toy = Math.round((VIEW_H - 270) / 2);
+    const cx = Math.round(VIEW_W / 2);
+    const cards = CHAMPS.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
+    const lock = { x: cx - 56, y: toy + 228, w: 112, h: 20 };
+    return { toy, cx, cards, lock };
+  }
+
+  // what the pointer is over: card index, CHAMPS.length for LOCK IN, -1 for nothing
+  function selectHit() {
+    const { cards, lock } = selectLayout();
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i];
+      if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
+    }
+    if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return cards.length;
+    return -1;
+  }
+
+  function beginSelect() {
+    const m = state.menu;
+    m.screen = 'select';
+    m.cswapT = 1;
+    SFX.place();
+  }
+  function leaveSelect() {
+    state.menu.screen = 'menu';
+    SFX.pickup();
+  }
+  function selectChamp(i) {
+    const m = state.menu;
+    const n = ((i % CHAMPS.length) + CHAMPS.length) % CHAMPS.length;
+    if (n === m.csel) return;
+    m.csel = n;
+    m.cswapT = 0;
+    SFX.pickup();
+  }
+  function lockIn() {
+    const m = state.menu;
+    if (m.lockT > 0) return;
+    m.lockT = 0.35;
+    setChamp(player, m.csel);
+    SFX.place();
+  }
+
+  function selectKey(k) {
+    const m = state.menu;
+    if (m.lockT > 0) return;
+    if (k === 'escape' || k === 'backspace') leaveSelect();
+    else if (k === 'arrowup' || k === 'w') selectChamp(m.csel - 1);
+    else if (k === 'arrowdown' || k === 's') selectChamp(m.csel + 1);
+    else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); }
+  }
+
+  function selectClick() {
+    const m = state.menu;
+    if (m.lockT > 0 || m.screenT < 1) return;
+    const h = selectHit();
+    if (h < 0) return;
+    if (h === CHAMPS.length) { m.pressT = 0.12; lockIn(); }
+    else { selectChamp(h); if (h === m.csel) m.csel = h; }
+  }
+
+  // a champion card: small plank with the portrait sprite and name; hot = gold
+  function drawChampCard(r, ci, hv, now, chosen) {
+    const lift = Math.round(hv * 2);
+    const x = r.x, y = r.y - lift, w = r.w, h = r.h;
+    if (hv > 0.02) {
+      ctx.globalAlpha *= 1; // keep caller alpha
+      const a0 = ctx.globalAlpha;
+      ctx.globalAlpha = a0 * 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
+      ctx.fillStyle = '#ffb347';
+      chamRect(x - 3, y - 3, w + 6, h + 6);
+      ctx.globalAlpha = a0;
+    }
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(x + 2, r.y + 2, w, h);
+    ctx.fillStyle = '#0a0e23'; chamRect(x, y, w, h);
+    ctx.fillStyle = chosen ? '#1f2b5c' : '#141c3c'; chamRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.fillStyle = chosen ? '#5a7fb8' : '#35426e';
+    ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
+    ctx.fillStyle = '#080c1c';
+    ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
+    if (chosen) {
+      ctx.fillStyle = '#c89a3c';
+      ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
+    }
+    // portrait well
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 4, y + 5, 20, 19);
+    ctx.fillStyle = chosen ? '#2a3a6e' : '#1c2750'; ctx.fillRect(x + 5, y + 6, 18, 17);
+    ctx.drawImage(SPRITES.champ[ci][0].down[0], x + 6, y + 6);
+    drawPixelTextShadow(ctx, CHAMPS[ci].name, x + 28, y + 8, chosen ? '#ffd95c' : '#cfe0ff', '#0a0e23');
+    drawPixelTextShadow(ctx, CHAMPS[ci].role, x + 28, y + 16, chosen ? '#9fb6d8' : '#5a6690', '#0a0e23');
+  }
+
+  function drawStatPips(x, y, label, n, col) {
+    drawPixelTextShadow(ctx, label, x, y, '#9fb6d8', 'rgba(15,22,50,0.9)');
+    for (let i = 0; i < 5; i++) {
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + i * 8, y + 8, 6, 4);
+      ctx.fillStyle = i < n ? col : '#1c2750'; ctx.fillRect(x + i * 8 + 1, y + 9, 4, 2);
+    }
+  }
+
+  // a (0..1) is the screen's own visibility; out is the play-intro exit
+  function renderSelect(now, a) {
+    const m = state.menu;
+    const { toy, cx, cards, lock } = selectLayout();
+    const c = CHAMPS[m.csel];
+    const slideIn = 1 - a;
+
+    // header
+    ctx.globalAlpha = a;
+    const t0 = 'CHOOSE YOUR CHAMPION';
+    drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 30 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
+
+    // cards, from the left
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i];
+      const rr = { x: r.x - Math.round(slideIn * 80), y: r.y, w: r.w, h: r.h };
+      ctx.globalAlpha = a;
+      drawChampCard(rr, i, m.chover[i], now, m.csel === i);
+      if (m.csel === i) drawSelector({ x: rr.x + 4, y: rr.y, w: 0, h: rr.h }, Math.round(m.chover[i] * 2), now, true);
+    }
+    ctx.globalAlpha = a;
+
+    // the champion, big: 6x sprite over a soft plinth, swapping with a quick rise
+    const sw = easeOut(m.cswapT);
+    const bx = cx - 48, by = toy + 52 + Math.round((1 - sw) * 10);
+    ctx.globalAlpha = a * 0.35;
+    ctx.fillStyle = '#0a0e23';
+    ctx.beginPath(); ctx.ellipse(cx, toy + 150, 46, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = a * sw;
+    const spr = SPRITES.champ[m.csel][0].down[0];
+    ctx.drawImage(spr, bx, by, 96, 96);
+    // name + role
+    const nm = c.name;
+    drawPixelTextShadow(ctx, nm, Math.round((VIEW_W - pixelTextWidth(nm, 3)) / 2), toy + 160, '#ffd95c', '#3c2a1e', 3);
+    drawPixelTextShadow(ctx, c.role, Math.round((VIEW_W - pixelTextWidth(c.role)) / 2), toy + 180, '#cfe0ff', 'rgba(15,22,50,0.9)');
+    let ly = toy + 194;
+    for (const l of c.blurb) {
+      drawPixelTextShadow(ctx, l, Math.round((VIEW_W - pixelTextWidth(l)) / 2), ly, '#9fb6d8', 'rgba(15,22,50,0.9)');
+      ly += 10;
+    }
+    // stat pips, right column
+    const sx = cx + 120 + Math.round(slideIn * 80);
+    drawStatPips(sx, toy + 80, 'ICE', c.stats.ice, '#8fd8ff');
+    drawStatPips(sx, toy + 100, 'DRAW', c.stats.draw, '#ffd95c');
+    drawStatPips(sx, toy + 120, 'POWER', c.stats.power, '#ff8a3c');
+    drawStatPips(sx, toy + 140, 'TOUGH', c.stats.tough, '#9fe0a8');
+    ctx.globalAlpha = a;
+
+    // lock in
+    const over = m.screenT >= 1 && selectHit() === CHAMPS.length;
+    const pressed = m.pressT > 0 || m.lockT > 0;
+    drawMenuButton({ x: lock.x, y: lock.y + Math.round(slideIn * 20), w: lock.w, h: lock.h }, 'LOCK IN', over ? 1 : 0.7, now, pressed);
+    const t3 = 'ENTER LOCK IN - ESC BACK';
+    drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 258, '#5a6690', 'rgba(15,22,50,0.9)');
+    ctx.globalAlpha = 1;
+  }
+
   function renderTitle(now) {
     const m = state.menu;
     // leaving: 0 while the menu is up, 0->1 over the intro
@@ -4534,7 +4756,8 @@
       ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     }
     const out = easeOut(outQ / 0.35);           // menu chrome drops away first
-    const pan = m.panel ? easeOut(m.panelT) : 0; // and ducks while a panel is up
+    const sc = easeInOut(m.screenT);             // champion select cross-fade
+    const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc); // chrome ducks under a panel or the select screen
     const { toy, rects } = menuLayout();
 
     // logo: drops in at boot, lifts away on play
@@ -4542,7 +4765,7 @@
     const t1 = 'EMBERFROST';
     const bob = Math.sin(now * 1.5) * 2;
     const ly = Math.round(toy + 46 + bob - (1 - logoIn) * 30 - out * 40);
-    ctx.globalAlpha = logoIn * (1 - out) * (1 - pan * 0.85);
+    ctx.globalAlpha = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
     const lx = Math.round((VIEW_W - pixelTextWidth(t1, 4)) / 2);
     drawPixelText(ctx, t1, lx + 1, ly + 1, '#ff7a2a', 4); // ember under-glow
     drawPixelTextShadow(ctx, t1, lx, ly, '#ffd95c', '#3c2a1e', 4);
@@ -4586,6 +4809,8 @@
       drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 250, '#5a6690', 'rgba(15,22,50,0.9)');
       ctx.globalAlpha = 1;
     }
+
+    if (sc > 0.005) renderSelect(now, sc * (1 - out));
 
     // sub-panels slide up from the bottom edge over the still-visible world
     if (m.panel) {
@@ -4678,7 +4903,7 @@
     setTool: (i, p) => { (p || player).tool = i; },
     getTool: (p) => (p || player).tool,
     cam: () => ({ x: camX, y: camY }),
-    startGame, beginIntro, menu: state.menu, menuHit, menuClick, menuKey, settingsHit,
+    startGame, beginIntro, beginSelect, lockIn, setChamp, CHAMPS, menu: state.menu, menuHit, menuClick, menuKey, settingsHit, selectHit,
     layout: () => ({ VIEW_W, VIEW_H, SET_X, SET_Y, SL_X, ROW_SHAKE, PANEL_X, PANEL_Y, MM_CX, MM_CY }),
     hideUI: false,
     step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },
