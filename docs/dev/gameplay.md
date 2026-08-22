@@ -213,7 +213,7 @@ toward the nearest player, and everyone standing on one contests it
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
 screen position (clamped to stay on-screen): up = wall, right = turret, down = generator, left =
-spawner (`STRUCT_ORDER`); release over a segment to build, release in the 10 px deadzone to
+spawner (`STRUCT_ORDER`); release over a segment to build, release without having moved to
 cancel. Right-clicking a **finished** structure opens a **manage wheel**: up = upgrade, down =
 demolish, and (spawners only) right = mode toggle. This wheel is the **only** way to build —
 there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers per
@@ -223,12 +223,21 @@ tier's cost and re-runs a shorter construction. Building is the only gold sink.
 
 Mechanics, all in `game.js`:
 
-- `state.wheel` (`{kind:'build'|'manage', tx, ty, seg}`) is the open wheel; ESC/M/settings/death
+- `state.wheel` (`{kind:'build'|'manage', tx, ty, seg, ax, ay}`) is the open wheel; ESC/M/settings/death
   close it, left-click is swallowed while it's open, and the game **keeps running** — opening the
   wheel mid-night is deliberate pressure. `wheelLayout()` is shared by `resolveWheel()` and
   `renderWheel()` so hover math and pixels can never disagree. `resolveWheel()` does not act: it
   writes `player.input.cmd`, and `runCmd(p, c)` performs it in the next sim step (re-checking
   ownership and the 60 px reach).
+- **The pointer is measured from `ax`/`ay`, the point the right button went down at**, not from
+  the wheel's drawn hub: that press is what the hand remembers, and the hub is pinned to the tile,
+  so it drifts as the camera follows the player and gets clamped near a screen edge. Travel past
+  `WHEEL_DEAD` (2 px) in any direction commits to the nearest segment by angle — a flick, not a
+  drag — and only sitting still cancels. Because that travel is invisible (the cursor can be
+  anywhere on screen), `drawWheelStick()` draws it at the hub: an origin pip, a knob that snaps
+  4 px clear and goes gold the instant a segment is live, and a dot of trail between them. The
+  knob is a compact readout, not a 1:1 echo — it caps at 12 px, inside the option icons, so it
+  never sits under the cursor.
 - `placeStruct(tx, ty, type, p)` consumes the stump (the tile is **empty** after demolition —
   stumps are a finite site resource), pays `tiers[0].cost` from that player's wallet, and drops the
   object into `building` state at 30% hp, stamped with `owner`/`team`. It enforces the 60 px reach
@@ -270,10 +279,13 @@ reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sor
 
 ## Death is not game over
 
-`die(p)` marks that slot dead, drops its bow draw, keeps `ceil(60%)` of each resource and starts a
-2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back on **its own**
-landing tile (`p.spawn`, set by the eagle drop) with i-frames. Only the local slot's death sets
-`state.mode = 'dead'` for the overlay.
+`die(p, src, cause)` marks that slot dead, drops its bow draw, keeps `ceil(60%)` of each resource
+and starts a 2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back on
+**its own** landing tile (`p.spawn`, set by the eagle drop) with i-frames. It also credits the
+kill and writes the feed line — see [Kills and the event
+feed](multiplayer.md#kills-and-the-event-feed). Only the local slot's death sets
+`state.mode = 'dead'` for the overlay; **TAB still opens the standings while you are down**, which
+is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
 `drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on while
 you are down. Only the local overlays (paused, map, settings) stop the sim;

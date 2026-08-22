@@ -23,6 +23,11 @@ set by the event handlers and cleared by the sim), consume it in `updatePlayer(p
 bots a way to use it in `updateAI()`. If only one player can have the result, queue it through
 `contest()`. See [multiplayer.md](multiplayer.md).
 
+**Adding a way to hurt a player** — pass the attacker as `damagePlayer`'s `src` (or, when the
+world did it, a `DEATH_CAUSE` key as `cause`). Miss it and the kill is uncredited on the TAB
+scoreboard and the event feed reports the death as an accident. See
+[multiplayer.md](multiplayer.md#kills-and-the-event-feed).
+
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the build wheel draws the local team's `SPRITES.teamBuild[team][type][0]`), a
 16×16 grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), entries in
@@ -55,8 +60,9 @@ the arrow speed/damage formulas in `fireArrow()`,
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but
   unreferenced since the buildables/HUD removal — kept in case those features return (the heart
   grids also carry the file's mangled-byte repair).
-- The `<` and `>` glyphs in [js/font.js](../../js/font.js) were added for the removed resolution
-  cycle control and are currently unreferenced — kept as generic font coverage.
+- The `<` glyph in [js/font.js](../../js/font.js) was added for the removed resolution cycle
+  control and is currently unreferenced — kept as generic font coverage. (`>` is live again: it
+  marks your own row on the scoreboard.)
 - `SPRITES.raider` (+ `RDPAL`) and `SPRITES.mine` are still baked but unreferenced since the
   raider/mine removal — kept in case a threat returns; the raider set shares the player grids
   (as do the four `playerTeam` sets, which are the live ones).

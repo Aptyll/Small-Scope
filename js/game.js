@@ -302,7 +302,7 @@
     paused: false,
     mapOpen: false,
     settingsOpen: false,
-    wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg }
+    wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
     // the open sub-panel ('settings' | 'help' | null) and its slide progress
     menu: { sel: 0, hover: [0, 0, 0, 0], t: 0, panel: null, panelT: 0, closing: false,
@@ -401,10 +401,19 @@
     p.level++;
     p.maxHp = levelMaxHp(p);
     p.hp = Math.min(p.maxHp, p.hp + LVL_HP);
+    // the early levels come too fast to be news; the late ones say who is ahead
+    if (p.level >= LOG_LEVEL) logEvent(p.name + ' REACHED LEVEL ' + p.level, p);
     if (!inAir(p)) floaters.push({ x: p.x, y: p.y - 22, txt: 'LEVEL ' + p.level, color: '#f2cc6a', t: 0, vx: 0, scale: 2, rise: 20 });
     if (p === player) SFX.levelUp();
   }
   function champSet(p) { return SPRITES.champ[p.champ][p.team]; }
+  // Slots past the fourth double up on a team colour, so text that names one
+  // player (the scoreboard, the event log) also needs a per-slot shade of that
+  // team's palette - the team colour stays the background, this is the ink.
+  function playerTint(p) {
+    const t = TEAMS[p.team];
+    return [t.trim, t.hatL, t.trimD, t.hat][Math.floor(p.id / TEAM_COUNT) % 4];
+  }
 
   // one frame of intent - the whole interface between a controller and the sim
   function makeInput() {
@@ -430,6 +439,7 @@
       this.inv = { gold: 0, berry: 0, fish: 0 };
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
+      this.kills = 0;                     // rivals downed; scoreboard only, survives death
       this.maxHp = 100;
       this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
       this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
@@ -533,7 +543,9 @@
   const mouse = { x: VIEW_W / 2, y: VIEW_H / 2, down: false, inside: false }; // inside: pointer over the canvas
 
   window.addEventListener('keydown', (e) => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
+    // Tab is held to read the scoreboard (scoreboardOpen()), so it must never
+    // reach the browser's focus traversal
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab'].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
@@ -553,6 +565,9 @@
     if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+  // a key held while the window loses focus never sends its keyup: alt-tabbing
+  // out would otherwise leave the scoreboard (or a walk direction) stuck on
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 
   canvas.addEventListener('mousemove', (e) => {
     const r = canvas.getBoundingClientRect();
@@ -578,8 +593,9 @@
       const o = objAt(tx, ty);
       if (!o) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
-      if (o.type === 'stump') state.wheel = { kind: 'build', tx, ty, seg: -1 };
-      else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1 };
+      // ax/ay: the press point every later pointer move is measured against
+      if (o.type === 'stump') state.wheel = { kind: 'build', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
+      else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
       else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
       return;
     }
@@ -1886,6 +1902,11 @@
 
   // ------------------------------------------------------------ radial wheel
   const WHEEL_R = 30;
+  // The pointer is measured from the press point (w.ax/ay), not from the wheel's
+  // drawn hub: that press is what the hand remembers, and the hub drifts as the
+  // camera follows the player. Only this much travel is "I haven't chosen yet" -
+  // a flick in any direction commits, and drawWheelStick() shows the travel.
+  const WHEEL_DEAD = 2;
 
   function wheelOptions() {
     const w = state.wheel;
@@ -1911,9 +1932,11 @@
     cx = Math.max(WHEEL_R + 36, Math.min(VIEW_W - WHEEL_R - 36, cx));
     cy = Math.max(WHEEL_R + 20, Math.min(VIEW_H - WHEEL_R - 30, cy)); // bottom margin fits the label
     const opts = wheelOptions();
-    const dx = mouse.x - cx, dy = mouse.y - cy;
+    // travel since the press, not distance from the hub
+    const dx = mouse.x - w.ax, dy = mouse.y - w.ay;
+    const dist = Math.hypot(dx, dy);
     let seg = -1;
-    if (Math.hypot(dx, dy) >= 10) { // 10px deadzone = cancel
+    if (dist >= WHEEL_DEAD) { // anything past the deadzone picks a segment; sitting still cancels
       const ang = Math.atan2(dy, dx);
       let bd = 1e9;
       for (let i = 0; i < opts.length; i++) {
@@ -1922,7 +1945,7 @@
         if (d < bd) { bd = d; seg = i; }
       }
     }
-    return { cx, cy, opts, seg };
+    return { cx, cy, opts, seg, dx, dy, dist };
   }
 
   // the wheel writes a one-shot order into the local player's input; the sim
@@ -1949,7 +1972,9 @@
     }
   }
 
-  function damagePlayer(p, dmg, dx, dy) {
+  // src: the player who dealt it (kill credit + the log line), null for the
+  // world; cause: a DEATH_CAUSE key naming what the world did, when src is null
+  function damagePlayer(p, dmg, dx, dy, src, cause) {
     if (p.dead || p.invuln > 0) return;
     p.hp -= dmg;
     p.hurtT = 0.25;
@@ -1959,11 +1984,14 @@
     addDmgFloater(p.x, p.y - 18, dmg, p === player);
     if (nearPlayer(p.x, p.y)) SFX.hurt();
     burst(p.x, p.y - 6, '#e04a54', 8, 50, 0.45);
-    if (p.hp <= 0) die(p);
+    if (p.hp <= 0) die(p, src, cause);
   }
 
+  // what the log says when nobody gets the credit
+  const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE' };
+
   // any slot can go down; only the local one takes the screen with it
-  function die(p) {
+  function die(p, src, cause) {
     p.dead = true;
     p.respawnT = 2.6;
     p.charging = false;
@@ -1977,6 +2005,12 @@
     p.inv.berry = Math.ceil(p.inv.berry * 0.6);
     p.inv.fish = Math.ceil(p.inv.fish * 0.6);
     burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
+    // kill credit and the feed line: the killer's colours if there is one,
+    // otherwise the victim's, since the victim is who the line is about
+    const killer = src && src !== p ? src : null;
+    if (killer) killer.kills++;
+    logEvent(killer ? killer.name + ' SHOT ' + p.name
+      : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
     if (p === player) {
       state.mode = 'dead';
       state.mapOpen = false;
@@ -2379,7 +2413,7 @@
         for (const t of players) {
           if (a.team === t.team || !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
           if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
-            damagePlayer(t, a.dmg, a.vx / vd, a.vy / vd);
+            damagePlayer(t, a.dmg, a.vx / vd, a.vy / vd, players[a.owner]);
             burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
             dead = true;
             break;
@@ -2619,7 +2653,7 @@
         if (nearPlayer(p.x, p.y)) SFX.splash();
         burst(p.x, p.y + 4, '#3a6080', 10, 55, 0.5, true);
         burst(p.x, p.y + 2, '#ddf1f8', 8, 60, 0.5, true);
-        damagePlayer(p, HOLE_FALL_DMG, 0, 0);
+        damagePlayer(p, HOLE_FALL_DMG, 0, 0, null, 'ice');
       }
     }
 
@@ -2792,6 +2826,12 @@
       const f = footprints[i];
       f.t += dt;
       if (f.t > (f.k === 1 ? SNOW_TRAIL_LIFE : 9)) footprints.splice(i, 1);
+    }
+    // the event feed ages here too: it is chrome, so it fades on wall time in
+    // every mode, not only while the sim is stepping
+    for (let i = events.length - 1; i >= 0; i--) {
+      events[i].t += dt;
+      if (events[i].t > EVENT_LIFE) events.splice(i, 1);
     }
   }
 
@@ -3069,6 +3109,11 @@
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title' || state.intro > 0) renderTitle(now);
     if (state.mode === 'dead') renderDead();
+    // both sit above the death dim: the feed and the standings are exactly what
+    // you read while you are down. They duck under the map/settings panels.
+    if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
+      (state.mode === 'play' || state.mode === 'dead')) renderEventLog();
+    if (scoreboardOpen()) renderScoreboard();
     if (settings.fps) drawFps();
     // the menu prints the seed itself (with the reroll die) - don't double it up
     if (!window.DBG.hideUI && state.mode !== 'title') drawSeedTag();
@@ -3634,6 +3679,32 @@
     ctx.globalAlpha = 1;
   }
 
+  // How far the pointer has travelled since the press that opened the wheel,
+  // drawn at the hub as a tiny stick: an origin pip (the press), a dot of trail
+  // and a knob that goes gold the instant the deadzone is cleared. The cursor
+  // itself can be anywhere on screen, so this is the only readout of the input
+  // the choice is actually made with.
+  function drawWheelStick(L) {
+    const live = L.seg >= 0;
+    // A compact stick, not a 1:1 echo of the pointer: the knob snaps STICK_MIN
+    // clear of the pip the moment a segment is live (so "I have chosen" is
+    // visible at 2 px of travel) and slides out to STICK_R, which stops short
+    // of the option icons. A 1:1 mapping would just sit under the cursor.
+    const STICK_MIN = 4, STICK_R = 12, STICK_FULL = 26;
+    const off = live ? STICK_MIN + (STICK_R - STICK_MIN) * Math.min(1, L.dist / STICK_FULL) : L.dist;
+    const k = off / Math.max(0.001, L.dist);
+    const kx = Math.round(L.cx + L.dx * k), ky = Math.round(L.cy + L.dy * k);
+    if (off > 6) { // a dot of travel between pip and knob
+      ctx.fillStyle = live ? 'rgba(255,217,92,0.5)' : 'rgba(159,182,216,0.4)';
+      ctx.fillRect(Math.round(L.cx + L.dx * k * 0.5), Math.round(L.cy + L.dy * k * 0.5), 1, 1);
+    }
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(L.cx - 2, L.cy - 2, 5, 5);
+    ctx.fillStyle = '#8fa4c8'; ctx.fillRect(L.cx - 1, L.cy - 1, 3, 3);
+    ctx.fillStyle = '#141c3c'; ctx.fillRect(L.cx, L.cy, 1, 1); // hollow: this is the origin, not the knob
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, ky - 2, 5, 5);
+    ctx.fillStyle = live ? '#ffd95c' : '#6d7ea6'; ctx.fillRect(kx - 1, ky - 1, 3, 3);
+  }
+
   function renderWheel(now) {
     const L = wheelLayout();
     const w = state.wheel;
@@ -3679,6 +3750,8 @@
           hovered ? '#ffd95c' : '#9fb6d8', '#0f1632');
       }
     }
+
+    drawWheelStick(L);
 
     // hovered label + cost under the wheel (or CANCEL in the deadzone)
     let label = 'CANCEL', color = '#9fb6d8';
@@ -3929,6 +4002,214 @@
     const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
     const ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
     drawPixelTextOutline(ctx, clock, ccx, MM_CY + MM_R + 9, '#f4f7ff', '#0f1632');
+  }
+
+  function renderUI(now) {
+    if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
+
+    // title -> play: the HUD slides in over the last part of the intro - the
+    // left stack from the left, the minimap stack from the top, messages from below
+    const hudIn = state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
+    const slide = 1 - hudIn;
+    ctx.save();
+    ctx.translate(Math.round(-slide * 60), 0);
+
+    // berries: consumable indicator, top-left (health lives on the in-world bar)
+    if (inv.berry > 0) {
+      ctx.drawImage(SPRITES.itemBerry, 5, 5);
+      drawPixelTextOutline(ctx, String(inv.berry), 15, 7, '#f4f7ff', '#0f1632');
+      drawPixelTextOutline(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', '#0f1632');
+    }
+    // fish: the bigger meal, right below the berries
+    if (inv.fish > 0) {
+      ctx.drawImage(SPRITES.itemFish, 5, 15);
+      drawPixelTextOutline(ctx, String(inv.fish), 15, 17, '#f4f7ff', '#0f1632');
+      drawPixelTextOutline(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', '#0f1632');
+    }
+
+    ctx.restore();
+    ctx.save();
+    ctx.translate(0, Math.round(-slide * (MM_R * 2 + 40)));
+
+    // the one currency - left of the minimap
+    const res = [
+      ['itemGold', inv.gold],
+    ];
+    const resGap = 7;
+    let resW = 0;
+    for (const [spr, n] of res) {
+      resW += 10 + pixelTextWidth(String(n));
+    }
+    resW += resGap * (res.length - 1);
+    let rx = MM_CX - MM_R - 10 - resW;
+    const ryTop = 5;
+    for (const [spr, n] of res) {
+      ctx.drawImage(SPRITES[spr], rx, ryTop);
+      drawPixelTextOutline(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', '#0f1632');
+      rx += 10 + pixelTextWidth(String(n)) + resGap;
+    }
+
+    // minimap with day/night ring
+    renderMinimap(now);
+    ctx.restore();
+
+    // (the bottom strip is deliberately empty: reserved for combat abilities)
+
+    // message
+    if (state.msgT > 0 && state.msg) {
+      const a = Math.min(1, state.msgT * 2);
+      ctx.globalAlpha = a;
+      const w = pixelTextWidth(state.msg);
+      drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 44, '#fff4d8', '#0f1632');
+      ctx.globalAlpha = 1;
+    }
+
+    if (state.paused) {
+      ctx.fillStyle = 'rgba(10,14,35,0.6)';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      const t = 'PAUSED';
+      drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 5, '#f4f7ff', '#0a0e23', 2);
+    }
+  }
+
+  // ------------------------------------------------------------ scoreboard & log
+  // Two readouts of the match rather than of the world. TAB, held, opens the
+  // standings from any mode but the title - being dead is exactly when you want
+  // them - and everything significant that happens to a slot leaves a line in
+  // the feed at the bottom left. Both draw after the death overlay so neither is
+  // dimmed by it. Colours everywhere: the team is the plate, playerTint(p) is
+  // the ink, so teammates read as one side and still as two people.
+
+  // ---- event feed ----
+  const EVENT_MAX = 4;      // lines on screen; the oldest scroll off the top
+  const EVENT_LIFE = 8;     // seconds from arrival to gone, faded linearly across it
+  const EVENT_FLASH = 0.35; // arrival: slides in from the edge under a white pop
+  const LOG_LEVEL = 5;      // level-ups below this come too fast to be news
+  const events = [];        // {txt, bg, fg, t}; updateFx ages and expires them
+
+  // p tints the line and is who it is about; null = a line nobody owns. The
+  // plate takes the team's dark coat, not its bright mark: the ink is a pale
+  // per-slot tint, and a bright plate over snow leaves it nothing to sit on.
+  function logEvent(txt, p) {
+    events.push({
+      txt: String(txt).toUpperCase(), t: 0,
+      bg: p ? TEAMS[p.team].coatD : '#2a3358',
+      edge: p ? TEAMS[p.team].mark : '#6d7ea6',
+      fg: p ? playerTint(p) : '#e6ecfa',
+    });
+    while (events.length > EVENT_MAX * 3) events.shift();
+  }
+
+  function renderEventLog() {
+    const n = Math.min(EVENT_MAX, events.length);
+    if (!n) return;
+    const pitch = 10;
+    let y = VIEW_H - 8 - pitch * n; // oldest at the top, newest along the bottom
+    for (let i = events.length - n; i < events.length; i++) {
+      const e = events[i];
+      const a = Math.max(0, 1 - e.t / EVENT_LIFE); // age alone sets the alpha
+      const f = Math.max(0, 1 - e.t / EVENT_FLASH);
+      const w = pixelTextWidth(e.txt) + 8;
+      const x = 4 - Math.round(7 * f * f); // slides in off the left edge
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(6,9,22,0.75)'; // base: the world must not read through the plate
+      ctx.fillRect(x, y, w, 9);
+      ctx.globalAlpha = a * 0.8;
+      ctx.fillStyle = e.bg;
+      ctx.fillRect(x, y, w, 9);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = e.edge;
+      ctx.fillRect(x, y, 1, 9); // the bright team mark, hard against the plate
+      if (f > 0) { // the arrival pop
+        ctx.globalAlpha = 0.6 * f * f;
+        ctx.fillStyle = '#f4f7ff';
+        ctx.fillRect(x, y, w, 9);
+        ctx.globalAlpha = a;
+      }
+      drawPixelTextShadow(ctx, e.txt, x + 4, y + 2, e.fg, 'rgba(6,9,22,0.9)');
+      ctx.globalAlpha = 1;
+      y += pitch;
+    }
+  }
+
+  // ---- scoreboard (hold TAB) ----
+  const SB_W = 168;
+  const SB_ROW = 9;
+  const SB_COL = [96, 128, 160]; // right edges of LVL / GOLD / KILLS, panel-relative
+
+  function scoreboardOpen() { return !!keys['tab'] && state.mode !== 'title' && !window.DBG.hideUI; }
+
+  // "winning" is lifetime gold earned, not the purse: gold spent on a building
+  // is progress, and it is the same number the hero levels run on
+  function scoreOf(p) { return p.xp; }
+
+  // slots grouped by team, teams ordered by their total, players by their own
+  function scoreGroups() {
+    const byTeam = new Map();
+    for (const p of players) {
+      if (!p.active) continue;
+      if (!byTeam.has(p.team)) byTeam.set(p.team, []);
+      byTeam.get(p.team).push(p);
+    }
+    const groups = [...byTeam.values()];
+    for (const g of groups) g.sort((a, b) => scoreOf(b) - scoreOf(a) || a.id - b.id);
+    const total = (g) => g.reduce((n, p) => n + scoreOf(p), 0);
+    groups.sort((a, b) => total(b) - total(a) || a[0].team - b[0].team);
+    return groups;
+  }
+
+  function renderScoreboard() {
+    const groups = scoreGroups();
+    if (!groups.length) return;
+    const rows = groups.reduce((n, g) => n + g.length, 0);
+    const h = 30 + rows * SB_ROW + (groups.length - 1) * 3;
+    const x = Math.round((VIEW_W - SB_W) / 2), y = Math.round((VIEW_H - h) / 2);
+    const shadow = 'rgba(8,12,28,0.9)';
+
+    ctx.fillStyle = 'rgba(4,7,20,0.45)'; ctx.fillRect(x + 2, y + 2, SB_W, h);
+    ctx.fillStyle = 'rgba(10,15,34,0.96)'; ctx.fillRect(x, y, SB_W, h);
+    ctx.fillStyle = '#2c3a68';
+    ctx.fillRect(x, y, SB_W, 1); ctx.fillRect(x, y + h - 1, SB_W, 1);
+    ctx.fillRect(x, y, 1, h); ctx.fillRect(x + SB_W - 1, y, 1, h);
+    ctx.fillStyle = '#3d4f85'; ctx.fillRect(x + 1, y + 1, SB_W - 2, 1); // lit top edge
+
+    drawPixelTextShadow(ctx, 'SCOREBOARD', x + 6, y + 6, '#cfe0ff', shadow);
+    const day = 'DAY ' + state.day;
+    drawPixelTextShadow(ctx, day, x + SB_W - 6 - pixelTextWidth(day), y + 6, '#7a8bb8', shadow);
+    ctx.fillStyle = '#222c55'; ctx.fillRect(x + 4, y + 15, SB_W - 8, 1);
+
+    const head = ['LVL', 'GOLD', 'KILLS'];
+    drawPixelTextShadow(ctx, 'PLAYER', x + 14, y + 19, '#7a8bb8', shadow);
+    for (let i = 0; i < 3; i++) {
+      drawPixelTextShadow(ctx, head[i], x + SB_COL[i] - pixelTextWidth(head[i]), y + 19, '#7a8bb8', shadow);
+    }
+
+    let ry = y + 28;
+    for (const g of groups) {
+      const tm = TEAMS[g[0].team];
+      ctx.fillStyle = tm.mark;
+      ctx.fillRect(x + 4, ry, 2, g.length * SB_ROW - 2); // one stripe down the whole team
+      for (const p of g) {
+        const dim = p.dead ? 0.55 : 1;
+        ctx.globalAlpha = dim * (p === player ? 0.26 : 0.13);
+        ctx.fillStyle = tm.mark;
+        ctx.fillRect(x + 8, ry, SB_W - 12, SB_ROW - 2);
+        ctx.globalAlpha = dim;
+        if (p === player) drawPixelTextShadow(ctx, '>', x + 9, ry + 1, '#ffd95c', shadow);
+        drawPixelTextShadow(ctx, p.name, x + 14, ry + 1, playerTint(p), shadow);
+        if (p.dead) {
+          drawPixelTextShadow(ctx, 'DOWN', x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
+        }
+        const vals = [String(p.level), String(p.inv.gold), String(p.kills)];
+        const cols = ['#cfe0ff', '#f2cc6a', '#ff9a8a'];
+        for (let i = 0; i < 3; i++) {
+          drawPixelTextShadow(ctx, vals[i], x + SB_COL[i] - pixelTextWidth(vals[i]), ry + 1, cols[i], shadow);
+        }
+        ctx.globalAlpha = 1;
+        ry += SB_ROW;
+      }
+      ry += 3; // teams read as blocks
+    }
   }
 
   // ------------------------------------------------------------ world map (M)
@@ -4305,74 +4586,6 @@
     if (slide) ctx.restore();
   }
 
-  function renderUI(now) {
-    if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
-
-    // title -> play: the HUD slides in over the last part of the intro - the
-    // left stack from the left, the minimap stack from the top, messages from below
-    const hudIn = state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
-    const slide = 1 - hudIn;
-    ctx.save();
-    ctx.translate(Math.round(-slide * 60), 0);
-
-    // berries: consumable indicator, top-left (health lives on the in-world bar)
-    if (inv.berry > 0) {
-      ctx.drawImage(SPRITES.itemBerry, 5, 5);
-      drawPixelTextOutline(ctx, String(inv.berry), 15, 7, '#f4f7ff', '#0f1632');
-      drawPixelTextOutline(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', '#0f1632');
-    }
-    // fish: the bigger meal, right below the berries
-    if (inv.fish > 0) {
-      ctx.drawImage(SPRITES.itemFish, 5, 15);
-      drawPixelTextOutline(ctx, String(inv.fish), 15, 17, '#f4f7ff', '#0f1632');
-      drawPixelTextOutline(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', '#0f1632');
-    }
-
-    ctx.restore();
-    ctx.save();
-    ctx.translate(0, Math.round(-slide * (MM_R * 2 + 40)));
-
-    // the one currency - left of the minimap
-    const res = [
-      ['itemGold', inv.gold],
-    ];
-    const resGap = 7;
-    let resW = 0;
-    for (const [spr, n] of res) {
-      resW += 10 + pixelTextWidth(String(n));
-    }
-    resW += resGap * (res.length - 1);
-    let rx = MM_CX - MM_R - 10 - resW;
-    const ryTop = 5;
-    for (const [spr, n] of res) {
-      ctx.drawImage(SPRITES[spr], rx, ryTop);
-      drawPixelTextOutline(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', '#0f1632');
-      rx += 10 + pixelTextWidth(String(n)) + resGap;
-    }
-
-    // minimap with day/night ring
-    renderMinimap(now);
-    ctx.restore();
-
-    // (the bottom strip is deliberately empty: reserved for combat abilities)
-
-    // message
-    if (state.msgT > 0 && state.msg) {
-      const a = Math.min(1, state.msgT * 2);
-      ctx.globalAlpha = a;
-      const w = pixelTextWidth(state.msg);
-      drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 44, '#fff4d8', '#0f1632');
-      ctx.globalAlpha = 1;
-    }
-
-    if (state.paused) {
-      ctx.fillStyle = 'rgba(10,14,35,0.6)';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-      const t = 'PAUSED';
-      drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 5, '#f4f7ff', '#0a0e23', 2);
-    }
-  }
-
   // ------------------------------------------------------------ main menu
   // The title screen is a real menu over the living world: the camera drifts
   // around the interior while animals, fish and snow keep running, four items
@@ -4700,7 +4913,7 @@
     bakeFrostSlab(g, SET_W, SET_H, 'HOW TO PLAY');
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
-      [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
+      [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['TAB', 'SCOREBOARD'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
     ];
     for (let c = 0; c < 2; c++) {
       let y = 24;
@@ -5308,6 +5521,9 @@
     placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, respawn, updateAI, contest,
     // hero levels: pay a slot gold (and XP) the way a pickup would
     gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
+    // the match readouts: stage feed lines without staging the kills behind
+    // them, and check the standings (hold TAB in game, or set keys.tab here)
+    events, logEvent, scoreGroups, scoreboardOpen,
     // action entry points default to the local slot, or take any player
     clickAction: (p) => clickAction(p || player),
     tryWork: (p) => tryWork(p || player),

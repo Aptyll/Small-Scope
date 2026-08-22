@@ -79,6 +79,8 @@ eagle, its shadow, the rider and every faller, while `state.drop` exists) → `r
 `renderVignettes` → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
+the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
+[Scoreboard and event feed](#scoreboard-and-event-feed)) →
 fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) → the screen fade
 (`state.fade`, the reroll whiteout) → the pixel cursor (always last). The bow's
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
@@ -151,8 +153,10 @@ translucent colour would stack unevenly). Sites: floaters (damage numbers, gold,
 rival name tags, the E and fish prompts, the radial-wheel labels, the HUD counters (berry/fish,
 gold, the clock under the minimap), `state.msg`, the fps and seed tags, and the drop-UI text.
 `drawPixelTextShadow` (a single bottom-right 1 px shadow) remains for text sitting on a panel,
-plank or overlay — the settings/map panels, the main menu, the death overlay — where a full
-outline reads heavy. Checked at noon on open snow and at full night.
+plank or overlay — the settings/map panels, the main menu, the death overlay, the scoreboard and
+the event feed's plates — where a full outline reads heavy. Checked at noon on open snow and at
+full night. A line drawn under a `globalAlpha` fade must use `Shadow`: the outline's eight passes
+overlap, so a translucent stamp stacks unevenly and the rim goes blotchy.
 
 ## Damage feedback
 
@@ -164,6 +168,35 @@ Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floater
 plain `addFloater` entries default to the old look. Units also flash white on hit via
 `drawSpriteFlash` (0.8-alpha overlay). Hits on **structures** intentionally get no numbers;
 structures show flash, shake, and damage cracks instead.
+
+## Scoreboard and event feed
+
+Two readouts of the **match** rather than of the world, in the `scoreboard & log` banner. Both
+draw after the death overlay, so the dim never touches them — being down is exactly when you read
+them — and both duck under the map/settings panels.
+
+**The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
+newest along the bottom. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
+supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate
+on snow leaves the text nothing to sit on), a 1 px edge in the team's bright `mark`, and the ink
+in `playerTint(p)` so two players on one team read as two people. `updateFx()` ages every line on
+wall time (so the feed fades in any mode, including paused) and drops it at `EVENT_LIFE` (8 s);
+alpha is `1 - t/EVENT_LIFE`, i.e. purely the line's age, which is what makes the stack read
+oldest-faintest. A new line arrives with an `EVENT_FLASH` (0.35 s) pop: it slides in from the left
+edge and takes a white wash that decays quadratically. What gets logged lives in
+[multiplayer.md](multiplayer.md#kills-and-the-event-feed).
+
+**The scoreboard** is held-TAB (`scoreboardOpen()`: `keys['tab']`, any mode but `title`, so it
+works while dead and while riding the eagle) and is drawn per frame, not baked — every number on
+it is live. `scoreGroups()` is the ordering: slots grouped by team, teams ranked by their total
+`scoreOf(p)` and players inside a team by their own, ties broken by team then slot id. `scoreOf`
+is **lifetime gold earned** (`p.xp`), not the purse — spending gold on a building is progress, and
+it is the number levels already run on — while the GOLD column shows the purse, so a slot that has
+spent can sit above one showing more gold (its LVL column is the visible tell). A team stripe in
+`TEAMS[team].mark` runs down each group, each row carries a faint team wash (stronger for the
+local slot, which also gets a gold `>`), dead slots dim to 0.55 and gain a `DOWN` tag. The panel
+is `SB_W` (168) wide, its height follows the row count, and it is centred on `VIEW_W`/`VIEW_H`
+every frame — no `relayout()` anchors, so it needs nothing on a resize.
 
 ## Cursor
 

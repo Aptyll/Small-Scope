@@ -69,7 +69,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`.
 
-`game.js` is one ~4100-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~5600-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -107,6 +107,7 @@ don't cite line numbers here, they go stale within a session.
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel` | `selection, hints & wheel` |
 | darkness, warm glows, snow (world-space flakes, see `fx updates`), vignette | `renderLighting`, `drawWarmGlows`, `renderWeather` | `lighting & weather` |
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
+| the TAB standings, the event feed | `logEvent`, `renderEventLog`, `scoreGroups`, `renderScoreboard` | `scoreboard & log` |
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |

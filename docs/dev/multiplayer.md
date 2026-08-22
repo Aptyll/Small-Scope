@@ -24,7 +24,7 @@ fewer bots, a frozen target dummy, or a ghost.
 dodge charges, slide state, swing state, held tool, i-frames, footprint cadence — plus `id`,
 `team`, `control`, `name`, `spawn` (the tile it landed on from the eagle), `aboard`/`dropT`/`dropU`
 (the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet,
-`level`/`xp` (see [Hero levels](#hero-levels)), an `input` struct and an `ai` brain.
+`level`/`xp` (see [Hero levels](#hero-levels)), `kills`, an `input` struct and an `ai` brain.
 `reset(first)` places it at `spawn` and clears every transient; it is the single definition of
 "a fresh player", used at boot and on respawn (respawn passes `false`, which grants 3 s i-frames).
 
@@ -121,18 +121,40 @@ Structures carry `owner` (slot id) and `team`, set by `placeStruct()`. `ownsStru
 manage wheel, upgrades and demolition; the right-click handler and `cursorInfo()` only offer the
 hammer over a stump (neutral) or your own building.
 
+Six slots over four presets means **teammates share a colour**, so anything that names one player
+in text takes a second axis: `playerTint(p)` returns a per-slot shade of that team's palette
+(`trim`, `hatL`, `trimD`, `hat` by `floor(id / TEAM_COUNT)`). The team colour stays the
+background, the tint is the ink — see the
+[scoreboard and event feed](rendering.md#scoreboard-and-event-feed).
+
 ## PvP
 
 `enemyOf(p, q)` is the one place the rule lives: another live, active slot on **another** team.
 Arrows carry `owner`/`team` and test players before animals in `updatePlay`'s arrow loop, using the
-same body radius; a hit calls `damagePlayer(target, dmg, dx, dy)` for knockback, flash, floater and
-possibly `die(p)`. Friendly fire is off, and an arrow can never hit its shooter.
+same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` for knockback, flash,
+floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
+shooter.
 
-`die(p)` marks the slot dead, keeps 60% of its wallet and starts a 2.6 s `respawnT`; `updatePlayer`
-counts it down and calls `respawn(p)`. Only the local slot's death takes the screen with it
-(`state.mode = 'dead'` for the overlay). **The match keeps simulating while you are down** —
+`die(p, src, cause)` marks the slot dead, keeps 60% of its wallet and starts a 2.6 s `respawnT`;
+`updatePlayer` counts it down and calls `respawn(p)`. Only the local slot's death takes the screen
+with it (`state.mode = 'dead'` for the overlay). **The match keeps simulating while you are down** —
 `update()` runs `updatePlay` in both `play` and `dead` mode; only the local overlays (pause, map,
 settings) stop the world.
+
+### Kills and the event feed
+
+The last two arguments are the whole credit system. `src` is the player who dealt the damage
+(`players[a.owner]` for an arrow, null for the world) and `cause` names what the world did when
+there is no `src` (`DEATH_CAUSE`, today just `'ice'` for a hole). A death with an `src` other than
+the victim bumps `src.kills` — the scoreboard's KILLS column, set in the constructor so it
+survives respawn — and writes `"<killer> SHOT <victim>"` into the feed in the killer's colours;
+without one it writes `"<victim> FELL THROUGH THE ICE"` in the victim's. **Any new way to hurt a
+player must pass its `src`**, or the kill goes uncredited and the feed line reads as an accident.
+
+The other thing logged today is a level-up at `LOG_LEVEL` (5) or above — the early levels come too
+fast to be news. `logEvent(txt, p)` is the whole interface; the feed's look and lifetimes are in
+[rendering.md](rendering.md#scoreboard-and-event-feed). `DBG.logEvent`/`DBG.events` stage lines
+without staging the kills behind them.
 
 ## Contested orders
 
