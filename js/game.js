@@ -3329,8 +3329,8 @@
     // dodge stamina: one clean unsegmented bar under the health bar - charges
     // stay discrete in the sim, the bar just shows the pooled total. Only the
     // local player needs it; a rival's tells are their draw meter and position.
-    // It is 3px tall, starting on the row under the health bar, so the two fills
-    // touch inside one shared frame (no dark divider between them).
+    // The track is painted one row taller than the fill so the gap between the two
+    // bars is track grey, not frame colour - one clean outline around both.
     if (local) {
       const bx = Math.round(p.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
@@ -3343,10 +3343,10 @@
       const gw = Math.round(14 * Math.max(frac, p.stamGhost)) - Math.round(14 * frac);
       if (gw > 0) {
         ctx.fillStyle = '#e6f4ff';
-        ctx.fillRect(bx + Math.round(14 * frac), by - 1, gw, 3);
+        ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
       }
       ctx.fillStyle = '#8ad8ff';
-      ctx.fillRect(bx, by - 1, Math.round(14 * frac), 3);
+      ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
     // bow draw meter, just above the health bar: yellow while charging,
     // turning hot orange the moment the draw is full. Drawn for everyone - it
