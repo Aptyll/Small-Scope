@@ -3846,11 +3846,11 @@
     const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
     const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
     const bob = b.moving ? Math.floor(b.animT / 2) % 2 : 0;
-    const bx = Math.round(b.x - 8 - ox);
+    const bx = Math.round(b.x - 6 - ox);
     const by = Math.round(b.y + 4 - oy) - spr.height - bob; // tread bottom sits at b.y + 4
 
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
-    ctx.fillRect(bx + 1, Math.round(b.y + 3 - oy), 14, 2);
+    ctx.fillRect(bx + 1, Math.round(b.y + 3 - oy), 10, 2);
 
     let tdx = 0, tdy = 0, working = false;
     if (b.tgt && !b.moving) {
@@ -3862,11 +3862,11 @@
 
     // carried gold: a nugget held up in front of the body
     if (b.carry > 0 && !working) {
-      const gx = bx + 5, gy = by + 3;
-      ctx.fillStyle = '#1c2130'; ctx.fillRect(gx, gy, 6, 5);
-      ctx.fillStyle = '#f2cc6a'; ctx.fillRect(gx + 1, gy + 1, 4, 3);
+      const gx = bx + 3, gy = by + 2;
+      ctx.fillStyle = '#1c2130'; ctx.fillRect(gx, gy, 6, 4);
+      ctx.fillStyle = '#f2cc6a'; ctx.fillRect(gx + 1, gy + 1, 4, 2);
       ctx.fillStyle = '#fff1b0'; ctx.fillRect(gx + 1, gy + 1, 2, 1);
-      ctx.fillStyle = '#b8902e'; ctx.fillRect(gx + 3, gy + 3, 2, 1);
+      ctx.fillStyle = '#b8902e'; ctx.fillRect(gx + 3, gy + 2, 2, 1);
     }
 
     // working: raised away from the target through a slow wind-up, then a
@@ -3877,13 +3877,13 @@
       const e = prog < 0.7 ? prog / 0.7 * 0.3 : 0.3 + (prog - 0.7) / 0.3 * 0.7;
       const a = Math.atan2(tdy, tdx) - 1.6 * (1 - e);
       ctx.save();
-      ctx.translate(Math.round(bx + 8 + Math.cos(a) * 9), Math.round(by + 4 + Math.sin(a) * 9));
+      ctx.translate(Math.round(bx + 6 + Math.cos(a) * 7), Math.round(by + 3 + Math.sin(a) * 7));
       ctx.rotate(a + Math.PI / 2);
       ctx.drawImage(icon, -4, -4);
       ctx.restore();
     }
 
-    drawHealthBar(b.x - ox, by - 4, b.hp, b.maxHp, 10);
+    drawHealthBar(b.x - ox, by - 4, b.hp, b.maxHp, 8);
   }
 
   // every player draws through here - the local one, the AI fills, network

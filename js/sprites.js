@@ -779,7 +779,7 @@
   ];
 
   // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
-  // arms at the sides, no face. One 16x12 grid, two frames (the tread notches
+  // arms at the sides, no face. One 12x10 grid, two frames (the tread notches
   // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
   // never part. The body (L/T/t) is painted in the team colour.
   const BOTPAL = {
@@ -794,22 +794,20 @@
     'n': '#6c7486', // tread notch
   };
   const botA = [
-    '...oooooooooo...',
-    '..oLLLLLLLLLLo..',
-    '..oLLLLLLLLLLo..',
-    '.ooTTTTTTTTTToo.',
-    'oaoTTTTTTTTTToao',
-    'oaoTTTTTTTTTToao',
-    'oAoTTTTTTTTTToAo',
-    '.oottttttttttoo.',
-    'oooooooooooooooo',
-    'okkkkkkkkkkkkkko',
-    'oknkknkknkknkkno',
-    'oooooooooooooooo',
+    '..oooooooo..',
+    '.oLLLLLLLLo.',
+    'oaoTTTTTToao',
+    'oaoTTTTTToao',
+    'oAoTTTTTToAo',
+    '.oottttttoo.',
+    'oooooooooooo',
+    'okkkkkkkkkko',
+    'oknkknkknkko',
+    'oooooooooooo',
   ];
-  const botB = botA.slice(0, 10).concat([
-    'okknkknkknkknkko',
-    'oooooooooooooooo',
+  const botB = botA.slice(0, 8).concat([
+    'okknkknkknko',
+    'oooooooooooo',
   ]);
 
   // ---------------------------------------------------------------- spikes

@@ -11,7 +11,7 @@ trick: one 16×16 grid each (`wall`, `turret`, `generator`, `spawner`) baked wit
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
-and the worker bot is one 16×12 grid on `BOTPAL` (`botA`/`botB`: a faceless boxy chassis with
+and the worker bot is one 12×10 grid on `BOTPAL` (`botA`/`botB`: a faceless boxy chassis with
 stub arms sitting on a single full-width tread, the two frames differing only in the tread
 notches). The body chars `L`/`T`/`t` are the team paint (`teamRobotPal` → `coatL`/`coat`/`coatD`),
 so `robotTeam[team]` is the whole bot in that colour; `drawRobot()` bobs the entire sprite while
