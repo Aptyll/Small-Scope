@@ -80,11 +80,51 @@ globals. Order matters: each file's globals must exist before the next runs.
 | [js/audio.js](js/audio.js) | `SFX` | WebAudio synth; no asset files |
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
 
-`game.js` is one ~2100-line IIFE with no internal module boundaries; it is organized by banner
-comments (`// ---- constants / rng / state / world / actions / update / render / UI /
-boot`). All game state lives in module-scope singletons: `state`, `settings`, `player`, `inv`,
-`tool` (selected `TOOLS` index), and the arrays `animals`, `arrows`, `drops`,
-`particles`, `floaters`, `footprints`, `lights`.
+`game.js` is one ~3700-line IIFE with no internal module boundaries; it is organized by banner
+comments of the form `// ------ name`, which are the file's only table of contents — see
+[Where things live](#where-things-live-in-gamejs). **Keep every banner honest**: a banner that
+has drifted from what sits under it is worse than no banner, because it sends future sessions to
+the wrong 600 lines. If a section grows past ~250 lines or picks up a second responsibility,
+split it and add the new banner here.
+
+All game state lives in module-scope singletons: `state`, `settings`, `player`, `inv`, and the
+arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`. The held
+tool is `player.tool` (a `TOOLS` index), not a free-floating global — see
+[Tools and the bow](#tools-and-the-bow).
+
+### Where things live in game.js
+
+Grep the banner (`// ------ actions`) to jump; the function names are the durable anchors —
+don't cite line numbers here, they go stale within a session.
+
+| Looking for | Start at | Banner |
+| --- | --- | --- |
+| tuning numbers (yields, reach, momentum caps, draw time) | `YIELD`, `WORK_REACH`, `ICE_MAX`, `BOW_CHARGE` | `constants` |
+| resolution, zoom, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` |
+| panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
+| determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
+| the singletons and entity arrays | `state`, `settings`, `player`, `inv` | `state` |
+| key/mouse handlers, the zoom wheel | the `addEventListener` block | `input` |
+| worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
+| ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
+| floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` |
+| collision and entity movement | `moveEntity`, `isSolidTile` | `movement & collision` |
+| what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` |
+| build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
+| wildlife behaviour | `updateAnimal`, `nearestBerryBush` | `animals` |
+| fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
+| construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
+| radial menu hit math | `wheelLayout`, `resolveWheel` | `radial wheel` |
+| the frame sim: momentum, day/night, timers | `update`, `updatePlay` | `update` |
+| render pass order | `render` | `render` |
+| pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` |
+| drawing player / animals / robots / held tool | `drawPlayer`, `drawHeldTool`, `drawAnimal`, `drawRobot`, `drawHealthBar` | `entity draw` |
+| brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel` | `selection, hints & wheel` |
+| darkness, warm glows, snow, vignette | `renderLighting`, `drawWarmGlows`, `renderWeather` | `lighting & weather` |
+| HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
+| the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
+| the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
+| boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 
 ### One-camera fullscreen pixel rendering
 
@@ -128,8 +168,10 @@ subpixels.
 **Cross-file invariant:** any code path that changes the canvas size — window resize,
 `fullscreenchange` — must call `fitCanvas()` then `relayout()`. `relayout()` recomputes
 everything positioned off `VIEW_W`/`VIEW_H`: the minimap anchors, the map/settings panel
-positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — now `let`s; the offsets *within* each baked
-panel stay fixed), `fitFlakes()`, which keeps snow density constant by topping up/trimming
+positions (`PANEL_X/Y`, `SET_X/Y`, `SL_X`, `ROW_*` — `let`s **declared in the `canvas` banner
+beside `relayout()`**, not down in their own sections, so `relayout()` never reaches forward
+into a temporal dead zone; the offsets *within* each baked panel stay fixed in their own
+sections), `fitFlakes()`, which keeps snow density constant by topping up/trimming
 the `flakes` array, and `renderBars()`, which re-bakes the pillarbox frame. Never write layout
 code against a literal 480/270; `renderTitle()` shows the pattern for recentering a 270-authored
 layout (`toy` offset).
@@ -271,8 +313,8 @@ and knockback still use the old direct-move idiom.
 ### Tools and the bow
 
 There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
-`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `tool` is the *held* index,
-which is the bow at rest. The bottom strip of the HUD is deliberately empty — it is reserved
+`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `player.tool` is the *held*
+index, which is the bow at rest. The bottom strip of the HUD is deliberately empty — it is reserved
 for combat abilities. Two verbs, two inputs:
 
 - **Left click = bow**, always (`clickAction`).
@@ -282,10 +324,10 @@ for combat abilities. Two verbs, two inputs:
   bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
   within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
   ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
-  does nothing. A valid target swaps `tool` to the right one, drops any bow draw, faces the
+  does nothing. A valid target swaps `player.tool` to the right one, drops any bow draw, faces the
   tile, and starts the swing; `swingHit()` lands on the locked tile (`player.workTx/Ty`) —
   whatever is there by then — via `hitObject()`/`crackIce()`. Once `swingT` and `swingCd`
-  both reach 0, `updatePlay` puts the bow back (`tool = TOOL_BOW`), so the axe only exists
+  both reach 0, `updatePlay` puts the bow back (`player.tool = TOOL_BOW`), so the axe only exists
   visually for the duration of the work. `workTarget()` is shared with the cursor, so the
   lock ring is exactly "E will do something here".
 
@@ -503,8 +545,9 @@ health at `py - 7`, draw meter at `py - 12`.
 The native pointer is hidden over the canvas and a **pixel-art cursor is drawn in-canvas** as
 the very last thing in `render()` (above every overlay and the seed tag), so it sits on the
 game's pixel grid at every zoom level. `cursorInfo()` resolves the pointer state once per
-frame from `mouse`, `state`, `tool`, and what's under the pointer, and both the pixel cursor
-and the browser-cursor fallback read from it. It returns `{ kind, mode, dim, frac }`:
+frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the pointer, and
+both the pixel cursor and the browser-cursor fallback read from it. It returns
+`{ kind, mode, dim, frac }`:
 
 - `kind` **arrow** — title, dead, paused, map, and anywhere in the settings/wheel that isn't
   a widget; **hand** — over a settings widget (`settingsHit()`, shared with the click handler
@@ -577,9 +620,10 @@ canvas with `source-in` — sprites larger than 32×32 will clip.
 into offscreen canvases at boot; per-frame code blits them and draws only the live parts on top.
 Their layout variables (`PANEL_*`, `MAP_*`, `SET_*`, `SL_X`, `ROW_*`) are shared between the bake
 function and the per-frame code, so both sides move together — but a bake-side change only appears
-after the panel is rebuilt. The position variables are `let`s recentered by `relayout()` on every
-canvas-size change; the bake draws in panel-relative coordinates (e.g. `ROW_FPS - SET_Y`), so a
-recenter never requires a re-bake — keep any new row's bake-side label and per-frame widget
+after the panel is rebuilt. They are declared **up in the `canvas` banner next to `relayout()`**
+(which reassigns them on every canvas-size change) rather than in these sections; a new panel row
+must be declared there too. The bake draws in panel-relative coordinates (e.g. `ROW_FPS - SET_Y`),
+so a recenter never requires a re-bake — keep any new row's bake-side label and per-frame widget
 expressed the same way.
 
 The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so

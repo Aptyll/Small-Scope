@@ -219,6 +219,28 @@
   let MM_R = 24;                   // minimap radius in px (1px = 1 tile)
   let MM_CX = VIEW_W - 32;         // minimap center
   let MM_CY = 40;
+
+  // Panel layout anchors. These live here rather than in the map/settings
+  // sections because relayout() assigns them on every canvas resize —
+  // declaring them 2800 lines further down left relayout() reaching forward
+  // into a TDZ, safe only while nothing called it before boot finished. The
+  // offsets *within* each baked panel stay in their own sections.
+  const PANEL_W = 308, PANEL_H = 226;
+  let PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);   // relayout() recenters these
+  let PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
+  let MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;     // 192x192 map area
+  let COL_CX = PANEL_X + 254;                          // right column center
+  const MAP_W = 192;             // the baked panel's map slot — the world scales into it
+  const MAP_S = MAP_W / WORLD;   // tiles -> map px
+
+  const SET_W = 240, SET_H = 202;
+  let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
+  let SET_Y = Math.round((VIEW_H - SET_H) / 2);
+  let SL_X = SET_X + 112;
+  const SL_W = 66;  // slider track
+  let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
+    ROW_FPS = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
+
   const mmCv = document.createElement('canvas');
   mmCv.width = WORLD; mmCv.height = WORLD;
   const mmCtx = mmCv.getContext('2d');
@@ -310,6 +332,7 @@
     stamGhost: 0, stamGhostT: 0, // spent-stamina ghost: lingers, then drains
     sliding: false, slideT: 0, trailD: 0, slideDustT: 0, // shift-slide state
     swingT: 0, swingCd: 0, swingDir: 0, swingHitDone: false,
+    tool: TOOL_BOW, // held TOOLS index: the bow, except mid-work (see tryWork)
     workTx: -1, workTy: -1, // tile the current E swing is aimed at
     hurtT: 0, invuln: 0,
     fallT: 0, fallRipT: 0, // floundering in an ice hole
@@ -317,7 +340,6 @@
   };
 
   const inv = { gold: 0, berry: 0, fish: 0 };
-  let tool = TOOL_BOW; // held TOOLS index: the bow, except mid-work (see tryWork)
 
   const animals = []; // passive wildlife: rabbits and deer, spawned once at boot
   const structures = []; // every stump-built tiered building (walls included)
@@ -840,7 +862,7 @@
     const t = workTarget();
     if (!t || !t.near) return;
     if (player.charging) { player.charging = false; player.chargeT = 0; } // work drops the draw
-    tool = t.tool;
+    player.tool = t.tool;
     player.workTx = t.tx; player.workTy = t.ty;
     const dx = t.tx * TILE + 8 - player.x, dy = t.ty * TILE + 8 - player.y;
     player.swingDir = Math.atan2(dy, dx);
@@ -987,7 +1009,7 @@
   function hitObject(o) {
     const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
     // hard tool gating: the wrong tool bounces off instead of harvesting
-    const k = TOOLS[tool].key;
+    const k = TOOLS[player.tool].key;
     if ((o.type === 'tree' && k !== 'axe') ||
         (o.type === 'rock' && k !== 'pick')) {
       SFX.deny();
@@ -1669,7 +1691,7 @@
     player.dodgeCharges = DODGE_CHARGES;
     player.dodgeRegenT = 0;
     player.swingT = player.swingCd = 0;
-    tool = TOOL_BOW;
+    player.tool = TOOL_BOW;
     state.mode = 'play';
     showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
   }
@@ -1947,7 +1969,7 @@
       }
     }
     // the work tool goes away with the swing cooldown; held E brings it right back
-    if (player.swingT <= 0 && player.swingCd <= 0) tool = TOOL_BOW;
+    if (player.swingT <= 0 && player.swingCd <= 0) player.tool = TOOL_BOW;
     if (keys['e']) tryWork();
 
     // bow draw: charge up and keep facing the mouse
@@ -2382,7 +2404,7 @@
       '#9fb6d8', 'rgba(15,22,50,0.85)');
   }
 
-  // ------------------------------------------------------------ cursor
+  // ------------------------------------------------------------ cursor & aim line
   // The pointer is drawn in-canvas (settings.pixelCursor) so it stays on the
   // game's pixel grid at every zoom. cursorInfo() resolves what it should look
   // like this frame, once, and both the pixel cursor and the browser-cursor
@@ -2559,7 +2581,7 @@
     }
   }
 
-
+  // ------------------------------------------------------------ entity draw
   // small overhead bar shared by every living unit; color shifts as hp drains
   function drawHealthBar(cxp, topY, hp, maxHp, w) {
     const x = Math.round(cxp - w / 2), y = Math.round(topY);
@@ -2596,6 +2618,145 @@
     drawHealthBar(b.x - ox, py - 4, b.hp, b.maxHp, 10);
   }
 
+  function drawPlayer(ox, oy, now) {
+    const set = SPRITES.player[player.dir];
+    let frame = 0;
+    if (player.moving) frame = 1 + (Math.floor(player.animT) % 2);
+    const spr = set[frame];
+    const px = Math.round(player.x - 8 - ox);
+    const py = Math.round(player.y - 12 - oy);
+    // shadow (not while swimming in a hole)
+    if (player.fallT <= 0) {
+      ctx.fillStyle = 'rgba(110,130,170,0.4)';
+      ctx.fillRect(px + 5, py + 15, 6, 2);
+    }
+
+    if (player.fallT > 0) {
+      // plunged through the ice: quick sink, only the head above the waterline
+      const sink = Math.round(Math.min(7, (HOLE_FALL_T - player.fallT) * 40));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(px - 2, py - 8, 20, 20); ctx.clip();
+      drawSpriteFlash(spr, px, py + sink, player.hurtT > 0.12 ? 1 : 0);
+      ctx.restore();
+      // ripple rings at the waterline
+      ctx.fillStyle = 'rgba(207,228,242,0.75)';
+      ctx.fillRect(px + 2, py + 11, 12, 1);
+      ctx.fillRect(px + 4, py + 13, 8, 1);
+    } else if (player.dodgeT > 0) {
+      // dodge roll: full spin over the roll, trailing two afterimage ghosts.
+      // Spin sign follows horizontal intent so side rolls tumble forward.
+      const prog = 1 - player.dodgeT / DODGE_T;
+      const sgn = player.dodgeVX < 0 ? -1 : player.dodgeVX > 0 ? 1 :
+        player.dodgeVY < 0 ? -1 : 1;
+      const vd = Math.hypot(player.dodgeVX, player.dodgeVY) || 1;
+      const nx = player.dodgeVX / vd, ny = player.dodgeVY / vd;
+      const rollSpr = SPRITES.player[player.dir][0];
+      const spin = (a, gx, gy) => {
+        ctx.save();
+        ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
+        ctx.rotate(a);
+        ctx.drawImage(rollSpr, -8, -8);
+        ctx.restore();
+      };
+      ctx.globalAlpha = 0.12; spin(sgn * (prog - 0.14) * Math.PI * 2, -nx * 11, -ny * 11);
+      ctx.globalAlpha = 0.28; spin(sgn * (prog - 0.07) * Math.PI * 2, -nx * 6, -ny * 6);
+      ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
+    } else {
+      // held tool: behind the body when facing away, in the hand otherwise
+      const held = state.mode === 'play';
+      const toolBehind = held && player.dir === 'up' && !player.charging && player.swingT <= 0;
+      if (toolBehind) drawHeldTool(px, py);
+      if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
+      drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
+      ctx.globalAlpha = 1;
+      if (held && !toolBehind) drawHeldTool(px, py);
+    }
+
+    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 7, player.hp, player.maxHp, 14);
+    // dodge stamina: one clean unsegmented bar under the health bar — charges
+    // stay discrete in the sim, the bar just shows the pooled total
+    if (state.mode === 'play') {
+      const bx = Math.round(player.x - ox) - 7, by = py - 4;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bx - 1, by - 1, 16, 4);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(bx, by, 14, 2);
+      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
+      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
+      // ghost of the chunk just spent: pale segment that drains into place
+      const gw = Math.round(14 * Math.max(frac, player.stamGhost)) - Math.round(14 * frac);
+      if (gw > 0) {
+        ctx.fillStyle = '#e6f4ff';
+        ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
+      }
+      ctx.fillStyle = '#8ad8ff';
+      ctx.fillRect(bx, by, Math.round(14 * frac), 2);
+    }
+    // bow draw meter, just above the health bar: yellow while charging,
+    // turning hot orange the moment the draw is full
+    if (player.charging && state.mode === 'play') {
+      const frac = Math.min(1, player.chargeT / BOW_CHARGE);
+      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 12);
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(x - 1, y - 1, 16, 4);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(x, y, 14, 2);
+      ctx.fillStyle = frac >= 1 ? '#ff9440' : '#ffd95c';
+      ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
+    }
+  }
+
+  // the selected tool, drawn on the player: carried at the hand while idle or
+  // walking, swept along the arc during a melee swing, aimed at the mouse while
+  // the bow is drawn. px/py are the player sprite's top-left in screen space.
+  function drawHeldTool(px, py) {
+    const t = TOOLS[player.tool];
+    const icon = SPRITES[t.icon];
+    const cxp = px + 8, cyp = py + 10; // roughly the hands
+
+    // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
+    // rotating by a + PI points the arc at the target
+    if (t.key === 'bow' && player.charging) {
+      const a = Math.atan2(mouse.y + camY - (player.y - BOW_Y), mouse.x + camX - player.x);
+      ctx.save();
+      ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
+      ctx.rotate(a + Math.PI);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+      return;
+    }
+
+    // melee swing: sweep with the same arc the swing effect uses; the icons
+    // point up, so + PI/2 aligns the head with the sweep direction
+    if (t.key !== 'bow' && player.swingT > 0) {
+      const prog = 1 - player.swingT / 0.18;
+      const a = player.swingDir - 1.1 + prog * 2.2;
+      ctx.save();
+      ctx.translate(Math.round(cxp + Math.cos(a) * 9), Math.round(cyp - 2 + Math.sin(a) * 9));
+      ctx.rotate(a + Math.PI / 2);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+      return;
+    }
+
+    // carried: sits in the leading hand, with a 1px walk bob
+    const bob = player.moving ? Math.floor(player.animT) % 2 : 0;
+    if (player.dir === 'left') {
+      ctx.save();
+      ctx.translate(px + 2, cyp - 2 + bob);
+      ctx.scale(-1, 1);
+      ctx.drawImage(icon, -4, -4);
+      ctx.restore();
+    } else if (player.dir === 'right') {
+      ctx.drawImage(icon, px + 10, cyp - 6 + bob);
+    } else if (player.dir === 'down') {
+      ctx.drawImage(icon, px + 10, cyp - 5 + bob);
+    } else { // up: far hand, occluded by the body (caller draws us first)
+      ctx.drawImage(icon, px - 2, cyp - 5 + bob);
+    }
+  }
+
+  // ------------------------------------------------------------ selection, hints & wheel
   // white corner brackets over the hovered / wheel-targeted tile
   function drawSelection(ox, oy, now) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen) return;
@@ -2781,144 +2942,7 @@
       Math.round(L.cy + WHEEL_R + 20), color, 'rgba(15,22,50,0.9)');
   }
 
-  function drawPlayer(ox, oy, now) {
-    const set = SPRITES.player[player.dir];
-    let frame = 0;
-    if (player.moving) frame = 1 + (Math.floor(player.animT) % 2);
-    const spr = set[frame];
-    const px = Math.round(player.x - 8 - ox);
-    const py = Math.round(player.y - 12 - oy);
-    // shadow (not while swimming in a hole)
-    if (player.fallT <= 0) {
-      ctx.fillStyle = 'rgba(110,130,170,0.4)';
-      ctx.fillRect(px + 5, py + 15, 6, 2);
-    }
-
-    if (player.fallT > 0) {
-      // plunged through the ice: quick sink, only the head above the waterline
-      const sink = Math.round(Math.min(7, (HOLE_FALL_T - player.fallT) * 40));
-      ctx.save();
-      ctx.beginPath(); ctx.rect(px - 2, py - 8, 20, 20); ctx.clip();
-      drawSpriteFlash(spr, px, py + sink, player.hurtT > 0.12 ? 1 : 0);
-      ctx.restore();
-      // ripple rings at the waterline
-      ctx.fillStyle = 'rgba(207,228,242,0.75)';
-      ctx.fillRect(px + 2, py + 11, 12, 1);
-      ctx.fillRect(px + 4, py + 13, 8, 1);
-    } else if (player.dodgeT > 0) {
-      // dodge roll: full spin over the roll, trailing two afterimage ghosts.
-      // Spin sign follows horizontal intent so side rolls tumble forward.
-      const prog = 1 - player.dodgeT / DODGE_T;
-      const sgn = player.dodgeVX < 0 ? -1 : player.dodgeVX > 0 ? 1 :
-        player.dodgeVY < 0 ? -1 : 1;
-      const vd = Math.hypot(player.dodgeVX, player.dodgeVY) || 1;
-      const nx = player.dodgeVX / vd, ny = player.dodgeVY / vd;
-      const rollSpr = SPRITES.player[player.dir][0];
-      const spin = (a, gx, gy) => {
-        ctx.save();
-        ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
-        ctx.rotate(a);
-        ctx.drawImage(rollSpr, -8, -8);
-        ctx.restore();
-      };
-      ctx.globalAlpha = 0.12; spin(sgn * (prog - 0.14) * Math.PI * 2, -nx * 11, -ny * 11);
-      ctx.globalAlpha = 0.28; spin(sgn * (prog - 0.07) * Math.PI * 2, -nx * 6, -ny * 6);
-      ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
-    } else {
-      // held tool: behind the body when facing away, in the hand otherwise
-      const held = state.mode === 'play';
-      const toolBehind = held && player.dir === 'up' && !player.charging && player.swingT <= 0;
-      if (toolBehind) drawHeldTool(px, py);
-      if (player.invuln > 0 && state.mode === 'play' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
-      drawSpriteFlash(spr, px, py, player.hurtT > 0.12 ? 1 : 0);
-      ctx.globalAlpha = 1;
-      if (held && !toolBehind) drawHeldTool(px, py);
-    }
-
-    if (state.mode === 'play') drawHealthBar(player.x - ox, py - 7, player.hp, player.maxHp, 14);
-    // dodge stamina: one clean unsegmented bar under the health bar — charges
-    // stay discrete in the sim, the bar just shows the pooled total
-    if (state.mode === 'play') {
-      const bx = Math.round(player.x - ox) - 7, by = py - 4;
-      ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(bx - 1, by - 1, 16, 4);
-      ctx.fillStyle = '#3a3448';
-      ctx.fillRect(bx, by, 14, 2);
-      const regenP = player.dodgeCharges < DODGE_CHARGES ? 1 - player.dodgeRegenT / DODGE_CD : 0;
-      const frac = (player.dodgeCharges + regenP) / DODGE_CHARGES;
-      // ghost of the chunk just spent: pale segment that drains into place
-      const gw = Math.round(14 * Math.max(frac, player.stamGhost)) - Math.round(14 * frac);
-      if (gw > 0) {
-        ctx.fillStyle = '#e6f4ff';
-        ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
-      }
-      ctx.fillStyle = '#8ad8ff';
-      ctx.fillRect(bx, by, Math.round(14 * frac), 2);
-    }
-    // bow draw meter, just above the health bar: yellow while charging,
-    // turning hot orange the moment the draw is full
-    if (player.charging && state.mode === 'play') {
-      const frac = Math.min(1, player.chargeT / BOW_CHARGE);
-      const x = Math.round(player.x - ox) - 7, y = Math.round(py - 12);
-      ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(x - 1, y - 1, 16, 4);
-      ctx.fillStyle = '#3a3448';
-      ctx.fillRect(x, y, 14, 2);
-      ctx.fillStyle = frac >= 1 ? '#ff9440' : '#ffd95c';
-      ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
-    }
-  }
-
-  // the selected tool, drawn on the player: carried at the hand while idle or
-  // walking, swept along the arc during a melee swing, aimed at the mouse while
-  // the bow is drawn. px/py are the player sprite's top-left in screen space.
-  function drawHeldTool(px, py) {
-    const t = TOOLS[tool];
-    const icon = SPRITES[t.icon];
-    const cxp = px + 8, cyp = py + 10; // roughly the hands
-
-    // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
-    // rotating by a + PI points the arc at the target
-    if (t.key === 'bow' && player.charging) {
-      const a = Math.atan2(mouse.y + camY - (player.y - BOW_Y), mouse.x + camX - player.x);
-      ctx.save();
-      ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
-      ctx.rotate(a + Math.PI);
-      ctx.drawImage(icon, -4, -4);
-      ctx.restore();
-      return;
-    }
-
-    // melee swing: sweep with the same arc the swing effect uses; the icons
-    // point up, so + PI/2 aligns the head with the sweep direction
-    if (t.key !== 'bow' && player.swingT > 0) {
-      const prog = 1 - player.swingT / 0.18;
-      const a = player.swingDir - 1.1 + prog * 2.2;
-      ctx.save();
-      ctx.translate(Math.round(cxp + Math.cos(a) * 9), Math.round(cyp - 2 + Math.sin(a) * 9));
-      ctx.rotate(a + Math.PI / 2);
-      ctx.drawImage(icon, -4, -4);
-      ctx.restore();
-      return;
-    }
-
-    // carried: sits in the leading hand, with a 1px walk bob
-    const bob = player.moving ? Math.floor(player.animT) % 2 : 0;
-    if (player.dir === 'left') {
-      ctx.save();
-      ctx.translate(px + 2, cyp - 2 + bob);
-      ctx.scale(-1, 1);
-      ctx.drawImage(icon, -4, -4);
-      ctx.restore();
-    } else if (player.dir === 'right') {
-      ctx.drawImage(icon, px + 10, cyp - 6 + bob);
-    } else if (player.dir === 'down') {
-      ctx.drawImage(icon, px + 10, cyp - 5 + bob);
-    } else { // up: far hand, occluded by the body (caller draws us first)
-      ctx.drawImage(icon, px - 2, cyp - 5 + bob);
-    }
-  }
-
+  // ------------------------------------------------------------ lighting & weather
   function renderLighting(ox, oy, now) {
     const dark = state.darkness;
     // dusk warm tint
@@ -3128,13 +3152,7 @@
   }
 
   // ------------------------------------------------------------ world map (M)
-  const PANEL_W = 308, PANEL_H = 226;
-  let PANEL_X = Math.round((VIEW_W - PANEL_W) / 2);   // relayout() recenters these
-  let PANEL_Y = Math.round((VIEW_H - PANEL_H) / 2);
-  let MAP_X = PANEL_X + 10, MAP_Y = PANEL_Y + 24;     // 192x192 map area
-  let COL_CX = PANEL_X + 254;                          // right column center
-  const MAP_W = 192;             // the baked panel's map slot — the world scales into it
-  const MAP_S = MAP_W / WORLD;   // tiles -> map px
+  // PANEL_*/MAP_* anchors are declared in the canvas banner (relayout() writes them).
 
   const mapCv = document.createElement('canvas');
   mapCv.width = WORLD; mapCv.height = WORLD;
@@ -3330,13 +3348,8 @@
   }
 
   // ------------------------------------------------------------ settings menu (ESC)
-  const SET_W = 240, SET_H = 202;
-  let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
-  let SET_Y = Math.round((VIEW_H - SET_H) / 2);
-  let SL_X = SET_X + 112;
-  const SL_W = 66;  // slider track
-  let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
+  // SET_*/SL_X/ROW_* anchors are declared in the canvas banner (relayout() writes them).
+
   let dragSlider = null;
 
   const setPanelCv = document.createElement('canvas');
@@ -3635,8 +3648,8 @@
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
     setZoom: (n) => { zoomStep = Math.max(0, n | 0); },
     getZoom: () => ({ step: zoomStep, applied: zoomEff, max: zoomMax }),
-    setTool: (i) => { tool = i; },
-    getTool: () => tool,
+    setTool: (i) => { player.tool = i; },
+    getTool: () => player.tool,
     cam: () => ({ x: camX, y: camY }),
     startGame,
     hideUI: false,
