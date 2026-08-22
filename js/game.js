@@ -3329,22 +3329,24 @@
     // dodge stamina: one clean unsegmented bar under the health bar - charges
     // stay discrete in the sim, the bar just shows the pooled total. Only the
     // local player needs it; a rival's tells are their draw meter and position.
+    // It is 3px tall, starting on the row under the health bar, so the two fills
+    // touch inside one shared frame (no dark divider between them).
     if (local) {
       const bx = Math.round(p.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by - 1, 16, 4);
       ctx.fillStyle = '#3a3448';
-      ctx.fillRect(bx, by, 14, 2);
+      ctx.fillRect(bx, by - 1, 14, 3);
       const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
       const frac = (p.dodgeCharges + regenP) / DODGE_CHARGES;
       // ghost of the chunk just spent: pale segment that drains into place
       const gw = Math.round(14 * Math.max(frac, p.stamGhost)) - Math.round(14 * frac);
       if (gw > 0) {
         ctx.fillStyle = '#e6f4ff';
-        ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
+        ctx.fillRect(bx + Math.round(14 * frac), by - 1, gw, 3);
       }
       ctx.fillStyle = '#8ad8ff';
-      ctx.fillRect(bx, by, Math.round(14 * frac), 2);
+      ctx.fillRect(bx, by - 1, Math.round(14 * frac), 3);
     }
     // bow draw meter, just above the health bar: yellow while charging,
     // turning hot orange the moment the draw is full. Drawn for everyone - it
