@@ -6,15 +6,15 @@ Read this before adding an ability, an input, or anything a player can do to the
 
 ## The slot model
 
-`MAX_PLAYER_SLOTS` (6) slots are created once at boot by `initPlayers()`, which runs after
-`genWorld()` because the constructor needs `spawnPts`. Each slot is one of:
+`MAX_PLAYER_SLOTS` (6) slots are created once at boot by `initPlayers()`. Each slot is one of:
 
 - `control: 'human'` — driven by keyboard/mouse. Today exactly one slot is human: **slot 0, this
   session's player**. `player` and `inv` point at it (and only at it) for the camera, HUD, cursor,
   audio gating and the aim line.
 - `control: 'ai'` — driven by `updateAI()`. Every vacant slot is filled with one at boot.
-- `control: 'none'` — nobody is in it. The slot still exists and still owns a camp; it is drawn as
-  a flat team-tinted silhouette there (`drawGhost`) and is skipped by the sim, arrows and drops.
+- `control: 'none'` — nobody is in it. The slot still exists; it is drawn as a flat team-tinted
+  silhouette at its `spawn` (`drawGhost`) and is skipped by the sim, arrows and drops. A slot
+  emptied before it ever landed stands at the world centre, the placeholder `spawn`.
   `p.active` is the `control !== 'none'` test every such loop uses.
 
 `DBG.setControl(slot, 'human'|'ai'|'none')` flips a slot live, which is how you stage a scene with
@@ -22,8 +22,10 @@ fewer bots, a frozen target dummy, or a ghost.
 
 **A `Player` owns everything the old singleton did** — position, velocity, facing, hp, bow draw,
 dodge charges, slide state, swing state, held tool, i-frames, footprint cadence — plus `id`,
-`team`, `control`, `name`, `spawn`, its own `inv` wallet, an `input` struct and an `ai` brain.
-`reset(first)` does camp placement and clears every transient; it is the single definition of
+`team`, `control`, `name`, `spawn` (the tile it landed on from the eagle), `aboard`/`dropT`/`dropU`
+(the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet, an
+`input` struct and an `ai` brain.
+`reset(first)` places it at `spawn` and clears every transient; it is the single definition of
 "a fresh player", used at boot and on respawn (respawn passes `false`, which grants 3 s i-frames).
 
 Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireArrow`, `tryDodge`,
@@ -140,22 +142,25 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
 2. **fight** — a rival within `AI_SIGHT` (150 px): circle at ~70 px, draw and loose near full,
    dodge when hurt. Only shoots when `aiLineClear()` says the flight path is open.
 3. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s give-up timer per animal.
-4. **unwedge** — after being stuck, walk back toward its camp before doing anything else.
+4. **unwedge** — after being stuck, walk back toward its landing site before doing anything else.
 5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
 6. **spend** — with gold in hand, build a generator/spawner on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
 7. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
-8. **roam** — wander between its camp and the map centre.
+8. **roam** — wander between its landing site and the map centre.
 
 **Nothing here paths around an obstacle**, so every pursuit carries a give-up timer and a short
 blacklist (`ai.avoid`, `ai.huntAvoid`), and `aiOpenSides()` keeps bots from targeting work buried
 inside the treeline. Those guards are what stop a bot freezing against a wall forever — keep them
 when you extend the ladder.
 
-## Spawn pockets
+## Where players start
 
-`spawnPts` is one camp per slot, evenly spaced on a ring `SPAWN_D` (`WORLD/2 - 55`) tiles from the
-centre, so no start is favoured. `genWorld()` clears a pocket at each, carves a river spoke from
-each to the centre plus a ring between neighbouring camps, keeps ponds/rocks/bushes clear of them,
-and gives **every** camp the same starter ring of rocks and bushes. Changing the slot count changes
-worldgen for a given seed.
+Nowhere, until they land: every active slot boards the eagle in `beginDrop()` and gets its
+`spawn` from `landPlayer()` — the nearest open tile to where it jumped (AI slots jump at a hashed
+fraction of the line, the human where they press Space, or at the end of the line). That tile is
+what `respawn()` returns the slot to, and what the bot brain treats as "home". There are no
+spawn pockets, no starter rings, and no guaranteed resources near a landing — reading the
+chart during the ride is the whole point. `ringPts` (six points on a ring `SPAWN_D` tiles from
+the centre) is the old camp ring, kept only because river spokes and the keep-clear rules in
+`genWorld()` are built on it.

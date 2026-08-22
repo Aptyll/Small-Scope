@@ -9,17 +9,18 @@ anything that must stay stable per tile.
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world. The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
-  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `spawnPts` is one camp
-  per player slot, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre, so
-  every camp sits at the treeline and no start is favoured — changing `MAX_PLAYER_SLOTS` changes
-  worldgen. Every camp gets the same cleared pocket and the same starter ring of rocks and bushes.
+  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is one point
+  per player slot, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre at
+  the treeline — the old spawn camps. Nobody starts there any more (players land from the eagle,
+  see [multiplayer.md](multiplayer.md#where-players-start)) and no pocket is carved, but the river
+  spokes and the keep-clear rules still hang off them, so `MAX_PLAYER_SLOTS` still shapes worldgen.
 - `ground` — `Uint8Array(WORLD²)`: `0` snow, `1` ice, `2` open-water hole (runtime-only, see
   [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
   [Momentum movement](gameplay.md#momentum-movement-players-only)), and worldgen carves it as a travel
   network: 14 frozen lakes plus winding ~5-tile-wide rivers (`carveRiver` in `genWorld()`) —
-  a spoke from each camp to the central clearing and a ring linking each camp to its neighbour. The
-  shared `carveIce` rule skips existing objects, the camps, and the clearing, so rivers gap
-  naturally around them.
+  a spoke from each ring point to the central clearing and a ring linking each point to its
+  neighbour. The shared `carveIce` rule skips existing objects, the ring points, and the clearing,
+  so rivers gap naturally around them.
 - `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
   `wall`, `turret`, `generator`, `spawner`.

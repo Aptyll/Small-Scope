@@ -14,7 +14,10 @@ resolution setting**; camera zoom is a gameplay feature (below), not a display o
 
 - It picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels land
   exactly on device pixels even under fractional 125%/150% OS scaling) closest to
-  `deviceH / TARGET_ROWS`. `scale` is fractional in CSS px and must not be floored.
+  `deviceH / viewRows`. `viewRows` is `TARGET_ROWS` except during the eagle drop, where
+  `applyView()` swaps in `DROP_ROWS` (540) so the rider sees twice the world (the one sanctioned
+  zoom-out: nobody is in the world yet, so the fairness ceiling doesn't apply). `scale` is
+  fractional in CSS px and must not be floored.
 - Heights that don't divide cleanly (1440p → 5×, 288 rows) **"breathe"** a few percent rather
   than letterbox or blur — the Terraria/Stardew trade. 16:9 screens always fill edge-to-edge.
 - `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get pillarbox
@@ -33,8 +36,9 @@ resolution setting**; camera zoom is a gameplay feature (below), not a display o
 device-pixel scale by one (so every level stays pixel-perfect), zoom **out** is hard-capped at
 the `TARGET_ROWS` baseline (the fairness ceiling — scrolling out never buys extra vision) and
 zoom **in** at `MIN_ROWS` (150) rows, so the number of steps varies per monitor (`zoomMax`, set
-by `fitCanvas()`). The wheel handler only bumps `zoomStep`; `update()` applies it by diffing
-against `zoomEff` and calling `fitCanvas()`/`relayout()` — overlays (map/settings) and non-play
+by `fitCanvas()`). The wheel handler only bumps `zoomStep`; `applyView()` (first thing in
+`update()`, also called directly by `beginDrop`/`landPlayer`) applies it by diffing against
+`zoomEff`/`viewRows` and calling `fitCanvas()`/`relayout()` — overlays (map/settings) and non-play
 modes force base zoom so the fixed-size panels always fit, restoring on close. The whole
 presentation zooms, HUD included. `DBG.setZoom(n)`/`DBG.getZoom()` drive it externally. The
 scroll wheel is zoom only — there is no tool selection to cycle.
@@ -70,8 +74,10 @@ slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
-arrows → turret tracers → swing arcs (one per swinging player) → floaters → `renderLighting` → `renderWeather` →
-`renderVignettes` → `renderUI` → `renderWheel` (radial menu, above the UI) →
+arrows → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
+eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` →
+`renderVignettes` → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
+chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
 fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) → the screen fade
 (`state.fade`, the reroll whiteout) → the pixel cursor (always last). The bow's
@@ -198,18 +204,53 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
   card clicks move `menu.csel` (`menu.cswapT` pops the big sprite), Enter/Space/LOCK IN call
   `lockIn()` — which stamps `setChamp(player, csel)`, holds `menu.lockT` for the press, then
-  `beginIntro()`; Esc/Backspace go back to the menu.
+  `beginDrop()` (the eagle ride, below); Esc/Backspace go back to the menu.
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
-- **Play intro** (`beginIntro`, what `startGame` now calls): the sim starts immediately, but
-  for `INTRO_T` (1.6 s) `state.intro` counts down while `renderTitle` keeps drawing — the tint
-  dissolves over the first 45 % and the chrome sinks away in the first 22 % — `update()` eases
-  the camera from `state.introFrom` (where the drift left it) onto the player with
-  `easeInOut` instead of the play lerp, and `renderUI` slides the HUD in over the last
-  `HUD_IN_T` (0.7 s): the left stack from the left, the gold/minimap stack from the top. The
-  first-run hint message fires when the intro ends.
+- **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
+  is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over
+  the first 45 % and the chrome sinks away in the first 22 % — and the camera eases from
+  `state.introFrom` with `easeInOut(1 - intro / introLen)` instead of the play lerp. `beginDrop`
+  starts it (into the eagle ride); `beginIntro` (debug only, `DBG.beginIntro`) starts it straight
+  into `play` with the player already standing in the world.
+- **Landing intro**: the human's `landPlayer` sets `state.intro = state.introLen = HUD_IN_T` (0.7 s)
+  with `introFrom` at the touchdown framing, so `renderUI` slides the HUD in (the left stack from
+  the left, the gold/minimap stack from the top) while the camera settles onto the play framing.
+  The first-run hint message fires when that intro ends.
 
 `DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and
 `layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
+
+## Eagle drop (mode `drop`)
+
+Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGame`/`DBG.beginDrop`)
+puts every active slot aboard (`p.aboard`), builds `state.drop` from `makeEagleRoute()` — two
+points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
+`hash2` so the line is the seed's — bakes the chart once (`buildWorldMapImg` into `mapCv`), sets
+mode `drop`, refits the view to `DROP_ROWS` around its centre and starts the menu exit. The bird
+flies the line at `EAGLE_SPD` (170 px/s, ~14–18 s); `updateDrop` (called from `updatePlay`, so
+pause stops it) moves it, carries everyone aboard with it, jumps each AI slot at its hashed
+`p.dropU` (0.12–0.88 of the line, scattered ±4 tiles off it) and the human at the end if they
+never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T` (1.3 s) straight
+down; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object and no
+water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow burst.
+Only the human's landing changes mode: `play`, `applyView()` back to base zoom centred on the
+landing, `shake`, and the landing intro above. `state.drop` outlives the mode: the eagle keeps
+flying (and dropping bots) until it is 60 tiles past the line's end with nobody in the air.
+
+Drawing: `drawDropAir` (above the world, below lighting) draws the `SPRITES.eagleShadow`
+silhouette `DROP_ALT` (56 px) below and 10 px right of the bird, the bird itself (`SPRITES.eagle`
+cycling spread → mid → back → mid, rotated to its heading, at `EAGLE_SCALE` 2× because it is
+high up, bobbing 3 px), the local rider unrotated on its back, a pulsing gold landing ring under
+the bird while the human is still aboard, and every faller shrinking from 2× to 1× along
+`alt = DROP_ALT·(1 − q²)` with a widening shadow. `renderDropUI` (mode `drop` only) draws the
+chart (`mapCv` at 1× when `VIEW_H ≥ 500`, else ½×, so pixels stay even) with the line inked dark
+under a dashed gold line, the flown part solid, the end-of-line marker, the bird as a white
+diamond with a pulsing ring, landed rivals as team pips and your own red diamond once you have
+jumped; top centre the pulsing `SPACE - JUMP` prompt with a draining time-left bar (red under
+3 s) and seconds, or `BRACE` while falling. Text scale follows the view (2× when tall).
+
+Airborne slots (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
+drops, wildlife scares, `enemyOf`, the y-sorted draws, the minimap and the M map.
 
 ## Lighting
 

@@ -244,10 +244,12 @@ reaped like animals. They inherit their spawner's `team`/`owner`, join the y-sor
 ## Death is not game over
 
 `die(p)` marks that slot dead, drops its bow draw, keeps `ceil(60%)` of each resource and starts a
-2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back at **its own** camp
-with i-frames. Only the local slot's death sets `state.mode = 'dead'` for the overlay.
-`state.mode` is `title | play | dead`, and `updatePlay()` runs in **both** `play` and `dead` — the
-match carries on while you are down. Only the local overlays (paused, map, settings) stop the sim;
+2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back on **its own**
+landing tile (`p.spawn`, set by the eagle drop) with i-frames. Only the local slot's death sets
+`state.mode = 'dead'` for the overlay.
+`state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
+`drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on while
+you are down. Only the local overlays (paused, map, settings) stop the sim;
 `update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
 runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-menu-title).
 

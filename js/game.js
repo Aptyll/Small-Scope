@@ -111,6 +111,9 @@
   // letterbox or blur (the Terraria/Stardew trade), and width is capped at
   // 16:9 so ultrawides get slim pillarbox bars instead of extra vision.
   const TARGET_ROWS = 270;
+  // the eagle drop renders at DROP_ROWS (see the eagle drop banner) so the
+  // rider sees enough of the world to pick a landing; applyView() swaps it
+  let viewRows = TARGET_ROWS;
 
   // Scroll-wheel camera zoom: each step raises the integer device-pixel scale
   // by one, so every zoom level stays pixel-perfect. Zoom OUT is capped at the
@@ -130,7 +133,7 @@
     const dpr = window.devicePixelRatio || 1;
     const devW = Math.max(1, Math.round(window.innerWidth * dpr));
     const devH = Math.max(1, Math.round(window.innerHeight * dpr));
-    let dev = Math.max(1, Math.round(devH / TARGET_ROWS));
+    let dev = Math.max(1, Math.round(devH / viewRows));
     // never shrink the view below the UI panels' footprint
     while (dev > 1 && (devW / dev < 320 || devH / dev < 240)) dev--;
     zoomMax = Math.max(0, Math.floor(devH / MIN_ROWS) - dev);
@@ -277,7 +280,7 @@
 
   // ------------------------------------------------------------ state
   const state = {
-    mode: 'title', // title | play | dead
+    mode: 'title', // title | drop | play | dead  (drop = riding / falling from the eagle)
     time: DAY_LEN * 0.25, // start mid-morning
     elapsed: 0,
     day: 1,
@@ -298,8 +301,10 @@
       // champion select: which screen the menu shows, its cross-fade, the
       // highlighted champion, per-card hover eases, swap pop, lock-in hold
       screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0 },
-    intro: 0,            // seconds left of the title -> play transition (0 = none)
+    intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
+    introLen: 1,         // that transition's full length (the camera ease divides by it)
     introFrom: null,     // camera position the transition started from
+    drop: null,          // the eagle while it is in the air: see makeEagleRoute() / beginDrop()
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
@@ -397,10 +402,13 @@
       this.team = slot % TEAM_COUNT;
       this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
       this.name = control === 'human' ? 'YOU' : TEAMS[this.team].name + '-' + (slot + 1);
-      this.spawn = spawnPts[slot % spawnPts.length];
+      this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot; respawn returns here
       this.inv = { gold: 0, berry: 0, fish: 0 };
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
       this.maxHp = 100;
+      this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
+      this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
+      this.dropU = 1;                     // route fraction at which an AI slot jumps
       // bot brain (unused by a human slot): current job, give-up timers and the
       // short blacklists that keep a bot from re-picking work it cannot reach
       this.ai = {
@@ -437,7 +445,7 @@
     }
   }
 
-  const players = [];  // every slot; filled by initPlayers() at boot (it needs spawnPts)
+  const players = [];  // every slot; filled by initPlayers() at boot
   let player = null;   // the local slot - camera, HUD, cursor and audio follow this one
   let inv = null;      // === player.inv, the counters the HUD draws
 
@@ -453,7 +461,9 @@
 
   // who p is allowed to shoot: another live slot on another team (this is the
   // one place the FFA/friendly-fire rule lives)
-  function enemyOf(p, q) { return q !== p && q.active && !q.dead && (!PVP || q.team !== p.team); }
+  function enemyOf(p, q) { return q !== p && q.active && !q.dead && !inAir(q) && (!PVP || q.team !== p.team); }
+  // riding the eagle or falling from it: not in the world yet, nothing can touch it
+  function inAir(p) { return p.aboard || p.dropT > 0; }
 
   // ---- contested orders --------------------------------------------------
   // Several players can order the same tile, drop or fish inside one sim step,
@@ -501,6 +511,7 @@
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
     if (state.mode === 'title') { menuKey(e); return; }
+    if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
     if (state.mode !== 'play') return;
     // edge-triggered intents go into the local player's input struct; the sim
     // reads and clears them, exactly as it does for an AI slot
@@ -549,6 +560,7 @@
     }
     if (e.button !== 0) return;
     if (state.mode === 'title') { menuClick(); return; }
+    if (state.mode === 'drop') { SFX.unlock(); dropJump(player); return; }
     if (state.mode !== 'play') return;
     if (state.wheel) return;
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
@@ -625,14 +637,15 @@
 
   const cx = WORLD / 2, cy = WORLD / 2;
 
-  // one spawn pocket per player slot, evenly spaced on a ring 55 tiles in from
-  // the world edge (nestled at the treeline) so no start position is favoured.
-  // The local human takes slot 0.
+  // six evenly spaced points on a ring 55 tiles in from the world edge (at the
+  // treeline). These were the spawn camps before the eagle drop; they still
+  // anchor the river spokes and the keep-clear rules so existing seeds keep
+  // their terrain. Nobody starts here any more - every slot lands from the eagle.
   const SPAWN_D = WORLD / 2 - 55;
-  const spawnPts = [];
+  const ringPts = [];
   for (let i = 0; i < MAX_PLAYER_SLOTS; i++) {
     const a = -Math.PI / 2 + (i / MAX_PLAYER_SLOTS) * Math.PI * 2;
-    spawnPts.push({
+    ringPts.push({
       tx: Math.round(cx + Math.cos(a) * SPAWN_D),
       ty: Math.round(cy + Math.sin(a) * SPAWN_D),
     });
@@ -662,23 +675,14 @@
       }
     }
 
-    // spawn pockets: clearings carved into the forest for each start position
-    for (const p of spawnPts) {
-      for (let dy = -7; dy <= 7; dy++) for (let dx = -7; dx <= 7; dx++) {
-        const tx = p.tx + dx, ty = p.ty + dy;
-        if (!inWorld(tx, ty)) continue;
-        if (Math.hypot(dx, dy) <= 6.5 + (hash2(tx, ty) - 0.5) * 2) objects[idx(tx, ty)] = null;
-      }
-    }
-
     // central clearing (the old ore field); CENTER_R keeps other worldgen out of it
     // so the river spokes still meet in open ground. Its rng() draws are kept so
     // existing seeds still produce the same world.
     const CENTER_R = 8;
     for (let i = 0; i < 8; i++) { rand(-0.25, 0.25); rand(3.6, 6.2); }
 
-    // frozen ponds - carved only into the open snow interior, away from spawns
-    const nearAnySpawn = (tx, ty, r) => spawnPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < r);
+    // frozen ponds - carved only into the open snow interior, away from the ring points
+    const nearAnySpawn = (tx, ty, r) => ringPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < r);
     for (let l = 0; l < 14; l++) {
       let px = 0, py = 0, ok = false;
       for (let tries = 0; tries < 40 && !ok; tries++) {
@@ -702,10 +706,10 @@
       }
     }
 
-    // frozen rivers: winding ~5-tile-wide ribbons that link each camp to the
-    // central ore field plus a ring around it — ice is the map's travel network.
-    // Same carve rules as the ponds, so rivers gap politely around camps, the
-    // ore field, and anything already standing (border trees leave natural gaps).
+    // frozen rivers: winding ~5-tile-wide ribbons that link each ring point to
+    // the central clearing plus a ring around it — ice is the map's travel network.
+    // Same carve rules as the ponds, so rivers gap politely around the ring points,
+    // the clearing, and anything already standing (border trees leave natural gaps).
     const carveIce = (tx, ty) => {
       if (inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0 &&
         Math.hypot(tx - cx, ty - cy) > CENTER_R + 3 && !nearAnySpawn(tx, ty, 9)) ground[idx(tx, ty)] = 1;
@@ -729,9 +733,9 @@
         if (Math.hypot(wx - x1, wy - y1) < 3) break;
       }
     };
-    for (const p of spawnPts) carveRiver(p.tx, p.ty, cx, cy); // spokes
-    for (let i = 0; i < spawnPts.length; i++) { // ring, camp to neighbouring camp
-      const a = spawnPts[i], b = spawnPts[(i + 1) % spawnPts.length];
+    for (const p of ringPts) carveRiver(p.tx, p.ty, cx, cy); // spokes
+    for (let i = 0; i < ringPts.length; i++) { // ring, point to neighbouring point
+      const a = ringPts[i], b = ringPts[(i + 1) % ringPts.length];
       carveRiver(a.tx, a.ty, b.tx, b.ty);
     }
 
@@ -739,7 +743,7 @@
       return inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0;
     }
     function nearSpawn(tx, ty) {
-      return spawnPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < 8);
+      return ringPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < 8);
     }
 
     // no interior trees: wood only grows at the forest boundary.
@@ -760,21 +764,6 @@
       const tx = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN), ty = randi(BORDER_MIN, WORLD - 1 - BORDER_MIN);
       if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > CENTER_R + 3) {
         placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
-      }
-    }
-
-    // guaranteed starter ring in every camp - each slot opens with the same kit
-    const ring = [
-      ['rock', 4, 4], ['rock', -4, 5],
-      ['bush', 3, -5], ['bush', -3, -5],
-    ];
-    for (const sp of spawnPts) {
-      for (const [type, dx, dy] of ring) {
-        const tx = sp.tx + dx, ty = sp.ty + dy;
-        if (free(tx, ty)) {
-          if (type === 'rock') placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
-          if (type === 'bush') placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
-        }
       }
     }
   }
@@ -1495,7 +1484,7 @@
     // rabbits are skittish: ANY player closing in sends them bolting
     let scare = null, sd = 1e9;
     for (const p of players) {
-      if (!p.active || p.dead) continue;
+      if (!p.active || p.dead || inAir(p)) continue;
       const d = Math.hypot(p.x - a.x, p.y - a.y);
       if (d < sd) { sd = d; scare = p; }
     }
@@ -1899,10 +1888,10 @@
   }
 
   function respawn(p) {
-    p.reset(false); // back at its own camp pocket, with i-frames
+    p.reset(false); // back where it landed from the eagle, with i-frames
     if (p === player) {
       state.mode = 'play';
-      showMsg('YOU WOKE AT CAMP  -  SOME SUPPLIES LOST', 4);
+      showMsg('YOU WOKE WHERE YOU LANDED  -  SOME SUPPLIES LOST', 4);
     }
   }
 
@@ -2147,15 +2136,21 @@
   // ------------------------------------------------------------ update
   let camX = 0, camY = 0;
 
-  function update(dt) {
-    // apply pending camera zoom (overlays and non-play modes drop to base zoom
-    // so the fixed-size panels fit; zoomMax can shrink on a window resize)
+  // apply pending camera zoom (overlays and non-play modes drop to base zoom so
+  // the fixed-size panels fit; zoomMax can shrink on a window resize) and the
+  // eagle drop's zoomed-out row target. Refits only when something changed.
+  function applyView() {
     const ze = (state.mode !== 'play' || state.mapOpen || state.settingsOpen)
       ? 0 : Math.min(zoomStep, zoomMax);
-    if (ze !== zoomEff) { zoomEff = ze; fitCanvas(); relayout(); }
+    const rows = state.mode === 'drop' ? DROP_ROWS : TARGET_ROWS;
+    if (ze !== zoomEff || rows !== viewRows) { zoomEff = ze; viewRows = rows; fitCanvas(); relayout(); }
+  }
 
-    // time
-    if (state.mode === 'play') {
+  function update(dt) {
+    applyView();
+
+    // time (the clock starts with the eagle - the match is live while you ride)
+    if (state.mode === 'play' || state.mode === 'drop') {
       state.time += dt;
       state.elapsed += dt;
       if (state.time >= CYCLE) {
@@ -2187,11 +2182,11 @@
 
     // the match runs on while the local player is down - other slots are still
     // playing. Only the local overlays (pause, map, settings) stop the sim.
-    if ((state.mode === 'play' || state.mode === 'dead') &&
+    if ((state.mode === 'play' || state.mode === 'dead' || state.mode === 'drop') &&
       !state.paused && !state.mapOpen && !state.settingsOpen) {
       sampleHumanInput(player);
       updatePlay(dt);
-    } else if (state.mode === 'play' || state.mode === 'dead') {
+    } else if (state.mode === 'play' || state.mode === 'dead' || state.mode === 'drop') {
       sampleHumanInput(player); // still drops a held draw when an overlay opens
     } else if (state.mode === 'title') {
       updateTitle(dt); // menu timers, camera drift, and the ambient world behind it
@@ -2201,16 +2196,29 @@
     if (state.mode === 'title') {
       const c = titleCamTarget();
       camX = c.x; camY = c.y;
+    } else if (state.mode === 'drop') {
+      // riding: track the eagle (the rider sits on it); falling: hold over the
+      // landing point. The first INTRO_T eases in from where the drift left off.
+      const tx = player.x - VIEW_W / 2, ty = player.y - VIEW_H / 2;
+      if (state.intro > 0) {
+        state.intro = Math.max(0, state.intro - dt);
+        const q = easeInOut(1 - state.intro / state.introLen);
+        camX = state.introFrom.x + (tx - state.introFrom.x) * q;
+        camY = state.introFrom.y + (ty - state.introFrom.y) * q;
+      } else {
+        camX += (tx - camX) * Math.min(1, dt * 9);
+        camY += (ty - camY) * Math.min(1, dt * 9);
+      }
     } else {
       const lookX = (mouse.x - VIEW_W / 2) * 0.12;
       const lookY = (mouse.y - VIEW_H / 2) * 0.12;
       const tx = player.x - VIEW_W / 2 + lookX;
       const ty = player.y - VIEW_H / 2 + lookY;
       if (state.intro > 0) {
-        // title -> play: glide from wherever the drift left the camera onto the
-        // player with an ease, instead of the play lerp's snap
+        // landing -> play: glide from the touchdown framing onto the play
+        // camera with an ease, instead of the play lerp's snap
         state.intro = Math.max(0, state.intro - dt);
-        const q = easeInOut(1 - state.intro / INTRO_T);
+        const q = easeInOut(1 - state.intro / state.introLen);
         camX = state.introFrom.x + (tx - state.introFrom.x) * q;
         camY = state.introFrom.y + (ty - state.introFrom.y) * q;
         if (state.intro === 0) showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
@@ -2245,12 +2253,14 @@
     state.tick++; // with SEED and the player id, this decides contested orders
 
     // every slot steps through the same code, each off its own input struct
+    // (slots still on or under the eagle are moved by updateDrop instead)
     for (const p of players) {
-      if (!p.active) continue;
+      if (!p.active || inAir(p)) continue;
       if (p.control === 'ai') updateAI(p, dt);
       updatePlayer(p, dt);
     }
     resolveContests(); // this step's work swings, build orders and fish claims
+    if (state.drop) updateDrop(dt);
 
     // arrows in flight
     for (let i = arrows.length - 1; i >= 0; i--) {
@@ -2266,7 +2276,7 @@
         const vd = Math.hypot(a.vx, a.vy) || 1;
         // players first: the same shot that drops a deer drops a rival
         for (const t of players) {
-          if (a.team === t.team || !t.active || t.dead || t.invuln > 0) continue;
+          if (a.team === t.team || !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
           if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
             damagePlayer(t, a.dmg, a.vx / vd, a.vy / vd);
             burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
@@ -2318,7 +2328,7 @@
       // standing on one claims it - the contest decides who actually gets it
       let near = null, pd = 1e9;
       for (const p of players) {
-        if (!p.active || p.dead) continue;
+        if (!p.active || p.dead || inAir(p)) continue;
         const dd = Math.hypot(d.x - p.x, d.y - p.y);
         if (dd < pd) { pd = dd; near = p; }
       }
@@ -2327,7 +2337,7 @@
         d.y += (near.y - d.y) * dt * 10;
       }
       if (d.t > 0.35) for (const p of players) {
-        if (!p.active || p.dead || Math.hypot(d.x - p.x, d.y - p.y) >= 7) continue;
+        if (!p.active || p.dead || inAir(p) || Math.hypot(d.x - p.x, d.y - p.y) >= 7) continue;
         contest('drop:' + i, p, () => {
           const j = drops.indexOf(d);
           if (j < 0) return;
@@ -2807,7 +2817,7 @@
       }
     }
     for (const p of players) {
-      if (p.dead) continue;
+      if (p.dead || inAir(p)) continue; // airborne slots draw in drawDropAir
       draws.push({ y: p.y + 8, p, ghost: !p.active }); // empty slots stand as silhouettes
     }
     for (const a of animals) draws.push({ y: a.y + 4, a });
@@ -2927,10 +2937,12 @@
       ctx.globalAlpha = 1;
     }
 
+    drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
     renderLighting(ox, oy, now);
     renderWeather(now);
     renderVignettes();
     renderUI(now);
+    if (state.mode === 'drop') renderDropUI(now);
     if (state.mode === 'play' && state.wheel) renderWheel(now);
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
@@ -3716,7 +3728,7 @@
       MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
     // the other slots, in team colour, wherever they fall inside the view
     for (const p of players) {
-      if (p === player || !p.active || p.dead) continue;
+      if (p === player || !p.active || p.dead || inAir(p)) continue;
       const dx = p.x / TILE - ptx, dy = p.y / TILE - pty;
       if (Math.hypot(dx, dy) > MM_R - 1) continue;
       ctx.fillStyle = 'rgba(15,22,50,0.9)';
@@ -3951,7 +3963,7 @@
 
     // the other slots, inked in their team colour
     for (const p of players) {
-      if (p === player || !p.active || p.dead) continue;
+      if (p === player || !p.active || p.dead || inAir(p)) continue;
       const ox2 = MAP_X + Math.round((p.x / TILE) * MAP_S);
       const oy2 = MAP_Y + Math.round((p.y / TILE) * MAP_S);
       ctx.fillStyle = '#241a10';
@@ -4152,7 +4164,7 @@
   }
 
   function renderUI(now) {
-    if (state.mode === 'title' || window.DBG.hideUI) return;
+    if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
 
     // title -> play: the HUD slides in over the last part of the intro - the
     // left stack from the left, the minimap stack from the top, messages from below
@@ -4324,11 +4336,12 @@
     menuActivate(h);
   }
 
-  // PLAY: the sim starts now; the menu tint dissolves while the camera eases
-  // from the drift onto the player, then the HUD slides in (renderUI)
+  // straight into play, skipping the eagle (debug: DBG.beginIntro): the menu
+  // tint dissolves while the camera eases from the drift onto the player, then
+  // the HUD slides in (renderUI)
   function beginIntro() {
     state.introFrom = { x: camX, y: camY };
-    state.intro = INTRO_T;
+    state.intro = INTRO_T; state.introLen = INTRO_T;
     state.mode = 'play';
     state.menu.panel = null;
     state.menu.screen = 'menu';
@@ -4392,7 +4405,7 @@
     }
     if (m.lockT > 0) {
       m.lockT -= dt;
-      if (m.lockT <= 0) { m.lockT = 0; beginIntro(); }
+      if (m.lockT <= 0) { m.lockT = 0; beginDrop(); }
     }
     if (m.panel) {
       if (m.closing) {
@@ -4585,7 +4598,7 @@
   // the chosen one big in the middle with name, role, blurb and stat pips, and
   // a LOCK IN plank. Up/Down browse, Enter/Space lock, Esc returns to the menu;
   // the mouse does the same through selectHit(). Lock-in stamps player.champ
-  // and hands off to beginIntro(), so the camera settle / HUD slide are shared.
+  // and hands off to beginDrop() (the eagle ride; see the eagle drop banner).
   const SEL_CARD_W = 78, SEL_CARD_H = 28;
 
   function selectLayout() {
@@ -4833,10 +4846,276 @@
     }
   }
 
+  // ------------------------------------------------------------ eagle drop
+  // Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle
+  // along a seed-fixed line across the world (mode 'drop'). The view zooms out
+  // to DROP_ROWS, a chart in the corner shows the line and the bird, and the
+  // rider jumps with Space/Enter/E/click (AI slots jump at their own hashed
+  // fraction of the route). A jumper free-falls for FALL_T onto the nearest
+  // open tile, which becomes its respawn point; the human's landing snaps the
+  // view back to base zoom and runs the HUD slide-in. If the rider never jumps,
+  // the end of the line jumps for them. state.drop outlives mode 'drop' - the
+  // eagle keeps flying (and dropping bots) until it is off the map.
+  const DROP_ROWS = 540;      // view rows while riding (2x the play view)
+  const EAGLE_SPD = 170;      // px/s along the route
+  const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
+  const FALL_T = 1.3;         // seconds of free fall
+  const DROP_ALT = 56;        // screen px between the bird / a faller and its shadow
+  const EAGLE_SCALE = 2;      // the bird is high above the ground: drawn at 2x
+
+  // the seed's line: two points on a ring just inside the forest, roughly
+  // opposite each other. hash2 only - never rng(), which would reshuffle seeds.
+  function makeEagleRoute() {
+    const c = WORLD * TILE / 2;
+    const a0 = hash2(3, 141) * Math.PI * 2;
+    const a1 = a0 + Math.PI + (hash2(5, 77) - 0.5) * 1.4;
+    const x0 = c + Math.cos(a0) * EAGLE_R * TILE, y0 = c + Math.sin(a0) * EAGLE_R * TILE;
+    const x1 = c + Math.cos(a1) * EAGLE_R * TILE, y1 = c + Math.sin(a1) * EAGLE_R * TILE;
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    return { x0, y0, x1, y1, len, dur: len / EAGLE_SPD, heading: Math.atan2(y1 - y0, x1 - x0) };
+  }
+
+  function beginDrop() {
+    const r = makeEagleRoute();
+    state.drop = Object.assign({ t: 0, x: r.x0, y: r.y0, prog: 0, flap: 0 }, r);
+    for (const p of players) {
+      if (!p.active) continue;
+      p.aboard = true; p.dropT = 0;
+      p.x = r.x0; p.y = r.y0;
+      // bots spread along the middle of the line; the human rides to the end unless they jump
+      p.dropU = p.control === 'ai' ? 0.12 + 0.76 * hash2(p.id * 31 + 5, 9) : 1;
+    }
+    buildWorldMapImg();                 // the chart: baked once, the ride is too short to matter
+    mapCtx.putImageData(mapImg, 0, 0);
+    state.mode = 'drop';
+    state.menu.panel = null;
+    state.menu.screen = 'menu';
+    // the view grows around its centre; ease in from the drift's framing
+    const ow = VIEW_W, oh = VIEW_H;
+    applyView();
+    state.introFrom = { x: camX - (VIEW_W - ow) / 2, y: camY - (VIEW_H - oh) / 2 };
+    state.intro = INTRO_T; state.introLen = INTRO_T;
+    SFX.dawnChime();
+  }
+
+  // off the bird: fall straight down from where it is right now
+  function dropJump(p) {
+    if (!p.aboard || !state.drop) return;
+    const d = state.drop;
+    p.aboard = false;
+    p.dropT = FALL_T;
+    p.x = d.x; p.y = d.y;
+    if (p.control === 'ai') { // scatter bots off the line so they don't stack
+      const off = (hash2(p.id * 7 + 1, 33) - 0.5) * 8 * TILE;
+      p.x += -Math.sin(d.heading) * off;
+      p.y += Math.cos(d.heading) * off;
+    }
+    if (p === player) SFX.dodge();
+  }
+
+  // touchdown: the nearest open tile to the fall point becomes the slot's
+  // position and its respawn tile. Only the local landing changes the mode.
+  function landPlayer(p) {
+    const ftx = Math.floor(p.x / TILE), fty = Math.floor(p.y / TILE);
+    let best = null;
+    for (let r = 0; r <= 80 && !best; r++) {
+      let bd = 1e9;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const tx = ftx + dx, ty = fty + dy;
+        if (!inWorld(tx, ty) || objAt(tx, ty) || ground[idx(tx, ty)] === 2) continue;
+        const dd = dx * dx + dy * dy;
+        if (dd < bd) { bd = dd; best = { tx, ty }; }
+      }
+    }
+    if (!best) best = { tx: WORLD >> 1, ty: WORLD >> 1 };
+    p.spawn = best;
+    p.x = (best.tx + 0.5) * TILE; p.y = (best.ty + 0.5) * TILE;
+    p.dropT = 0; p.vx = p.vy = 0;
+    p.invuln = 2; // a beat of grace while the snow settles
+    burst(p.x, p.y - 2, '#f4f7ff', 16, 70, 0.5, true);
+    if (p === player) {
+      state.mode = 'play';
+      applyView();                      // back to the play zoom, centred on the landing
+      camX = Math.max(0, Math.min(WORLD * TILE - VIEW_W, p.x - VIEW_W / 2));
+      camY = Math.max(0, Math.min(WORLD * TILE - VIEW_H, p.y - VIEW_H / 2));
+      state.introFrom = { x: camX, y: camY };
+      state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, the camera settles
+      state.menu.screenT = 0;
+      state.shake = 5;
+      SFX.hit();
+    } else {
+      addFloater(p.x, p.y - 20, p.name + ' LANDED', TEAMS[p.team].mark);
+    }
+  }
+
+  function updateDrop(dt) {
+    const d = state.drop;
+    d.t += dt; d.flap += dt;
+    const dist = EAGLE_SPD * d.t;
+    d.prog = Math.min(1, dist / d.len);
+    d.x = d.x0 + Math.cos(d.heading) * dist;
+    d.y = d.y0 + Math.sin(d.heading) * dist;
+    for (const p of players) {
+      if (!p.active) continue;
+      if (p.aboard) {
+        p.x = d.x; p.y = d.y;
+        if (d.prog >= p.dropU) dropJump(p); // the end of the line drops the human too
+      } else if (p.dropT > 0) {
+        p.dropT -= dt;
+        if (p.dropT <= 0) landPlayer(p);
+      }
+    }
+    // everyone is off and the bird has cleared the map: done
+    if (d.prog >= 1 && dist > d.len + 60 * TILE && !players.some((p) => p.active && inAir(p))) state.drop = null;
+  }
+
+  // the bird, its rider and every faller, above the world and below the
+  // lighting. Shadows sit DROP_ALT below (and a little right of) each body.
+  function drawDropAir(ex, ey, now) {
+    const d = state.drop;
+    if (!d) return;
+    const S = EAGLE_SCALE;
+    const frames = SPRITES.eagle;
+    const spr = frames[[0, 1, 2, 1][Math.floor(d.flap * 7) % 4]];
+    const w = spr.width * S, h = spr.height * S;
+    const sx = Math.round(d.x - ex), sy = Math.round(d.y - ey);
+    if (sx > -w && sy > -h - DROP_ALT && sx < VIEW_W + w && sy < VIEW_H + h) {
+      const bob = Math.round(Math.sin(now * 2.4) * 3);
+      ctx.save();
+      ctx.translate(sx + 10, sy + DROP_ALT);
+      ctx.rotate(d.heading);
+      ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(sx, sy + bob);
+      ctx.rotate(d.heading);
+      ctx.drawImage(spr, -w / 2, -h / 2, w, h);
+      ctx.restore();
+      // the local rider sits on its back (unrotated, so the face reads)
+      if (player.aboard) {
+        const ps = champSet(player).down[0];
+        ctx.drawImage(ps, sx - 16, sy + bob - 17, 32, 32);
+      }
+      // where a jump right now would land: a pulsing ring under the bird
+      if (player.aboard && state.mode === 'drop') {
+        const ph = (now * 1.2) % 1;
+        ctx.globalAlpha = 0.8 - ph * 0.6;
+        ctx.strokeStyle = '#ffd95c';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy + DROP_ALT, 6 + ph * 12, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    // fallers: shrink from the bird's scale to the ground's, shadow growing under them
+    for (const p of players) {
+      if (!p.active || p.dropT <= 0) continue;
+      const q = 1 - p.dropT / FALL_T;          // 0 just jumped .. 1 touching down
+      const alt = DROP_ALT * (1 - q * q);      // gravity: slow start, fast finish
+      const sc = S - (S - 1) * q;
+      const px = Math.round(p.x - ex), py = Math.round(p.y - ey);
+      if (px < -40 || py < -120 || px > VIEW_W + 40 || py > VIEW_H + 40) continue;
+      const sw = Math.round(3 + 5 * q);
+      ctx.fillStyle = 'rgba(40,60,100,' + (0.12 + 0.28 * q).toFixed(2) + ')';
+      ctx.fillRect(px - sw, py - 1, sw * 2, 2);
+      const ps = champSet(p).down[1 + (Math.floor(p.dropT * 10) % 2)];
+      const dw = Math.round(16 * sc);
+      ctx.drawImage(ps, Math.round(px - dw / 2), Math.round(py - alt - 12 * sc), dw, dw);
+    }
+  }
+
+  // the ride's HUD: chart with the line and the bird, the jump prompt and timer
+  function renderDropUI(now) {
+    const d = state.drop;
+    if (!d || window.DBG.hideUI) return;
+    const big = VIEW_H >= 500;
+    const ts = big ? 2 : 1;                   // text scale follows the zoomed-out view
+    // chart (right edge, integer scale so the pixels stay even)
+    const cs = big ? WORLD : WORLD >> 1;
+    const k = cs / WORLD;
+    const cx0 = VIEW_W - cs - 12 * ts, cy0 = Math.round((VIEW_H - cs) / 2);
+    ctx.fillStyle = 'rgba(12,18,42,0.85)';
+    ctx.fillRect(cx0 - 3, cy0 - 3, cs + 6, cs + 6);
+    ctx.fillStyle = '#241a10';
+    ctx.fillRect(cx0 - 1, cy0 - 1, cs + 2, cs + 2);
+    ctx.drawImage(mapCv, cx0, cy0, cs, cs);
+    const title = "THE EAGLE'S LINE";
+    drawPixelTextShadow(ctx, title, Math.round(cx0 + (cs - pixelTextWidth(title, ts)) / 2), cy0 - 3 - 7 * ts,
+      '#ffd95c', 'rgba(15,22,50,0.9)', ts);
+    // the line, dashed, the flown part solid
+    const mx = (x) => cx0 + (x / TILE) * k, my = (y) => cy0 + (y / TILE) * k;
+    ctx.save();
+    ctx.lineWidth = 3;                      // dark ink under the line so it reads on parchment and forest alike
+    ctx.strokeStyle = 'rgba(36,26,16,0.7)';
+    ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x1), my(d.y1)); ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 2]);
+    ctx.strokeStyle = '#ffd95c';
+    ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x1), my(d.y1)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#fff3c0';
+    ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x), my(d.y)); ctx.stroke();
+    ctx.restore();
+    // the end of the line: where the bird drops whoever is still aboard
+    ctx.fillStyle = '#241a10'; ctx.fillRect(Math.round(mx(d.x1)) - 2, Math.round(my(d.y1)) - 2, 5, 5);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(Math.round(mx(d.x1)) - 1, Math.round(my(d.y1)) - 1, 3, 3);
+    // landed rivals, in team colour
+    for (const p of players) {
+      if (p === player || !p.active || inAir(p)) continue;
+      const px = Math.round(mx(p.x)), py = Math.round(my(p.y));
+      ctx.fillStyle = '#241a10'; ctx.fillRect(px - 2, py - 2, 5, 5);
+      ctx.fillStyle = TEAMS[p.team].mark; ctx.fillRect(px - 1, py - 1, 3, 3);
+    }
+    // the bird: white diamond with a pulsing ring; your landing once you have jumped
+    const bx = Math.round(mx(d.x)), by = Math.round(my(d.y));
+    const ph = (now * 0.9) % 1;
+    ctx.globalAlpha = (1 - ph) * 0.6;
+    ctx.strokeStyle = '#f4f7ff';
+    ctx.beginPath(); ctx.arc(bx, by, 2 + ph * 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#241a10';
+    ctx.fillRect(bx - 3, by - 1, 7, 3); ctx.fillRect(bx - 1, by - 3, 3, 7);
+    ctx.fillStyle = '#f4f7ff';
+    ctx.fillRect(bx - 2, by, 5, 1); ctx.fillRect(bx, by - 2, 1, 5);
+    if (!player.aboard) {
+      const px = Math.round(mx(player.x)), py = Math.round(my(player.y));
+      ctx.fillStyle = '#241a10';
+      ctx.fillRect(px - 2, py - 1, 5, 3); ctx.fillRect(px - 1, py - 2, 3, 5);
+      ctx.fillStyle = '#e05548';
+      ctx.fillRect(px - 1, py, 3, 1); ctx.fillRect(px, py - 1, 1, 3);
+    }
+
+    // prompt + timer, top centre
+    const cxm = Math.round(VIEW_W / 2);
+    if (player.aboard) {
+      const pulse = 0.75 + Math.sin(now * 5) * 0.25;
+      const t1 = 'SPACE - JUMP';
+      ctx.globalAlpha = pulse;
+      drawPixelTextShadow(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#ffd95c', 'rgba(15,22,50,0.9)', ts);
+      ctx.globalAlpha = 1;
+      // time left on the line
+      const left = Math.max(0, d.dur - d.t);
+      const bw = 60 * ts, bh = 3 * ts, bxx = cxm - bw / 2, byy = 19 * ts;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bxx - 1, byy - 1, bw + 2, bh + 2);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(bxx, byy, bw, bh);
+      ctx.fillStyle = left < 3 ? '#ff6a5a' : '#f4f7ff';
+      ctx.fillRect(bxx, byy, Math.round(bw * (1 - d.prog)), bh);
+      const t2 = Math.ceil(left) + 'S';
+      drawPixelTextShadow(ctx, t2, bxx + bw + 4 * ts, byy - ts, '#cfe0ff', 'rgba(15,22,50,0.9)', ts);
+      const t3 = 'THE EAGLE DROPS YOU AT THE END OF ITS LINE';
+      drawPixelTextShadow(ctx, t3, Math.round(cxm - pixelTextWidth(t3, ts) / 2), VIEW_H - 14 * ts, '#9fb6d8', 'rgba(15,22,50,0.9)', ts);
+    } else {
+      const t1 = 'BRACE';
+      drawPixelTextShadow(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#f4f7ff', 'rgba(15,22,50,0.9)', ts);
+    }
+  }
+
   // ------------------------------------------------------------ boot
   function startGame() {
     SFX.unlock();
-    beginIntro();
+    beginDrop();
   }
 
   loadSettings();
@@ -4846,7 +5125,7 @@
   genWorld();
   spawnAnimals();
   spawnFish();
-  initPlayers(); // needs spawnPts, so it runs after the world exists
+  initPlayers();
   renderGround();
   buildMapPanel();
   buildSettingsPanel();
@@ -4870,7 +5149,9 @@
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     // multiplayer slots: every slot, the local one, and the teams table
-    players, MAX_PLAYER_SLOTS, TEAMS, Player, spawnPts, contestRank,
+    players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
+    // the eagle drop: the live flight record, force a jump, or fly the route from scratch
+    get drop() { return state.drop; }, beginDrop, dropJump: (p) => dropJump(p || player), landPlayer, makeEagleRoute, inAir,
     get player() { return player; },
     get inv() { return player.inv; },
     // hand a slot to an AI, a human, or nobody (a ghost at its camp)

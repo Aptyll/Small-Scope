@@ -8,8 +8,9 @@ rivers, chained dodges, shift-sliding). **Gold is the only currency**; berries a
 Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the local human, the rest
 AI fills, four team colours), each playing one of two champions (WREN the ranger, SKADI the
 skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
-animals. Nothing
-else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
+animals. Nobody spawns in a camp: after LOCK IN every slot rides a white eagle along a seed-fixed
+line across the world and jumps (Space) to pick its landing, which becomes its respawn point.
+Nothing else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
 
 ## Commands
 
@@ -108,6 +109,7 @@ don't cite line numbers here, they go stale within a session.
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
+| the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 
 ## Hard rules
@@ -115,7 +117,7 @@ don't cite line numbers here, they go stale within a session.
 Cross-file invariants — breaking one produces a bug that looks unrelated to its cause.
 
 - **Canvas size changed?** Call `fitCanvas()` **then** `relayout()` — every path (window resize,
-  `fullscreenchange`, camera zoom) goes through both. Never write layout code against a literal
+  `fullscreenchange`, camera zoom, the eagle drop's `DROP_ROWS` view via `applyView()`) goes through both. Never write layout code against a literal
   480/270; the view is `VIEW_W`×`VIEW_H`.
 - **Screen position is `round(world − camera)`, rounded exactly once.** Statics subtract the
   rounded `ox`/`oy`; moving entities subtract the exact `ex`/`ey` and round at the end. Rounding
@@ -124,6 +126,8 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   neighbours into the prerendered ground canvas. Never call `renderGround()` per frame; it bakes
   the entire 3712×3712 world and is a boot-time cost.
 - **Added or removed a light-emitting object?** Call `rebuildLights()`.
+- **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
+  eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).
