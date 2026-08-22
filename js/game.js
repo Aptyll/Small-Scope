@@ -4883,6 +4883,39 @@
     mmCtx.putImageData(mmImg, 0, 0);
   }
 
+  // Every curve of the minimap is rasterised a pixel at a time: canvas arc()
+  // anti-aliases, and at game resolution a 1 px rim smeared over two pixels
+  // reads as blur. mmRing paints every pixel whose centre lies in [r0, r1)
+  // from the disc centre, optionally only between angles a0..a1 (clockwise
+  // from a0, in canvas terms), and mmMask(r) is a cached pixel disc used to
+  // clip the map view with destination-in instead of an anti-aliased clip().
+  function mmRing(g, cx, cy, r0, r1, col, a0, a1) {
+    const span = a1 === undefined ? 7 : ((a1 - a0) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+    const R = Math.ceil(r1);
+    g.fillStyle = col;
+    for (let py = -R; py <= R; py++) for (let px = -R; px <= R; px++) {
+      const dx = px + 0.5, dy = py + 0.5, d = Math.hypot(dx, dy);
+      if (d < r0 || d >= r1) continue;
+      if (a1 !== undefined) {
+        const a = ((Math.atan2(dy, dx) - a0) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2);
+        if (a > span) continue;
+      }
+      g.fillRect(cx + px, cy + py, 1, 1);
+    }
+  }
+  const mmMasks = new Map();
+  function mmMask(r) {
+    let m = mmMasks.get(r);
+    if (!m) {
+      m = document.createElement('canvas'); m.width = m.height = r * 2;
+      mmRing(m.getContext('2d'), r, r, 0, r, '#000');
+      mmMasks.set(r, m);
+    }
+    return m;
+  }
+  const mmView = document.createElement('canvas'); // the clipped map view, rebuilt each frame
+  const mmViewCtx = mmView.getContext('2d');
+
   function renderMinimap(now) {
     updateMinimap();
     const vp = viewPlayer();
@@ -4892,23 +4925,25 @@
 
     // silhouette: an opaque dark disc under everything, rimmed by a pale line
     // so the whole control reads as one solid shape on the snow
-    ctx.fillStyle = hov ? '#9aa8d0' : '#6f7ca8';
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#0f1632';
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 7, 0, Math.PI * 2); ctx.fill();
+    mmRing(ctx, MM_CX, MM_CY, MM_R + 7, MM_R + 8, hov ? '#9aa8d0' : '#6f7ca8');
+    mmRing(ctx, MM_CX, MM_CY, 0, MM_R + 7, '#0f1632');
 
-    // circular-clipped map view centered on the player
-    ctx.save();
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R, 0, Math.PI * 2); ctx.clip();
+    // pixel-clipped map view centered on the player
     const half = MM_R / s; // tiles from the centre to the edge
-    ctx.drawImage(mmCv, ptx - half, pty - half, half * 2, half * 2,
-      MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
+    if (mmView.width !== MM_R * 2) { mmView.width = mmView.height = MM_R * 2; }
+    mmViewCtx.imageSmoothingEnabled = false;
+    mmViewCtx.globalCompositeOperation = 'source-over';
+    mmViewCtx.clearRect(0, 0, MM_R * 2, MM_R * 2);
+    mmViewCtx.drawImage(mmCv, ptx - half, pty - half, half * 2, half * 2, 0, 0, MM_R * 2, MM_R * 2);
+    mmViewCtx.globalCompositeOperation = 'destination-in';
+    mmViewCtx.drawImage(mmMask(MM_R), 0, 0);
+    ctx.drawImage(mmView, MM_CX - MM_R, MM_CY - MM_R);
     // the other slots, in team colour, wherever they fall inside the view
     for (const p of players) {
       if (p === vp || !p.active || p.dead || inAir(p)) continue;
       const dx = (p.x / TILE - ptx) * s, dy = (p.y / TILE - pty) * s;
       if (Math.hypot(dx, dy) > MM_R - 1) continue;
-      ctx.fillStyle = 'rgba(15,22,50,0.9)';
+      ctx.fillStyle = '#0f1632';
       ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
       ctx.fillStyle = TEAMS[p.team].mark;
       ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
@@ -4918,50 +4953,32 @@
     for (const L of landmarks) {
       const dx = (L.tx + 0.5 - ptx) * s, dy = (L.ty + 0.5 - pty) * s;
       if (Math.hypot(dx, dy) > MM_R - 2) continue;
-      drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, 'rgba(15,22,50,0.9)');
+      drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, '#0f1632');
     }
     // the centre dot: white for you, the team colour for a slot you are watching
-    ctx.fillStyle = 'rgba(15,22,50,0.9)';
+    ctx.fillStyle = '#0f1632';
     ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
     ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[vp.team].mark;
     ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
-    ctx.restore();
 
-    // map edge, opaque so the map's own rim is as crisp as the outer one
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = '#0f1632';
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, MM_R + 0.5, 0, Math.PI * 2); ctx.stroke();
-
-    // day/night cycle ring
+    // day/night cycle ring: a 3 px band of pixels, the elapsed part painted
+    // clockwise from 12 o'clock in the day colour, then the night colour
     const prog = state.time / CYCLE;
     const dayFrac = DAY_LEN / CYCLE;
     const a0 = -Math.PI / 2; // start at 12 o'clock
-    const ringR = MM_R + 3.5;
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = '#2a3358'; // track
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, 0, Math.PI * 2); ctx.stroke();
-    // day portion of elapsed time
-    ctx.strokeStyle = '#ffd95c';
-    ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, a0, a0 + Math.min(prog, dayFrac) * Math.PI * 2); ctx.stroke();
-    // night portion of elapsed time
-    if (prog > dayFrac) {
-      ctx.strokeStyle = '#7a90d8';
-      ctx.beginPath(); ctx.arc(MM_CX, MM_CY, ringR, a0 + dayFrac * Math.PI * 2, a0 + prog * Math.PI * 2); ctx.stroke();
-    }
-    // dusk boundary tick
+    const r0 = MM_R + 2, r1 = MM_R + 5;
+    mmRing(ctx, MM_CX, MM_CY, r0, r1, '#2a3358'); // track
+    if (prog > 0) mmRing(ctx, MM_CX, MM_CY, r0, r1, '#ffd95c', a0, a0 + Math.min(prog, dayFrac) * Math.PI * 2);
+    if (prog > dayFrac) mmRing(ctx, MM_CX, MM_CY, r0, r1, '#7a90d8', a0 + dayFrac * Math.PI * 2, a0 + prog * Math.PI * 2);
+    // dusk boundary tick: one pixel column across the band, a little past it
     const ba = a0 + dayFrac * Math.PI * 2;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = '#8f9cc4';
-    ctx.beginPath();
-    ctx.moveTo(MM_CX + Math.cos(ba) * (ringR - 2.5), MM_CY + Math.sin(ba) * (ringR - 2.5));
-    ctx.lineTo(MM_CX + Math.cos(ba) * (ringR + 2.5), MM_CY + Math.sin(ba) * (ringR + 2.5));
-    ctx.stroke();
-    // progress tip
+    mmRing(ctx, MM_CX, MM_CY, r0 - 1, r1 + 1, '#8f9cc4', ba - 0.03, ba + 0.03);
+    // progress tip: a 3x3 pixel block on the band
     const ta = a0 + prog * Math.PI * 2;
     const pulse = state.darkness > 0.5 ? (Math.sin(now * 6) * 0.15 + 0.85) : 1;
     ctx.fillStyle = state.darkness > 0.5 ? '#cfd8f2' : '#fff2b0';
     ctx.globalAlpha = pulse;
-    ctx.beginPath(); ctx.arc(MM_CX + Math.cos(ta) * ringR, MM_CY + Math.sin(ta) * ringR, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(Math.round(MM_CX + Math.cos(ta) * (r0 + 1)) - 1, Math.round(MM_CY + Math.sin(ta) * (r0 + 1)) - 1, 3, 3);
     ctx.globalAlpha = 1;
 
     // beneath the minimap, one centred row: slots still in the match (a pixel
@@ -5632,9 +5649,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.12'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.13'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.13', 'THE MINIMAP IS DRAWN PIXEL BY PIXEL: ITS RIM, MAP EDGE AND DAY RING ARE CRISP.'],
     ['1.12', 'THE SCROLL WHEEL OVER THE MINIMAP ZOOMS IT, AND THE MINIMAP HAS A SOLID RIM.'],
     ['1.11', 'ROBOTS, FLEEING ANIMALS, WOLVES AND BOTS NOW ROUTE AROUND TREES, ROCKS, BUILDINGS AND WATER INSTEAD OF BUMPING INTO THEM.'],
     ['1.10', 'THE GAME IS CALLED SOFTFALL EVERYWHERE NOW; SAVED SETTINGS RESET ONCE.'],
