@@ -275,14 +275,14 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   draws the two stone pillars `TITLE_PILLAR_DX` either side of the column (coursed shaft, frost
   at the base, snow-capped capital, an iron brazier whose flame flickers and throws an additive
   warm light); `drawMenuSlab` is the translucent slab with gilt corner brackets behind the items;
-  `drawGoldRule` the gold rule with diamond finials under the subtitle, above the footer and
+  `drawGoldRule` the gold rule with diamond finials under the logo (`SOFTFALL`, no subtitle), along the bottom and
   under the select header; `drawEmbers` the sparks rising off the logo and the braziers. The logo
   gets a pulsing ember glow behind it and a 1px ice rim along its top edges. Pillars rise from
-  below at boot and sink away with the items on play.
+  below at boot and sink away with the items on play. `PATCH_TXT` prints bottom-right.
 - **Buttons** are procedural frost planks (`drawMenuButton`): chamfered slab with hashed
-  wood-grain, a snow cap along the top, icicles off the bottom, ember gems and a gold rule
-  when hot. `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
-  shadow stays on the ground), the warm fill, and a pulsing ember glow behind; `menu.pressT`
+  wood-grain, a snow cap along the top, icicles off the bottom, corner rivets and a gold rule
+  when hot (no glow behind the hot plank - it lifts and warms only). `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
+  shadow stays on the ground) and the warm fill; `menu.pressT`
   sinks it for a beat. The selector is a pair of bobbing pixel arrows (`drawSelector`).
 - **Die** (`drawDie`): shows `SEED % 6`, cycles faces and jitters while hovered, tumbles while
   `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`

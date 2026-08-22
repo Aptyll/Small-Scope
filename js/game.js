@@ -5353,6 +5353,7 @@
   const PANEL_SLIDE_T = 0.32;
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY'];
   const MENU_BW = 112, MENU_BH = 20;
+  const PATCH_TXT = 'PATCH 1.00'; // printed bottom-right of the title screen
 
   function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
   function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -5539,18 +5540,11 @@
   }
 
   // a frost plank: snow-capped slab with icicles hanging off it. hv (0..1) is the
-  // hover ease - it lifts, warms, and grows an ember glow; pressed sinks it a px
+  // hover ease - it lifts and warms; pressed sinks it a px
   function drawMenuButton(r, label, hv, now, pressed) {
     const a0 = ctx.globalAlpha; // respect the caller's fade (the menu and select screens animate alpha)
     const lift = Math.round(hv * 2) - (pressed ? 2 : 0);
     const x = r.x, y = r.y - lift, w = r.w, h = r.h;
-    // ember glow behind the hovered plank
-    if (hv > 0.02) {
-      ctx.globalAlpha = a0 * 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
-      ctx.fillStyle = '#ffb347';
-      chamRect(x - 4, y - 4, w + 8, h + 8);
-      ctx.globalAlpha = a0;
-    }
     // shadow stays on the ground while the plank lifts
     ctx.fillStyle = 'rgba(4,6,18,0.55)';
     chamRect(x + 2, r.y + 2, w, h);
@@ -5599,20 +5593,6 @@
       ctx.fillStyle = '#e8f4ff';
       ctx.fillRect(x + px, y + h, 1, 1);
       if (hv > 0.5 && ((now * 6 + px) | 0) % 5 === 0) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x + px, y + h + len - 1, 1, 1); }
-    }
-    // ember gems at both ends when hot
-    if (hv > 0.5) {
-      ctx.globalAlpha = a0 * (hv - 0.5) * 2;
-      for (const gx of [x + 6, x + w - 7]) {
-        const gy = y + Math.floor(h / 2);
-        ctx.fillStyle = '#0a0e23';
-        ctx.fillRect(gx - 2, gy, 5, 1); ctx.fillRect(gx, gy - 2, 1, 5); ctx.fillRect(gx - 1, gy - 1, 3, 3);
-        ctx.fillStyle = '#ff8a3c';
-        ctx.fillRect(gx - 1, gy, 3, 1); ctx.fillRect(gx, gy - 1, 1, 3);
-        ctx.fillStyle = '#ffd95c';
-        ctx.fillRect(gx, gy, 1, 1);
-      }
-      ctx.globalAlpha = a0;
     }
     // label
     const tw = pixelTextWidth(label, 2);
@@ -5920,14 +5900,6 @@
   function drawChampCard(r, ci, hv, now, chosen) {
     const lift = Math.round(hv * 2);
     const x = r.x, y = r.y - lift, w = r.w, h = r.h;
-    if (hv > 0.02) {
-      ctx.globalAlpha *= 1; // keep caller alpha
-      const a0 = ctx.globalAlpha;
-      ctx.globalAlpha = a0 * 0.16 * hv * (0.8 + 0.2 * Math.sin(now * 5));
-      ctx.fillStyle = '#ffb347';
-      chamRect(x - 3, y - 3, w + 6, h + 6);
-      ctx.globalAlpha = a0;
-    }
     ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(x + 2, r.y + 2, w, h);
     ctx.fillStyle = '#0a0e23'; chamRect(x, y, w, h);
     ctx.fillStyle = chosen ? '#1f2b5c' : '#141c3c'; chamRect(x + 1, y + 1, w - 2, h - 2);
@@ -6045,7 +6017,7 @@
 
     // logo: drops in at boot, lifts away on play
     const logoIn = easeOut(m.t / 0.6);
-    const t1 = 'EMBERFROST';
+    const t1 = 'SOFTFALL';
     const bob = Math.sin(now * 1.5) * 2;
     const ly = Math.round(toy + 46 + bob - (1 - logoIn) * 30 - out * 40);
     const logoA = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
@@ -6065,9 +6037,7 @@
     drawPixelText(ctx, t1, lx + 1, ly + 1, '#ff7a2a', 4); // ember under-glow
     drawPixelText(ctx, t1, lx, ly - 1, '#fff1c2', 4);     // ice rim along every top edge
     drawPixelTextShadow(ctx, t1, lx, ly, '#ffd95c', '#3c2a1e', 4);
-    const t2 = 'A COZY WINTER FREE-FOR-ALL';
-    drawPixelTextShadow(ctx, t2, Math.round((VIEW_W - pixelTextWidth(t2)) / 2), ly + 34, '#cfe0ff', 'rgba(15,22,50,0.9)');
-    drawGoldRule(cx, ly + 45, Math.round(lw / 2) + 6, logoA);
+    drawGoldRule(cx, ly + 32, Math.round(lw / 2) + 6, logoA);
     drawEmbers(now, logoA * 0.85, cx, ly + 26, lw, 22, 5);
     ctx.globalAlpha = 1;
 
@@ -6103,9 +6073,8 @@
     const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);
     if (fin > 0.005) {
       ctx.globalAlpha = fin;
-      drawGoldRule(cx, toy + 242, 52, fin);
-      const t3 = 'ARROWS SELECT - ENTER CONFIRM';
-      drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 250, '#5a6690', 'rgba(15,22,50,0.9)');
+      drawGoldRule(cx, toy + 246, 52, fin);
+      drawPixelTextShadow(ctx, PATCH_TXT, VIEW_W - pixelTextWidth(PATCH_TXT) - 5, VIEW_H - 9, '#5a6690', 'rgba(15,22,50,0.9)');
       ctx.globalAlpha = 1;
     }
 
