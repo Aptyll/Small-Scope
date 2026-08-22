@@ -248,7 +248,7 @@
 
   // scratch canvas for white hit-flash sprites
   const scratch = document.createElement('canvas');
-  scratch.width = 64; scratch.height = 64; // the biggest thing that flashes is the 48x43 bay
+  scratch.width = 64; scratch.height = 64; // the biggest thing that flashes is the 48x38 bay
   const sctx = scratch.getContext('2d');
 
   // offscreen minimap canvas (1px per world tile)
@@ -3957,8 +3957,8 @@
   }
 
   // Everything the bay animates or reports, drawn over the baked sprite. Bay
-  // geometry is the sprite's: doorway cols 14-33, rows 18-40, floor row 41;
-  // the right flank's plain plate rows 28-34 carry the readouts.
+  // geometry is the sprite's: doorway cols 14-33, rows 13-35, floor row 36;
+  // the right flank's plain plate rows 23-29 carry the readouts.
   //   roll-out - the next bot slides down the doorway over the last 0.8 s of its
   //              timer, so the real one appears at the mouth mid-motion
   //   shutter  - rolls down over the doorway as o.door -> 0 (guard mode)
@@ -3975,30 +3975,30 @@
       const spr = set[Math.floor(now * 8) % 2];
       const k = 1 - o.respawnT / 0.8;
       ctx.save();
-      ctx.beginPath(); ctx.rect(px + 14, sy + 18, 20, 24); ctx.clip();
-      ctx.drawImage(spr, px + 18, sy + 31 - Math.round(12 * (1 - k)));
+      ctx.beginPath(); ctx.rect(px + 14, sy + 13, 20, 24); ctx.clip();
+      ctx.drawImage(spr, px + 18, sy + 26 - Math.round(12 * (1 - k)));
       ctx.restore();
     }
     const shut = Math.round(23 * (1 - o.door));
     for (let i = 0; i < shut; i++) {
       ctx.fillStyle = i === shut - 1 ? '#1c2130' : (i % 3 === 2 ? '#5b6473' : '#98a1b0');
-      ctx.fillRect(px + 14, sy + 18 + i, 20, 1);
+      ctx.fillRect(px + 14, sy + 13 + i, 20, 1);
     }
     // readouts on the right flank
-    ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 35, sy + 28, 10, 9);
+    ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 35, sy + 23, 10, 9);
     for (let i = 0; i < t.bots; i++) {
       let c = '#3b4150';
       if (i < o.bots.length) c = '#9ce87a';
       else if (i === o.bots.length && due) c = Math.floor(now * 3) % 2 ? '#ffd95c' : '#6b5a1c';
-      ctx.fillStyle = c; ctx.fillRect(px + 36 + i * 3, sy + 29, 2, 2);
+      ctx.fillStyle = c; ctx.fillRect(px + 36 + i * 3, sy + 24, 2, 2);
     }
-    ctx.fillStyle = '#3b4150'; ctx.fillRect(px + 36, sy + 33, 8, 2);
+    ctx.fillStyle = '#3b4150'; ctx.fillRect(px + 36, sy + 28, 8, 2);
     if (due) {
       ctx.fillStyle = '#ffd95c';
-      ctx.fillRect(px + 36, sy + 33, Math.max(1, Math.round(8 * (1 - o.respawnT / (o.respawnTotal || 1)))), 2);
+      ctx.fillRect(px + 36, sy + 28, Math.max(1, Math.round(8 * (1 - o.respawnT / (o.respawnTotal || 1)))), 2);
     }
     // vent slat flicker
-    const slat = sy + 22 + (Math.floor(now * 5) % 3) * 2;
+    const slat = sy + 17 + (Math.floor(now * 5) % 3) * 2;
     ctx.fillStyle = '#6c7486';
     ctx.fillRect(px + 5, slat, 6, 1); ctx.fillRect(px + 37, slat, 6, 1);
     // beacon on the roof corner

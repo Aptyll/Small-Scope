@@ -10,10 +10,10 @@ same grids as the player, so a player pose edit changes both. The tiered structu
 trick: one 16×16 grid each (`wall`, `turret`, `generator`) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
-**bot bay** (`spawner`) is the one big sprite: a single-tier 48×43 grid (`bay`, `BAYPAL`) on a 3×2
-tile footprint — steel plates under a snow cap with icicles, a team-painted lintel band (`L`/`T`/`t`
+**bot bay** (`spawner`) is the one big sprite: a single-tier 48×38 grid (`bay`, `BAYPAL`) on a 3×2
+tile footprint — steel plates under a flat two-row snow cap, a team-painted lintel band (`L`/`T`/`t`
 via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols
-14–33, rows 18–40, floor row 41 — `drawBayRollout` in game.js clips to it). Its 16×16 wheel glyph is
+14–33, rows 13–35, floor row 36 — `drawBayRollout` in game.js clips to it). Its 16×16 wheel glyph is
 a separate grid, `bayIcon`, exported as `teamBuild[team].icon.spawner`; the old 16×16 `spawner` grid
 is still baked as the flat `SPRITES.spawner` but unreferenced. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),

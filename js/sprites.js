@@ -779,11 +779,11 @@
   ];
 
   // ---------------------------------------------------------------- bot bay
-  // The spawner: a 48x43 bot garage on a 3x2 tile footprint (see STRUCTS.spawner
+  // The spawner: a 48x38 bot garage on a 3x2 tile footprint (see STRUCTS.spawner
   // w/h), drawn with its snow skirt on the footprint's bottom edge. Steel
-  // plate walls under a deep snow cap (mounds on top, icicles off the fascia),
+  // plate walls under a flat two-row snow cap (a few 1px drips - readability over detail),
   // a team-painted lintel band (L/T/t) above a 20px-wide bay with a dark
-  // interior and a lit floor lip, riveted flanks with a vent grille and a
+  // interior and a lit floor lip (doorway cols 14-33, rows 13-35, floor row 36), riveted flanks with a vent grille and a
   // hazard stripe, the mouth open to the ground. One tier, so no WPAL swap -
   // bayTeamPal only paints the band. bayIcon is the 16x16 wheel glyph.
   const BAYPAL = {
@@ -810,16 +810,11 @@
     'w': '#c9dcee', // snow skirt
   };
   const bay = [
-    '...oSSSSSSSSo...oSSSSSSSSSSSSSSo..oSSSSSSSSSSo..',
     '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
     '..oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo..',
-    '.oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo.',
-    'oSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSo',
-    'osssssssssssssssssssssssssssssssssssssssssssssso',
-    'ozzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzo',
-    'oppppppppppppppppppppppppppppppppppppppppppppppo',
-    'oqqqzqqqqqqqqqzqqqqqqzqqqqqqqqqqqzqqqqqqqqzqqqqo',
-    '.onzooooooooooooooozoooooooooooooozoooooooooono.',
+    '..osssssssssssssssssssssssssssssssssssssssssso..',
+    '..ozPPPPPPPPPzPPPPPPPPPPPPPPPPzPPPPPPPPPPPPPzo..',
+    '..oqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo..',
     '..oPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPo..',
     '..opLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLpo..',
     '..opTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTpo..',
@@ -855,10 +850,10 @@
     '..wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww..',
   ];
   const bayIcon = [
-    '..oSSSSSSSSSSo..',
     '.oSSSSSSSSSSSSo.',
-    'oSSSSSSSSSSSSSSo',
-    'oqqqqqqqqqqqqqqo',
+    '.oSSSSSSSSSSSSo.',
+    '.oqqqqqqqqqqqqo.',
+    '.oPPPPPPPPPPPPo.',
     '.oLLLLLLLLLLLLo.',
     '.oTTTTTTTTTTTTo.',
     '.oPPPooooooPPPo.',
