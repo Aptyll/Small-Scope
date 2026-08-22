@@ -202,7 +202,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Play intro** (`beginIntro`, what `startGame` now calls): the sim starts immediately, but
   for `INTRO_T` (1.6 s) `state.intro` counts down while `renderTitle` keeps drawing — the tint
-  dissolves over the first 70 % and the chrome sinks away in the first 35 % — `update()` eases
+  dissolves over the first 45 % and the chrome sinks away in the first 22 % — `update()` eases
   the camera from `state.introFrom` (where the drift left it) onto the player with
   `easeInOut` instead of the play lerp, and `renderUI` slides the HUD in over the last
   `HUD_IN_T` (0.7 s): the left stack from the left, the gold/minimap stack from the top. The

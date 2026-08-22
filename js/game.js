@@ -4627,7 +4627,7 @@
   function lockIn() {
     const m = state.menu;
     if (m.lockT > 0) return;
-    m.lockT = 0.35;
+    m.lockT = 0.12;
     setChamp(player, m.csel);
     SFX.place();
   }
@@ -4750,12 +4750,12 @@
     const m = state.menu;
     // leaving: 0 while the menu is up, 0->1 over the intro
     const outQ = state.intro > 0 ? 1 - state.intro / INTRO_T : 0;
-    const tintA = 0.55 * (1 - easeOut(outQ / 0.7));
+    const tintA = 0.55 * (1 - easeOut(outQ / 0.45));
     if (tintA > 0.005) {
       ctx.fillStyle = 'rgba(10,16,42,' + tintA.toFixed(3) + ')';
       ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     }
-    const out = easeOut(outQ / 0.35);           // menu chrome drops away first
+    const out = easeOut(outQ / 0.22);           // menu chrome drops away first
     const sc = easeInOut(m.screenT);             // champion select cross-fade
     const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc); // chrome ducks under a panel or the select screen
     const { toy, rects } = menuLayout();
