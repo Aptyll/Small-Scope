@@ -10,8 +10,8 @@ AI fills, four team colours), each playing one of two champions (WREN the ranger
 skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
 animals. Gold earned is also XP: every slot levels 1→9 (`p.level`, flat +hp/+arrow damage per
 level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides
-a white eagle along a seed-fixed line and jumps (Space) to pick its landing. **Death is final** — a slot that goes down is out of the
-match (the local one spectates or returns to the lobby). What they are picking between is **landmarks** — named places worldgen scatters
+a white eagle along a seed-fixed line and jumps (Space) to pick its landing; **death is final** (the local slot spectates or returns to the
+lobby). What they are picking between is **landmarks** — named places worldgen scatters
 and every map labels: a **WOLF DEN** (a pack that hunts you, the only hostile thing in the world)
 and a **ROOKERY** (dead snags full of flighty birds). Nothing else is hostile, so night is
 otherwise visual-only.
@@ -46,6 +46,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
+| which banner / function in game.js owns a thing | [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) |
 
 ## Architecture
 
@@ -64,70 +65,10 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~6100-line IIFE with no internal module boundaries, organized only by banner
-comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
-what sits under it is worse than no banner, because it sends future sessions to the wrong 600
-lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
-the new banner to the table below.
-
-### Where things live in game.js
-
-Grep the banner (`// ------ actions`) to jump; the function names are the durable anchors —
-don't cite line numbers here, they go stale within a session.
-
-| Looking for | Start at | Banner |
-| --- | --- | --- |
-| tuning numbers (yields, reach, momentum caps, draw time) | `YIELD`, `WORK_REACH`, `ICE_MAX`, `BOW_CHARGE` | `constants` |
-| resolution, zoom, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` |
-| panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
-| determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
-| the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
-| slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
-| key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
-| worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
-| ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
-| floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` |
-| tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` |
-| what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` |
-| build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
-| wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
-| a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
-| fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
-| construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
-| radial menu hit math | `wheelLayout`, `resolveWheel` | `radial wheel` |
-| what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` |
-| the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` |
-| render pass order | `render` | `render` |
-| pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` |
-| drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |
-| brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel` | `selection, hints & wheel` |
-| darkness, warm glows, snow (world-space flakes, see `fx updates`), vignette | `renderLighting`, `drawWarmGlows`, `renderWeather` | `lighting & weather` |
-| HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` |
-| the TAB standings, the event feed | `logEvent`, `renderEventLog`, `scoreGroups`, `renderScoreboard` | `scoreboard & log` |
-| the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
-| the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
-| the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
-| the death / win overlay, spectating, back to the lobby, who the camera frames | `endMatch`, `viewPlayer`, `specNext`, `toLobby`, `renderDead` | `death & spectate` |
-| the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
-| boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
-
-### Adding a landmark
-
-One entry in `LANDMARKS` (the `landmarks` banner) is one kind of named place — that entry plus its
-generator is the whole feature; no map, chart or HUD code learns its name:
-
-```js
-shipwreck: { name, tag,           // what both maps, the chart and the arrival toast print
-             count, r, surface,   // how many, footprint radius in tiles, 'snow' | 'ice'
-             mark, icon,          // map ink; the glyph is [x,y,w,h] rects in a 7x7 box
-             pop, repop,          // inhabitants kept alive, seconds between top-ups
-             gen(L), spawnOne(L) } // stamp the objects (in worldgen); add one inhabitant (after)
-```
-
-Add the key to `LANDMARK_ORDER` and it is placed, drawn on the minimap, the M map and the eagle's
-chart, and announced when a player walks in. Only a *new object type* it stamps costs work
-elsewhere (see [checklists](docs/dev/checklists.md)). The abandoned mine, frozen fort, shipwreck
-and shop are meant to land here.
+`game.js` is one ~6700-line IIFE organized only by `// ------ name` banners. **Keep every banner
+honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
+read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
+[checklists](docs/dev/checklists.md#common-changes).
 
 ## Versioning
 
