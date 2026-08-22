@@ -64,14 +64,30 @@
   const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
   const FISH_MARGIN = 6;     // body clearance from snow: soft-steered away, hard-clamped
 
+  // landmark inhabitants (the places themselves are the LANDMARKS table in
+  // the landmarks banner). Wolves are the only thing in the world that hunts
+  // a player; birds are the only thing that flies.
+  const WOLF_SIGHT = 96;     // px a wolf notices a player at (x1.75 at full dark)
+  const WOLF_LEASH = 190;    // px from its den a wolf will chase, and no further
+  const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a slide
+  const WOLF_BITE_R = 13;    // px reach of a bite
+  const WOLF_BITE_DMG = 9;
+  const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
+  const BIRD_FLUSH = 34;     // px: a player this close puts the whole rookery up
+  const BIRD_SPD = 112;      // px/s in flight
+  const BIRD_ALT = 15;       // px a perched bird sits above its tile; flight climbs past it
+
   // One currency, many sources. Every source pays gold with a different yield profile
   // (per-hit trickle vs. burst on completion); this table is the whole economy.
   const YIELD = {
     treeHit: 1,   treeFall: 1,            // 4 hp tree  -> 5 gold, slow and safe
     treeRare: 6,                          // rare-tree jackpot on top of the fall payout
     rockHit: 1,   rockBreak: 4,           // 5 hp rock  -> 9 gold, a bit more than a tree
+    deadTreeHit: 1, deadTreeFall: 2,      // 3 hp snag  -> 5 gold, the rookery's cover; leaves a stump
     rabbit: { coins: 2, each: 5 },        // 10 gold + a berry, but it bolts
     deer:   { coins: 3, each: 6 },        // 18 gold, the big mobile target
+    wolf:   { coins: 3, each: 8 },        // 24 gold, the biggest kill in the game - and it bites back
+    bird:   { coins: 2, each: 4 },        // 8 gold, and the hardest shot in the game
   };
 
   // Stump-built structures: right-click a stump, pick from the radial wheel.
@@ -299,6 +315,7 @@
     deadTimer: 0,
     msg: null, msgT: 0,
     hints: { stump: false },
+    loc: null,     // the named place the local player is standing in: { L, t }
     paused: false,
     mapOpen: false,
     settingsOpen: false,
@@ -537,6 +554,7 @@
   const fish = []; // swimmers under the ice: {x,y,a,spd,t,turnT,spook}
   const iceCracks = new Map(); // tile idx -> pickaxe hits taken (cracked, not yet open)
   const holes = []; // tile idx of open water holes; they refreeze each dawn
+  const landmarks = []; // named points of interest, placed by worldgen (see the landmarks banner)
 
   // ------------------------------------------------------------ input
   const keys = {};
@@ -673,7 +691,8 @@
     if (!inWorld(tx, ty)) return true;
     const o = objects[idx(tx, ty)];
     if (!o) return false;
-    return o.type === 'tree' || o.type === 'rock' || o.type === 'wall' ||
+    return o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock' ||
+      o.type === 'den' || o.type === 'wall' ||
       o.type === 'turret' || o.type === 'generator' || o.type === 'spawner';
   }
 
@@ -1050,13 +1069,14 @@
   // that component is handed to the other unit as knockback, and a lighter
   // unit gets a small bounce off a heavier one. Two relaxation passes settle
   // piles. Deterministic: fixed iteration order, no rng.
-  const UNIT_MASS = { player: 3, deer: 2.2, rabbit: 0.5, robot: 0.7 };
+  const UNIT_MASS = { player: 3, deer: 2.2, wolf: 2, rabbit: 0.5, robot: 0.7 };
   const UNIT_BOUNCE = 0.3; // restitution for the lighter side of a contact
-  function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : 3; }
+  function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : e.kind === 'wolf' ? 4.5 : 3; }
   function separateUnits() {
     const us = [];
     for (const p of players) if (p.active && !p.dead && !inAir(p)) us.push({ e: p, r: PLAYER_R, m: UNIT_MASS.player, vel: true });
-    for (const a of animals) if (!a.dead) us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false });
+    // birds fly: they are the one unit nothing collides with
+    for (const a of animals) if (!a.dead && a.kind !== 'bird') us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false });
     for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS.robot, vel: false });
     // velocity a unit carries into a contact: players their momentum, the
     // rest their knockback (their walk is direction-only and re-chosen each tick)
@@ -1118,7 +1138,7 @@
     const o = objects[idx(tx, ty)];
     let t = -1;
     if (o) {
-      if (o.type === 'tree') t = TOOL_AXE;
+      if (o.type === 'tree' || o.type === 'deadTree') t = TOOL_AXE;
       else if (o.type === 'rock') t = TOOL_PICK;
       else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
     } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
@@ -1307,10 +1327,10 @@
     const near = nearPlayer(ox, oy); // remote players' work must not spam the mix
     // hard tool gating: the wrong tool bounces off instead of harvesting
     const k = TOOLS[p.tool].key;
-    if ((o.type === 'tree' && k !== 'axe') ||
+    if (((o.type === 'tree' || o.type === 'deadTree') && k !== 'axe') ||
         (o.type === 'rock' && k !== 'pick')) {
       if (near) SFX.deny();
-      addFloater(ox, oy - 14, o.type === 'tree' ? 'NEEDS AXE' : 'NEEDS PICKAXE', '#9fb6d8');
+      addFloater(ox, oy - 14, o.type === 'rock' ? 'NEEDS PICKAXE' : 'NEEDS AXE', '#9fb6d8');
       return;
     }
     o.flash = 0.1;
@@ -1338,6 +1358,23 @@
           addFloater(ox, oy - 18, 'JACKPOT!', '#f2cc6a');
           if (near) SFX.pickup();
         }
+      }
+    } else if (o.type === 'deadTree') {
+      // the rookery's cover: quicker than a live pine, same gold, and felling
+      // a perch scatters the flock that was sitting in it
+      o.hp--;
+      if (near) SFX.chop();
+      spawnDrop(ox, oy, 'gold', YIELD.deadTreeHit);
+      burst(ox, oy - 10, '#eef4fb', 5, 40, 0.5, true);
+      burst(ox, oy - 12, '#6b5a48', 3, 30, 0.4, true);
+      if (o.hp <= 0) {
+        objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
+        if (near) SFX.treeFall();
+        if (p === player) state.shake = Math.max(state.shake, 2);
+        spawnDrop(ox, oy, 'gold', YIELD.deadTreeFall);
+        burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
+        burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
+        flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
       }
     } else if (o.type === 'rock') {
       o.hp--;
@@ -1474,15 +1511,32 @@
   }
 
   // ------------------------------------------------------------ animals
+  // Rabbits and deer are the passive half (updatePrey); wolves and birds are
+  // the inhabitants of the two landmarks (updateWolf / updateBird), and go in
+  // this same array so arrows, the draw list, the kill payouts and the cursor
+  // all treat them as what they are: things you shoot.
+  const ANIMAL_HP = { rabbit: 8, deer: 24, wolf: 30, bird: 3 };
+  const HIT_PUFF = { rabbit: '#eef2fa', deer: '#a5825a', wolf: '#6f778c', bird: '#cfd6e4' };
+
   function makeAnimal(kind, x, y) {
-    const hp = kind === 'rabbit' ? 8 : 24;
+    const hp = ANIMAL_HP[kind] || 8;
     return {
       kind, x, y, hp, maxHp: hp,
       dir: rng() < 0.5 ? 'left' : 'right',
       moveT: 0, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
       animT: rng() * 2, flash: 0, kbx: 0, kby: 0, fleeT: 0, jinkA: 0,
+      home: null,                          // the landmark it belongs to, if any
+      target: null, biteCd: 0,           // wolf: its quarry and its bite rhythm
+      perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
       dead: false,
     };
+  }
+
+  // the body an arrow (and the aim line) tests against. Birds ride their alt
+  // and are a smaller mark - that is most of what makes them a hard shot.
+  function animalHit(a, x, y) {
+    const r = a.kind === 'bird' ? 5 : 8;
+    return Math.hypot(a.x - x, a.y - (a.alt || 0) - 3 - y) < r;
   }
 
   function spawnAnimals() {
@@ -1592,6 +1646,16 @@
     a.flash = Math.max(0, a.flash - dt);
     a.kbx *= Math.pow(0.02, dt);
     a.kby *= Math.pow(0.02, dt);
+    if (a.kind === 'wolf') updateWolf(a, dt);
+    else if (a.kind === 'bird') updateBird(a, dt);
+    else updatePrey(a, dt);
+    a.x = Math.max(8, Math.min(WORLD * TILE - 8, a.x));
+    a.y = Math.max(8, Math.min(WORLD * TILE - 8, a.y));
+    if (a.hp <= 0 && !a.dead) animalDies(a);
+  }
+
+  // rabbits and deer: wander, nibble, and bolt from anyone who gets close
+  function updatePrey(a, dt) {
     const rabbit = a.kind === 'rabbit';
     const r = rabbit ? 2.5 : 5;
 
@@ -1652,25 +1716,367 @@
     if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
     a.animT += dt * (moving ? (rabbit ? 10 : 7) : 0);
     a.moving = moving;
+  }
 
-    a.x = Math.max(8, Math.min(WORLD * TILE - 8, a.x));
-    a.y = Math.max(8, Math.min(WORLD * TILE - 8, a.y));
+  // what a kill pays: one profile per kind, all of it out of the YIELD table
+  function animalDies(a) {
+    a.dead = true;
+    if (nearPlayer(a.x, a.y)) SFX.monsterDie();
+    if (a.kind === 'rabbit') {
+      burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
+      burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
+      spawnDrop(a.x, a.y, 'berry');
+      for (let i = 0; i < YIELD.rabbit.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.rabbit.each);
+    } else if (a.kind === 'deer') {
+      burst(a.x, a.y - 5, '#8a6847', 12, 50, 0.55);
+      burst(a.x, a.y - 5, '#f2cc6a', 8, 45, 0.5);
+      for (let i = 0; i < YIELD.deer.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.deer.each);
+      addFloater(a.x, a.y - 14, 'GOLD!', '#f2cc6a');
+    } else if (a.kind === 'wolf') {
+      burst(a.x, a.y - 5, '#6f778c', 12, 50, 0.55);
+      burst(a.x, a.y - 5, '#e04a54', 8, 45, 0.5);
+      for (let i = 0; i < YIELD.wolf.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.wolf.each);
+      addFloater(a.x, a.y - 16, 'WOLF DOWN', '#f2cc6a');
+    } else if (a.kind === 'bird') {
+      burst(a.x, a.y - a.alt, '#cfd6e4', 9, 40, 0.5, true);
+      for (let i = 0; i < YIELD.bird.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.bird.each);
+      flushBirds(a.home, a); // the rest of the flock does not stay to watch
+    }
+  }
 
-    if (a.hp <= 0 && !a.dead) {
-      a.dead = true;
-      if (nearPlayer(a.x, a.y)) SFX.monsterDie();
-      if (rabbit) {
-        burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
-        burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
-        spawnDrop(a.x, a.y, 'berry');
-        for (let i = 0; i < YIELD.rabbit.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.rabbit.each);
-      } else {
-        burst(a.x, a.y - 5, '#8a6847', 12, 50, 0.55);
-        burst(a.x, a.y - 5, '#f2cc6a', 8, 45, 0.5);
-        for (let i = 0; i < YIELD.deer.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.deer.each);
-        addFloater(a.x, a.y - 14, 'GOLD!', '#f2cc6a');
+  // ---- wolves: the landmark that hunts back --------------------------------
+  // A wolf holds station at its den and wakes when a player comes inside its
+  // sight (much further after dark), runs them down at WOLF_SPD - faster than a
+  // walk, slower than a slide, so the answer is momentum, not distance - and
+  // bites on its own cooldown. damagePlayer's i-frames are what stops four
+  // wolves shredding anyone instantly: the pack is pressure, not burst. Waking
+  // one wakes the den, which is what makes it a place instead of four animals.
+  function wakePack(w, t) {
+    if (!t) return;
+    if (!w.home) { w.target = t; return; }
+    let howl = false;
+    for (const o of animals) {
+      if (o.dead || o.kind !== 'wolf' || o.home !== w.home) continue;
+      if (!o.target) howl = true;
+      o.target = t;
+    }
+    if (howl && nearPlayer(w.x, w.y, 260)) SFX.howl();
+  }
+
+  function updateWolf(a, dt) {
+    const L = a.home;
+    const hx = L ? (L.tx + 0.5) * TILE : a.x, hy = L ? (L.ty + 0.5) * TILE : a.y;
+    a.biteCd = Math.max(0, a.biteCd - dt);
+
+    // keep the current quarry while it is still worth keeping, else look around
+    let t = a.target;
+    const leashed = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_LEASH;
+    if (t && (!t.active || t.dead || inAir(t) || !leashed(t))) t = null;
+    if (!t) {
+      let bd = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
+      for (const p of players) {
+        if (!p.active || p.dead || inAir(p) || !leashed(p)) continue;
+        const d = Math.hypot(p.x - a.x, p.y - a.y);
+        if (d < bd) { bd = d; t = p; }
+      }
+      if (t) wakePack(a, t);
+    }
+    a.target = t;
+
+    let moving = false;
+    if (t) {
+      const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
+      a.mvx = dx / d; a.mvy = dy / d;
+      moveEntity(a, (a.mvx * WOLF_SPD + a.kbx) * dt, (a.mvy * WOLF_SPD + a.kby) * dt, 4.5);
+      moving = true;
+      if (d < WOLF_BITE_R && a.biteCd <= 0) {
+        a.biteCd = WOLF_BITE_CD;
+        damagePlayer(t, WOLF_BITE_DMG, a.mvx, a.mvy, null, 'wolf');
+        burst(a.x + a.mvx * 6, a.y - 4, '#e04a54', 5, 40, 0.35);
+        if (nearPlayer(a.x, a.y)) SFX.bite();
+      }
+    } else if (a.moveT > 0) {
+      // patrolling its den
+      a.moveT -= dt;
+      moving = true;
+      const mv = moveEntity(a, (a.mvx * 34 + a.kbx) * dt, (a.mvy * 34 + a.kby) * dt, 4.5);
+      if (mv.blockedX || mv.blockedY) a.moveT = 0;
+      if (a.moveT <= 0) a.idleT = rand(0.8, 2.6);
+    } else {
+      a.idleT -= dt;
+      if (Math.abs(a.kbx) + Math.abs(a.kby) > 1) moveEntity(a, a.kbx * dt, a.kby * dt, 4.5);
+      if (a.idleT <= 0) {
+        // wander, but never far from the den it belongs to
+        const away = Math.hypot(a.x - hx, a.y - hy);
+        const ang = away > (L ? L.r : 4) * TILE * 0.8
+          ? Math.atan2(hy - a.y, hx - a.x) + rand(-0.5, 0.5)
+          : rng() * Math.PI * 2;
+        a.mvx = Math.cos(ang); a.mvy = Math.sin(ang);
+        a.moveT = rand(0.8, 2);
       }
     }
+
+    if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
+    a.animT += dt * (moving ? (t ? 12 : 6) : 0);
+    a.moving = moving;
+  }
+
+  // ---- birds: the landmark that will not stand still ----------------------
+  // Perched in the rookery's snags until a player gets inside BIRD_FLUSH, and
+  // then the whole stand goes up at once - the flock is the point, one bird
+  // leaving alone would read as a bug. In the air they are the hardest shot in
+  // the game: small body, no straight line, and they come down again on their
+  // own perch when they have settled.
+  function flushBirds(L, from) {
+    if (!L) return;
+    let woke = false;
+    for (const b of animals) {
+      if (b.dead || b.kind !== 'bird' || b.home !== L) continue;
+      if (b.flyT <= 0) { woke = true; burst(b.x, b.y - b.alt, '#cfd6e4', 4, 30, 0.35); }
+      b.flyT = Math.max(b.flyT, rand(2.4, 4.2));
+      b.fa = Math.atan2(b.y - from.y, b.x - from.x) + rand(-0.7, 0.7);
+      b.perch = rookeryPerch(L) || b.perch;
+    }
+    if (woke && nearPlayer(from.x, from.y, 220)) SFX.wings();
+  }
+
+  function updateBird(a, dt) {
+    const L = a.home;
+    // anyone this close puts the whole rookery up (only a bird still on its
+    // perch tests for it - once the flock is up there is nothing left to flush)
+    if (a.flyT <= 0) for (const p of players) {
+      if (!p.active || p.dead || inAir(p)) continue;
+      if (Math.hypot(p.x - a.x, p.y - (a.y - a.alt)) < BIRD_FLUSH) { flushBirds(L, p); break; }
+    }
+
+    if (a.flyT > 0) {
+      a.flyT -= dt;
+      a.alt += (26 - a.alt) * Math.min(1, dt * 2.5);
+      // the last beat of the flight is the run back to the perch; before that
+      // it is a wandering circuit that never leaves the stand
+      const home = a.perch ? { x: (a.perch.tx + 0.5) * TILE, y: (a.perch.ty + 0.5) * TILE }
+        : { x: (L ? L.tx + 0.5 : a.x / TILE) * TILE, y: (L ? L.ty + 0.5 : a.y / TILE) * TILE };
+      const out = Math.hypot(a.x - home.x, a.y - home.y);
+      if (a.flyT < 1.1 || out > (L ? L.r + 2 : 6) * TILE) {
+        const want = Math.atan2(home.y - a.y, home.x - a.x);
+        let da = want - a.fa;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        a.fa += Math.max(-4 * dt, Math.min(4 * dt, da));
+      } else {
+        a.fa += Math.sin(a.animT * 1.7) * 2.2 * dt;
+      }
+      a.x += Math.cos(a.fa) * BIRD_SPD * dt;
+      a.y += Math.sin(a.fa) * BIRD_SPD * dt;
+      a.mvx = Math.cos(a.fa);
+      // never pop across the stand: stay up until it is actually over the perch
+      if (a.flyT <= 0) {
+        if (out > 8) a.flyT = 0.25;
+        else if (a.perch) { a.x = home.x + rand(-3, 3); a.y = home.y; }
+      }
+    } else {
+      // perched: settle into the branches and shuffle about
+      a.alt += (BIRD_ALT - a.alt) * Math.min(1, dt * 4);
+      a.idleT -= dt;
+      if (a.idleT <= 0) { a.idleT = rand(0.9, 3); a.dir = rng() < 0.5 ? 'left' : 'right'; }
+    }
+
+    if (a.flyT > 0 && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
+    a.animT += dt * (a.flyT > 0 ? 14 : 0);
+    a.moving = a.flyT > 0;
+    a.x = Math.max(8, Math.min(WORLD * TILE - 8, a.x));
+    a.y = Math.max(8, Math.min(WORLD * TILE - 8, a.y));
+  }
+
+
+  // ------------------------------------------------------------ landmarks
+  // Named points of interest: the places worth deciding between while the eagle
+  // is still in the air. One entry in LANDMARKS is one kind of place - its name,
+  // its footprint, what stands there, what lives there and the glyph the maps
+  // mark it with - and adding a new kind is that entry plus its generator.
+  //
+  //   name/tag    what the maps and the arrival toast print
+  //   count       how many of them worldgen scatters
+  //   r           footprint radius in tiles: the keep-clear ring, the canvas gen
+  //               draws in, and how close you must be to be "here"
+  //   surface     the ground its site must sit on ('snow' | 'ice')
+  //   mark/icon   map ink, and a glyph as rects in a 7x7 box (drawLandmarkIcon)
+  //   pop/repop   how many inhabitants it keeps, and seconds between top-ups
+  //   gen(L)      stamp the objects (runs inside worldgen, before renderGround)
+  //   spawnOne(L) put one inhabitant in it (runs after the world is stamped)
+  //
+  // Placement and everything it rolls run on their own seeded stream (lmRng),
+  // never the shared rng, so landmarks can never reshuffle the terrain a seed
+  // already produces.
+  const lmRng = mulberry32((SEED ^ 0x4c414e44) >>> 0);
+  function lmRand(a, b) { return a + lmRng() * (b - a); }
+  function lmRandi(a, b) { return Math.floor(lmRand(a, b + 1)); }
+
+  const LANDMARKS = {
+    // The first thing in the frostlands that hunts back. Rich - a wolf is the
+    // biggest single payout in the game - and lethal in a pack (see updateWolf).
+    wolfDen: {
+      name: 'WOLF DEN', tag: 'THE PACK HUNTS HERE',
+      count: 3, r: 5, surface: 'snow',
+      mark: '#d8c0c4',
+      icon: [[2, 3, 3, 3], [1, 4, 5, 2], [0, 1, 1, 2], [2, 0, 1, 2], [4, 0, 1, 2], [6, 1, 1, 2]], // paw print
+      pop: 4, repop: 40,
+      gen(L) {
+        placeObj(L.tx, L.ty, 'den');
+        const n = lmRandi(5, 8); // a broken ring of boulders around the mouth
+        for (let i = 0; i < n; i++) {
+          const s = lmSpot(L, 2, L.r);
+          if (s) placeObj(s.tx, s.ty, 'rock', { hp: 5, variant: lmRandi(0, 1) });
+        }
+      },
+      spawnOne(L) {
+        const s = lmSpot(L, 1, 3);
+        if (!s) return null;
+        const a = makeAnimal('wolf', (s.tx + 0.5) * TILE, (s.ty + 0.5) * TILE);
+        a.home = L;
+        animals.push(a);
+        return a;
+      },
+    },
+    // A stand of dead trees full of birds: no danger at all, just the hardest
+    // shooting in the game. Walk in and the whole flock goes up (see updateBird).
+    rookery: {
+      name: 'ROOKERY', tag: 'THE FLOCK IS SKITTISH',
+      count: 3, r: 6, surface: 'snow',
+      mark: '#b8c6dc',
+      icon: [[0, 2, 2, 2], [2, 3, 1, 1], [3, 4, 1, 1], [4, 3, 1, 1], [5, 2, 2, 2]], // bird in flight
+      pop: 9, repop: 30,
+      gen(L) {
+        const n = lmRandi(6, 9);
+        for (let i = 0; i < n; i++) {
+          const s = lmSpot(L, 0, L.r - 1);
+          if (s) placeObj(s.tx, s.ty, 'deadTree', { hp: 3, variant: lmRandi(0, 1) });
+        }
+        for (let i = 0; i < 3; i++) {
+          const s = lmSpot(L, 2, L.r);
+          if (s) placeObj(s.tx, s.ty, 'rock', { hp: 5, variant: lmRandi(0, 1) });
+        }
+      },
+      spawnOne(L) {
+        const t = rookeryPerch(L);
+        if (!t) return null;
+        const a = makeAnimal('bird', (t.tx + 0.5) * TILE + lmRand(-3, 3), (t.ty + 0.5) * TILE);
+        a.home = L; a.perch = t; a.alt = BIRD_ALT;
+        animals.push(a);
+        return a;
+      },
+    },
+  };
+  const LANDMARK_ORDER = ['wolfDen', 'rookery']; // placement order: the pickiest site first
+
+  // a free tile in a landmark's footprint, rMin..rMax tiles out from its centre
+  function lmSpot(L, rMin, rMax) {
+    for (let i = 0; i < 40; i++) {
+      const a = lmRng() * Math.PI * 2, d = lmRand(rMin, rMax);
+      const tx = Math.round(L.tx + Math.cos(a) * d), ty = Math.round(L.ty + Math.sin(a) * d);
+      if (inWorld(tx, ty) && !objects[idx(tx, ty)] && ground[idx(tx, ty)] === 0) return { tx, ty };
+    }
+    return null;
+  }
+
+  // one of the rookery's snags, for a bird to sit in
+  function rookeryPerch(L) {
+    const trees = [];
+    for (let dy = -L.r; dy <= L.r; dy++) for (let dx = -L.r; dx <= L.r; dx++) {
+      const o = objAt(L.tx + dx, L.ty + dy);
+      if (o && o.type === 'deadTree') trees.push(o);
+    }
+    if (!trees.length) return null;
+    const t = trees[lmRandi(0, trees.length - 1)];
+    return { tx: t.tx, ty: t.ty };
+  }
+
+  // a site for one landmark: open interior, clear of the middle, the ring
+  // points, the treeline and every landmark already placed
+  function landmarkSite(spec) {
+    const m = BORDER_MIN + spec.r + 3;
+    const want = spec.surface === 'ice' ? 1 : 0;
+    for (let tries = 0; tries < 400; tries++) {
+      const tx = lmRandi(m, WORLD - 1 - m), ty = lmRandi(m, WORLD - 1 - m);
+      if (objects[idx(tx, ty)] || ground[idx(tx, ty)] !== want) continue;
+      // the treeline wanders, so measure it here rather than assuming the worst
+      // case - otherwise every landmark bunches into one narrow ring
+      const edge = Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty);
+      if (edge < borderDepth(tx, ty) + spec.r + 4) continue;
+      if (Math.hypot(tx - cx, ty - cy) < 20) continue;                    // the middle stays open
+      if (ringPts.some((p) => Math.hypot(tx - p.tx, ty - p.ty) < 12)) continue;
+      if (landmarks.some((L) => Math.hypot(tx - L.tx, ty - L.ty) < spec.r + L.r + 8)) continue;
+      // most of the footprint has to be the right surface and standing empty
+      let good = 0, total = 0;
+      for (let dy = -spec.r; dy <= spec.r; dy++) for (let dx = -spec.r; dx <= spec.r; dx++) {
+        if (dx * dx + dy * dy > spec.r * spec.r) continue;
+        total++;
+        const x = tx + dx, y = ty + dy;
+        if (inWorld(x, y) && !objects[idx(x, y)] && ground[idx(x, y)] === want) good++;
+      }
+      if (good < total * 0.72) continue;
+      return { tx, ty };
+    }
+    return null;
+  }
+
+  // worldgen's last pass: scatter the named places and stamp their footprints
+  function placeLandmarks() {
+    for (const key of LANDMARK_ORDER) {
+      const spec = LANDMARKS[key];
+      for (let n = 0; n < spec.count; n++) {
+        const s = landmarkSite(spec);
+        if (!s) continue;
+        const L = { key, spec, name: spec.name, tag: spec.tag, tx: s.tx, ty: s.ty, r: spec.r, repopT: spec.repop };
+        landmarks.push(L);
+        spec.gen(L);
+      }
+    }
+  }
+
+  // stock every site, once the world (and the ordinary wildlife) is down
+  function stockLandmarks() {
+    for (const L of landmarks) {
+      for (let i = 0; i < L.spec.pop && landmarkPop(L) < L.spec.pop; i++) L.spec.spawnOne(L);
+    }
+  }
+
+  function landmarkPop(L) {
+    let n = 0;
+    for (const a of animals) if (!a.dead && a.home === L) n++;
+    return n;
+  }
+
+  // the named place a world position is standing in, if any
+  function landmarkAt(x, y) {
+    const tx = x / TILE - 0.5, ty = y / TILE - 0.5;
+    for (const L of landmarks) if (Math.hypot(tx - L.tx, ty - L.ty) <= L.r) return L;
+    return null;
+  }
+
+  // slow top-up, never while someone is standing in the site: clearing a
+  // landmark is a real reward for a while, but it always grows back into one
+  function updateLandmarks(dt) {
+    for (const L of landmarks) {
+      if (!L.spec.repop) continue;
+      L.repopT -= dt;
+      if (L.repopT > 0) continue;
+      L.repopT = L.spec.repop;
+      if (landmarkPop(L) >= L.spec.pop) continue;
+      const px = (L.tx + 0.5) * TILE, py = (L.ty + 0.5) * TILE;
+      if (players.some((p) => p.active && !p.dead && !inAir(p) && Math.hypot(p.x - px, p.y - py) < 96)) continue;
+      L.spec.spawnOne(L);
+    }
+  }
+
+  // a landmark's glyph, centred on x,y: a rim pass so it reads on parchment,
+  // snow and forest alike, then the ink
+  function drawLandmarkIcon(g, L, x, y, col, rim) {
+    const x0 = Math.round(x) - 3, y0 = Math.round(y) - 3;
+    g.fillStyle = rim || '#241a10';
+    for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx - 1, y0 + ry - 1, rw + 2, rh + 2);
+    g.fillStyle = col || L.spec.mark;
+    for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx, y0 + ry, rw, rh);
   }
 
   // ------------------------------------------------------------ structures & robots
@@ -1988,7 +2394,7 @@
   }
 
   // what the log says when nobody gets the credit
-  const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE' };
+  const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES' };
 
   // any slot can go down; only the local one takes the screen with it
   function die(p, src, cause) {
@@ -2034,8 +2440,8 @@
   // Bot slots. A bot only ever writes the same input struct a human fills in -
   // movement axis, aim point, fire / work / slide / dodge and the odd build
   // order - so it can never do anything a player couldn't. The brain is a small
-  // priority ladder, re-picked a few times a second: eat, fight, hunt, unwedge,
-  // loot, spend, harvest, roam. Every pursuit carries a give-up timer, because
+  // priority ladder, re-picked a few times a second: eat, fight, wolves, hunt,
+  // unwedge, loot, spend, harvest, roam. Every pursuit carries a give-up timer, because
   // nothing here paths around an obstacle.
   const AI_SIGHT = 150;   // px: how far a bot notices a rival
   const AI_HUNT = 120;    // px: how far it will go after an animal
@@ -2051,10 +2457,22 @@
     return best;
   }
 
+  // wolves that are already on this bot, or close enough to be about to be
+  function aiNearestWolf(p) {
+    let best = null, bd = 92;
+    for (const a of animals) {
+      if (a.dead || a.kind !== 'wolf') continue;
+      const d = Math.hypot(a.x - p.x, a.y - p.y);
+      if (d < bd || (a.target === p && d < AI_SIGHT)) { bd = Math.min(bd, d); best = a; }
+    }
+    return best;
+  }
+
   function aiNearestAnimal(p) {
     let best = null, bd = AI_HUNT;
     for (const a of animals) {
-      if (a.dead || a === p.ai.huntAvoid) continue;
+      // a flushed bird is a wild goose chase for something with no pathfinding
+      if (a.dead || a.kind === 'bird' || a === p.ai.huntAvoid) continue;
       const d = Math.hypot(a.x - p.x, a.y - p.y);
       if (d < bd) { bd = d; best = a; }
     }
@@ -2119,7 +2537,22 @@
       return;
     }
 
-    // 3. meat is gold: chase and shoot the nearest animal, but give up on one
+    // 3. wolves hunt back: a bot that wanders into a den has to fight its way
+    //    out, so it shoots the nearest one and gives ground while it does
+    const wolf = aiNearestWolf(p);
+    if (wolf) {
+      const d = Math.hypot(wolf.x - p.x, wolf.y - p.y);
+      const clear = aiLineClear(p, wolf.x, wolf.y - 4);
+      aimAt(wolf.x, wolf.y - 4);
+      const away = Math.atan2(p.y - wolf.y, p.x - wolf.x);
+      if (d < 64) { inp.mx = Math.cos(away); inp.my = Math.sin(away); }
+      inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.7;
+      if (d < 30 && p.dodgeCharges > 0 && rng() < dt * 3) inp.dodge = true;
+      ai.tgt = null;
+      return;
+    }
+
+    // 4. meat is gold: chase and shoot the nearest animal, but give up on one
     //    it cannot corner - a bot pinned against a treeline would chase forever
     if (ai.huntAvoidT > 0) { ai.huntAvoidT -= dt; if (ai.huntAvoidT <= 0) ai.huntAvoid = null; }
     const prey = aiNearestAnimal(p);
@@ -2141,7 +2574,7 @@
     }
     inp.fire = false;
 
-    // 4. wedged a moment ago: head back to open ground before doing anything else
+    // 5. wedged a moment ago: head back to open ground before doing anything else
     if (ai.escapeT > 0) {
       ai.escapeT -= dt;
       steerTo(ai.wx, ai.wy);
@@ -2149,7 +2582,7 @@
       return;
     }
 
-    // 5. loot on the ground is neutral and first-come: pick up what is close
+    // 6. loot on the ground is neutral and first-come: pick up what is close
     let loot = null, ld = 72;
     for (const d of drops) {
       if (d.t < 0.35) continue;
@@ -2159,7 +2592,7 @@
     if (loot && ai.lootT < 4) { ai.lootT += dt; aimAt(loot.x, loot.y); steerTo(loot.x, loot.y); return; }
     if (!loot) ai.lootT = 0;
 
-    // 6. spend the purse: building is the only gold sink, so a bot with money
+    // 7. spend the purse: building is the only gold sink, so a bot with money
     //    looks for a stump to build on, then for its own work to upgrade
     if (ai.buildT <= 0 && p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold) {
       const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
@@ -2204,7 +2637,7 @@
       ai.buildT = 4; // nothing worth spending on nearby; look again shortly
     }
 
-    // 7. harvest: walk to a tree/rock/berry bush and hold E on it
+    // 8. harvest: walk to a tree/rock/berry bush and hold E on it
     // (a stripped bush stops being work, so drop it the moment it empties)
     if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
       (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
@@ -2255,7 +2688,7 @@
       return;
     }
 
-    // 8. nothing to do: roam between its camp and the middle of the map
+    // 9. nothing to do: roam between its camp and the middle of the map
     ai.roam -= dt;
     if (ai.roam <= 0) {
       ai.roam = rand(3, 7);
@@ -2423,14 +2856,17 @@
       if (!dead) {
         const vd = Math.hypot(a.vx, a.vy) || 1;
         for (const an of animals) {
-          if (Math.hypot(an.x - a.x, an.y - 3 - a.y) < 8) {
+          if (animalHit(an, a.x, a.y)) {
             an.hp -= a.dmg;
             an.flash = 0.12;
-            an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
-            addDmgFloater(an.x, an.y - 12, a.dmg);
+            // a wolf does not run from an arrow - the whole den comes for you
+            if (an.kind === 'wolf') wakePack(an, players[a.owner]);
+            else if (an.kind === 'bird') flushBirds(an.home, a);
+            else an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
+            addDmgFloater(an.x, an.y - (an.alt || 0) - 12, a.dmg);
             const kb = 25 + 45 * a.pow;
             an.kbx = a.vx / vd * kb; an.kby = a.vy / vd * kb;
-            burst(an.x, an.y - 4, an.kind === 'rabbit' ? '#eef2fa' : '#a5825a', 6, 40, 0.4);
+            burst(an.x, an.y - (an.alt || 0) - 4, HIT_PUFF[an.kind] || '#a5825a', 6, 40, 0.4);
             if (nearPlayer(an.x, an.y)) SFX.hit();
             dead = true;
             break;
@@ -2444,6 +2880,16 @@
     for (const a of animals) updateAnimal(a, dt);
     for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
     updateFish(dt);
+    updateLandmarks(dt); // named sites restock their inhabitants
+
+    // the named place the local player is standing in drives the arrival toast
+    if (player.dead || inAir(player)) state.loc = null;
+    else {
+      const here = landmarkAt(player.x, player.y);
+      if (!here) state.loc = null;
+      else if (!state.loc || state.loc.L !== here) state.loc = { L: here, t: 0 };
+      else state.loc.t += dt;
+    }
 
     // stump-built structures + their robots
     updateStructures(dt);
@@ -2993,6 +3439,10 @@
       const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
       if (o.type === 'tree') {
         drawSpriteFlash(SPRITES.tree[o.variant], px + sh, py - 8, o.flash);
+      } else if (o.type === 'deadTree') {
+        drawSpriteFlash(SPRITES.deadTree[o.variant], px + sh, py - 8, o.flash);
+      } else if (o.type === 'den') {
+        drawSpriteFlash(SPRITES.den, px + sh, py + 4, o.flash);
       } else if (o.type === 'rock') {
         drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
       } else if (o.type === 'bush') {
@@ -3189,8 +3639,10 @@
       }
     }
     for (const a of animals) {
-      const hw = a.kind === 'rabbit' ? 7 : 13, h = a.kind === 'rabbit' ? 11 : 22;
-      if (Math.abs(wx - a.x) <= hw && wy >= a.y + 4 - h && wy <= a.y + 4) {
+      const hw = a.kind === 'rabbit' ? 7 : a.kind === 'bird' ? 5 : a.kind === 'wolf' ? 9 : 13;
+      const h = a.kind === 'rabbit' ? 11 : a.kind === 'bird' ? 7 : a.kind === 'wolf' ? 14 : 22;
+      const by = a.y + 4 - (a.alt || 0); // birds ride their alt
+      if (Math.abs(wx - a.x) <= hw && wy >= by - h && wy <= by) {
         return { kind: 'reticle', mode: 'hunt', dim: busy };
       }
     }
@@ -3309,7 +3761,7 @@
       const x = x0 + nx * s, y = y0 + ny * s;
       if (isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
       let hit = false;
-      for (const an of animals) if (Math.hypot(an.x - x, an.y - 3 - y) < 8) { hit = true; break; }
+      for (const an of animals) if (animalHit(an, x, y)) { hit = true; break; }
       if (!hit) for (const q of players) {
         if (enemyOf(player, q) && Math.hypot(q.x - x, q.y - 6 - y) < 7) { hit = true; break; }
       }
@@ -3358,17 +3810,33 @@
   }
 
   function drawAnimal(a, ox, oy, now) {
+    if (a.kind === 'bird') { drawBird(a, ox, oy); return; }
     const rabbit = a.kind === 'rabbit';
+    const wolf = a.kind === 'wolf';
     const set = SPRITES[a.kind][a.dir];
     const frame = a.moving ? 1 + (Math.floor(a.animT) % 2) : 0;
     const spr = set[frame];
     const px = Math.round(a.x - spr.width / 2 - ox);
     const py = Math.round(a.y + 4 - spr.height - oy);
+    const sw = rabbit ? 4 : wolf ? 6 : 7;
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
-    if (rabbit) ctx.fillRect(Math.round(a.x - ox) - 4, Math.round(a.y + 2 - oy), 8, 2);
-    else ctx.fillRect(Math.round(a.x - ox) - 7, Math.round(a.y + 2 - oy), 14, 2);
+    ctx.fillRect(Math.round(a.x - ox) - sw, Math.round(a.y + 2 - oy), sw * 2, 2);
     drawSpriteFlash(spr, px, py, a.flash);
-    drawHealthBar(a.x - ox, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : 16);
+    drawHealthBar(a.x - ox, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
+  }
+
+  // The only thing in the world that leaves the ground: the sprite lifts off
+  // its own shadow by a.alt, which is the whole read on how high a bird is.
+  // No health bar - three hp means every hit is a kill, and a bar over
+  // something this small is all bar.
+  function drawBird(a, ox, oy) {
+    const flying = a.flyT > 0;
+    const spr = SPRITES.bird[a.dir][flying ? 1 + (Math.floor(a.animT) % 2) : 0];
+    const px = Math.round(a.x - spr.width / 2 - ox);
+    const py = Math.round(a.y - a.alt - spr.height - oy);
+    ctx.fillStyle = flying ? 'rgba(110,130,170,0.22)' : 'rgba(110,130,170,0.3)';
+    ctx.fillRect(Math.round(a.x - ox) - 2, Math.round(a.y + 1 - oy), 4, 1);
+    drawSpriteFlash(spr, px, py, a.flash);
   }
 
   function drawRobot(b, ox, oy) {
@@ -3607,10 +4075,11 @@
     if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
     const t = workTarget(player);
     if (!t || !t.near) return;
-    const verb = !t.o ? 'CRACK ICE' : t.o.type === 'tree' ? 'CHOP' :
+    const tall = t.o && (t.o.type === 'tree' || t.o.type === 'deadTree');
+    const verb = !t.o ? 'CRACK ICE' : tall ? 'CHOP' :
       t.o.type === 'bush' ? 'PICK' : 'MINE';
     // sit above the sprite: trees reach 8px above their tile, short objects start 6px below
-    const lift = t.o ? (t.o.type === 'tree' ? 20 : 10) : 8;
+    const lift = t.o ? (tall ? 20 : 10) : 8;
     const pressed = !!player.input.work;
     const capW = 9, gapW = 3;
     const totalW = capW + gapW + pixelTextWidth(verb);
@@ -3912,6 +4381,8 @@
       const o = objects[i];
       if (o) {
         if (o.type === 'tree') { r = 52; g = 100; b = 82; }
+        else if (o.type === 'deadTree') { r = 138; g = 128; b = 116; }
+        else if (o.type === 'den') { r = 92; g = 86; b = 100; }
         else if (o.type === 'rock') { r = 122; g = 131; b = 153; }
         else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
@@ -3950,6 +4421,13 @@
       ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
       ctx.fillStyle = TEAMS[p.team].mark;
       ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
+    }
+    // named places, glyph only - a name would not fit inside the disc (the
+    // world map and the arrival toast are where they are read by name)
+    for (const L of landmarks) {
+      const dx = L.tx + 0.5 - ptx, dy = L.ty + 0.5 - pty;
+      if (Math.hypot(dx, dy) > MM_R - 2) continue;
+      drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, 'rgba(15,22,50,0.9)');
     }
     // player dot
     ctx.fillStyle = 'rgba(15,22,50,0.9)';
@@ -4054,6 +4532,27 @@
     ctx.restore();
 
     // (the bottom strip is deliberately empty: reserved for combat abilities)
+
+    // arriving at a named place announces it, top centre: the name big, its
+    // personality under it. Fades on the plate, so it uses the shadow font.
+    if (state.loc) {
+      const L = state.loc.L, t = state.loc.t;
+      const a = t < 0.25 ? t / 0.25 : t > 2.8 ? Math.max(0, 1 - (t - 2.8) / 0.7) : 1;
+      if (a > 0) {
+        const nw = pixelTextWidth(L.name, 2), tw = pixelTextWidth(L.tag);
+        const w = Math.max(nw, tw) + 26;
+        const bx = Math.round((VIEW_W - w) / 2), by = 14;
+        ctx.globalAlpha = a;
+        ctx.fillStyle = 'rgba(12,18,42,0.72)';
+        ctx.fillRect(bx, by, w, 24);
+        ctx.fillStyle = L.spec.mark;
+        ctx.fillRect(bx, by, w, 1); ctx.fillRect(bx, by + 23, w, 1);
+        drawLandmarkIcon(ctx, L, bx + 10, by + 12, L.spec.mark, '#0a0e23');
+        drawPixelTextShadow(ctx, L.name, Math.round((VIEW_W - nw) / 2) + 7, by + 4, '#f4f7ff', '#0a0e23', 2);
+        drawPixelTextShadow(ctx, L.tag, Math.round((VIEW_W - tw) / 2) + 7, by + 15, L.spec.mark, '#0a0e23');
+        ctx.globalAlpha = 1;
+      }
+    }
 
     // message
     if (state.msgT > 0 && state.msg) {
@@ -4319,6 +4818,8 @@
           else if (h > 0.45) { r = 60; g = 88; b = 64; }
           else { r = 74; g = 102; b = 74; }
         }
+        else if (o && o.type === 'deadTree') { r = 150; g = 132; b = 108; }
+        else if (o && o.type === 'den') { r = 86; g = 80; b = 92; }
         else if (o && o.type === 'rock') { r = 104; g = 108; b = 118; }
         else if (o && o.type === 'bush') {
           if (o.berries > 0) { r = 170; g = 72; b = 80; } else { r = 118; g = 128; b = 98; }
@@ -4383,6 +4884,16 @@
     ctx.lineWidth = 1;
     ctx.strokeRect(MAP_X + (camX / TILE) * MAP_S + 0.5, MAP_Y + (camY / TILE) * MAP_S + 0.5,
       (VIEW_W / TILE) * MAP_S - 1, (VIEW_H / TILE) * MAP_S - 1);
+
+    // named places: glyph plus the name, inked like the rest of the chart
+    for (const L of landmarks) {
+      const lx = MAP_X + Math.round((L.tx + 0.5) * MAP_S);
+      const ly = MAP_Y + Math.round((L.ty + 0.5) * MAP_S);
+      drawLandmarkIcon(ctx, L, lx, ly - 3, '#3a2c1c', 'rgba(228,216,186,0.85)');
+      const w = pixelTextWidth(L.name);
+      const nx = Math.max(MAP_X + 1, Math.min(MAP_X + MAP_W - w - 1, Math.round(lx - w / 2)));
+      drawPixelTextShadow(ctx, L.name, nx, ly + 3, '#3a2c1c', 'rgba(228,216,186,0.85)');
+    }
 
     // the other slots, inked in their team colour
     for (const p of players) {
@@ -4937,6 +5448,7 @@
       ['RIGHT CLICK A STUMP TO RAISE A BASE', '#9fb6d8'],
       ['CRACK THE ICE TO SPEAR FISH BELOW', '#9fb6d8'],
       ['RIVERS ARE FAST - CHAIN DODGES TO FLY', '#9fb6d8'],
+      ['NAMED PLACES ARE ON THE MAP - WOLVES DEN UP', '#ff9a8a'],
       ['RIVALS SHARE THE MAP - ARROWS HURT THEM', '#ff9a8a'],
     ];
     let y = 106;
@@ -5418,6 +5930,17 @@
     ctx.strokeStyle = '#fff3c0';
     ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x), my(d.y)); ctx.stroke();
     ctx.restore();
+    // the named places - the whole point of reading the chart on the way in.
+    // Names only at full scale; at half scale they would sit on top of each other.
+    for (const L of landmarks) {
+      const lx = cx0 + (L.tx + 0.5) * k, ly = cy0 + (L.ty + 0.5) * k;
+      drawLandmarkIcon(ctx, L, lx, ly - (big ? 4 : 0), L.spec.mark, '#0f1632');
+      if (!big) continue;
+      const w = pixelTextWidth(L.name);
+      const nx = Math.max(cx0, Math.min(cx0 + cs - w, Math.round(lx - w / 2)));
+      drawPixelTextOutline(ctx, L.name, nx, Math.round(ly + 2), '#f4f7ff', '#0f1632');
+    }
+
     // the end of the line: where the bird drops whoever is still aboard
     ctx.fillStyle = '#241a10'; ctx.fillRect(Math.round(mx(d.x1)) - 2, Math.round(my(d.y1)) - 2, 5, 5);
     ctx.fillStyle = '#ffd95c'; ctx.fillRect(Math.round(mx(d.x1)) - 1, Math.round(my(d.y1)) - 1, 3, 3);
@@ -5485,8 +6008,10 @@
   SFX.setVolume(settings.volume);
   SFX.setMuted(settings.muted);
   genWorld();
+  placeLandmarks();  // worldgen's last pass, before the ground is baked
   spawnAnimals();
   spawnFish();
+  stockLandmarks();  // wolves and birds go in once the world is standing
   initPlayers();
   renderGround();
   buildMapPanel();
@@ -5508,6 +6033,10 @@
   window.DBG = {
     SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes,
     fish, iceCracks, holes, crackIce, addFish,
+    // named places: the live registry, the table behind it, and what is where
+    landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
+    // drop a slot (default the local one) on a tile - how to stage a landmark
+    warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
     settings, perf, treeRare, cursorInfo,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     // multiplayer slots: every slot, the local one, and the teams table

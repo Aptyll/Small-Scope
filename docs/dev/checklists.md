@@ -3,6 +3,43 @@
 Step-by-step lists for the changes that touch many places at once, plus the intentionally dead
 code you should not "clean up".
 
+## Verifying a change
+
+The rule is in [CLAUDE.md](../../CLAUDE.md): look at the running game, don't re-read the code and
+declare victory. The three affordances:
+
+- **`window.DBG`** (end of [js/game.js](../../js/game.js)) — read the object literal for the
+  current surface; it is the whole external API. The non-obvious members: `step(dt, n)` runs `n`
+  fixed-`dt` update ticks and one render, `freeze = true` stops the rAF loop so stepping is
+  deterministic, `hideUI = true` drops the HUD/seed tag/cursor for captures, `buildStruct` stages
+  a construction site with no cost or validation, `warp(tx, ty, p?)` drops a slot on a tile, and
+  `setControl(slot, mode)` hands a slot to an AI, a human or nobody. **Stage the scene** (place
+  structures, warp to a landmark, jump `state.day`/`state.time`) instead of playing to reach it.
+- **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
+  prove worldgen still varies. Without it every reload is a different world and A/B screenshots
+  are meaningless. The seed prints bottom-right every frame, so a screenshot carries its world.
+- **`POST /shot`** in [serve.js](../../serve.js#L14) writes a base64 PNG body to `shot.png` in the
+  repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
+  it, and `shot.png` is not gitignored — don't commit it.
+
+A page that loads the same four scripts, stages through `DBG` and POSTs the canvas is enough to
+drive the whole game from a headless browser; keep such a rig out of the repo (or delete it when
+you are done) so `index.html` stays the only entry point.
+
+## What is worth recording
+
+[CLAUDE.md](../../CLAUDE.md) carries the rule (docs are part of the deliverable, fixed in the same
+turn as the code); this is the inventory.
+
+**Worth recording:** a new object type, buildable, ground type, resource, landmark, or enemy; new
+or rebound keys; new state on `state`/`settings`/`player`; a new render pass, overlay, or
+offscreen canvas; a change to the day/night, lighting, tool, or difficulty formulas; anything that
+adds a cross-file invariant; any change to how the game is run or verified; and durable
+preferences or constraints the user states in conversation.
+
+**Not worth recording:** balance tweaks to existing numbers, sprite pixel edits, and refactors
+that preserve the described structure.
+
 ## Common changes
 
 **Adding an object type** — touch all of: `isSolidTile()` (if it blocks), `hitObject()` (what a
@@ -34,6 +71,14 @@ scoreboard and the event feed reports the death as an accident. See
 `isSolidTile()`, both map colour tables, and a functional tick branch in
 `updateStructures()`. `hitObject()`, the draws pass (via `structSprite`), construction, ownership
 and refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
+
+**Adding a landmark** — a `LANDMARKS` entry plus its `gen`, and its key in `LANDMARK_ORDER`; that
+is the whole feature (see [world.md](world.md#landmarks) for the fields). Nothing in the maps, the
+drop chart or the HUD needs to learn about it. What *does* cost work: any **new object type** its
+`gen` stamps (the checklist above), any **new kind of inhabitant** its `spawnOne` pushes into
+`animals` (a `kind` branch in `updateAnimal`, hp in `ANIMAL_HP`, a `HIT_PUFF` colour, a payout in
+`animalDies`, `UNIT_MASS` + `unitRadius` if it is solid, a hover box in `cursorInfo`, and — if it
+can hurt a player — a `DEATH_CAUSE` key), and rolling **only** through `lmRng`, never `rng`.
 
 **Adding a ground type** — extend `paintGroundTile()`, `updateMinimap()`, and `buildWorldMapImg()`,
 give it a surface branch in `updatePlayer()`'s momentum block (steer/decay/target rates — ice is
@@ -68,8 +113,8 @@ the arrow speed/damage formulas in `fireArrow()`,
   (as do the four `playerTeam` sets, which are the live ones).
 - `SPRITES.goldOre`, `SPRITES.itemWood`, and `SPRITES.itemStone` are baked but unreferenced since
   the single-currency change (no ore object, no wood/stone drops or HUD counters).
-- `SFX.nightSting` and `SFX.monsterDie` in [js/audio.js](../../js/audio.js) are unreferenced since
-  the raider removal.
+- `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
+  (`SFX.monsterDie` is live again — every animal death plays it).
 - The turret type (its tick is an idle no-op), the spawner's guard mode (loiters), and the
-  `tracers` pass are kept working but have no trigger — they went idle with the raiders, and
-  nothing but players is hostile now.
+  `tracers` pass are kept working but have no trigger — they went idle with the raiders. Wolves
+  are hostile but only to players: nothing targets a building or a robot.

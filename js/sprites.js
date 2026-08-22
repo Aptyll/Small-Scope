@@ -1402,6 +1402,174 @@
     '................................',
   ];
 
+
+  // ---------------------------------------------------------------- wolf
+  // The wolf den's pack: a low-slung side-view predator, amber-eyed, in the
+  // same 3-frame stand/run set the deer and rabbit use (left = flipH).
+  const WOPAL = {
+    '.': null,
+    'o': '#262b38', // outline
+    'y': '#6f778c', // coat mid
+    'Y': '#8f97ac', // coat light (lit from above)
+    'd': '#4d5468', // coat shade (flank)
+    'c': '#dfe4ef', // pale throat / belly / muzzle
+    'e': '#f2b03c', // eye
+    'n': '#171a22', // nose
+  };
+  const wolfBody = [
+    '...........o.o..',
+    '..........oYoYo.',
+    '.o........oYYYo.',
+    'oYo....ooooYYYYo',
+    'oYYo..oYYYYYYYeo',
+    '.oYYooYYYYYYYccn',
+    '..oYYdddddYYcco.',
+    '...oddddddddco..',
+    '...oddddddddco..',
+    '...ocddcccddco..',
+  ];
+  const wolfStand = wolfBody.concat([
+    '...oyo...oyyo...',
+    '...oyo...oyyo...',
+    '...ooo...ooo....',
+  ]);
+  const wolfRunA = wolfBody.concat([
+    '..oyo....oyyo...',
+    '.oyo......oyyo..',
+    '.ooo......ooo...',
+  ]);
+  const wolfRunB = wolfBody.concat([
+    '....oyo.oyyo....',
+    '....oyo..oyyo...',
+    '....ooo..ooo....',
+  ]);
+
+  // ---------------------------------------------------------------- rookery
+  // Dead trees: the rookery's bare snags. Same 16x24 footprint as a pine so
+  // they draw at py-8 in the same band, but stripped to grey wood and snow.
+  const DTPAL = {
+    '.': null,
+    'o': '#2a2018', // outline
+    'u': '#6b5a48', // dead wood
+    'U': '#4b3d30', // dead wood dark
+    'v': '#8a7761', // lit bark
+    'w': '#eef4fb', // snow
+    's': '#c9dcee', // snow shade
+  };
+  const deadTree1 = [
+    '................',
+    '.......ow.......',
+    '..w....ou.......',
+    '.ouo...ov...w...',
+    '..ovo..ov..ouo..',
+    '...ovo.ov.ovo...',
+    '....ovoovoovo...',
+    '.....ovuvuvo....',
+    '..w...ouvuo.....',
+    '.ouo..ouvuo.ww..',
+    '..ovo.ouvuo.ou..',
+    '...ovooUvUoovo..',
+    '....ovuUvUuvo...',
+    '......ouvUo.....',
+    '......ouvUo.....',
+    '......ouUUo.....',
+    '.....oouUUoo....',
+    '.....ovuUUvo....',
+    '.....ovuUUvo....',
+    '.....ouUUUuo....',
+    '....oouUUUuoo...',
+    '....owwUUUwwo...',
+    '....osswwwsso...',
+    '.....ssssss.....',
+  ];
+  const deadTree2 = [
+    '................',
+    '...........w....',
+    '....w.....ou....',
+    '...ouo....ov....',
+    '....ovo..ovo....',
+    '.....ovooovo....',
+    '..w...ovuvo.....',
+    '.ouo..ouvuo.....',
+    '..ovo.ouvuo.w...',
+    '...ovooUvUoouo..',
+    '....ovuUvUuovo..',
+    '......ouvUuvo...',
+    '......ouvUo.....',
+    '......ouUUo.....',
+    '......ouUUo.....',
+    '.....oouUUo.....',
+    '.....ovuUUoo....',
+    '.....ovuUUvo....',
+    '.....ouUUUvo....',
+    '.....ouUUUuo....',
+    '....oouUUUuoo...',
+    '....owwUUUwwo...',
+    '....osswwwsso...',
+    '.....ssssss.....',
+  ];
+
+  // Birds: the rookery's flock. Tiny, so a perched frame plus two wing frames
+  // is the whole set; the game draws them above the ground on their own alt.
+  const BIPAL = {
+    '.': null,
+    'o': '#232734', // outline
+    'y': '#4d5566', // feather mid
+    'Y': '#77809a', // feather light
+    'c': '#cfd6e4', // pale breast
+    'n': '#e0a63c', // beak
+  };
+  const birdPerch = [
+    '..oo.....',
+    '.oYYo....',
+    'oyYYyon..',
+    'oyyyyco..',
+    '.oyyco...',
+    '..o.o....',
+  ];
+  const birdFlyA = [
+    'oo.....oo',
+    '.oy...yo.',
+    '.oyYYYyon',
+    '..oyccyo.',
+    '...ooo...',
+  ];
+  const birdFlyB = [
+    '.........',
+    '..oo.oo..',
+    '.oyYYYyon',
+    'oyyyccyo.',
+    '.oo...oo.',
+  ];
+
+  // ---------------------------------------------------------------- den
+  // The wolf den's mouth: a snow-capped rock mound with a black throat and a
+  // picked-over bone at the lip. 16x12, drawn at py+4 like a rock.
+  const DNPAL = {
+    '.': null,
+    'o': '#2b3040', // outline
+    'y': '#7b8398', // rock mid
+    'Y': '#99a1b6', // rock light
+    'v': '#5a6176', // rock dark
+    'k': '#12151f', // the dark inside
+    'b': '#e6e2d4', // bone
+    'w': '#eef4fb', // snow
+    's': '#c9dcee', // snow shade
+  };
+  const den = [
+    '................',
+    '.....owwwwo.....',
+    '...oowwwwwwoo...',
+    '..owwwwwwwwwwo..',
+    '.oswwwwwwwwwwso.',
+    'oYsswyyyyywsssYo',
+    'oYyyyokkkoyyyyYo',
+    'oYyyokkkkkoyyyYo',
+    'ovyyokkkkkoyyyvo',
+    'ovvyokkkkkoyyvvo',
+    '.ovvokkkkkovvvo.',
+    '..ooobkkkboooo..',
+  ];
   window.SPRITES = {
     teams: TEAM_SKINS,
     playerTeam: teamPlayers,
@@ -1426,6 +1594,16 @@
       right: [bake(rabbitSit, RBPAL), bake(rabbitHop, RBPAL), bake(rabbitSit, RBPAL)],
       left: [flipH(bake(rabbitSit, RBPAL)), flipH(bake(rabbitHop, RBPAL)), flipH(bake(rabbitSit, RBPAL))],
     },
+    wolf: {
+      right: [bake(wolfStand, WOPAL), bake(wolfRunA, WOPAL), bake(wolfRunB, WOPAL)],
+      left: [flipH(bake(wolfStand, WOPAL)), flipH(bake(wolfRunA, WOPAL)), flipH(bake(wolfRunB, WOPAL))],
+    },
+    bird: {
+      right: [bake(birdPerch, BIPAL), bake(birdFlyA, BIPAL), bake(birdFlyB, BIPAL)],
+      left: [flipH(bake(birdPerch, BIPAL)), flipH(bake(birdFlyA, BIPAL)), flipH(bake(birdFlyB, BIPAL))],
+    },
+    deadTree: [bake(deadTree1, DTPAL), bake(deadTree2, DTPAL)],
+    den: bake(den, DNPAL),
     deer: {
       right: [bake(deerStand, DEPAL), bake(deerWalkA, DEPAL), bake(deerWalkB, DEPAL)],
       left: [flipH(bake(deerStand, DEPAL)), flipH(bake(deerWalkA, DEPAL)), flipH(bake(deerWalkB, DEPAL))],

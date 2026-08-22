@@ -86,9 +86,10 @@ fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) →
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
-Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it.
-Short ground sprites (rock, bush, stump) all draw at `py + 4` to stay clear of that
-band — drop one lower and a tree on the tile below hides it almost completely.
+Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it; a
+**dead tree** shares that 16×24 footprint and that offset. Short ground sprites (rock, bush,
+stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
+a tree on the tile below hides it almost completely.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 32×32 `scratch`
 canvas with `source-in` — sprites larger than 32×32 will clip.
@@ -131,7 +132,9 @@ view.
 
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
 unit, always visible: every player (in `drawPlayer`), animals (in `drawAnimal`),
-and robots (in `drawRobot`).
+and robots (in `drawRobot`). **Birds are the one exception** — 3 hp means every hit is a kill, and
+a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow
+by `a.alt` instead, which is the only read on how high one is.
 The overhead bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
 drawn, a second small meter renders just above it: yellow while charging,
@@ -168,6 +171,27 @@ Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floater
 plain `addFloater` entries default to the old look. Units also flash white on hit via
 `drawSpriteFlash` (0.8-alpha overlay). Hits on **structures** intentionally get no numbers;
 structures show flash, shake, and damage cracks instead.
+
+## Landmarks on the maps
+
+A [landmark](world.md#landmarks) is a *named* place, so it has to be legible on every surface
+that shows the world. `drawLandmarkIcon(g, L, x, y, col, rim)` is the shared stamp: the spec's
+`icon` rects inside a 7×7 box, drawn once inflated by 1 px in a rim colour and once in the ink,
+so the same glyph reads on parchment, on snow and over forest.
+
+- **The minimap** (`renderMinimap`) draws the glyph for any landmark inside the disc, in the
+  spec's `mark` over a dark rim. No name — `WOLF DEN` is wider than the whole 48 px disc.
+- **The M map** (`renderWorldMap`) draws the glyph plus the name in map ink under it, clamped
+  to the map rect so a landmark near the edge keeps its label.
+- **The eagle's chart** (`renderDropUI`) draws both, and this is the one that matters: choosing
+  between them is the whole jump decision. Names only when the chart is at full scale
+  (`VIEW_H >= 500`); at half scale they would sit on top of each other, so it is glyphs only.
+- **Arrival** — `updatePlay` keeps `state.loc` (`{ L, t }`) for the local slot from
+  `landmarkAt(player.x, player.y)`, and `renderUI` shows a toast top centre for ~3.5 s whenever it
+  changes: a dark plate ruled in the spec's `mark`, the glyph, the name at 2× and the `tag` under
+  it. It fades in and out, so it uses `drawPixelTextShadow` (see
+  [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
+  blotchy).
 
 ## Scoreboard and event feed
 

@@ -21,9 +21,11 @@ anything that must stay stable per tile.
   a spoke from each ring point to the central clearing and a ring linking each point to its
   neighbour. The shared `carveIce` rule skips existing objects, the ring points, and the clearing,
   so rivers gap naturally around them.
-- `objects` — flat `Array(192*192)`, **at most one object per tile**. Every object is
-  `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `stump`, `rock`, `bush`,
-  `wall`, `turret`, `generator`, `spawner`.
+- `objects` — flat `Array(WORLD*WORLD)`, **at most one object per tile**. Every object is
+  `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `deadTree`, `stump`, `rock`,
+  `bush`, `den`, `wall`, `turret`, `generator`, `spawner`. `deadTree` (a 3 hp snag, chopped like a
+  tree for `YIELD.deadTreeHit`/`deadTreeFall`, leaves a stump) and `den` (solid, inert scenery)
+  exist only inside [landmarks](#landmarks).
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
   `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
   the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
@@ -51,6 +53,78 @@ ground change must call `repaintGround(tx, ty)` — it repaints the tile plus it
 (edge rims depend on neighbors) into the prerendered canvas. Ice holes are currently the only
 runtime ground change.
 
+## Landmarks
+
+Named points of interest scattered through the open interior, each with its own personality — the
+thing a player is choosing between while the eagle is still in the air. They live in the
+`landmarks` banner of [game.js](../../js/game.js) and in the module-scope `landmarks` array
+(`{ key, spec, name, tag, tx, ty, r, repopT }` per placed site).
+
+**One entry in `LANDMARKS` is one kind of place**, and that entry plus its generator is the whole
+feature — no map, chart or HUD code knows any landmark by name:
+
+| Field | Meaning |
+| --- | --- |
+| `name` | printed by the minimap (glyph only), the M map, the eagle's chart and the arrival toast |
+| `tag` | the one-line personality under the name on the toast (`THE PACK HUNTS HERE`) |
+| `count` | how many worldgen scatters |
+| `r` | footprint radius in tiles: the keep-clear ring, the canvas `gen` draws in, and the radius `landmarkAt()` calls "here" |
+| `surface` | the ground its site must sit on — `'snow'` or `'ice'` (a shipwreck wants ice) |
+| `mark` | map ink for its glyph and its toast rule |
+| `icon` | the glyph itself: `[x, y, w, h]` rects inside a 7×7 box, stamped by `drawLandmarkIcon()` with a dark rim pass so it reads on parchment, snow and forest alike |
+| `pop` | how many inhabitants the site keeps alive (`a.home === L` is the backref) |
+| `repop` | seconds between top-ups; `0` never restocks |
+| `gen(L)` | stamps the objects/ground, inside worldgen and **before** `renderGround()` bakes |
+| `spawnOne(L)` | adds one inhabitant, after the world (and the ordinary wildlife) is standing |
+
+`LANDMARK_ORDER` is the placement order — the pickiest site first, since each one reserves
+`r + other.r + 8` tiles around itself.
+
+### Placement
+
+`placeLandmarks()` runs as worldgen's last pass (boot, right after `genWorld()`), then
+`stockLandmarks()` fills every site once `spawnAnimals`/`spawnFish` are done. `landmarkSite()`
+rejects a candidate that is on the wrong surface, inside 20 tiles of the world centre, within 12
+tiles of a `ringPts` point, too close to a landmark already placed, closer to the treeline than
+`borderDepth(tx, ty) + r + 4` (measured, not worst-case — assuming `BORDER_MAX` bunches every
+landmark into one narrow ring), or whose footprint is less than 72 % free of the right surface.
+
+**Everything a landmark rolls comes from `lmRng`**, a second `mulberry32` seeded from
+`SEED ^ 0x4c414e44` — the same trick `fxRng` uses. Placement, `gen` and `spawnOne` therefore
+cannot perturb the shared `rng` stream, so terrain is bit-identical for an existing seed. (The
+objects they stamp *do* displace what `spawnAnimals`/`spawnFish` can land on, so a replayed seed
+keeps its terrain but not its exact rabbit positions.)
+
+### The two that exist
+
+- **WOLF DEN** (3, r 5) — a `den` mouth ringed by boulders, with a pack of 4 wolves. The only
+  hostile thing in the world; see [Wolves](gameplay.md#wolves-the-first-enemy).
+- **ROOKERY** (3, r 6) — 6–9 `deadTree` snags and a few rocks, with a flock of 9 birds. No danger
+  at all, just the hardest shooting in the game; see [Birds](gameplay.md#birds-the-flock).
+
+### Saved for later
+
+The **abandoned mine**, **frozen fort**, **shipwreck** and **shop** are meant to be table entries
+here, not new systems. The format already holds them: `surface: 'ice'` puts a shipwreck out on a
+frozen lake, `gen` may write `ground` as well as objects (it runs before the ground bake, so no
+`repaintGround` is needed) and may stand up structures through `placeStruct` for a fort,
+`pop`/`repop` stock a mine with whatever lives down it, and a site with `pop: 0` and no
+`spawnOne` is simply a place made of scenery. What a new landmark *does* cost is any **new object
+type** it stamps — that is the checklist in
+[checklists.md](checklists.md#common-changes).
+
+### Runtime
+
+`updateLandmarks(dt)` (from `updatePlay`) counts each site's living inhabitants every `repop`
+seconds and calls `spawnOne` when it is short — never while any player is within 96 px, so
+clearing a den is a real reward for a while and the site still grows back. `landmarkAt(x, y)`
+returns the landmark a world position stands in; `updatePlay` feeds it `state.loc`
+(`{ L, t }`), which drives the arrival toast in
+[rendering.md](rendering.md#landmarks-on-the-maps).
+
+`DBG` exposes `landmarks`, `LANDMARKS`, `landmarkAt`, `stockLandmarks`, `flushBirds` and
+`warp(tx, ty, p?)` — warping a slot onto a site is how to stage one.
+
 ## Determinism and noise
 
 Every run picks a fresh `SEED` at boot from `Date.now() ^ Math.random()`, and **everything random
@@ -67,11 +141,11 @@ it came from; in `title` mode the main menu prints the seed instead, next to the
   of position *within a run* — use them for anything that must stay stable per tile no matter when
   it is asked (ground texture, forest boundary, tree rare-drops, panel mottling, map dithering).
   `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map.
-- One exception to the single stream: `fxRng` (a second `mulberry32` seeded from
-  `SEED ^ 0x9e3779b9`) feeds resize-driven snowflake top-ups in `fitFlakes()`, precisely so that
-  window size / resolution changes can never perturb the main `rng`'s worldgen prefix — the same
-  seed yields the same world on every device (the boot-time 70 flakes still draw from `rng`,
-  unchanged).
+- Two exceptions to the single stream, both for the same reason — nothing outside worldgen may
+  perturb the main `rng`'s worldgen prefix. `fxRng` (`SEED ^ 0x9e3779b9`) feeds resize-driven
+  snowflake top-ups in `fitFlakes()`, so window size / resolution changes cannot move the world
+  (the boot-time 70 flakes still draw from `rng`, unchanged). `lmRng` (`SEED ^ 0x4c414e44`) feeds
+  everything [landmarks](#landmarks) roll, at boot and at runtime.
 - `SEED` is a `const` in the rng banner and `hash2` closes over it, so nothing may call `hash2`
   before that line runs. Everything that does — `genWorld`, `renderGround`, the panel bakes — is
   further down in boot order.
@@ -82,17 +156,18 @@ it came from; in `title` mode the main menu prints the seed instead, next to the
 `state.day` increments at wrap. `update()` derives `state.darkness` (0→1) from a hand-written
 ramp: dusk over the last 12 s of day, full dark, then a 10 s dawn.
 
-With the raider waves removed, night is purely visual pressure (darkness + lighting). What still
-keys off the cycle:
+Night is visual pressure (darkness + lighting) plus one real edge: a wolf's sight range scales
+with `state.darkness` (×1.75 at full dark), so a den is a different proposition after sunset.
+What else keys off the cycle:
 
 - `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every slot.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
 - Carved ice holes refreeze at dawn (cracks heal too) and the fish shoal tops back up to
   `FISH_COUNT` — see [Ice holes and fishing](#ice-holes-and-fishing).
 
-`state.day` no longer drives any difficulty — nothing hostile exists, so nothing currently
-damages a player except another player's arrows and a plunge through the ice (see
-[PvP](multiplayer.md#pvp)).
+`state.day` no longer drives any difficulty. What damages a player: another player's arrows, a
+plunge through the ice (see [PvP](multiplayer.md#pvp)), and the wolves of a
+[wolf den](#landmarks).
 
 ## Ice holes and fishing
 

@@ -9,9 +9,12 @@ Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the loc
 AI fills, four team colours), each playing one of two champions (WREN the ranger, SKADI the
 skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
 animals. Gold earned is also XP: every slot levels 1→9 (`p.level`, flat +hp/+arrow damage per
-level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides a white eagle along a seed-fixed
-line across the world and jumps (Space) to pick its landing, which becomes its respawn point.
-Nothing else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
+level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides
+a white eagle along a seed-fixed line and jumps (Space) to pick its landing, which becomes its
+respawn point. What they are picking between is **landmarks** — named places worldgen scatters
+and every map labels: a **WOLF DEN** (a pack that hunts you, the only hostile thing in the world)
+and a **ROOKERY** (dead snags full of flighty birds). Nothing else is hostile, so night is
+otherwise visual-only.
 
 ## Commands
 
@@ -24,20 +27,12 @@ file and reloading the page is the whole dev loop (`Cache-Control: no-store` is 
 refresh always picks up changes). `PORT` overrides the port; `.claude/launch.json` sets
 `autoPort`, so a second session can preview alongside an already-running server.
 
-**Verify changes in the browser, not by re-reading code** — three affordances drive it from outside:
-
-- `window.DBG` (end of [js/game.js](js/game.js)) exposes the live singletons and helpers; read the
-  object literal for the current surface. The non-obvious members: `step(dt, n)` runs `n`
-  fixed-`dt` update ticks and one render, `freeze = true` stops the rAF loop so stepping is
-  deterministic, `hideUI = true` drops the HUD/seed tag/cursor for captures, and `buildStruct`
-  stages a construction site with no cost or validation. Stage a scene (place structures, jump
-  `state.day`/`state.time`) instead of playing to reach it.
-- `?seed=N` pins the world — same seed twice proves a change is deterministic, two seeds prove
-  worldgen still varies. Without it every reload is a different world and A/B screenshots are
-  meaningless. The seed prints bottom-right every frame, so a screenshot carries its world.
-- `POST /shot` in [serve.js](serve.js#L14) writes a base64 PNG body to `shot.png` in the repo root,
-  for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls it, and
-  `shot.png` is not gitignored — don't commit it.
+**Verify changes in the browser, not by re-reading code.** Three affordances drive it from
+outside: `window.DBG` (end of [js/game.js](js/game.js)) exposes the live singletons and stages a
+scene without playing to it, `?seed=N` pins the world so two screenshots are comparable, and
+`POST /shot` ([serve.js](serve.js#L14)) sinks `canvas.toDataURL()` to `shot.png` for a headless
+driver — never commit that file. How to use all three:
+[checklists](docs/dev/checklists.md#verifying-a-change).
 
 ## Deep docs
 
@@ -46,11 +41,11 @@ Read the relevant one **before** working in that area — they carry the detail 
 | Working on | Read |
 | --- | --- |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
-| worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish | [docs/dev/world.md](docs/dev/world.md) |
-| movement, bow and tools, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
+| movement, bow and tools, dodge, wildlife, wolves and birds, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
-| adding an object/tool/structure/ground type, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
+| adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 
 ## Architecture
 
@@ -67,9 +62,9 @@ globals. Order matters: each file's globals must exist before the next runs.
 All game state lives in module-scope singletons — `state`, `settings`, `players` (with `player` /
 `inv` pointing at the local slot and its wallet) — plus the
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
-`structures`, `robots`, `fish`.
+`structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~5600-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~6100-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -95,7 +90,8 @@ don't cite line numbers here, they go stale within a session.
 | tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` |
 | build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
-| wildlife behaviour | `updateAnimal`, `nearestBerryBush` | `animals` |
+| wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
+| a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
 | radial menu hit math | `wheelLayout`, `resolveWheel` | `radial wheel` |
@@ -113,6 +109,24 @@ don't cite line numbers here, they go stale within a session.
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
 | the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
+
+### Adding a landmark
+
+One entry in `LANDMARKS` (the `landmarks` banner) is one kind of named place — that entry plus its
+generator is the whole feature; no map, chart or HUD code learns its name:
+
+```js
+shipwreck: { name, tag,           // what both maps, the chart and the arrival toast print
+             count, r, surface,   // how many, footprint radius in tiles, 'snow' | 'ice'
+             mark, icon,          // map ink; the glyph is [x,y,w,h] rects in a 7x7 box
+             pop, repop,          // inhabitants kept alive, seconds between top-ups
+             gen(L), spawnOne(L) } // stamp the objects (in worldgen); add one inhabitant (after)
+```
+
+Add the key to `LANDMARK_ORDER` and it is placed, drawn on the minimap, the M map and the eagle's
+chart, and announced when a player walks in. Only a *new object type* it stamps costs work
+elsewhere (see [checklists](docs/dev/checklists.md)). The abandoned mine, frozen fort, shipwreck
+and shop are meant to land here.
 
 ## Hard rules
 
@@ -138,9 +152,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).
-- **Never add or remove an `rng()` call inside `genWorld()`** — it reshuffles every existing seed.
-  Use `hash2`/`vnoise` for anything that must stay stable per tile, and never call `hash2` before
-  the `SEED` const it closes over.
+- **Never add or remove an `rng()` call inside `genWorld()`** — it reshuffles every existing seed,
+  which is why landmark placement rolls its own `lmRng` stream. Use `hash2`/`vnoise` for anything
+  that must stay stable per tile, and never call `hash2` before the `SEED` const it closes over.
 - **At most one object per tile.** Create with `placeObj`, read with `objAt`, and route structures
   through `placeStruct`/`destroyStructure` so the `structures` registry and lights stay in sync.
 - **Anything drawn through `drawSpriteFlash()` must fit in 32×32** — it recolours through a shared
@@ -157,12 +171,8 @@ subsystem, and prune what a change has made false, including
 [Known drift](docs/dev/checklists.md#known-drift) entries once they are fixed. A stale line is
 worse than a missing one, because future sessions act on it without re-verifying.
 
-Worth recording: a new object type, buildable, ground type, resource, or enemy; new or rebound
-keys; new state on `state`/`settings`/`player`; a new render pass, overlay, or offscreen canvas; a
-change to the day/night, lighting, tool, or difficulty formulas; anything that adds a cross-file
-invariant; any change to how the game is run or verified; and durable preferences or constraints
-the user states in conversation. Not worth recording: balance tweaks to existing numbers, sprite
-pixel edits, and refactors that preserve the described structure.
+What is and is not worth recording:
+[checklists](docs/dev/checklists.md#what-is-worth-recording).
 
 **This file loads in full at the start of every session — keep it under ~150 lines.** It is a
 system prompt, not a knowledge base: every line costs context and attention in *every* session,

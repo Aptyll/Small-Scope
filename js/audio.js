@@ -124,5 +124,10 @@
     levelUp() { tone(523, 0.08, 'square', 0.08); tone(659, 0.08, 'square', 0.08, 0, 0.07); tone(784, 0.16, 'square', 0.09, 0, 0.14); tone(1046, 0.22, 'triangle', 0.08, 0, 0.2); },
     heal() { tone(440, 0.1, 'triangle', 0.08); tone(554, 0.12, 'triangle', 0.08, 0, 0.08); },
     splash() { noise(0.28, 0.28, 750); tone(300, 0.22, 'sine', 0.1, -190); noise(0.14, 0.12, 1500, 0.06); },
+    // the wolf den: a rising howl that sags at the end, then the pack answering
+    howl() { tone(280, 0.55, 'sawtooth', 0.05, 150); tone(430, 0.75, 'triangle', 0.06, -140, 0.1); tone(360, 0.5, 'triangle', 0.035, -110, 0.34); },
+    bite() { noise(0.07, 0.32, 1100); tone(210, 0.08, 'sawtooth', 0.11, -110); },
+    // the rookery going up: three overlapping beats of wings
+    wings() { noise(0.09, 0.14, 520); noise(0.09, 0.12, 460, 0.07); noise(0.08, 0.09, 400, 0.15); },
   };
 })();

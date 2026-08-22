@@ -55,12 +55,14 @@ underfoot sets friction and speed caps. All the tuning constants live in the con
 
 ## Unit collisions
 
-Players, animals and robots are solid circles to each other (`PLAYER_R` 4.5, deer 5, rabbit
-2.5, robot 3 — `unitRadius`). Tile collision stays per-mover in `moveEntity`; unit-vs-unit is a
-separate relaxation pass, `separateUnits()` in the `movement & collision` banner, that
-`updatePlay` runs once after every player, animal and robot has stepped. For each overlapping
-pair it splits the overlap by inverse mass (`UNIT_MASS`: player 3, deer 2.2, robot 0.7, rabbit
-0.5 — a player shoves a rabbit aside and barely notices, two players split it evenly). Every
+Players, animals and robots are solid circles to each other (`PLAYER_R` 4.5, deer 5, wolf 4.5,
+rabbit 2.5, robot 3 — `unitRadius`). **Birds are the exception**: they fly, so `separateUnits()`
+skips them entirely and they have no `UNIT_MASS` entry. Tile collision stays per-mover in
+`moveEntity`; unit-vs-unit is a separate relaxation pass, `separateUnits()` in the
+`movement & collision` banner, that `updatePlay` runs once after every player, animal and robot
+has stepped. For each overlapping pair it splits the overlap by inverse mass (`UNIT_MASS`:
+player 3, deer 2.2, wolf 2, robot 0.7, rabbit 0.5 — a player shoves a rabbit aside and barely
+notices, two players split it evenly). Every
 push goes through `moveEntity(…, strict)`, which treats open water as a wall even for players
 (a shove never dunks anyone), and **any push a wall refuses is handed to the other unit** — the
 player's share is tried first, so a small unit can never pin a player in a corner: the pinner
@@ -87,8 +89,8 @@ for combat abilities. Two verbs, two inputs:
   `updatePlayer` starts the draw on the rising edge and looses on the falling one.
 - **E = work** (`tryWork(p)`, auto-repeating every swing cooldown while held — `updatePlayer`
   calls it whenever `p.input.work` is set). It resolves `workTarget(p)`: the tile that player is
-  aiming at, if it holds a tree (→ axe), rock (→ pick), a berried bush (→ axe), or is
-  bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
+  aiming at, if it holds a tree or a dead tree (→ axe), rock (→ pick), a berried bush (→ axe), or
+  is bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
   within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
   ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
   does nothing. A valid target swaps `p.tool` to the right one, drops any bow draw, faces the
@@ -167,19 +169,67 @@ the local slot only — a rival's tells are their draw meter and their position.
 
 ## Wildlife
 
-`animals` holds passive fauna spawned once at boot by `spawnAnimals()` (called right after
-`genWorld()`, so its `rng()` draws don't reshuffle the world layout): 16 rabbits (8 HP, biased to
-spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or respawns.
-Behavior lives in `updateAnimal()`: both wander in idle/move bursts; when a
+`animals` holds **everything that is shot rather than swung at** — four kinds, keyed by
+`a.kind` with hp from `ANIMAL_HP`. The passive pair is spawned once at boot by `spawnAnimals()`
+(called right after `genWorld()`, so its `rng()` draws don't reshuffle the world layout): 16
+rabbits (8 HP, biased to spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or
+respawns. **Wolves** (30 HP) and **birds** (3 HP) belong to a
+[landmark](world.md#landmarks) instead — `a.home` points at it, and the site restocks them.
+
+`updateAnimal()` is the shared shell: it ages the flash and knockback, dispatches to
+`updatePrey` / `updateWolf` / `updateBird`, clamps to the world, and calls `animalDies(a)` — the
+one place a kill pays out, straight from the `YIELD` table. Everything in `animals` is a target
+for arrows (`animalHit(a, x, y)`, shared by the arrow update and the aim line), gets the amber
+hunt reticle, and joins the y-sorted draws.
+
+Prey behaviour lives in `updatePrey()`: both wander in idle/move bursts; when a
 rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
 (`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when **any**
 player comes within 26 px, and a hit sends either species fleeing directly away from the nearest
-one (`fleeT`). Deaths pay out in `updateAnimal` from the `YIELD` table: rabbits drop 1 berry plus
-`YIELD.rabbit` coins, deer drop `YIELD.deer` coins plus a `GOLD!` floater. Arrows are the only thing that hurts them (there is no melee);
-animals are solid to players, robots and each other (see
-[Unit collisions](#unit-collisions)), join the y-sorted `draws` pass via `drawAnimal()`, and
-sprites are side-view only (`dir` is `left|right`). They are not shown on the minimap or world
-map.
+one (`fleeT`). Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
+floater. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
+to players, robots and each other except birds, which fly (see
+[Unit collisions](#unit-collisions)), and sprites are side-view only (`dir` is `left|right`).
+They are not shown on the minimap or world map.
+
+### Wolves: the first enemy
+
+A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
+
+- **Sight.** A wolf takes the nearest player inside `WOLF_SIGHT` (96 px) — scaled by
+  `1 + darkness * 0.75`, so at full night it sees ~168 px and the den is a different proposition
+  after sunset. It only ever considers players within `WOLF_LEASH` (190 px) **of its den**, and
+  drops a quarry that leaves that radius, so a den is a place you walk into, not a patrol that
+  follows you home.
+- **The pack.** `wakePack(w, target)` hands one wolf's find to every wolf of the same den and
+  plays `SFX.howl()` — spotting you, or an arrow, wakes all four (a wolf shot from cover does
+  **not** flee like a deer; the den comes for the shooter).
+- **The chase.** `WOLF_SPD` (96 px/s) is faster than the 72 px/s walk and slower than a slide or
+  the ice cap, so the answer is the momentum system, not distance. Bites do `WOLF_BITE_DMG` (9)
+  inside `WOLF_BITE_R` (13 px) every `WOLF_BITE_CD` (1 s) per wolf, through
+  `damagePlayer(t, dmg, dx, dy, null, 'wolf')` — whose own 0.7 s of i-frames is what keeps four
+  wolves from deleting anyone: measured, standing in a den costs ~9 hp/s, so a level-1 slot has
+  ~10 s to get out. Death reads `WENT TO THE WOLVES` in the feed
+  ([multiplayer.md](multiplayer.md#kills-and-the-event-feed)).
+- **Off duty** it patrols its den, wandering back whenever it drifts past `r * 0.8` tiles.
+- **The payout** is `YIELD.wolf` — 24 gold, the biggest single kill in the game, for 30 hp of
+  arrows (three full draws at level 1). Dangerous, rewarding.
+
+### Birds: the flock
+
+A **rookery** keeps 9 birds perched in its dead trees. `updateBird()`:
+
+- **Flighty.** Any player inside `BIRD_FLUSH` (34 px) — or an arrow hitting one, or a snag being
+  chopped — calls `flushBirds(L, from)`, which puts **the whole rookery** up at once with
+  `SFX.wings()`. One bird leaving alone would read as a bug; the flock is the personality.
+- **In the air** for 2.4–4.2 s at `BIRD_SPD` (112 px/s): a wandering circuit that never leaves
+  the stand, then a run back to a perch (`rookeryPerch(L)`, re-picked on every flush).
+- **Height** is `a.alt` — `BIRD_ALT` (15 px) perched, easing to 26 in flight. It is the only
+  thing in the world off the ground: `animalHit` and the cursor both subtract it, birds are
+  skipped by `separateUnits`, and `drawBird` lifts the sprite off its own shadow.
+- **The shot.** 3 hp (any arrow kills) but a 5 px body instead of 8, moving, at altitude, with
+  the flock scattering — `YIELD.bird` pays 8 gold and there are nine of them. It is the archery
+  range of the map, and bots deliberately don't hunt them (no pathfinding, no chance).
 
 ## Economy (one currency)
 
@@ -192,10 +242,13 @@ rather than a different resource (the League model: one number, many ways to ear
 | Source | Pays | Profile |
 | --- | --- | --- |
 | tree (4 hp) | `treeHit` 1 per swing + `treeFall` 1 → 5 | slow, safe, everywhere; leaves a stump |
+| dead tree (3 hp) | `deadTreeHit` 1 per swing + `deadTreeFall` 2 → 5 | a tree in fewer swings, but only at a rookery |
 | rare tree (8%) | + `treeRare` 6 → 11 | jackpot roll, see `treeRare()` |
 | rock (5 hp) | `rockHit` 1 per swing + `rockBreak` 4 → 9 | a bit more than a tree, back-loaded |
 | rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached |
 | deer | `deer` 3 coins × 6 → 18 | the big mobile target |
+| wolf | `wolf` 3 coins × 8 → 24 | the biggest kill, and it bites back |
+| bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
 | generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, capped at 6 uncollected |
 
 Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop

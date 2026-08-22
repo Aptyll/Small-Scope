@@ -145,7 +145,7 @@ settings) stop the world.
 
 The last two arguments are the whole credit system. `src` is the player who dealt the damage
 (`players[a.owner]` for an arrow, null for the world) and `cause` names what the world did when
-there is no `src` (`DEATH_CAUSE`, today just `'ice'` for a hole). A death with an `src` other than
+there is no `src` (`DEATH_CAUSE`: `'ice'` for a hole, `'wolf'` for a den's pack). A death with an `src` other than
 the victim bumps `src.kills` — the scoreboard's KILLS column, set in the constructor so it
 survives respawn — and writes `"<killer> SHOT <victim>"` into the feed in the killer's colours;
 without one it writes `"<victim> FELL THROUGH THE ICE"` in the victim's. **Any new way to hurt a
@@ -184,13 +184,16 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
 1. **eat** — fish below 50% hp, berry below 80%.
 2. **fight** — a rival within `AI_SIGHT` (150 px): circle at ~70 px, draw and loose near full,
    dodge when hurt. Only shoots when `aiLineClear()` says the flight path is open.
-3. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s give-up timer per animal.
-4. **unwedge** — after being stuck, walk back toward its landing site before doing anything else.
-5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
-6. **spend** — with gold in hand, build a generator/spawner on a nearby stump, else upgrade its own
+3. **wolves** — a wolf within 92 px (or any wolf already hunting this bot): shoot it and give
+   ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
+4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s give-up timer per animal. Birds are
+   excluded: with no pathfinding, a flushed flock is a wild goose chase.
+5. **unwedge** — after being stuck, walk back toward its landing site before doing anything else.
+6. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
+7. **spend** — with gold in hand, build a generator/spawner on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
-7. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
-8. **roam** — wander between its landing site and the map centre.
+8. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
+9. **roam** — wander between its landing site and the map centre.
 
 **Nothing here paths around an obstacle**, so every pursuit carries a give-up timer and a short
 blacklist (`ai.avoid`, `ai.huntAvoid`), and `aiOpenSides()` keeps bots from targeting work buried

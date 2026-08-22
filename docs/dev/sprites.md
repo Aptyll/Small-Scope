@@ -22,7 +22,11 @@ those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's 
 icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL` and are drawn at a crisp
 2× in `renderUI()`. Wildlife is
 side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames
-sharing a `deerHead` upper body) — and left variants are `flipH` of the right-facing grids.
+sharing a `deerHead` upper body), wolves are 16×13 (a shared `wolfBody` plus three leg rows per
+frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — and left variants are
+`flipH` of the right-facing grids. The two [landmark](world.md#landmarks) props are
+`deadTree` (two 16×24 snags on `DTPAL`, the same footprint as a pine so they draw in the same
+band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
 Anything drawn through `drawSpriteFlash` must stay within 32×32.
 
 `js/sprites.js` has a UTF-8 BOM and one heart row that repairs a mangled byte via
