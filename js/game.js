@@ -3309,13 +3309,14 @@
     if (state.mode === 'title') return;
 
     drawHealthBar(p.x - ox, py - 7, p.hp, p.maxHp, 14);
-    // level badge: a 7x7 square flush against the left edge of the bar backing,
-    // spanning the health bar and the stamina bar stacked (py-8 .. py-1), so the
-    // pair reads as one widget. Same backing / track colours as the bars.
+    // level badge: a 7x7 square sharing its right frame column with the bar
+    // backing's left edge (one 1px frame everywhere, never a doubled wall), and
+    // spanning the health bar and the stamina bar stacked (py-8 .. py-2). Same
+    // backing / track colours as the bars.
     {
-      const bx = Math.round(p.x - ox) - 15, by = py - 8;
+      const bx = Math.round(p.x - ox) - 14, by = py - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(bx, by, 7, 7);
+      ctx.fillRect(bx, by, 6, 7); // 6 wide: the 7th column is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx + 1, by + 1, 5, 5);
       drawPixelText(ctx, String(p.level), bx + 2, by + 1, '#f2cc6a');
@@ -3334,7 +3335,7 @@
     if (local) {
       const bx = Math.round(p.x - ox) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(bx - 1, by - 1, 16, 4);
+      ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx, by - 1, 14, 3);
       const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
