@@ -290,7 +290,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`
   (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the seed tag) and then
   navigates to `?seed=<new>` — `SEED` is a const everything closes over, so a new world is a
-  new page. Boot checks `sessionStorage['emberfrost.reroll']` and lands with the fade
+  new page. Boot checks `sessionStorage['softfall.reroll']` and lands with the fade
   clearing from white and the die still settling.
 - **Panels** slide up from the bottom edge over the still-visible world (`menu.panel`,
   `menu.panelT` over `PANEL_SLIDE_T`, `menu.closing` on the way out); the menu chrome ducks to

@@ -1,4 +1,4 @@
-// Emberfrost - a cozy winter survival game.
+// Softfall - a cozy winter survival game.
 (function () {
   'use strict';
 
@@ -346,11 +346,11 @@
   const perf = { fps: 0, frames: 0, acc: 0 };
 
   function saveSettings() {
-    try { localStorage.setItem('emberfrost.settings', JSON.stringify(settings)); } catch (e) { }
+    try { localStorage.setItem('softfall.settings', JSON.stringify(settings)); } catch (e) { }
   }
   function loadSettings() {
     try {
-      const s = JSON.parse(localStorage.getItem('emberfrost.settings'));
+      const s = JSON.parse(localStorage.getItem('softfall.settings'));
       if (s) Object.assign(settings, s);
     } catch (e) { }
   }
@@ -5412,9 +5412,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.09'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.10'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.10', 'THE GAME IS CALLED SOFTFALL EVERYWHERE NOW; SAVED SETTINGS RESET ONCE.'],
     ['1.09', 'HOUSEKEEPING: THE DEV NOTES OPEN WITH A SHORT PITCH; NOTHING IN THE GAME CHANGED.'],
     ['1.08', 'HOUSEKEEPING: THE DEV NOTES WERE TRIMMED; NOTHING IN THE GAME CHANGED.'],
     ['1.07', 'SPECTATING IS A PAIR OF ARROWS AROUND THE NAME AT THE TOP OF THE SCREEN - NO HINT TEXT.'],
@@ -5561,7 +5562,7 @@
     state.fade = {
       a: 0, to: 1, spd: 1 / 0.55, color: '#f4f7ff',
       then: () => {
-        try { sessionStorage.setItem('emberfrost.reroll', '1'); } catch (e) { }
+        try { sessionStorage.setItem('softfall.reroll', '1'); } catch (e) { }
         location.href = location.pathname + '?seed=' + next;
       },
     };
@@ -6720,8 +6721,8 @@
   camY = player.y - VIEW_H / 2;
   // landing from a reroll: the whiteout the die left behind clears to the new world
   try {
-    if (sessionStorage.getItem('emberfrost.reroll')) {
-      sessionStorage.removeItem('emberfrost.reroll');
+    if (sessionStorage.getItem('softfall.reroll')) {
+      sessionStorage.removeItem('softfall.reroll');
       state.fade = { a: 1, to: 0, spd: 1 / 0.8, color: '#f4f7ff', then: null };
       state.menu.rolling = 0.5;
     }

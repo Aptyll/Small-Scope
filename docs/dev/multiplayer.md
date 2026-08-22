@@ -1,6 +1,6 @@
 # Player slots, teams and AI
 
-Emberfrost is a free-for-all. Every combatant — the local human, the AI fills, and eventually a
+Softfall is a free-for-all. Every combatant — the local human, the AI fills, and eventually a
 network peer — is a `Player` in the module-scope `players` array, and they all run the same code.
 Read this before adding an ability, an input, or anything a player can do to the world.
 

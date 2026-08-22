@@ -1,4 +1,4 @@
-<h1 align="center">Project: Emberfrost</h1>
+<h1 align="center">Project: Softfall</h1>
 <p align="center">A cozy survival game</p>
 
 <p align="center">
