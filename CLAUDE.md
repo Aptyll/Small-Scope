@@ -8,7 +8,8 @@ rivers, chained dodges, shift-sliding). **Gold is the only currency**; berries a
 Every combatant is a slot in `players` (`MAX_PLAYER_SLOTS` = 6, slot 0 = the local human, the rest
 AI fills, four team colours), each playing one of two champions (WREN the ranger, SKADI the
 skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
-animals. Nobody spawns in a camp: after LOCK IN every slot rides a white eagle along a seed-fixed
+animals. Gold earned is also XP: every slot levels 1→9 (`p.level`, flat +hp/+arrow damage per
+level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides a white eagle along a seed-fixed
 line across the world and jumps (Space) to pick its landing, which becomes its respawn point.
 Nothing else is hostile: the gold mine and the raider waves are gone, so night is visual-only.
 
@@ -86,7 +87,7 @@ don't cite line numbers here, they go stale within a session.
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
-| slots, teams, champions + kits, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `makeInput`, `initPlayers`, `contest` | `players` |
+| slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
@@ -128,6 +129,8 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
 - **Added or removed a light-emitting object?** Call `rebuildLights()`.
 - **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
+- **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is
+  also the XP source; a direct `+=` earns no levels.
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).

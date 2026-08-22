@@ -121,6 +121,7 @@
       tone(659, 0.35, 'triangle', 0.07, 0, 0.18);
       tone(784, 0.5, 'triangle', 0.07, 0, 0.36);
     },
+    levelUp() { tone(523, 0.08, 'square', 0.08); tone(659, 0.08, 'square', 0.08, 0, 0.07); tone(784, 0.16, 'square', 0.09, 0, 0.14); tone(1046, 0.22, 'triangle', 0.08, 0, 0.2); },
     heal() { tone(440, 0.1, 'triangle', 0.08); tone(554, 0.12, 'triangle', 0.08, 0, 0.08); },
     splash() { noise(0.28, 0.28, 750); tone(300, 0.22, 'sine', 0.1, -190); noise(0.14, 0.12, 1500, 0.06); },
   };

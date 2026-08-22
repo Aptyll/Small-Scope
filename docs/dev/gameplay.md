@@ -175,11 +175,13 @@ rather than a different resource (the League model: one number, many ways to ear
 | generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, capped at 6 uncollected |
 
 Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
-(`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` and floats
+(`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` (gold through
+`gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-levels)) and floats
 `+n` in `RES_COLORS[type]`. Only `gold` and `berry` drops exist (fish go straight to `inv`).
 The HUD shows the local wallet's gold counter (`itemGold`) left of the minimap; the berry/fish
 indicators sit top-left as before. `die(p)` keeps 60% of all three. Robots carry a single gold
-number (`b.carry`) and deposit at 8+ into their **owner's** wallet. Drops are neutral: they drift
+number (`b.carry`) and deposit at 8+ into their **owner's** wallet (via `gainGold`, so robot
+income levels the owner too). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
 (`canAfford`/`pay` also take the player whose wallet is meant).
 

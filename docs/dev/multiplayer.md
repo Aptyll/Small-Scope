@@ -23,8 +23,8 @@ fewer bots, a frozen target dummy, or a ghost.
 **A `Player` owns everything the old singleton did** — position, velocity, facing, hp, bow draw,
 dodge charges, slide state, swing state, held tool, i-frames, footprint cadence — plus `id`,
 `team`, `control`, `name`, `spawn` (the tile it landed on from the eagle), `aboard`/`dropT`/`dropU`
-(the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet, an
-`input` struct and an `ai` brain.
+(the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet,
+`level`/`xp` (see [Hero levels](#hero-levels)), an `input` struct and an `ai` brain.
 `reset(first)` places it at `spawn` and clears every transient; it is the single definition of
 "a fresh player", used at boot and on respawn (respawn passes `false`, which grants 3 s i-frames).
 
@@ -66,7 +66,8 @@ instead of the bare constants: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, 
 `dmgBase`/`dmgPow` (arrow damage = base + pow × draw), `spdDmg` (extra damage scaled by the
 shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
 `updatePlayer`'s movement block, `fireArrow`, `tryDodge`, the AI's draw timing, the cursor,
-aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre-match choice).
+aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre-match choice);
+`p.maxHp` is always `levelMaxHp(p)` = kit hp + the level growth below.
 
 | # | Name | Look | Kit |
 | --- | --- | --- | --- |
@@ -78,6 +79,26 @@ The local slot picks on the champion select screen (see
 so a replayed world fields the same roster. Sprites live in `SPRITES.champ[c][team]` — same
 16×16 body plan and frame set as the player, so `drawPlayer`/`drawGhost` just swap the set via
 `champSet(p)`; `SPRITES.playerTeam` is champion 0.
+
+## Hero levels
+
+League-style: every slot has `p.level` (1–`LEVEL_MAX` = 9) and `p.xp`, which is simply lifetime
+gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (drop pickups and robot
+deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
+`levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 10, 25, 45, 70, 100, 135, 175,
+220 — the gap grows by 5 each level, ~220 gold to cap). Spending gold and dying never touch
+`xp`; level and xp are set in the constructor, not `reset()`, so they survive respawn.
+
+Growth is flat and identical for both champions: each level past 1 adds `LVL_HP` (6) to
+`maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
+(`fireArrow` adds it after the kit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
+damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
+plays `SFX.levelUp()` for the local slot.
+
+The level shows as a 7×7 badge in `drawPlayer`, flush against the left edge of the overhead
+bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every
+slot in the bars' backing/track colours with the digit in gold. `DBG.gainGold(n, p?)` pays a
+slot (default local) the way a pickup would, which is how to stage a level.
 
 ## Teams and colours
 

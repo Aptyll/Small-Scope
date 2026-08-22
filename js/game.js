@@ -29,6 +29,15 @@
   const DODGE_CHARGES = 2;
   const DODGE_CD = 3.5;     // seconds to refill one charge
 
+  // Hero levels (League-style, max 9). XP is lifetime gold earned (gainGold), never spent
+  // or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
+  // the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
+  // every arrow, applied on top of the champion kit.
+  const LEVEL_MAX = 9;
+  const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220];
+  const LVL_HP = 6;
+  const LVL_DMG = 1;
+
   // Player slots. Every combatant in the match - the local human, the AI fills,
   // and (later) network peers - is a Player in `players`, so anything written
   // for "the player" is automatically something every slot can do. Only the
@@ -379,7 +388,22 @@
   ];
   function kitOf(p) { return CHAMPS[p.champ].kit; }
   // swap a slot's champion: kit hp applies on the spot (full heal, it's a pre-match choice)
-  function setChamp(p, c) { p.champ = c; p.maxHp = CHAMPS[c].kit.maxHp; p.hp = p.maxHp; }
+  function setChamp(p, c) { p.champ = c; p.maxHp = levelMaxHp(p); p.hp = p.maxHp; }
+  // kit hp plus the flat per-level growth
+  function levelMaxHp(p) { return kitOf(p).maxHp + LVL_HP * (p.level - 1); }
+  // the one way gold enters a wallet: pays the purse and the same amount of XP
+  function gainGold(p, n) {
+    p.inv.gold += n;
+    p.xp += n;
+    while (p.level < LEVEL_MAX && p.xp >= LEVEL_XP[p.level]) levelUp(p);
+  }
+  function levelUp(p) {
+    p.level++;
+    p.maxHp = levelMaxHp(p);
+    p.hp = Math.min(p.maxHp, p.hp + LVL_HP);
+    if (!inAir(p)) floaters.push({ x: p.x, y: p.y - 22, txt: 'LEVEL ' + p.level, color: '#f2cc6a', t: 0, vx: 0, scale: 2, rise: 20 });
+    if (p === player) SFX.levelUp();
+  }
   function champSet(p) { return SPRITES.champ[p.champ][p.team]; }
 
   // one frame of intent - the whole interface between a controller and the sim
@@ -405,6 +429,7 @@
       this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot; respawn returns here
       this.inv = { gold: 0, berry: 0, fish: 0 };
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
+      this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
       this.maxHp = 100;
       this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
       this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
@@ -1127,7 +1152,7 @@
     arrows.push({
       x: p.x, y: p.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
-      t: 0, life: 0.85, dmg: Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus), pow: pw,
+      t: 0, life: 0.85, dmg: Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1), pow: pw,
       owner: p.id, team: p.team, // whose shot it is - it never hits its own side
     });
     if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
@@ -1705,7 +1730,7 @@
 
     const deposit = () => {
       if (b.carry <= 0) return;
-      (players[b.owner] || player).inv.gold += b.carry;
+      gainGold(players[b.owner] || player, b.carry);
       addFloater(hx, hy - 14, '+' + b.carry, RES_COLORS.gold);
       b.carry = 0;
       if (nearPlayer(hx, hy)) SFX.pickup();
@@ -2349,7 +2374,7 @@
           const j = drops.indexOf(d);
           if (j < 0) return;
           drops.splice(j, 1);
-          p.inv[d.type] += d.n;
+          if (d.type === 'gold') gainGold(p, d.n); else p.inv[d.type] += d.n;
           addFloater(p.x, p.y - 14, '+' + d.n, RES_COLORS[d.type]);
           if (p === player) SFX.pickup();
         });
@@ -3284,6 +3309,17 @@
     if (state.mode === 'title') return;
 
     drawHealthBar(p.x - ox, py - 7, p.hp, p.maxHp, 14);
+    // level badge: a 7x7 square flush against the left edge of the bar backing,
+    // spanning the health bar and the stamina bar stacked (py-8 .. py-1), so the
+    // pair reads as one widget. Same backing / track colours as the bars.
+    {
+      const bx = Math.round(p.x - ox) - 15, by = py - 8;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bx, by, 7, 7);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(bx + 1, by + 1, 5, 5);
+      drawPixelText(ctx, String(p.level), bx + 2, by + 1, '#f2cc6a');
+    }
     // rivals carry a name tag in their team colour so a fight stays legible
     if (!local) {
       drawPixelTextShadow(ctx, p.name,
@@ -5171,6 +5207,8 @@
     // hand a slot to an AI, a human, or nobody (a ghost at its camp)
     setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
     placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, respawn, updateAI, contest,
+    // hero levels: pay a slot gold (and XP) the way a pickup would
+    gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
     // action entry points default to the local slot, or take any player
     clickAction: (p) => clickAction(p || player),
     tryWork: (p) => tryWork(p || player),
