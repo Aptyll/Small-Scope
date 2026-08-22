@@ -5353,7 +5353,7 @@
   const PANEL_SLIDE_T = 0.32;
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY'];
   const MENU_BW = 112, MENU_BH = 20;
-  const PATCH_TXT = 'PATCH 1.01'; // printed bottom-right of the title screen
+  const PATCH_TXT = 'PATCH 1.02'; // printed bottom-right of the title screen
 
   function easeOut(t) { t = Math.max(0, Math.min(1, t)); return 1 - (1 - t) * (1 - t) * (1 - t); }
   function easeInOut(t) { t = Math.max(0, Math.min(1, t)); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
@@ -6030,12 +6030,6 @@
         const tx = rr.x + 3, ty = rr.y + 3 - lift;
         drawPixelTextShadow(ctx, SEED_TXT, tx, ty, hv > 0.5 ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
         drawDie(tx + pixelTextWidth(SEED_TXT) + 6, rr.y - lift, hv, now);
-        if (hv > 0.5) {
-          ctx.globalAlpha = a * (hv - 0.5) * 2;
-          const ht = 'ROLL A NEW WORLD';
-          drawPixelTextShadow(ctx, ht, Math.round((VIEW_W - pixelTextWidth(ht)) / 2), rr.y + 16, '#ffd95c', 'rgba(15,22,50,0.9)');
-          ctx.globalAlpha = a;
-        }
       } else {
         drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed);
       }
