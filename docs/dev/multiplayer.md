@@ -26,7 +26,8 @@ dodge charges, slide state, swing state, held tool, i-frames, footprint cadence 
 (the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet,
 `level`/`xp` (see [Hero levels](#hero-levels)), `kills`, an `input` struct and an `ai` brain.
 `reset(first)` places it at `spawn` and clears every transient; it is the single definition of
-"a fresh player", used at boot and on respawn (respawn passes `false`, which grants 3 s i-frames).
+"a fresh player". Only boot calls it now (death is final — see below); the `first` flag still
+decides whether the slot gets 3 s of i-frames, so a future respawn path can pass `false`.
 
 Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireArrow`, `tryDodge`,
 `eatBerry`, `damagePlayer`, `die`, `respawn`, `placeStruct`, …), matching the rest of the file's
@@ -87,7 +88,7 @@ gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (drop pic
 deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
 `levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 10, 25, 45, 70, 100, 135, 175,
 220 — the gap grows by 5 each level, ~220 gold to cap). Spending gold and dying never touch
-`xp`; level and xp are set in the constructor, not `reset()`, so they survive respawn.
+`xp`; level and xp are set in the constructor, not `reset()`, so they would survive a `reset`.
 
 Growth is flat and identical for both champions: each level past 1 adds `LVL_HP` (6) to
 `maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
@@ -136,19 +137,21 @@ same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` fo
 floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
 shooter.
 
-`die(p, src, cause)` marks the slot dead, keeps 60% of its wallet and starts a 2.6 s `respawnT`;
-`updatePlayer` counts it down and calls `respawn(p)`. Only the local slot's death takes the screen
-with it (`state.mode = 'dead'` for the overlay). **The match keeps simulating while you are down** —
-`update()` runs `updatePlay` in both `play` and `dead` mode; only the local overlays (pause, map,
-settings) stop the world.
+`die(p, src, cause)` marks the slot dead for good — no respawn, the wallet kept for the
+standings; `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
+the screen with it (`endMatch('lost')` → `state.mode = 'dead'` and the death overlay: spectate a
+living rival through `viewPlayer()`/`specNext()`, or `toLobby()` back to the title), and every
+death runs `checkLastStanding()`, which ends the match as a win when the local slot is the only one
+left. **The match keeps simulating while you are out** — `update()` runs `updatePlay` in both
+`play` and `dead` mode; only the local overlays (pause, map, settings) stop the world. Full
+detail: [Death is final](gameplay.md#death-is-final).
 
 ### Kills and the event feed
 
 The last two arguments are the whole credit system. `src` is the player who dealt the damage
 (`players[a.owner]` for an arrow, null for the world) and `cause` names what the world did when
 there is no `src` (`DEATH_CAUSE`: `'ice'` for a hole, `'wolf'` for a den's pack). A death with an `src` other than
-the victim bumps `src.kills` — the scoreboard's KILLS column, set in the constructor so it
-survives respawn — and writes `"<killer> SHOT <victim>"` into the feed in the killer's colours;
+the victim bumps `src.kills` — the scoreboard's KILLS column — and writes `"<killer> SHOT <victim>"` into the feed in the killer's colours;
 without one it writes `"<victim> FELL THROUGH THE ICE"` in the victim's. **Any new way to hurt a
 player must pass its `src`**, or the kill goes uncredited and the feed line reads as an accident.
 
@@ -208,7 +211,7 @@ Nowhere, until they land: every active slot boards the eagle in `beginDrop()` an
 `spawn` from `landPlayer()` — the nearest open tile to where it jumped (AI slots jump at a hashed
 fraction of the line, the human where they press Space — drifting with WASD on the way down — or at
 the end of the line). That tile is
-what `respawn()` returns the slot to, and what the bot brain treats as "home". There are no
+what the bot brain treats as "home". There are no
 spawn pockets, no starter rings, and no guaranteed resources near a landing — reading the
 chart during the ride is the whole point. `ringPts` (six points on a ring `SPAWN_D` tiles from
 the centre) is the old camp ring, kept only because river spokes and the keep-clear rules in

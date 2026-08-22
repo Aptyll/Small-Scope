@@ -305,7 +305,7 @@
 
   // ------------------------------------------------------------ state
   const state = {
-    mode: 'title', // title | drop | play | dead  (drop = riding / falling from the eagle)
+    mode: 'title', // title | drop | play | dead  (drop = riding / falling from the eagle; dead = the local slot is out of the match, or it is over)
     time: DAY_LEN * 0.25, // start mid-morning
     elapsed: 0,
     day: 1,
@@ -313,6 +313,10 @@
     darkness: 0,
     shake: 0,
     deadTimer: 0,
+    // out of the match: the overlay's state. over: 'lost' | 'won' | null; view:
+    // 'menu' (the planks) | 'spec' (following a living slot); spec: that slot's
+    // id; sel + hover: the planks' keyboard pick and per-plank hover eases
+    over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
     msg: null, msgT: 0,
     hints: { stump: false },
     loc: null,     // the named place the local player is standing in: { L, t }
@@ -453,7 +457,7 @@
       this.team = slot % TEAM_COUNT;
       this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
       this.name = control === 'human' ? 'YOU' : TEAMS[this.team].name + '-' + (slot + 1);
-      this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot; respawn returns here
+      this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
       this.inv = { gold: 0, berry: 0, fish: 0 };
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
@@ -473,14 +477,14 @@
       this.reset(true);
     }
     get active() { return this.control !== 'none'; }
-    // camp placement + every transient cleared; used at boot and on respawn
+    // camp placement + every transient cleared; used at boot (death is final, so nothing else calls it)
     reset(first) {
       this.x = (this.spawn.tx + 0.5) * TILE;
       this.y = (this.spawn.ty + 0.5) * TILE;
       this.vx = 0; this.vy = 0;
       this.dir = 'down'; this.moving = false; this.animT = 0;
       this.hp = this.maxHp;
-      this.dead = false; this.respawnT = 0;
+      this.dead = false;
       this.charging = false; this.chargeT = 0;      // bow draw state
       this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
       this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
@@ -568,6 +572,7 @@
     keys[e.key.toLowerCase()] = true;
     if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
+    if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
     if (state.mode !== 'play') return;
     // edge-triggered intents go into the local player's input struct; the sim
     // reads and clears them, exactly as it does for an AI slot
@@ -621,6 +626,7 @@
     if (e.button !== 0) return;
     if (state.mode === 'title') { menuClick(); return; }
     if (state.mode === 'drop') { SFX.unlock(); dropJump(player); return; }
+    if (state.mode === 'dead') { SFX.unlock(); deadClick(); return; }
     if (state.mode !== 'play') return;
     if (state.wheel) return;
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
@@ -2501,10 +2507,10 @@
   // what the log says when nobody gets the credit
   const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES' };
 
-  // any slot can go down; only the local one takes the screen with it
+  // any slot can go down, and going down is final - the slot is out of the
+  // match. Only the local one takes the screen with it (the death overlay).
   function die(p, src, cause) {
     p.dead = true;
-    p.respawnT = 2.6;
     p.charging = false;
     p.chargeT = 0;
     p.dodgeT = 0;
@@ -2512,9 +2518,6 @@
     p.sliding = false;
     p.fallT = 0;
     p.swingT = p.swingCd = 0;
-    p.inv.gold = Math.ceil(p.inv.gold * 0.6);
-    p.inv.berry = Math.ceil(p.inv.berry * 0.6);
-    p.inv.fish = Math.ceil(p.inv.fish * 0.6);
     burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
     // kill credit and the feed line: the killer's colours if there is one,
     // otherwise the victim's, since the victim is who the line is about
@@ -2522,23 +2525,38 @@
     if (killer) killer.kills++;
     logEvent(killer ? killer.name + ' SHOT ' + p.name
       : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
-    if (p === player) {
-      state.mode = 'dead';
-      state.mapOpen = false;
-      state.settingsOpen = false;
-      state.wheel = null;
-      state.deadTimer = 0;
-    } else {
-      addFloater(p.x, p.y - 20, p.name + ' DOWN', TEAMS[p.team].mark);
+    if (p === player) endMatch('lost');
+    else {
+      addFloater(p.x, p.y - 20, p.name + ' OUT', TEAMS[p.team].mark);
+      if (state.spec === p.id) specNext(1); // the slot being watched went down: follow another
     }
+    checkLastStanding();
   }
 
-  function respawn(p) {
-    p.reset(false); // back where it landed from the eagle, with i-frames
-    if (p === player) {
-      state.mode = 'play';
-      showMsg('YOU WOKE WHERE YOU LANDED  -  SOME SUPPLIES LOST', 4);
-    }
+  // slots still in the match (riding the eagle counts: it is about to land)
+  function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
+
+  // the local slot alive and every rival gone: the match is won (only once,
+  // and only when there was anyone to beat)
+  function checkLastStanding() {
+    if (state.over || player.dead || aliveCount() !== 1) return;
+    if (players.filter((p) => p.active).length < 2) return;
+    endMatch('won');
+  }
+
+  // the local slot leaves the match, one way or the other: the overlay takes
+  // the screen (mode 'dead'), the sim runs on underneath it
+  function endMatch(how) {
+    state.over = how;
+    state.mode = 'dead';
+    state.deadView = 'menu';
+    state.deadSel = 0;
+    state.deadHover = [0, 0];
+    state.mapOpen = false;
+    state.settingsOpen = false;
+    state.wheel = null;
+    state.deadTimer = 0;
+    player.input = makeInput(); // whatever was held dies with the slot
   }
 
   // ------------------------------------------------------------ ai
@@ -2852,7 +2870,7 @@
     else dark = 1 - (t - (CYCLE - 10)) / 10;
     state.darkness = dark;
 
-    if (state.mode === 'dead') state.deadTimer += dt; // the overlay's fade; respawn is per player
+    if (state.mode === 'dead') state.deadTimer += dt; // the overlay's fade-in
 
     // the match runs on while the local player is down - other slots are still
     // playing. Only the local overlays (pause, map, settings) stop the sim.
@@ -2884,10 +2902,12 @@
         camY += (ty - camY) * Math.min(1, dt * 9);
       }
     } else {
-      const lookX = (mouse.x - VIEW_W / 2) * 0.12;
-      const lookY = (mouse.y - VIEW_H / 2) * 0.12;
-      const tx = player.x - VIEW_W / 2 + lookX;
-      const ty = player.y - VIEW_H / 2 + lookY;
+      const vp = viewPlayer();
+      const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre
+      const lookX = (mouse.x - VIEW_W / 2) * look;
+      const lookY = (mouse.y - VIEW_H / 2) * look;
+      const tx = vp.x - VIEW_W / 2 + lookX;
+      const ty = vp.y - VIEW_H / 2 + lookY;
       if (state.intro > 0) {
         // landing -> play: glide from the touchdown framing onto the play
         // camera with an ease, instead of the play lerp's snap
@@ -3058,11 +3078,9 @@
   function updatePlayer(p, dt) {
     const inp = p.input;
 
-    if (p.dead) {
-      p.respawnT -= dt;
+    if (p.dead) { // out of the match: nothing it wants gets through
       inp.dodge = inp.eatBerry = inp.eatFish = false;
       inp.cmd = null;
-      if (p.respawnT <= 0) respawn(p);
       return;
     }
 
@@ -3706,7 +3724,7 @@
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title' || state.intro > 0) renderTitle(now);
-    if (state.mode === 'dead') renderDead();
+    if (state.mode === 'dead') renderDead(now);
     // both sit above the death dim: the feed and the standings are exactly what
     // you read while you are down. They duck under the map/settings panels.
     if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
@@ -3759,6 +3777,7 @@
       if (!m.panel && menuHit() >= 0) return { kind: 'hand' };
       return { kind: 'arrow' };
     }
+    if (state.mode === 'dead') return { kind: deadHit() >= 0 ? 'hand' : 'arrow' };
     if (state.mode !== 'play') return { kind: 'arrow' };
     if (state.settingsOpen) {
       if (dragSlider) return { kind: 'grab' };
@@ -4652,7 +4671,8 @@
 
   function renderMinimap(now) {
     updateMinimap();
-    const ptx = player.x / TILE, pty = player.y / TILE;
+    const vp = viewPlayer();
+    const ptx = vp.x / TILE, pty = vp.y / TILE;
 
     // backing disc (covers ring + map)
     ctx.fillStyle = 'rgba(12,18,42,0.85)';
@@ -4665,7 +4685,7 @@
       MM_CX - MM_R, MM_CY - MM_R, MM_R * 2, MM_R * 2);
     // the other slots, in team colour, wherever they fall inside the view
     for (const p of players) {
-      if (p === player || !p.active || p.dead || inAir(p)) continue;
+      if (p === vp || !p.active || p.dead || inAir(p)) continue;
       const dx = p.x / TILE - ptx, dy = p.y / TILE - pty;
       if (Math.hypot(dx, dy) > MM_R - 1) continue;
       ctx.fillStyle = 'rgba(15,22,50,0.9)';
@@ -4680,10 +4700,10 @@
       if (Math.hypot(dx, dy) > MM_R - 2) continue;
       drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, 'rgba(15,22,50,0.9)');
     }
-    // player dot
+    // the centre dot: white for you, the team colour for a slot you are watching
     ctx.fillStyle = 'rgba(15,22,50,0.9)';
     ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[vp.team].mark;
     ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
     ctx.restore();
 
@@ -4724,13 +4744,44 @@
     ctx.beginPath(); ctx.arc(MM_CX + Math.cos(ta) * ringR, MM_CY + Math.sin(ta) * ringR, 2, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
 
-    // elapsed play-time, centered beneath the minimap (clear of the fps
-    // readout, which owns the extreme top-right corner)
+    // beneath the minimap, one centred row: slots still in the match (a pixel
+    // figure + the count, no label) then the elapsed play-time. Clear of the
+    // fps readout, which owns the extreme top-right corner.
     const mins = Math.floor(state.elapsed / 60);
     const secs = Math.floor(state.elapsed % 60);
     const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
-    const ccx = Math.round(MM_CX - pixelTextWidth(clock) / 2);
-    drawPixelTextOutline(ctx, clock, ccx, MM_CY + MM_R + 9, '#f4f7ff', '#0f1632');
+    const alive = String(aliveCount());
+    const rowW = ALIVE_ICON_W + 2 + pixelTextWidth(alive) + 7 + pixelTextWidth(clock);
+    let rx = Math.round(MM_CX - rowW / 2);
+    const ry = MM_CY + MM_R + 9;
+    drawAliveIcon(rx, ry - 1, '#f4f7ff', '#0f1632');
+    rx += ALIVE_ICON_W + 2;
+    drawPixelTextOutline(ctx, alive, rx, ry, '#f4f7ff', '#0f1632');
+    rx += pixelTextWidth(alive) + 7;
+    drawPixelTextOutline(ctx, clock, rx, ry, '#f4f7ff', '#0f1632');
+  }
+
+  // the "players left" glyph: a hooded figure, 5x7, stamped with the same 1px
+  // rim the outline font uses so it reads on snow beside the count
+  const ALIVE_ICON = [
+    '.###.',
+    '#####',
+    '#.#.#',
+    '.###.',
+    '#####',
+    '#####',
+    '#...#',
+  ];
+  const ALIVE_ICON_W = 5;
+  function drawAliveIcon(x, y, color, outline) {
+    const stamp = (ox, oy, c) => {
+      ctx.fillStyle = c;
+      for (let r = 0; r < ALIVE_ICON.length; r++)
+        for (let q = 0; q < ALIVE_ICON_W; q++)
+          if (ALIVE_ICON[r][q] === '#') ctx.fillRect(x + q + ox, y + r + oy, 1, 1);
+    };
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (ox || oy) stamp(ox, oy, outline);
+    stamp(0, 0, color);
   }
 
   function renderUI(now) {
@@ -4743,14 +4794,15 @@
     ctx.save();
     ctx.translate(Math.round(-slide * 60), 0);
 
+    const out = state.mode === 'dead'; // the local wallet is moot once you are out
     // berries: consumable indicator, top-left (health lives on the in-world bar)
-    if (inv.berry > 0) {
+    if (inv.berry > 0 && !out) {
       ctx.drawImage(SPRITES.itemBerry, 5, 5);
       drawPixelTextOutline(ctx, String(inv.berry), 15, 7, '#f4f7ff', '#0f1632');
       drawPixelTextOutline(ctx, '(Q)', 17 + pixelTextWidth(String(inv.berry)), 7, '#9fb6d8', '#0f1632');
     }
     // fish: the bigger meal, right below the berries
-    if (inv.fish > 0) {
+    if (inv.fish > 0 && !out) {
       ctx.drawImage(SPRITES.itemFish, 5, 15);
       drawPixelTextOutline(ctx, String(inv.fish), 15, 17, '#f4f7ff', '#0f1632');
       drawPixelTextOutline(ctx, '(F)', 17 + pixelTextWidth(String(inv.fish)), 17, '#9fb6d8', '#0f1632');
@@ -4772,6 +4824,7 @@
     resW += resGap * (res.length - 1);
     let rx = MM_CX - MM_R - 10 - resW;
     const ryTop = 5;
+    if (out) res.length = 0;
     for (const [spr, n] of res) {
       ctx.drawImage(SPRITES[spr], rx, ryTop);
       drawPixelTextOutline(ctx, String(n), rx + 10, ryTop + 2, '#f4f7ff', '#0f1632');
@@ -4948,7 +5001,7 @@
         if (p === player) drawPixelTextShadow(ctx, '>', x + 9, ry + 1, '#ffd95c', shadow);
         drawPixelTextShadow(ctx, p.name, x + 14, ry + 1, playerTint(p), shadow);
         if (p.dead) {
-          drawPixelTextShadow(ctx, 'DOWN', x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
+          drawPixelTextShadow(ctx, 'OUT', x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
         }
         const vals = [String(p.level), String(p.inv.gold), String(p.kills)];
         const cols = ['#cfe0ff', '#f2cc6a', '#ff9a8a'];
@@ -5359,9 +5412,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.05'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.06'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.06', 'DEATH IS FINAL: YOU SPECTATE OR GO BACK TO THE LOBBY, AND THE HUD COUNTS WHO IS LEFT.'],
     ['1.05', 'THE PATCH NOTES SCROLL, AND THE TITLE HIDES WHILE A PANEL IS OPEN.'],
     ['1.04', 'THE PATCH TAG NOW OPENS THESE NOTES.'],
     ['1.03', 'A FOURTH PLACEHOLDER BUTTON JOINS THE MENU AND THE WHOLE COLUMN SITS HIGHER.'],
@@ -6186,15 +6240,126 @@
     }
   }
 
-  function renderDead() {
+  // ------------------------------------------------------------ death & spectate
+  // Death is final: the local slot's death (or its win, once every rival is
+  // gone) puts the game in mode 'dead' with the match running on underneath.
+  // The overlay offers two planks - SPECTATE follows a living slot (click or
+  // the arrows cycle, ESC comes back), LOBBY fades out and reloads into the
+  // title screen on the same seed. viewPlayer() is who the camera and minimap
+  // frame, and the only thing the rest of the file needs to know about any of it.
+  const DEAD_BW = 112, DEAD_BH = 20, DEAD_GAP = 12; // the title menu plank, side by side
+  const DEAD_ITEMS = { lost: ['SPECTATE', 'LOBBY'], won: ['KEEP PLAYING', 'LOBBY'] };
+
+  function viewPlayer() {
+    const q = state.spec >= 0 ? players[state.spec] : null;
+    return q && q.active && !q.dead ? q : player;
+  }
+
+  function deadLayout() {
+    const items = DEAD_ITEMS[state.over] || DEAD_ITEMS.lost;
+    const w = items.length * DEAD_BW + (items.length - 1) * DEAD_GAP;
+    const x0 = Math.round((VIEW_W - w) / 2), y = Math.round(VIEW_H / 2) + 10;
+    return items.map((label, i) => ({ x: x0 + i * (DEAD_BW + DEAD_GAP), y, w: DEAD_BW, h: DEAD_BH, label }));
+  }
+
+  // which plank is under the pointer (-1 for none); the overlay must have faded in
+  function deadHit() {
+    if (state.deadView !== 'menu' || state.deadTimer < 0.5) return -1;
+    const rs = deadLayout();
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i];
+      if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
+    }
+    return -1;
+  }
+
+  function deadActivate(i) {
+    const label = deadLayout()[i].label;
+    SFX.place();
+    if (label === 'LOBBY') toLobby();
+    else if (label === 'SPECTATE') { state.deadView = 'spec'; state.spec = -1; specNext(1); }
+    else if (label === 'KEEP PLAYING') { state.mode = 'play'; }
+  }
+
+  // follow the next living rival in slot order (dir -1 for the previous one)
+  function specNext(dir) {
+    const n = players.length;
+    let i = state.spec;
+    for (let k = 0; k < n; k++) {
+      i = ((i + dir) % n + n) % n;
+      const q = players[i];
+      if (q !== player && q.active && !q.dead) { state.spec = i; return; }
+    }
+    state.spec = -1; // nobody left to watch
+  }
+
+  // back to the title screen: fade to dark and reload this seed
+  function toLobby() {
+    if (state.fade) return;
+    state.fade = {
+      a: 0, to: 1, spd: 1 / 0.5, color: '#06081a',
+      then: () => { location.href = location.pathname + location.search; },
+    };
+  }
+
+  function deadKey(k) {
+    if (state.fade) return;
+    if (state.deadView === 'spec') {
+      if (k === 'escape' || k === 'backspace' || k === 'enter' || k === ' ') { state.deadView = 'menu'; SFX.pickup(); }
+      else if (k === 'arrowright' || k === 'd') { specNext(1); SFX.pickup(); }
+      else if (k === 'arrowleft' || k === 'a') { specNext(-1); SFX.pickup(); }
+      return;
+    }
+    if (state.deadTimer < 0.5) return;
+    const n = deadLayout().length;
+    if (k === 'arrowleft' || k === 'a') { state.deadSel = (state.deadSel + n - 1) % n; SFX.pickup(); }
+    else if (k === 'arrowright' || k === 'd') { state.deadSel = (state.deadSel + 1) % n; SFX.pickup(); }
+    else if (k === 'enter' || k === ' ') deadActivate(state.deadSel);
+  }
+
+  function deadClick() {
+    if (state.fade) return;
+    if (state.deadView === 'spec') { specNext(1); SFX.pickup(); return; }
+    const h = deadHit();
+    if (h >= 0) { state.deadSel = h; deadActivate(h); }
+  }
+
+  function renderDead(now) {
+    const rs = deadLayout();
+    const hot = deadHit();
+    if (state.deadView === 'spec') {
+      // a thin plate along the bottom: who is being watched and how to leave
+      const vp = viewPlayer();
+      const name = vp === player ? 'NOBODY LEFT TO WATCH' : vp.name;
+      const hint = 'CLICK OR ARROWS  NEXT   ESC  BACK';
+      const w = Math.max(pixelTextWidth(name), pixelTextWidth(hint)) + 24;
+      const bx = Math.round((VIEW_W - w) / 2), by = VIEW_H - 36;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bx, by, w, 24);
+      ctx.fillStyle = vp === player ? '#8f9cc4' : TEAMS[vp.team].mark;
+      ctx.fillRect(bx, by, w, 1); ctx.fillRect(bx, by + 23, w, 1);
+      drawPixelTextShadow(ctx, name, Math.round((VIEW_W - pixelTextWidth(name)) / 2), by + 4,
+        vp === player ? '#8f9cc4' : playerTint(vp), '#0a0e23');
+      drawPixelTextShadow(ctx, hint, Math.round((VIEW_W - pixelTextWidth(hint)) / 2), by + 14, '#7a8bb8', '#0a0e23');
+      return;
+    }
     const a = Math.min(0.75, state.deadTimer * 0.6);
     ctx.fillStyle = 'rgba(8,10,28,' + a + ')';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-    if (state.deadTimer > 0.5) {
-      const t = 'YOU COLLAPSED IN THE SNOW';
-      drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 14, '#a8c4ff', '#0a0e23', 2);
-      const t2 = 'SOME SUPPLIES WERE LOST...';
-      drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, VIEW_H / 2 + 8, '#8f9cc4', '#0a0e23');
+    if (state.deadTimer < 0.5) return;
+    const won = state.over === 'won';
+    const t = won ? 'LAST ONE STANDING' : 'YOU COLLAPSED IN THE SNOW';
+    drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 24, won ? '#ffd95c' : '#a8c4ff', '#0a0e23', 2);
+    const t2 = won ? 'EVERY RIVAL IS DOWN' : 'YOU ARE OUT OF THE MATCH';
+    drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, VIEW_H / 2 - 6, '#8f9cc4', '#0a0e23');
+    // the planks: hovered or keyboard-picked is hot, the ease runs per plank
+    // (the hover eases only step while the overlay is up, so they use the frame delta)
+    const dt = Math.min(0.05, now - (renderDead.last || now)); renderDead.last = now;
+    for (let i = 0; i < rs.length; i++) {
+      const want = (hot >= 0 ? hot === i : state.deadSel === i) ? 1 : 0;
+      state.deadHover[i] += (want - state.deadHover[i]) * Math.min(1, dt * 14);
+      const hv = state.deadHover[i];
+      drawMenuButton(rs[i], rs[i].label, hv, now, false); // prints its own 2x label
     }
   }
 
@@ -6204,7 +6369,7 @@
   // to DROP_ROWS, a chart in the corner shows the line and the bird, and the
   // rider jumps with Space/Enter/E/click (AI slots jump at their own hashed
   // fraction of the route). A jumper free-falls for FALL_T onto the nearest
-  // open tile, which becomes its respawn point; the human's landing snaps the
+  // open tile, which becomes its spawn tile (the bot brain's home); the human's landing snaps the
   // view back to base zoom and runs the HUD slide-in. If the rider never jumps,
   // the end of the line jumps for them. state.drop outlives mode 'drop' - the
   // eagle keeps flying (and dropping bots) until it is off the map.
@@ -6267,7 +6432,7 @@
   }
 
   // touchdown: the nearest open tile to the fall point becomes the slot's
-  // position and its respawn tile. Only the local landing changes the mode.
+  // position and its spawn tile. Only the local landing changes the mode.
   function landPlayer(p) {
     const ftx = Math.floor(p.x / TILE), fty = Math.floor(p.y / TILE);
     let best = null;
@@ -6533,7 +6698,7 @@
     get inv() { return player.inv; },
     // hand a slot to an AI, a human, or nobody (a ghost at its camp)
     setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
-    placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, respawn, updateAI, contest,
+    placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
     // hero levels: pay a slot gold (and XP) the way a pickup would
     gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
     // the match readouts: stage feed lines without staging the kills behind

@@ -353,18 +353,25 @@ reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted 
 carried gold shows as a nugget up front), and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
 
-## Death is not game over
+## Death is final
 
-`die(p, src, cause)` marks that slot dead, drops its bow draw, keeps `ceil(60%)` of each resource
-and starts a 2.6 s `respawnT`; `updatePlayer` counts it down and `respawn(p)` puts it back on
-**its own** landing tile (`p.spawn`, set by the eagle drop) with i-frames. It also credits the
-kill and writes the feed line — see [Kills and the event
-feed](multiplayer.md#kills-and-the-event-feed). Only the local slot's death sets
-`state.mode = 'dead'` for the overlay; **TAB still opens the standings while you are down**, which
-is the point of holding them above the dim.
+`die(p, src, cause)` marks that slot dead, drops its bow draw and clears its momentum; there is no
+respawn — a dead slot stays out for the rest of the match (the wallet is untouched, so the
+standings still show what it earned). It also credits the kill and writes the feed line — see
+[Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — and then
+`checkLastStanding()` asks whether the local slot is now the only one left (with at least one
+rival to have beaten), which ends the match as a win. Either way the local slot leaves through
+`endMatch('lost' | 'won')` (the `death & spectate` banner): `state.mode = 'dead'`, every local
+overlay closed, and the death overlay takes the screen with two planks — **SPECTATE** (lost) or
+**KEEP PLAYING** (won), and **LOBBY**. Spectating sets `state.spec` to a living rival's id and
+`viewPlayer()` — the one place the camera and minimap ask who to frame — returns it; click or the
+arrows cycle (`specNext`, slot order, skipping the dead), ESC returns to the planks, and a
+watched slot that dies hands the view to the next. LOBBY (`toLobby`) fades to dark and reloads
+the page on the same seed, which boots into the title screen. **TAB still opens the standings
+while you are out**, which is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
-`drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on while
-you are down. Only the local overlays (paused, map, settings) stop the sim;
+`drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on
+without you. Only the local overlays (paused, map, settings) stop the sim;
 `update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
 runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-menu-title).
 
@@ -382,8 +389,10 @@ still refits the canvas when the browser toggles it.
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
 unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
 it in the extreme top-right corner, drawn just before the seed tag so it survives every overlay,
-and turns red below 45. The elapsed clock in `renderMinimap()` sits centered beneath the
-minimap, so it never collides with the fps readout.
+and turns red below 45. Beneath the minimap `renderMinimap()` prints one centred row: a 5×7
+pixel figure (`ALIVE_ICON`, no label) with `aliveCount()` — slots active and not dead, riders
+included — then the elapsed clock; the row is centred under the minimap, so it never collides
+with the fps readout.
 
 ## Audio
 

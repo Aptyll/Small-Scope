@@ -154,7 +154,8 @@ colour, then once in the text colour — a solid rim on every side, exactly 1 ga
 scale, no blur. The outline colour is the opaque `#0f1632` (the eight passes overlap, so a
 translucent colour would stack unevenly). Sites: floaters (damage numbers, gold, `LEVEL n`),
 rival name tags, the E and fish prompts, the radial-wheel labels, the HUD counters (berry/fish,
-gold, the clock under the minimap), `state.msg`, the fps and seed tags, and the drop-UI text.
+gold, the alive count and clock under the minimap — the alive icon is stamped with the same
+eight-offset rim by `drawAliveIcon`), `state.msg`, the fps and seed tags, and the drop-UI text.
 `drawPixelTextShadow` (a single bottom-right 1 px shadow) remains for text sitting on a panel,
 plank or overlay — the settings/map panels, the main menu, the death overlay, the scoreboard and
 the event feed's plates — where a full outline reads heavy. Checked at noon on open snow and at
@@ -218,7 +219,7 @@ is **lifetime gold earned** (`p.xp`), not the purse — spending gold on a build
 it is the number levels already run on — while the GOLD column shows the purse, so a slot that has
 spent can sit above one showing more gold (its LVL column is the visible tell). A team stripe in
 `TEAMS[team].mark` runs down each group, each row carries a faint team wash (stronger for the
-local slot, which also gets a gold `>`), dead slots dim to 0.55 and gain a `DOWN` tag. The panel
+local slot, which also gets a gold `>`), dead slots dim to 0.55 and gain an `OUT` tag. The panel
 is `SB_W` (168) wide, its height follows the row count, and it is centred on `VIEW_W`/`VIEW_H`
 every frame — no `relayout()` anchors, so it needs nothing on a resize.
 
@@ -231,8 +232,8 @@ frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the
 both the pixel cursor and the browser-cursor fallback read from it. It returns
 `{ kind, mode, dim, frac }`:
 
-- `kind` **arrow** — dead, paused, map, and anywhere in the title/settings/wheel that isn't
-  a widget; **hand** — over a main-menu item (`menuHit()`), a settings widget (`settingsHit()`, shared with the click handler
+- `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
+  a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree) or a live wheel segment; **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.

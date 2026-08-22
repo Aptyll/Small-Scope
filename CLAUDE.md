@@ -10,8 +10,8 @@ AI fills, four team colours), each playing one of two champions (WREN the ranger
 skater — a look plus a kit read via `kitOf(p)`), and arrows hurt rival players exactly as they hurt
 animals. Gold earned is also XP: every slot levels 1→9 (`p.level`, flat +hp/+arrow damage per
 level, a badge beside the overhead bars). Nobody spawns in a camp: after LOCK IN every slot rides
-a white eagle along a seed-fixed line and jumps (Space) to pick its landing, which becomes its
-respawn point. What they are picking between is **landmarks** — named places worldgen scatters
+a white eagle along a seed-fixed line and jumps (Space) to pick its landing. **Death is final** — a slot that goes down is out of the
+match (the local one spectates or returns to the lobby). What they are picking between is **landmarks** — named places worldgen scatters
 and every map labels: a **WOLF DEN** (a pack that hunts you, the only hostile thing in the world)
 and a **ROOKERY** (dead snags full of flighty birds). Nothing else is hostile, so night is
 otherwise visual-only.
@@ -107,6 +107,7 @@ don't cite line numbers here, they go stale within a session.
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
+| the death / win overlay, spectating, back to the lobby, who the camera frames | `endMatch`, `viewPlayer`, `specNext`, `toLobby`, `renderDead` | `death & spectate` |
 | the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 
