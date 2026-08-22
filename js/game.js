@@ -600,6 +600,13 @@
       inp.cmd = null;
       if (p.charging) { p.charging = false; p.chargeT = 0; }
       p.firePrev = false;
+      // the one thing that works mid-air: WASD drifts the fall (updateDrop reads it)
+      if (state.mode === 'drop' && !state.paused) {
+        if (keys['w'] || keys['arrowup']) inp.my -= 1;
+        if (keys['s'] || keys['arrowdown']) inp.my += 1;
+        if (keys['a'] || keys['arrowleft']) inp.mx -= 1;
+        if (keys['d'] || keys['arrowright']) inp.mx += 1;
+      }
       return;
     }
     let mx = 0, my = 0;
@@ -4860,6 +4867,7 @@
   const EAGLE_SPD = 170;      // px/s along the route
   const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
   const FALL_T = 1.3;         // seconds of free fall
+  const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
   const DROP_ALT = 56;        // screen px between the bird / a faller and its shadow
   const EAGLE_SCALE = 2;      // the bird is high above the ground: drawn at 2x
 
@@ -4963,6 +4971,12 @@
         if (d.prog >= p.dropU) dropJump(p); // the end of the line drops the human too
       } else if (p.dropT > 0) {
         p.dropT -= dt;
+        // steer the fall: the input axis drifts the landing point
+        const dm = Math.hypot(p.input.mx, p.input.my);
+        if (dm > 0) {
+          p.x = Math.max(TILE, Math.min(WORLD * TILE - TILE, p.x + p.input.mx / dm * DRIFT_SPD * dt));
+          p.y = Math.max(TILE, Math.min(WORLD * TILE - TILE, p.y + p.input.my / dm * DRIFT_SPD * dt));
+        }
         if (p.dropT <= 0) landPlayer(p);
       }
     }
@@ -5107,7 +5121,7 @@
       const t3 = 'THE EAGLE DROPS YOU AT THE END OF ITS LINE';
       drawPixelTextShadow(ctx, t3, Math.round(cxm - pixelTextWidth(t3, ts) / 2), VIEW_H - 14 * ts, '#9fb6d8', 'rgba(15,22,50,0.9)', ts);
     } else {
-      const t1 = 'BRACE';
+      const t1 = 'WASD - DRIFT';
       drawPixelTextShadow(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#f4f7ff', 'rgba(15,22,50,0.9)', ts);
     }
   }

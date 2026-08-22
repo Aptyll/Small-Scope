@@ -158,7 +158,8 @@ when you extend the ladder.
 
 Nowhere, until they land: every active slot boards the eagle in `beginDrop()` and gets its
 `spawn` from `landPlayer()` — the nearest open tile to where it jumped (AI slots jump at a hashed
-fraction of the line, the human where they press Space, or at the end of the line). That tile is
+fraction of the line, the human where they press Space — drifting with WASD on the way down — or at
+the end of the line). That tile is
 what `respawn()` returns the slot to, and what the bot brain treats as "home". There are no
 spawn pockets, no starter rings, and no guaranteed resources near a landing — reading the
 chart during the ride is the whole point. `ringPts` (six points on a ring `SPAWN_D` tiles from

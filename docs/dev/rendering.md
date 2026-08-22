@@ -230,8 +230,9 @@ mode `drop`, refits the view to `DROP_ROWS` around its centre and starts the men
 flies the line at `EAGLE_SPD` (170 px/s, ~14–18 s); `updateDrop` (called from `updatePlay`, so
 pause stops it) moves it, carries everyone aboard with it, jumps each AI slot at its hashed
 `p.dropU` (0.12–0.88 of the line, scattered ±4 tiles off it) and the human at the end if they
-never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T` (1.3 s) straight
-down; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object and no
+never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T` (1.3 s), steering
+with WASD/arrows at `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the
+movement axis alive in mode `drop` while zeroing everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object and no
 water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow burst.
 Only the human's landing changes mode: `play`, `applyView()` back to base zoom centred on the
 landing, `shake`, and the landing intro above. `state.drop` outlives the mode: the eagle keeps
@@ -247,7 +248,7 @@ chart (`mapCv` at 1× when `VIEW_H ≥ 500`, else ½×, so pixels stay even) wit
 under a dashed gold line, the flown part solid, the end-of-line marker, the bird as a white
 diamond with a pulsing ring, landed rivals as team pips and your own red diamond once you have
 jumped; top centre the pulsing `SPACE - JUMP` prompt with a draining time-left bar (red under
-3 s) and seconds, or `BRACE` while falling. Text scale follows the view (2× when tall).
+3 s) and seconds, or `WASD - DRIFT` while falling. Text scale follows the view (2× when tall).
 
 Airborne slots (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
 drops, wildlife scares, `enemyOf`, the y-sorted draws, the minimap and the M map.
