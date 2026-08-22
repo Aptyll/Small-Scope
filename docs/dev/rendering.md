@@ -298,8 +298,11 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
   slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands); PATCH
   NOTES is `patchPanelCv`, opened by clicking the `PATCH_TXT` tag bottom-right (`patchTagRect` /
-  `overPatchTag`; the tag turns gold with an underline on hover) and baked from `PATCH_NOTES`,
-  newest first, word-wrapped, entries that would overflow the slab dropped.
+  `overPatchTag`; the tag turns gold with an underline on hover): the frame is baked once, the
+  entries (newest first, word-wrapped) into `patchNotesCv` as tall as they need, and render blits
+  the `PN_H` window at `menu.patchScroll`. Past one window a pixel scrollbar appears (`drawPatchBar`:
+  iron rail, gilt thumb, ice nubs) — wheel, Up/Down, the nubs (step) and the track (page) move it.
+  Any open panel ducks the logo to zero alpha.
 - **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
   over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on
   the left (`drawChampCard`: portrait well + name + role), the highlighted one drawn 6× in the

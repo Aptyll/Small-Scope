@@ -322,7 +322,8 @@
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
     // the open sub-panel ('settings' | 'help' | null) and its slide progress
-    menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row panel: null, panelT: 0, closing: false,
+    menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row
+      panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
       moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
       // champion select: which screen the menu shows, its cross-fade, the
       // highlighted champion, per-card hover eases, swap pop, lock-in hold
@@ -638,6 +639,10 @@
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   canvas.addEventListener('wheel', (e) => {
+    if (state.mode === 'title') {
+      if (state.menu.panel === 'patch') { e.preventDefault(); patchScrollBy(e.deltaY > 0 ? 16 : -16); }
+      return;
+    }
     if (state.mode !== 'play') return;
     e.preventDefault();
     if (state.mapOpen || state.settingsOpen || state.wheel) return;
@@ -5354,9 +5359,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.04'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.05'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.05', 'THE PATCH NOTES SCROLL, AND THE TITLE HIDES WHILE A PANEL IS OPEN.'],
     ['1.04', 'THE PATCH TAG NOW OPENS THESE NOTES.'],
     ['1.03', 'A FOURTH PLACEHOLDER BUTTON JOINS THE MENU AND THE WHOLE COLUMN SITS HIGHER.'],
     ['1.02', 'THE SEED ROW NO LONGER SHOWS A CAPTION WHEN HOVERED.'],
@@ -5420,6 +5426,7 @@
   function openMenuPanel(kind) {
     const m = state.menu;
     m.panel = kind; m.panelT = 0; m.closing = false;
+    m.patchScroll = 0;
     SFX.place();
   }
   function closeMenuPanel() {
@@ -5445,6 +5452,8 @@
     if (m.screen === 'select') { if (m.screenT >= 1) selectKey(k); return; }
     if (m.panel) {
       if (k === 'escape' || k === 'backspace' || (m.panel !== 'settings' && (k === 'enter' || k === ' '))) closeMenuPanel();
+      else if (m.panel === 'patch' && (k === 'arrowup' || k === 'w')) patchScrollBy(-8);
+      else if (m.panel === 'patch' && (k === 'arrowdown' || k === 's')) patchScrollBy(8);
       return;
     }
     if (k === 'arrowup' || k === 'w') menuSelect(m.sel - 1);
@@ -5460,6 +5469,7 @@
     if (m.panel) {
       if (!menuPanelReady()) return;
       if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
+      if (m.panel === 'patch' && overMenuPanel()) { patchPanelClick(mouse.x - SET_X, mouse.y - SET_Y); return; }
       if (!overMenuPanel()) closeMenuPanel();
       return;
     }
@@ -5822,15 +5832,26 @@
     drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
   }
 
-  // the patch notes: one line per patch, version in gold, sentence wrapped
-  // beside it; newest first, and whatever does not fit the slab is dropped
+  // the patch notes: the slab frame is baked once (patchPanelCv), the entries -
+  // version in gold, sentence word-wrapped beside it, newest first - into a
+  // canvas as tall as they need (patchNotesCv), and render blits the PN_H-px
+  // window at menu.patchScroll through the frame. When the entries outgrow the
+  // window a scrollbar appears on the right: wheel, up/down keys, clicking the
+  // nubs or the track all move it.
+  const PN_Y = 24, PN_H = SET_H - 24 - 18; // the window: below the title, above the hint
+  const PN_BAR_X = SET_W - 13, PN_BAR_W = 6;
   const patchPanelCv = document.createElement('canvas');
   patchPanelCv.width = SET_W; patchPanelCv.height = SET_H;
+  const patchNotesCv = document.createElement('canvas');
   function buildPatchPanel() {
     const g = patchPanelCv.getContext('2d');
     bakeFrostSlab(g, SET_W, SET_H, 'PATCH NOTES');
-    const x0 = 14, x1 = 40, maxW = SET_W - x1 - 14, yMax = SET_H - 24;
-    let y = 24;
+    const hint = 'ESC BACK';
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
+    // lay the entries out once to learn the height, then paint them
+    const x0 = 14, x1 = 40, maxW = PN_BAR_X - 6 - x1;
+    const rows = [];
+    let y = 0;
     for (const [v, text] of PATCH_NOTES) {
       const lines = [];
       let line = '';
@@ -5839,13 +5860,68 @@
         if (pixelTextWidth(next) > maxW && line) { lines.push(line); line = word; } else line = next;
       }
       if (line) lines.push(line);
-      if (y + lines.length * 8 > yMax) break;
-      drawPixelText(g, v, x0, y, '#ffd95c');
-      for (const l of lines) { drawPixelText(g, l, x1, y, '#9fb6d8'); y += 8; }
-      y += 4;
+      rows.push({ v, lines, y });
+      y += lines.length * 8 + 4;
     }
-    const hint = 'ESC BACK';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 190, '#5a6690');
+    patchNotesCv.width = SET_W; patchNotesCv.height = Math.max(PN_H, y);
+    const n = patchNotesCv.getContext('2d');
+    for (const r of rows) {
+      drawPixelText(n, r.v, x0, r.y, '#ffd95c');
+      r.lines.forEach((l, i) => drawPixelText(n, l, x1, r.y + i * 8, '#9fb6d8'));
+    }
+  }
+  function patchScrollMax() { return Math.max(0, patchNotesCv.height - PN_H); }
+  function patchScrollBy(d) {
+    const m = state.menu;
+    m.patchScroll = Math.max(0, Math.min(patchScrollMax(), m.patchScroll + d));
+  }
+  // the scrollbar's pieces in panel space: nubs at both ends, the track between
+  function patchBarLayout() {
+    const track = { x: PN_BAR_X, y: PN_Y + 6, w: PN_BAR_W, h: PN_H - 12 };
+    const max = patchScrollMax();
+    const th = Math.max(8, Math.round(track.h * PN_H / patchNotesCv.height));
+    const ty = track.y + Math.round((track.h - th) * (max ? state.menu.patchScroll / max : 0));
+    return {
+      track, thumb: { x: PN_BAR_X, y: ty, w: PN_BAR_W, h: th },
+      up: { x: PN_BAR_X, y: PN_Y, w: PN_BAR_W, h: 5 }, down: { x: PN_BAR_X, y: PN_Y + PN_H - 5, w: PN_BAR_W, h: 5 },
+    };
+  }
+  // a click inside the slab (panel-space px): nubs step, the track pages
+  function patchPanelClick(px, py) {
+    if (!patchScrollMax()) return;
+    const { track, thumb, up, down } = patchBarLayout();
+    const inR = (r) => px >= r.x - 2 && px < r.x + r.w + 2 && py >= r.y && py < r.y + r.h;
+    if (inR(up)) patchScrollBy(-8);
+    else if (inR(down)) patchScrollBy(8);
+    else if (inR(track)) patchScrollBy(py < thumb.y ? -PN_H : py >= thumb.y + thumb.h ? PN_H : 0);
+  }
+  // iron rail, gilt thumb with grip notches, ice nubs - on the main ctx at the slab's origin
+  function drawPatchBar(ox, oy) {
+    if (!patchScrollMax()) return;
+    const { track, thumb, up, down } = patchBarLayout();
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(ox + track.x - 1, oy + track.y - 1, track.w + 2, track.h + 2);
+    ctx.fillStyle = '#1c2750'; ctx.fillRect(ox + track.x, oy + track.y, track.w, track.h);
+    ctx.fillStyle = '#0f1632'; ctx.fillRect(ox + track.x + 2, oy + track.y, 2, track.h); // a groove down the rail
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(ox + thumb.x - 1, oy + thumb.y - 1, thumb.w + 2, thumb.h + 2);
+    ctx.fillStyle = '#c89a3c'; ctx.fillRect(ox + thumb.x, oy + thumb.y, thumb.w, thumb.h);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(ox + thumb.x, oy + thumb.y, thumb.w, 1); ctx.fillRect(ox + thumb.x, oy + thumb.y, 1, thumb.h);
+    ctx.fillStyle = '#8a6a2a'; ctx.fillRect(ox + thumb.x, oy + thumb.y + thumb.h - 1, thumb.w, 1); ctx.fillRect(ox + thumb.x + thumb.w - 1, oy + thumb.y, 1, thumb.h);
+    ctx.fillStyle = '#0a0e23';
+    for (let i = 3; i < thumb.h - 2; i += 3) ctx.fillRect(ox + thumb.x + 2, oy + thumb.y + i, 2, 1);
+    // nubs: ice triangles pointing out of the rail, rows widen away from the tip
+    const tri = (r, dir) => {
+      const cx = ox + r.x + (r.w >> 1), tip = oy + (dir < 0 ? r.y + 1 : r.y + r.h - 2);
+      for (let i = 0; i < 3; i++) {
+        const yy = tip + (dir < 0 ? i : -i);
+        ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - i - 1, yy, 2 * i + 3, 1);
+      }
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx, tip + (dir < 0 ? -1 : 1), 1, 1);
+      for (let i = 0; i < 3; i++) {
+        const yy = tip + (dir < 0 ? i : -i);
+        ctx.fillStyle = i === 0 ? '#f4f7ff' : '#b8cce6'; ctx.fillRect(cx - i, yy, 2 * i + 1, 1);
+      }
+    };
+    tri(up, -1); tri(down, 1);
   }
 
   // ---- champion select ----------------------------------------------------
@@ -6042,7 +6118,7 @@
     const t1 = 'SOFTFALL';
     const bob = Math.sin(now * 1.5) * 2;
     const ly = Math.round(toy + 34 + bob - (1 - logoIn) * 30 - out * 40);
-    const logoA = logoIn * (1 - out) * (1 - pan * 0.85) * (1 - sc);
+    const logoA = logoIn * (1 - out) * (1 - pan) * (1 - sc);
     const lw = pixelTextWidth(t1, 4);
     const lx = Math.round((VIEW_W - lw) / 2);
     // a pulsing ember glow behind the letters
@@ -6102,7 +6178,11 @@
     if (m.panel) {
       const slide = Math.round((1 - easeOut(m.panelT)) * (VIEW_H - SET_Y + 6));
       if (m.panel === 'settings') renderSettings(now, { bare: true, slide });
-      else ctx.drawImage(m.panel === 'patch' ? patchPanelCv : helpPanelCv, SET_X, SET_Y + slide);
+      else if (m.panel === 'patch') {
+        ctx.drawImage(patchPanelCv, SET_X, SET_Y + slide);
+        ctx.drawImage(patchNotesCv, 0, m.patchScroll, SET_W, PN_H, SET_X, SET_Y + slide + PN_Y, SET_W, PN_H);
+        drawPatchBar(SET_X, SET_Y + slide);
+      } else ctx.drawImage(helpPanelCv, SET_X, SET_Y + slide);
     }
   }
 
