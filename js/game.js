@@ -23,6 +23,10 @@
   const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
   const BOW_CHARGE = 0.9;   // seconds to a full draw
   const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
+  const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
+  const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
+  const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
+  const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
   const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
@@ -556,8 +560,9 @@
   const robots = []; // spawner-owned worker bots
   const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
   const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
+  const ARROW_PX = []; // scratch x,y pairs for one arrow's rasterised body (render only)
   const drops = [];
-  const particles = [];
+  const particles = []; // {x,y,vx,vy,life,color,size,grav} + optional `alpha` fade ceiling
   const floaters = [];
   const footprints = [];
   const lights = []; // rebuilt from placed objects
@@ -1047,7 +1052,7 @@
       const a = rng() * Math.PI * 2, s = rand(0.3, 1) * (spd || 40);
       particles.push({
         x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.7 - (grav ? 20 : 0),
-        life: rand(0.5, 1) * (life || 0.5), maxLife: 1, color, size: rng() < 0.3 ? 2 : 1, grav: grav ? 90 : 0,
+        life: rand(0.5, 1) * (life || 0.5), maxLife: 0.4, color, size: rng() < 0.3 ? 2 : 1, grav: grav ? 90 : 0,
       });
     }
   }
@@ -1525,6 +1530,7 @@
       vx: dx / d * spd, vy: dy / d * spd,
       t: 0, life: 0.85, dmg: Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1), pow: pw,
       owner: p.id, team: p.team, // whose shot it is - it never hits its own side
+      trailD: 0,                 // px of flight banked toward the next trail mote (see updatePlay)
     });
     if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
     else p.dir = dy > 0 ? 'down' : 'up';
@@ -3153,20 +3159,36 @@
     // arrows in flight
     for (let i = arrows.length - 1; i >= 0; i--) {
       const a = arrows[i];
+      const vd = Math.hypot(a.vx, a.vy) || 1;
+      const nx = a.vx / vd, ny = a.vy / vd;
       a.t += dt;
       a.x += a.vx * dt; a.y += a.vy * dt;
+      // a faint mote in the shooter's colour every few px of flight: the shot
+      // reads as a streak, and whose shot it is reads from across the map. The
+      // step just walked is subdivided (rather than one mote per tick) so the
+      // spacing survives both a slow arrow and a long frame; the motes are laid
+      // behind the head at the distance they are owed and left to fade in place.
+      a.trailD += vd * dt;
+      while (a.trailD >= ARROW_TRAIL_STEP) {
+        a.trailD -= ARROW_TRAIL_STEP;
+        particles.push({
+          x: a.x - nx * a.trailD, y: a.y - ny * a.trailD,
+          vx: -nx * 8, vy: -ny * 8,
+          life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE, color: TEAMS[a.team].mark,
+          size: 1, grav: 0, alpha: ARROW_TRAIL_A,
+        });
+      }
       let dead = a.t > a.life;
       if (!dead && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
         dead = true;
         burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
       }
       if (!dead) {
-        const vd = Math.hypot(a.vx, a.vy) || 1;
         // players first: the same shot that drops a deer drops a rival
         for (const t of players) {
           if (a.team === t.team || !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
           if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
-            damagePlayer(t, a.dmg, a.vx / vd, a.vy / vd, players[a.owner]);
+            damagePlayer(t, a.dmg, nx, ny, players[a.owner]);
             burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
             dead = true;
             break;
@@ -3174,7 +3196,6 @@
         }
       }
       if (!dead) {
-        const vd = Math.hypot(a.vx, a.vy) || 1;
         for (const an of animals) {
           if (animalHit(an, a.x, a.y)) {
             an.hp -= a.dmg;
@@ -3185,7 +3206,7 @@
             else an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
             addDmgFloater(an.x, an.y - (an.alt || 0) - 12, a.dmg);
             const kb = 25 + 45 * a.pow;
-            an.kbx = a.vx / vd * kb; an.kby = a.vy / vd * kb;
+            an.kbx = nx * kb; an.kby = ny * kb;
             burst(an.x, an.y - (an.alt || 0) - 4, HIT_PUFF[an.kind] || '#a5825a', 6, 40, 0.4);
             if (nearPlayer(an.x, an.y)) SFX.hit();
             dead = true;
@@ -3847,7 +3868,10 @@
 
     // particles
     for (const p of particles) {
-      ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2.5));
+      // `maxLife` is the seconds a particle spends fading out (bursts hold full
+      // opacity until their last 0.4 s); `alpha` caps how opaque it ever gets,
+      // which is what keeps arrow trail motes a hint of colour rather than sparks
+      ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.maxLife)) * (p.alpha || 1);
       ctx.fillStyle = p.color;
       ctx.fillRect(Math.round(p.x - ex), Math.round(p.y - ey), p.size, p.size);
     }
@@ -3855,18 +3879,36 @@
 
     drawAimLine(ex, ey, now);
 
-    // arrows: short shaft trailing the velocity, bright tip
+    // arrows: a barbed head, a shaft and team-coloured fletching, rasterised
+    // pixel by pixel and rimmed in dark so the shot stays readable over snow.
+    // Points are addressed as (back along the shaft, sideways): i px behind the
+    // head, j px along the perpendicular.
     for (const a of arrows) {
       const vd = Math.hypot(a.vx, a.vy) || 1;
       const nx = a.vx / vd, ny = a.vy / vd;
       const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
-      ctx.strokeStyle = '#d8c8a0';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(hx - nx * 5 + 0.5, hy - ny * 5 + 0.5);
-      ctx.lineTo(hx + 0.5, hy + 0.5);
-      ctx.stroke();
-      ctx.fillStyle = '#f4f7ff';
+      if (hx < -16 || hx > VIEW_W + 16 || hy < -16 || hy > VIEW_H + 16) continue;
+      const qx = -ny, qy = nx;
+      ARROW_PX.length = 0;
+      const at = (i, j) => ARROW_PX.push(
+        Math.round(hx - nx * i + qx * j), Math.round(hy - ny * i + qy * j));
+      at(0, 0); at(1, 0); at(2, 0); at(3, 0); at(4, 0); at(5, 0); at(6, 0); at(7, 0);
+      at(2, -1); at(2, 1);        // barbs: the head still points at any angle
+      const shaftEnd = ARROW_PX.length;
+      at(6, -1); at(6, 1); at(7, -1); at(7, 1); // fletching, in the team colour
+      // rim first: a plus-shaped dilation of every pixel, so the whole arrow
+      // carries a 1px dark edge whatever direction it flies
+      ctx.fillStyle = ARROW_RIM;
+      for (let k = 0; k < ARROW_PX.length; k += 2) {
+        const px = ARROW_PX[k], py = ARROW_PX[k + 1];
+        ctx.fillRect(px - 1, py, 1, 1); ctx.fillRect(px + 1, py, 1, 1);
+        ctx.fillRect(px, py - 1, 1, 1); ctx.fillRect(px, py + 1, 1, 1);
+      }
+      ctx.fillStyle = '#e8dcb4';
+      for (let k = 0; k < shaftEnd; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
+      ctx.fillStyle = TEAMS[a.team].mark;
+      for (let k = shaftEnd; k < ARROW_PX.length; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
+      ctx.fillStyle = '#ffffff'; // the tip stays the brightest pixel on screen
       ctx.fillRect(hx, hy, 1, 1);
     }
 
@@ -5649,9 +5691,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.13'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.14'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.14', 'ARROWS ARE DRAWN PIXEL BY PIXEL, CARRY YOUR TEAM COLOUR ON THE FLETCHING, AND LEAVE A FADING TRAIL.'],
     ['1.13', 'THE MINIMAP IS DRAWN PIXEL BY PIXEL: ITS RIM, MAP EDGE AND DAY RING ARE CRISP.'],
     ['1.12', 'THE SCROLL WHEEL OVER THE MINIMAP ZOOMS IT, AND THE MINIMAP HAS A SOLID RIM.'],
     ['1.11', 'ROBOTS, FLEEING ANIMALS, WOLVES AND BOTS NOW ROUTE AROUND TREES, ROCKS, BUILDINGS AND WATER INSTEAD OF BUMPING INTO THEM.'],

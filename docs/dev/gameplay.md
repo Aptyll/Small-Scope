@@ -155,8 +155,25 @@ renders above the player's health bar),
 and the release edge fires via `fireArrow(p)` — power scales speed (170–360 px/s) and damage
 (4–13). Arrows carry their shooter's `owner`/`team`, live in the `arrows` array, and are updated
 in `updatePlay()`: they die on solid tiles, on a **rival player** (tested before animals — see
-[PvP](multiplayer.md#pvp)), on any animal hit (knockback scales with power), or after 0.85 s. They render as short
-velocity-aligned lines in their own pass (using `ex`/`ey`) and never hit robots or structures.
+[PvP](multiplayer.md#pvp)), on any animal hit (knockback scales with power), or after 0.85 s. They
+never hit robots or structures.
+
+An arrow in flight is drawn in its own pass (using `ex`/`ey`) and **rasterised pixel by pixel**
+rather than stroked, so it stays opaque and crisp at any angle: an 8 px shaft, two barbs 2 px back
+that keep the head pointing whatever direction it flies, and 4 px of fletching at the tail in
+`TEAMS[a.team].mark` — whose shot it is is readable from the arrow itself. Every one of those
+pixels is dilated into `ARROW_RIM` first (a plus-shaped 1 px dark edge) so the shaft reads over
+snow, and the tip is left pure white. The body is built into the `ARROW_PX` scratch array, and a
+shot off the edge of the view is skipped before any of it runs.
+
+Behind it, each arrow lays a **trail of team-coloured motes** into `particles`, one every
+`ARROW_TRAIL_STEP` (4) px of *flight distance* — not per tick, so a slow arrow streaks as evenly
+as a fast one, and a long frame is subdivided instead of leaving a gap. Motes are dropped at the
+distance behind the head they are owed (`a.trailD` banks the remainder), drift back at 8 px/s and
+fade from `ARROW_TRAIL_A` (0.7) over `ARROW_TRAIL_LIFE` (0.22 s), leaving a tail that thins out
+behind the shot. The particle draw pass is what makes that possible: a particle's
+`maxLife` is the seconds it spends fading (`burst` uses 0.4) and its optional `alpha` caps how
+opaque it ever gets. Particles draw before the arrows, so a trail always sits under its own shaft.
 Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
 (0.9 s) is a full draw.
 
