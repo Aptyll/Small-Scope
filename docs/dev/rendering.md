@@ -23,6 +23,9 @@ resolution setting**; camera zoom is a gameplay feature (below), not a display o
 - `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get pillarbox
   bars instead of extra vision — the SC2 rule. Narrower screens simply see less width. A guard
   keeps the view at least 320×240 so the UI panels always fit.
+- A third canvas, `#replay`, sits *above* `#game` and carries the replay window at device
+  resolution; see [Replay](#replay-the-last-four-seconds). It is the only thing drawn outside
+  `#game`'s pixel grid, and the only reason is that the grid has too few pixels there.
 - The bars are **themed, not black**: a second full-window canvas (`#bars`, z-order under
   `#game`, `pointer-events: none`) carries a static frost-panel frame — night slab, mottling,
   ice crystals, icicle fringes on the top and bottom edges, and an icy bevel hugging the game
@@ -76,9 +79,12 @@ stump / finished structure, or the wheel's target) → the E work prompt (`drawW
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
 eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` (snow, see below) →
-`renderVignettes` → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
+`renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
+sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
+itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
+`renderReplay` (the replay window, above both the death dim and the pause dim) →
 the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
 [Scoreboard and event feed](#scoreboard-and-event-feed)) →
 fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) → the screen fade
@@ -204,6 +210,75 @@ so the same glyph reads on parchment, on snow and over forest.
   [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
   blotchy).
 
+## Replay: the last four seconds
+
+The `replay` banner keeps a rolling four seconds of what was on screen and plays it back in the
+bottom-left corner while you are **dead** (the planks view, not while spectating) or **paused**.
+It records pixels, not state, so it costs nothing to keep and re-renders nothing to play.
+
+**Why it is not drawn in the game canvas.** The window is `RP_W`×`RP_H` (160×90) *game* px, and a
+480×270 view does not fit in a ninth of itself — eight of every nine pixels are gone before
+anything is drawn, and no amount of stored resolution brings them back. The same corner of the
+*screen* is `RP_W * devScale` px across (640 device px at a 1080p fullscreen's 4× scale), which is
+**more** pixels than the view itself has. So the frame goes to its own canvas, `#replay`
+(z-order above `#game`, `pointer-events: none`), positioned over that rect by `layoutReplay()` —
+which `relayout()` calls, so it follows every resize, fullscreen toggle and camera zoom. The game
+canvas draws only the plate, the frost rim, the playhead and a low-res copy underneath, which
+keeps the feature legible in a plain `canvas.toDataURL()` capture (`POST /shot`) and is covered
+exactly by the overlay on screen.
+
+Fullscreen here is the browser's (F11), which fullscreens the document, so a `position: fixed`
+sibling still renders. Calling `requestFullscreen()` on `#game` itself would render *only* that
+element and the replay window would vanish — fullscreen the document, or move the overlay inside
+whatever element goes fullscreen.
+
+**The ring.** `replayTick(now)` runs once per frame from the pass order above and owns the clock
+(one `Math.min(0.05, …)` delta feeds both the capture cadence and the playhead). While
+`replayLive()` — mode `play`, the local slot alive, and no overlay freezing the sim, i.e. exactly
+the condition `update()` steps on — it blits the finished canvas into slot `rpHead` of one atlas
+canvas every `1/RP_FPS` s and wraps. `RP_SECS` 4 × `RP_FPS` 30 = `RP_N` 120 slots, `RP_COLS` 12
+across; `RP_RATE` 0.5 is the playback speed.
+
+**Capture resolution rides on `devScale`** (device px per game px, the integer `fitCanvas()`
+picks). `rpTarget()` fits the view inside three ceilings — what the corner can show
+(`RP_W * devScale`), the memory cap (`RP_CAP_W`×`RP_CAP_H`, 480×270), and 1:1, since upscaling the
+view would cost memory and add no detail. At a 1080p or 4K fullscreen all three land on the view
+itself, so the capture is **1:1 and nothing is resampled anywhere** — the atlas slot, the overlay
+backing store and the blit out are all the same pixels. A window wide enough to render more than
+the cap loses the excess, which the corner could not have shown anyway.
+
+**A resize does not cost frames.** Each slot records the size it was captured at (`rpFW`/`rpFH`),
+so a change in view or zoom changes what the *next* frames look like and leaves the banked ones
+alone. If the new size needs a bigger slot, `rpEnsure()` allocates a larger atlas and re-blits
+every banked frame into it at its own resolution — only ever upward, so dragging a window about
+does not reallocate on every step. Playback resizes the overlay's backing store to whatever the
+current frame was captured at (the CSS size stays put), which is why a replay spanning a resize
+changes sharpness mid-loop instead of jumping size or losing its history.
+
+**Memory** is `RP_CAP_W * RP_CAP_H * 4 * RP_N` at the ceiling — 62 MB, and the ring only grows to
+what a given window actually captures (a small window with `devScale` 1 stays near 7 MB). This is
+the price of the resolution: it is the biggest allocation in the game, ahead of the 55 MB baked
+ground. `RP_CAP_*`, `RP_FPS` and `RP_SECS` are the knobs.
+
+**Per-frame cost while alive** is one `drawImage` at `RP_FPS`, straight off the finished world
+pass. Canvas-to-canvas stays on the GPU; `getImageData`/`toDataURL` would stall the pipeline every
+capture, so neither is used, and nothing is allocated per frame. The one downscale path (a view
+bigger than the corner) runs with `imageSmoothingEnabled` on `rpCtx` — nearest there would sample
+1 px in 9 and strobe an arrow in flight in and out of the recording.
+
+**Playback.** `replayShowing()` decides; every fresh open restarts at the oldest frame. The
+playhead advances `RP_FPS * RP_RATE` frames a second, so the four seconds take eight to watch and
+then loop at 15 fps on screen. The window wears the standard `#35426e` frost rim with a gold
+playhead sweeping the bottom — no label and no "REPLAY" string: a looping window under a sweeping
+playhead is what a recording looks like. Because the overlay is a DOM layer it is **not** covered
+by anything the game canvas draws, so `renderReplay()` hides it outright when the window is down
+and mirrors `state.fade` onto its `opacity` — otherwise the replay would sit there through the
+LOBBY fade-out.
+
+`DBG.replay` exposes `{ cv, frames, showing(), shot, slot, bytes, W, H, fps, rate, ov }` — `cv` is
+the whole filmstrip and `shot`/`slot`/`bytes` report the live capture size, slot size and atlas
+cost, so a headless driver can check the resolution without playing to a death.
+
 ## Scoreboard and event feed
 
 Two readouts of the **match** rather than of the world, in the `scoreboard & log` banner. Both
@@ -211,7 +286,9 @@ draw after the death overlay, so the dim never touches them — being down is ex
 them — and both duck under the map/settings panels.
 
 **The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
-newest along the bottom. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
+newest along the bottom. It shares that corner with the
+[replay window](#replay-the-last-four-seconds) and steps up by `replayLift()` px for as long as
+that window is open. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
 supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate
 on snow leaves the text nothing to sit on), a 1 px edge in the team's bright `mark`, and the ink
 in `playerTint(p)` so two players on one team read as two people. `updateFx()` ages every line on

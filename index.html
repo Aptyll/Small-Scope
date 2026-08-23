@@ -16,6 +16,9 @@
     image-rendering: crisp-edges;
   }
   #game { position: relative; z-index: 1; background: #0d1524; }
+  /* the replay window's frame, at device resolution over the game canvas's
+     bottom-left corner: the game canvas has too few pixels there to hold it */
+  #replay { position: fixed; z-index: 2; display: none; pointer-events: none; }
   /* decorative frost frame behind the game; visible only as pillarbox bars */
   #bars { position: fixed; top: 0; left: 0; z-index: 0; pointer-events: none; }
 </style>
@@ -23,6 +26,7 @@
 <body>
 <canvas id="bars"></canvas>
 <canvas id="game" width="480" height="270"></canvas>
+<canvas id="replay"></canvas>
 <script src="js/font.js"></script>
 <script src="js/sprites.js"></script>
 <script src="js/audio.js"></script>

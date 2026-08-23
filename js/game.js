@@ -154,7 +154,8 @@
   let zoomEff = 0;   // currently applied steps
   let zoomMax = 0;   // available steps on this window (set by fitCanvas)
 
-  let scale = 2;
+  let scale = 2;    // CSS px per game px
+  let devScale = 2; // DEVICE px per game px (the integer fitCanvas picks)
   function fitCanvas() {
     // pick an integer scale in DEVICE pixels, not CSS pixels: on fractional
     // display scaling (125%/150% Windows) a CSS-integer scale lands game pixels
@@ -168,6 +169,7 @@
     zoomMax = Math.max(0, Math.floor(devH / MIN_ROWS) - dev);
     dev += Math.min(zoomEff, zoomMax);
     scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
+    devScale = dev;    // the replay window captures at this resolution
     // cover the window exactly: ceil leaves at most one game px of overflow,
     // which the body's flex centering splits and overflow:hidden clips
     VIEW_H = Math.ceil(devH / dev);
@@ -383,6 +385,7 @@
     ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
     fitFlakes();
     renderBars();
+    layoutReplay();
   }
 
   // ------------------------------------------------------------ players
@@ -3954,6 +3957,7 @@
     renderLighting(ox, oy, now);
     renderWeather(ex, ey);
     renderVignettes();
+    replayTick(now); // banks the finished world frame - must stay above renderUI
     renderUI(now);
     if (state.mode === 'drop') renderDropUI(now);
     if (state.mode === 'play' && state.wheel) renderWheel(now);
@@ -3962,6 +3966,7 @@
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
     if (state.mode === 'title' || state.intro > 0) renderTitle(now);
     if (state.mode === 'dead') renderDead(now);
+    renderReplay(); // the last four seconds, looping in the bottom-left corner
     // both sit above the death dim: the feed and the standings are exactly what
     // you read while you are down. They duck under the map/settings panels.
     if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
@@ -4899,6 +4904,208 @@
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
+  // ------------------------------------------------------------ replay
+  // A rolling four seconds of what was on screen, kept as pixels rather than as
+  // state, played back in the bottom-left corner while you are dead or paused.
+  //
+  // The window is RP_W x RP_H GAME px, but the frame inside it is NOT drawn into
+  // the game canvas: those 160x90 canvas pixels can only hold a ninth of a
+  // 480x270 view, and no amount of storage fixes that - the detail is gone
+  // before it is drawn. The same corner of the SCREEN is RP_W*devScale wide
+  // (640 device px at a 1080p fullscreen's 4x), which is more pixels than the
+  // view itself has, so the frame goes to its own device-resolution canvas
+  // (#replay) laid over that rect, and the game canvas draws only the plate,
+  // the rim, the playhead and a low-res copy underneath (which keeps the
+  // feature legible in a plain canvas.toDataURL() capture). At a fullscreen
+  // zoom the capture is 1:1 with the view and nothing is resampled at all.
+  //
+  // Capture is one drawImage every 1/RP_FPS s while you are alive, straight off
+  // the finished world pass - never a getImageData / toDataURL readback, and
+  // nothing allocated per frame.
+  const RP_W = 160, RP_H = 90;    // the window, in GAME px: 16:9, a third of the view
+  const RP_SECS = 4;              // seconds held
+  const RP_FPS = 30;              // frames captured per second -> 15fps on screen at RP_RATE
+  const RP_RATE = 0.5;            // playback speed
+  const RP_N = RP_SECS * RP_FPS;  // slots in the ring
+  const RP_COLS = 12;             // atlas grid; RP_N / RP_COLS rows
+  const RP_PAD = 4;               // inset from the bottom-left corner
+  // the biggest slot the ring will ever allocate, and so the memory ceiling:
+  // RP_CAP_W * RP_CAP_H * 4 * RP_N bytes (480x270 -> 62 MB). It is exactly the
+  // view a 1080p or 4K fullscreen renders, so those capture 1:1; a window wide
+  // enough to render more than this loses the excess, which the corner could
+  // not have shown anyway.
+  const RP_CAP_W = 480, RP_CAP_H = 270;
+
+  // the device-resolution layer: sized and placed over the window's rect by
+  // layoutReplay(), which relayout() calls on every canvas-size change
+  const rpOv = document.getElementById('replay');
+  const rpOvx = rpOv.getContext('2d');
+
+  // The ring is one atlas canvas of RP_N slots. Slots are square-off cells of
+  // rpSW x rpSH; each frame records the size it was actually captured at, so a
+  // resize changes what the NEXT frames look like without invalidating - or
+  // rescaling - the ones already banked. The atlas only ever grows.
+  let rpAt = null, rpAtx = null;
+  let rpSW = 0, rpSH = 0;                  // current slot size
+  const rpFW = new Int16Array(RP_N);       // per-frame captured size (0 = empty slot)
+  const rpFH = new Int16Array(RP_N);
+
+  let rpHead = 0;     // slot the next capture goes in
+  let rpCount = 0;    // slots filled, <= RP_N
+  let rpAcc = 0;      // seconds banked toward the next capture
+  let rpPlay = 0;     // playhead, in frames
+  let rpLast = 0;     // previous render's clock; the delta for both timers
+  let rpOpen = false; // was the window up last frame (a fresh open restarts the loop)
+  let rpVis = false, rpAlpha = -1, rpOvW = 0, rpOvH = 0; // last state pushed to the overlay
+
+  // What to capture at, this frame: the view itself, clipped by what the corner
+  // can actually show (its device-pixel size) and by the memory ceiling. Never
+  // an upscale - blowing the view up would cost memory and add no detail.
+  function rpTarget() {
+    const s = Math.min(1, (RP_W * devScale) / VIEW_W, (RP_H * devScale) / VIEW_H,
+      RP_CAP_W / VIEW_W, RP_CAP_H / VIEW_H);
+    return [Math.max(1, Math.round(VIEW_W * s)), Math.max(1, Math.round(VIEW_H * s))];
+  }
+
+  function rpSlotAt(i, sw, sh) { return [(i % RP_COLS) * sw, ((i / RP_COLS) | 0) * sh]; }
+
+  // Grow the atlas so a w x h frame fits a slot, carrying every banked frame
+  // over at its own resolution. Only a resize or a zoom that raises devScale
+  // gets here, and only ever upward, so a window being dragged about does not
+  // reallocate on every step - and no frame is ever dropped for it.
+  function rpEnsure(w, h) {
+    if (rpAt && w <= rpSW && h <= rpSH) return;
+    const nw = Math.max(w, rpSW), nh = Math.max(h, rpSH);
+    const cv = document.createElement('canvas');
+    cv.width = nw * RP_COLS;
+    cv.height = nh * Math.ceil(RP_N / RP_COLS);
+    const cx = cv.getContext('2d');
+    // the capture is a reduction whenever the view outruns the corner, and
+    // nearest would sample 1px in 9 there - an arrow in flight would strobe
+    cx.imageSmoothingEnabled = true;
+    cx.imageSmoothingQuality = 'medium';
+    cx.fillStyle = '#06091a';
+    cx.fillRect(0, 0, cv.width, cv.height); // slots are opaque before they are filled
+    if (rpAt) {
+      for (let i = 0; i < RP_N; i++) {
+        if (!rpFW[i]) continue;
+        const o = rpSlotAt(i, rpSW, rpSH), n = rpSlotAt(i, nw, nh);
+        cx.drawImage(rpAt, o[0], o[1], rpFW[i], rpFH[i], n[0], n[1], rpFW[i], rpFH[i]);
+      }
+    }
+    rpAt = cv; rpAtx = cx; rpSW = nw; rpSH = nh;
+  }
+
+  // Recording runs exactly while the local slot is alive and the sim is
+  // stepping - the same condition update() plays on. The overlays that freeze
+  // the sim would otherwise pack the ring with copies of one still frame, and
+  // death freezes the strip on the four seconds that led to it.
+  function replayLive() {
+    return state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen &&
+      player.active && !player.dead;
+  }
+
+  // up on the death planks and on pause, never under a full-screen panel
+  function replayShowing() {
+    if (!rpCount || window.DBG.hideUI || state.mapOpen || state.settingsOpen) return false;
+    if (state.paused) return true;
+    return state.mode === 'dead' && state.deadView === 'menu' && state.deadTimer >= 0.5;
+  }
+
+  // px the event feed lifts to clear the window
+  function replayLift() { return replayShowing() ? RP_H + 4 : 0; }
+
+  // the overlay tracks the game canvas: same corner, same scale, device pixels
+  function layoutReplay() {
+    const r = canvas.getBoundingClientRect();
+    rpOv.style.left = (r.left + RP_PAD * scale) + 'px';
+    rpOv.style.top = (r.top + (VIEW_H - RP_H - RP_PAD) * scale) + 'px';
+    rpOv.style.width = (RP_W * scale) + 'px';
+    rpOv.style.height = (RP_H * scale) + 'px';
+  }
+
+  // one call per frame from render(), at the capture point: it owns the clock,
+  // and either banks a frame or advances the playhead - never both
+  function replayTick(now) {
+    const dt = rpLast ? Math.min(0.05, now - rpLast) : 0;
+    rpLast = now;
+    if (replayLive()) {
+      rpOpen = false;
+      rpAcc += dt;
+      if (rpAcc < 1 / RP_FPS) return;
+      // carry the remainder so the cadence averages out, but never bank more
+      // than one period of debt: below RP_FPS that would spiral
+      rpAcc = Math.min(rpAcc - 1 / RP_FPS, 1 / RP_FPS);
+      const [cw, ch] = rpTarget();
+      rpEnsure(cw, ch);
+      const [sx, sy] = rpSlotAt(rpHead, rpSW, rpSH);
+      // the slot may be wider than this frame (a shrunk view after a resize):
+      // clear it so the last tenant does not fringe the new one
+      rpAtx.fillStyle = '#06091a';
+      rpAtx.fillRect(sx, sy, rpSW, rpSH);
+      rpAtx.drawImage(canvas, sx, sy, cw, ch);
+      rpFW[rpHead] = cw; rpFH[rpHead] = ch;
+      rpHead = (rpHead + 1) % RP_N;
+      if (rpCount < RP_N) rpCount++;
+      return;
+    }
+    if (!replayShowing()) { rpOpen = false; return; }
+    if (!rpOpen) { rpOpen = true; rpPlay = 0; } // every open starts four seconds back
+    rpPlay += dt * RP_FPS * RP_RATE;
+    if (rpPlay >= rpCount) rpPlay -= Math.floor(rpPlay / rpCount) * rpCount;
+  }
+
+  // the overlay's whole public surface: shown/hidden and faded with the screen,
+  // and touched only when something actually changed
+  function rpOverlay(on, a) {
+    if (on !== rpVis) {
+      rpVis = on;
+      rpOv.style.display = on ? 'block' : 'none';
+      if (on) layoutReplay();
+    }
+    if (on && a !== rpAlpha) { rpAlpha = a; rpOv.style.opacity = a; }
+  }
+
+  // Bottom-left: the strip on a frost plate, a playhead sweeping the bottom rim.
+  // No label - a looping window under a sweeping playhead is what a recording
+  // looks like, and the half speed reads itself.
+  function renderReplay() {
+    if (!replayShowing()) { rpOverlay(false, 1); return; }
+    const x = RP_PAD, y = VIEW_H - RP_H - RP_PAD;
+    const i = Math.min(rpCount - 1, Math.max(0, Math.floor(rpPlay)));
+    const slot = (rpHead - rpCount + i + RP_N) % RP_N;
+    const [sx, sy] = rpSlotAt(slot, rpSW, rpSH);
+    const fw = rpFW[slot], fh = rpFH[slot];
+    ctx.fillStyle = '#0a0e23';
+    ctx.fillRect(x - 2, y - 2, RP_W + 4, RP_H + 4);
+    // the low-res copy in the game canvas: the overlay covers it exactly, so
+    // this is only ever seen in a raw canvas capture or if the layer is off
+    if (fw) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(rpAt, sx, sy, fw, fh, x, y, RP_W, RP_H);
+      ctx.imageSmoothingEnabled = false;
+    }
+    // the pale frost rim every other plate in the UI wears
+    ctx.fillStyle = '#35426e';
+    ctx.fillRect(x - 1, y - 1, RP_W + 2, 1);
+    ctx.fillRect(x - 1, y + RP_H, RP_W + 2, 1);
+    ctx.fillRect(x - 1, y - 1, 1, RP_H + 2);
+    ctx.fillRect(x + RP_W, y - 1, 1, RP_H + 2);
+    // playhead along the bottom rim: where the loop is, and the only thing that
+    // says this corner is a recording rather than a second camera
+    ctx.fillStyle = '#c89a3c';
+    ctx.fillRect(x - 1, y + RP_H, Math.round((RP_W + 2) * Math.min(1, rpPlay / rpCount)), 1);
+
+    // and the real thing, at device resolution, over the top
+    if (!fw) { rpOverlay(false, 1); return; }
+    if (rpOvW !== fw || rpOvH !== fh) {
+      rpOvW = rpOv.width = fw; rpOvH = rpOv.height = fh;
+      rpOvx.imageSmoothingEnabled = false; // resizing a canvas resets ctx state
+    }
+    rpOvx.drawImage(rpAt, sx, sy, fw, fh, 0, 0, fw, fh); // 1:1, never resampled
+    rpOverlay(true, state.fade ? Math.max(0, 1 - state.fade.a) : 1);
+  }
+
   // ------------------------------------------------------------ UI
   function updateMinimap() {
     const d = mmImg.data;
@@ -5186,7 +5393,7 @@
     const n = Math.min(EVENT_MAX, events.length);
     if (!n) return;
     const pitch = 10;
-    let y = VIEW_H - 8 - pitch * n; // oldest at the top, newest along the bottom
+    let y = VIEW_H - 8 - replayLift() - pitch * n; // oldest at the top, newest along the bottom
     for (let i = events.length - n; i < events.length; i++) {
       const e = events[i];
       const a = Math.max(0, 1 - e.t / EVENT_LIFE); // age alone sets the alpha
@@ -5691,9 +5898,10 @@
   const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.14'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.15'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.15', 'DYING OR PAUSING REPLAYS YOUR LAST FOUR SECONDS ON A LOOP, AT HALF SPEED, IN THE BOTTOM-LEFT CORNER.'],
     ['1.14', 'ARROWS ARE DRAWN PIXEL BY PIXEL, CARRY YOUR TEAM COLOUR ON THE FLETCHING, AND LEAVE A FADING TRAIL.'],
     ['1.13', 'THE MINIMAP IS DRAWN PIXEL BY PIXEL: ITS RIM, MAP EDGE AND DAY RING ARE CRISP.'],
     ['1.12', 'THE SCROLL WHEEL OVER THE MINIMAP ZOOMS IT, AND THE MINIMAP HAS A SOLID RIM.'],
@@ -7037,6 +7245,13 @@
     // the match readouts: stage feed lines without staging the kills behind
     // them, and check the standings (hold TAB in game, or set keys.tab here)
     events, logEvent, scoreGroups, scoreboardOpen,
+    // the four-second replay: the filmstrip itself, how much is banked, and whether it is up
+    replay: {
+      get cv() { return rpAt; }, get frames() { return rpCount; }, showing: replayShowing,
+      get shot() { return [rpFW[(rpHead - 1 + RP_N) % RP_N], rpFH[(rpHead - 1 + RP_N) % RP_N]]; },
+      get slot() { return [rpSW, rpSH]; }, get bytes() { return rpAt ? rpAt.width * rpAt.height * 4 : 0; },
+      W: RP_W, H: RP_H, fps: RP_FPS, rate: RP_RATE, ov: rpOv,
+    },
     // action entry points default to the local slot, or take any player
     clickAction: (p) => clickAction(p || player),
     tryWork: (p) => tryWork(p || player),
