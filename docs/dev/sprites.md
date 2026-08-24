@@ -28,9 +28,10 @@ as `SPRITES.teams` so game.js can read the names and marker colours) drives thre
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to
-those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The tool-bar
-icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL` and are drawn at a crisp
-2× in `renderUI()`. Wildlife is
+those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The tool
+icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
+`drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the `TOOLS`
+table) and by `drawRobot()` for a bot's swing — there is no tool bar. Wildlife is
 side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames
 sharing a `deerHead` upper body), wolves are 16×13 (a shared `wolfBody` plus three leg rows per
 frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — and left variants are
@@ -39,7 +40,11 @@ frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — 
 band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
 Anything drawn through `drawSpriteFlash` must stay within 64×64.
 
-`js/sprites.js` has a UTF-8 BOM and one heart row that repairs a mangled byte via
-`'...'.replace('о', 'g')`. Preserve the file's encoding when editing — re-saving it as something
-else will corrupt the grids.
+`js/sprites.js` has a UTF-8 BOM and **seven** rows that repair a mangled byte via
+`'...'.replace('о', 'g')` — in `stump`, `imp1` (×2), `wall` (×2, one of them a `/g` replace),
+`heartHalf` and `heartEmpty`. Preserve the file's encoding when editing — re-saving it as
+something else will corrupt the grids, and the corruption is silent: `bake()` sizes each canvas
+from `rows[0].length` alone, so an unmatched palette char is indistinguishable from a transparent
+pixel and a broken repair just shifts that grid row one column sideways. (`heartHalf`'s repair is
+currently a no-op — `.replace('g', 'g')`.)
 

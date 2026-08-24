@@ -380,7 +380,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   when hot (no glow behind the hot plank - it lifts and warms only). `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
   shadow stays on the ground) and the warm fill; `menu.pressT`
   sinks it for a beat; the lift, warm fill and gold rule are the whole selection cue (no selector arrows).
-- **Die** (`drawDie`): shows `SEED % 6`, cycles faces and jitters while hovered, tumbles while
+- **Die** (`drawDie`): shows `1 + (SEED % 6)` (faces 1–6), cycles faces and jitters while hovered, tumbles while
   `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`
   (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the seed tag) and then
   navigates to `?seed=<new>` — `SEED` is a const everything closes over, so a new world is a
@@ -428,7 +428,7 @@ puts every active slot aboard (`p.aboard`), builds `state.drop` from `makeEagleR
 points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
 `hash2` so the line is the seed's — bakes the chart once (`buildWorldMapImg` into `mapCv`), sets
 mode `drop`, refits the view to `DROP_ROWS` around its centre and starts the menu exit. The bird
-flies the line at `EAGLE_SPD` (170 px/s, ~14–18 s); `updateDrop` (called from `updatePlay`, so
+flies the line at `EAGLE_SPD` (170 px/s, ~13–15 s); `updateDrop` (called from `updatePlay`, so
 pause stops it) moves it, carries everyone aboard with it, jumps each AI slot at its hashed
 `p.dropU` (0.12–0.88 of the line, scattered ±4 tiles off it) and the human at the end if they
 never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T` (1.3 s), steering

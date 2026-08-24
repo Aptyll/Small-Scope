@@ -385,9 +385,13 @@ Mechanics, all in `game.js`:
   roll-out timer as a bar under them; a flickering slat across each vent grille; a roof **beacon**
   that blinks amber while a bot is due; and an hp bar over the roof once damaged. `removeStruct()`
   clears the whole footprint and kills its robots with it.
-- Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`); the
-  `hitObject()` structure-damage branch and `destroyStructure(o, true)` refund path still
-  exist but nothing reaches them now that E ignores structures. `canAfford`/`pay`/`costText` are generic over every `inv` key.
+- Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), spawned as
+  that many separate 1-gold drops — 23 of them for a fully-upgraded wall. `demolishStruct()` →
+  `destroyStructure(o, true)` is the **live** path for that, reached from `runCmd` for the wheel's
+  demolish order: do not read it as dead code. What *is* unreachable is the `hitObject()`
+  structure-damage branch — `swingHit` filters `STRUCTS` types out before calling it and nothing
+  else calls `hitObject`, so **buildings currently take no damage from anything** and demolish is
+  the only way one comes down. `canAfford`/`pay`/`costText` are generic over every `inv` key.
 - None of the four structures emits light (see [Lighting](rendering.md#lighting)).
 
 ## Robots

@@ -7,8 +7,8 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
 - Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to the lobby.
-- The world has named **landmarks**: a WOLF DEN (the only hostile thing) and a ROOKERY (birds).
-- Night is visual only for now.
+- The world has named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY (birds).
+- Night is mostly visual, but not inert: wolves see ×1.75 further at full dark and the only passive heal stops (`darkness < 0.3`).
 
 ## Commands
 
@@ -59,7 +59,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~6700-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~7400-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
@@ -118,8 +118,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   create/remove only through `createStruct`/`removeStruct`, which place and clear the footprint.
 - **Anything drawn through `drawSpriteFlash()` must fit in 64×64** — it recolours through a shared
   64×64 scratch canvas and larger sprites clip.
-- **[js/sprites.js](js/sprites.js) has a UTF-8 BOM** and one row that repairs a mangled byte via
-  `.replace()`. Preserve the file's encoding or the grids corrupt.
+- **[js/sprites.js](js/sprites.js) has a UTF-8 BOM** and **seven** rows that repair a mangled byte
+  via `.replace()` (`stump`, `imp1`×2, `wall`×2, `heartHalf`, `heartEmpty`). Preserve the file's
+  encoding or the grids corrupt.
 
 ## Keeping the docs current
 
