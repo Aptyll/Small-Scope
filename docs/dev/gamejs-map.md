@@ -29,6 +29,7 @@ don't cite line numbers here, they go stale within a session.
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
+| shooting a worker bot: its hitbox, its damage, its wreck | `robotHit`, `hurtRobot`, `robotDies` | `structures & robots` |
 | radial menu hit math | `wheelLayout`, `resolveWheel` | `radial wheel` |
 | what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` |
 | the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` |

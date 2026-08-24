@@ -2641,6 +2641,44 @@
     };
   }
 
+  // A worker is a 12x10 body standing on its treads at b.y + 4, so its middle
+  // sits a pixel above the anchor. Same radius as a player: a bot in the open
+  // is as shootable as the rival who built it.
+  function robotHit(b, x, y) { return Math.hypot(b.x - x, b.y - 1 - y) < 7; }
+
+  // an arrow landing on a worker - and a turret bolt too, since bolts ride the
+  // same pipeline. src is the shooter, for the feed line on the kill.
+  function hurtRobot(b, dmg, nx, ny, src) {
+    if (b.dead) return;
+    b.hp -= dmg;
+    b.flash = 0.12;
+    b.kbx = nx * 40; b.kby = ny * 40;
+    addDmgFloater(b.x, b.y - 12, dmg);
+    burst(b.x, b.y - 2, '#c3c9d3', 6, 45, 0.35, true);
+    burst(b.x, b.y - 2, '#ffb347', 3, 40, 0.3, true); // sparks off the plating
+    if (nearPlayer(b.x, b.y)) SFX.hit();
+    if (b.hp <= 0) robotDies(b, src);
+  }
+
+  // The wreck. Whatever gold it was hauling spills where it fell (up to three
+  // coins, so a full load reads as a pile), which is what makes shooting a
+  // loaded worker on its way home worth the arrows.
+  function robotDies(b, src) {
+    b.dead = true;
+    if (nearPlayer(b.x, b.y)) SFX.break_();
+    burst(b.x, b.y - 4, '#98a1b0', 10, 50, 0.5, true);
+    burst(b.x, b.y - 4, '#3b4150', 4, 35, 0.4);
+    if (b.carry > 0) {
+      const coins = Math.min(3, b.carry);
+      for (let i = 0; i < coins; i++) {
+        spawnDrop(b.x, b.y, 'gold', Math.floor(b.carry / coins) + (i < b.carry % coins ? 1 : 0));
+      }
+      b.carry = 0;
+    }
+    // a downed worker is not a downed slot: it makes the feed, never the kill count
+    if (src && src.team !== b.team) logEvent(src.name + ' SCRAPPED A WORKER', src);
+  }
+
   function updateRobot(b, dt) {
     b.flash = Math.max(0, b.flash - dt);
     b.atkCd = Math.max(0, b.atkCd - dt);
@@ -2761,12 +2799,7 @@
     b.x = Math.max(8, Math.min(WORLD * TILE - 8, b.x));
     b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
 
-    if (b.hp <= 0 && !b.dead) {
-      b.dead = true;
-      if (nearPlayer(b.x, b.y)) SFX.break_();
-      burst(b.x, b.y - 4, '#98a1b0', 10, 50, 0.5, true);
-      burst(b.x, b.y - 4, '#3b4150', 4, 35, 0.4);
-    }
+    if (b.hp <= 0 && !b.dead) robotDies(b, null);
   }
 
   // ------------------------------------------------------------ radial wheel
@@ -3320,6 +3353,18 @@
           if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
             damagePlayer(t, a.dmg, nx, ny, players[a.owner]);
             burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+            dead = true;
+            break;
+          }
+        }
+      }
+      if (!dead) {
+        // worker bots take the same shot: they are units in the open, on a
+        // team, and the only thing that ever stood outside the arrow pipeline
+        for (const b of robots) {
+          if (a.team === b.team || b.dead) continue;
+          if (robotHit(b, a.x, a.y)) {
+            hurtRobot(b, a.dmg, nx, ny, players[a.owner]);
             dead = true;
             break;
           }
@@ -4202,6 +4247,12 @@
     for (const q of players) {
       if (!enemyOf(player, q)) continue;
       if (Math.abs(wx - q.x) <= 8 && wy >= q.y - 14 && wy <= q.y + 4) {
+        return { kind: 'reticle', mode: 'hunt', dim: busy };
+      }
+    }
+    for (const b of robots) {
+      if (b.dead || b.team === player.team) continue;
+      if (Math.abs(wx - b.x) <= 7 && wy >= b.y - 7 && wy <= b.y + 4) {
         return { kind: 'reticle', mode: 'hunt', dim: busy };
       }
     }
@@ -6181,9 +6232,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.22'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.23'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.23', 'ENEMY WORKER BOTS CAN BE SHOT DOWN WITH THE BOW, AND A DOWNED ONE SPILLS THE GOLD IT WAS CARRYING.'],
     ['1.22', 'TURRETS WORK: A BIGGER GUN SWINGS ONTO THE NEAREST ENEMY, LINES UP THE SHOT ALONG A DASHED LINE, AND FIRES A GLOWING BOLT.'],
     ['1.21', 'YOU CAN NOW BREAK AN ENEMY TEAM BUILDING BY HOLDING E BESIDE IT, AND ANY DAMAGED BUILDING SHOWS A HEALTH BAR.'],
     ['1.20', 'THE NIGHT GLOW NOW SITS EXACTLY ON YOU INSTEAD OF DRIFTING A FRACTION OF A PIXEL AS YOU MOVE.'],

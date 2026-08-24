@@ -131,7 +131,10 @@ the arrow speed/damage formulas in `fireArrow()`,
 - The spawner's guard mode (loiters) and the `tracers` pass are kept working but have no trigger —
   they went idle with the raiders. The **turret is live again** (it shoots enemy players and worker
   bots) but it does not use `tracers`: it fires a travelling bolt through the `arrows` array, so
-  the `tracers` pass still has nothing pushing to it. Wolves are hostile but only to players, and
-  nothing targets a robot except a turret. Buildings are not immune either: a **player** on another
+  the `tracers` pass still has nothing pushing to it. Wolves are hostile but only to players.
+  Worker bots take arrows from any rival now (and so, at last, the turret bolts that were already
+  aiming at them — see [Robots](gameplay.md#robots)), but nothing **melees** one and the AI's
+  target picker still ignores them: a bot slot only downs a worker by accident, with a shot meant
+  for a player. Buildings are not immune either: a **player** on another
   team breaks one with E (see [Base building](gameplay.md#base-building)), but no AI or wildlife
   does, and arrows and bolts pass buildings without damaging them.

@@ -132,10 +132,15 @@ background, the tint is the ink — see the
 ## PvP
 
 `enemyOf(p, q)` is the one place the rule lives: another live, active slot on **another** team.
-Arrows carry `owner`/`team` and test players before animals in `updatePlay`'s arrow loop, using the
+Arrows carry `owner`/`team` and test players first in `updatePlay`'s arrow loop, using the
 same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` for knockback, flash,
 floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
 shooter.
+
+**A rival's worker bots are targets too** — they are tested straight after the players, on the same
+team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one costs the owner
+its income and spills the gold it was carrying, so a base's economy can be raided without ever
+touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
 `die(p, src, cause)` marks the slot dead for good — no respawn, the wallet kept for the
 standings; `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes

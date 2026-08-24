@@ -162,9 +162,10 @@ targets scale to 55% — walk speed and the ice cap both — facing tracks the m
 renders above the player's health bar),
 and the release edge fires via `fireArrow(p)` — power scales speed (170–360 px/s) and damage
 (4–13). Arrows carry their shooter's `owner`/`team`, live in the `arrows` array, and are updated
-in `updatePlay()`: they die on solid tiles, on a **rival player** (tested before animals — see
-[PvP](multiplayer.md#pvp)), on any animal hit (knockback scales with power), or after 0.85 s. They
-never hit robots or structures.
+in `updatePlay()`: they die on solid tiles, on a **rival player** (tested first — see
+[PvP](multiplayer.md#pvp)), on an **enemy worker bot** (`robotHit`/`hurtRobot`, tested next), on
+any animal hit (knockback scales with power), or after 0.85 s. They never hit structures — a
+building is broken by hand with E, not shot.
 
 An arrow in flight is drawn in its own pass (using `ex`/`ey`) and **rasterised pixel by pixel**
 rather than stroked, so it stays opaque and crisp at any angle: an 8 px shaft, two barbs 2 px back
@@ -440,8 +441,20 @@ home) and are solid to players and animals (see [Unit collisions](#unit-collisio
 with no route, or one they get pinned on the way to, goes on `b.avoid` for 12 s. They die with
 their bay and are reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted draws via
 `drawRobot()` in team colours (the whole sprite bobs while driving, the tool swings at a target,
-carried gold shows as a nugget up front), and show a health bar; nothing any player does can hit them yet. Their SFX are gated on player proximity
+carried gold shows as a nugget up front), and show a health bar. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
+
+A worker is **shootable**: `robotHit(b, x, y)` is its hitbox (radius 7 about `b.y - 1`, the middle
+of a body whose treads sit at `b.y + 4`), and `hurtRobot(b, dmg, nx, ny, src)` is the single entry
+point for damage — flash, knockback, a damage floater, a scrap-and-sparks burst, `SFX.hit`, and
+`robotDies` at zero. Only arrows reach it, and only from another team (friendly fire is off, as it
+is for players), so a bay's own side drives through its workers safely. `robotDies(b, src)`
+**spills whatever the worker was hauling** as up to three gold coins splitting `b.carry` — which is
+what makes shooting a loaded worker on its way home worth the arrows — and logs
+`<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed slot, so it never touches
+the kill count. `updateRobot`'s own `hp <= 0` check routes through the same function (with no
+`src`, so the wreck goes unclaimed). Turret bolts ride the arrow pipeline, so a turret's mark
+finally dies; nothing else — a swing, wildlife, the AI's target picker — goes after a worker.
 
 ## Death is final
 
