@@ -654,7 +654,7 @@
     if (state.mode === 'drop') { SFX.unlock(); dropJump(player); return; }
     if (state.mode === 'dead') { SFX.unlock(); deadClick(); return; }
     if (state.mode !== 'play') return;
-    if (state.wheel) return;
+    if (state.wheel) { state.wheel = null; return; } // left-click while it is open: cancel
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
     mouse.down = true;
@@ -2803,51 +2803,63 @@
   }
 
   // ------------------------------------------------------------ radial wheel
-  const WHEEL_R = 30;
+  // One geometry, any number of options: n wedges of exactly 2*PI/n, the first
+  // centred straight up and the rest clockwise. Nothing is special-cased per
+  // count - 4 options land on up/right/down/left and 2 on up/down because that
+  // is what the formula gives. WHEEL_HUB is the hole in the middle and the
+  // cancel target both: the pointer starts inside it, and nothing is chosen
+  // until it leaves.
+  const WHEEL_HUB = 13;   // inner radius = the deadzone that cancels
+  const WHEEL_R = 40;     // outer radius of the wedges
+  const WHEEL_PAD = 4;    // backing disc beyond the wedges
+  const WHEEL_RING = (WHEEL_HUB + WHEEL_R) >> 1; // icons and labels: the same distance every direction
+  const WHEEL_GAP = 2;    // px of daylight between neighbouring wedges, measured at the rim
   // The pointer is measured from the press point (w.ax/ay), not from the wheel's
   // drawn hub: that press is what the hand remembers, and the hub drifts as the
-  // camera follows the player. Only this much travel is "I haven't chosen yet" -
-  // a flick in any direction commits, and drawWheelStick() shows the travel.
-  const WHEEL_DEAD = 2;
+  // camera follows the player. drawWheelStick() draws that travel 1:1 from the
+  // hub, so the knob is visibly inside the wedge it has picked.
 
   function wheelOptions() {
     const w = state.wheel;
-    if (w.kind === 'build') {
-      return STRUCT_ORDER.map((type, i) => ({
-        id: type, ang: [-Math.PI / 2, 0, Math.PI / 2, Math.PI][i],
-      }));
-    }
+    if (w.kind === 'build') return STRUCT_ORDER.map((type) => ({ id: type }));
     const o = structOf(objAt(w.tx, w.ty));
-    const opts = [
-      { id: 'upgrade', ang: -Math.PI / 2 },
-      { id: 'demolish', ang: Math.PI / 2 },
-    ];
-    if (o && o.type === 'spawner') opts.push({ id: 'mode', ang: 0 });
+    // upgrade is always the wedge straight up and demolish always the last one,
+    // so the bay's extra option lands between them instead of displacing either
+    const opts = [{ id: 'upgrade' }];
+    if (o && o.type === 'spawner') opts.push({ id: 'mode' });
+    opts.push({ id: 'demolish' });
     return opts;
   }
+
+  // The whole geometry, in two lines: every wedge is span wide, and wedge i is
+  // centred on wheelAng(i). The hover test, the wedge pixels and the icon ring
+  // all read them, so a wedge is exactly its own hitbox at any count.
+  function wheelSpan(n) { return Math.PI * 2 / n; }
+  function wheelAng(i, n) { return -Math.PI / 2 + i * wheelSpan(n); }
 
   // shared by resolveWheel and renderWheel so hover math and pixels agree
   function wheelLayout() {
     const w = state.wheel;
+    const edge = WHEEL_R + WHEEL_PAD;
     let cx = w.tx * TILE + 8 - Math.round(camX);
     let cy = w.ty * TILE + 8 - Math.round(camY);
-    cx = Math.max(WHEEL_R + 36, Math.min(VIEW_W - WHEEL_R - 36, cx));
-    cy = Math.max(WHEEL_R + 20, Math.min(VIEW_H - WHEEL_R - 30, cy)); // bottom margin fits the label
+    cx = Math.max(edge + 2, Math.min(VIEW_W - edge - 2, cx));
+    cy = Math.max(edge + 2, Math.min(VIEW_H - edge - 14, cy)); // bottom margin fits the label
     const opts = wheelOptions();
+    const n = opts.length, span = wheelSpan(n);
+    for (let i = 0; i < n; i++) opts[i].ang = wheelAng(i, n);
     // travel since the press, not distance from the hub
     const dx = mouse.x - w.ax, dy = mouse.y - w.ay;
     const dist = Math.hypot(dx, dy);
     let seg = -1;
-    if (dist >= WHEEL_DEAD) { // anything past the deadzone picks a segment; sitting still cancels
-      const ang = Math.atan2(dy, dx);
-      let bd = 1e9;
-      for (let i = 0; i < opts.length; i++) {
-        let d = Math.abs(ang - opts[i].ang);
-        if (d > Math.PI) d = Math.PI * 2 - d;
-        if (d < bd) { bd = d; seg = i; }
-      }
+    if (dist >= WHEEL_HUB) { // still in the hub = nothing chosen, releasing cancels
+      // which wedge the travel points into - the same floor the wedges are drawn
+      // from, so the hit region and the pixels cannot disagree
+      let a = Math.atan2(dy, dx) - wheelAng(0, n) + span / 2;
+      a -= Math.floor(a / (Math.PI * 2)) * Math.PI * 2;
+      seg = Math.floor(a / span) % n;
     }
-    return { cx, cy, opts, seg, dx, dy, dist };
+    return { cx, cy, opts, n, span, seg, dx, dy, dist };
   }
 
   // the wheel writes a one-shot order into the local player's input; the sim
@@ -2855,7 +2867,7 @@
   function resolveWheel() {
     const w = state.wheel;
     const L = wheelLayout();
-    if (L.seg < 0) return; // released in the deadzone = cancel
+    if (L.seg < 0) return; // released in the hub = cancel
     player.input.cmd = { kind: w.kind === 'build' ? 'build' : L.opts[L.seg].id, tx: w.tx, ty: w.ty, id: L.opts[L.seg].id };
   }
 
@@ -5010,29 +5022,38 @@
   }
 
   // How far the pointer has travelled since the press that opened the wheel,
-  // drawn at the hub as a tiny stick: an origin pip (the press), a dot of trail
-  // and a knob that goes gold the instant the deadzone is cleared. The cursor
-  // itself can be anywhere on screen, so this is the only readout of the input
-  // the choice is actually made with.
+  // drawn from the hub as a knob. The cursor itself can be anywhere on screen,
+  // so this is the only readout of the input the choice is actually made with:
+  // it moves 1:1 with the pointer, so the knob is visibly inside the wedge that
+  // is lit, and it clamps to the lane between the hub rim and the icon ring so
+  // it never lands on an icon. Sitting in the hub is "nothing chosen": the knob
+  // stays grey on the cancel cross, which is where it starts.
   function drawWheelStick(L) {
     const live = L.seg >= 0;
-    // A compact stick, not a 1:1 echo of the pointer: the knob snaps STICK_MIN
-    // clear of the pip the moment a segment is live (so "I have chosen" is
-    // visible at 2 px of travel) and slides out to STICK_R, which stops short
-    // of the option icons. A 1:1 mapping would just sit under the cursor.
-    const STICK_MIN = 4, STICK_R = 12, STICK_FULL = 26;
-    const off = live ? STICK_MIN + (STICK_R - STICK_MIN) * Math.min(1, L.dist / STICK_FULL) : L.dist;
-    const k = off / Math.max(0.001, L.dist);
+    const reach = (WHEEL_HUB + WHEEL_RING) >> 1;      // clear of the hub, short of the icons
+    const k = L.dist > reach ? reach / L.dist : 1;    // 1:1 until it would reach an icon
     const kx = Math.round(L.cx + L.dx * k), ky = Math.round(L.cy + L.dy * k);
-    if (off > 6) { // a dot of travel between pip and knob
-      ctx.fillStyle = live ? 'rgba(255,217,92,0.5)' : 'rgba(159,182,216,0.4)';
-      ctx.fillRect(Math.round(L.cx + L.dx * k * 0.5), Math.round(L.cy + L.dy * k * 0.5), 1, 1);
-    }
-    ctx.fillStyle = '#0a0e23'; ctx.fillRect(L.cx - 2, L.cy - 2, 5, 5);
-    ctx.fillStyle = '#8fa4c8'; ctx.fillRect(L.cx - 1, L.cy - 1, 3, 3);
-    ctx.fillStyle = '#141c3c'; ctx.fillRect(L.cx, L.cy, 1, 1); // hollow: this is the origin, not the knob
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, ky - 2, 5, 5);
-    ctx.fillStyle = live ? '#ffd95c' : '#6d7ea6'; ctx.fillRect(kx - 1, ky - 1, 3, 3);
+    ctx.fillStyle = live ? '#ffd95c' : '#8fa4c8'; ctx.fillRect(kx - 1, ky - 1, 3, 3);
+  }
+
+  // the hub: the hole the wedges leave, and the cancel target. It carries a
+  // cross rather than the word CANCEL, and goes hot while the pointer is in it
+  // - which is where the pointer starts, so the way out is the way you came in.
+  function drawWheelHub(L) {
+    const cancel = L.seg < 0;
+    ctx.beginPath();
+    ctx.arc(L.cx, L.cy, WHEEL_HUB - 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = cancel ? '#3a1f2c' : '#0e142c';
+    ctx.fill();
+    ctx.strokeStyle = cancel ? '#ff8a7a' : '#2a3358';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = cancel ? '#ff8a7a' : '#46527a';
+    for (let d = -3; d <= 3; d++) { // rasterised, so the cross stays crisp
+      ctx.fillRect(L.cx + d, L.cy + d, 1, 1);
+      ctx.fillRect(L.cx + d, L.cy - d, 1, 1);
+    }
   }
 
   function renderWheel(now) {
@@ -5041,27 +5062,30 @@
     // backing disc
     ctx.fillStyle = 'rgba(6,10,24,0.6)';
     ctx.beginPath();
-    ctx.arc(L.cx, L.cy, WHEEL_R + 14, 0, Math.PI * 2);
+    ctx.arc(L.cx, L.cy, WHEEL_R + WHEEL_PAD, 0, Math.PI * 2);
     ctx.fill();
 
-    const n = L.opts.length;
-    const span = Math.PI * 2 / n;
+    const n = L.n, span = L.span;
+    const gap = WHEEL_GAP / WHEEL_R / 2; // half a rim-width gap, as an angle
     for (let i = 0; i < n; i++) {
       const opt = L.opts[i];
       const hovered = i === L.seg;
-      ctx.fillStyle = hovered ? '#35426e' : '#141c3c';
+      // an annulus sector: exactly span wide, from the hub out to the rim, so
+      // every wedge is the same size and shape however many there are
+      const a0 = opt.ang - span / 2 + gap, a1 = opt.ang + span / 2 - gap;
       ctx.beginPath();
-      ctx.moveTo(L.cx, L.cy);
-      ctx.arc(L.cx, L.cy, WHEEL_R + 11, opt.ang - span / 2 + 0.04, opt.ang + span / 2 - 0.04);
+      ctx.arc(L.cx, L.cy, WHEEL_R, a0, a1);
+      ctx.arc(L.cx, L.cy, WHEEL_HUB, a1, a0, true);
       ctx.closePath();
+      ctx.fillStyle = hovered ? '#35426e' : '#141c3c';
       ctx.fill();
       if (hovered) {
         ctx.strokeStyle = '#ffd95c';
         ctx.lineWidth = 1;
         ctx.stroke();
       }
-      const ix = L.cx + Math.cos(opt.ang) * (WHEEL_R - 9);
-      const iy = L.cy + Math.sin(opt.ang) * (WHEEL_R - 9);
+      const ix = L.cx + Math.cos(opt.ang) * WHEEL_RING;
+      const iy = L.cy + Math.sin(opt.ang) * WHEEL_RING;
       if (w.kind === 'build') {
         const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
         const tb = SPRITES.teamBuild[player.team];
@@ -5082,9 +5106,10 @@
       }
     }
 
+    drawWheelHub(L);
     drawWheelStick(L);
 
-    // hovered label + cost under the wheel (or CANCEL in the deadzone)
+    // hovered label + cost under the wheel (or CANCEL, from inside the hub)
     let label = 'CANCEL', color = '#9fb6d8';
     if (L.seg >= 0) {
       const opt = L.opts[L.seg];
@@ -5107,9 +5132,12 @@
         color = '#ffd95c';
       }
     }
+    // centred under the wheel, but never off the edge: the wheel sits where the
+    // stump is, and a wide cost line is wider than the margin that leaves
+    const lw = pixelTextWidth(label);
     drawPixelTextOutline(ctx, label,
-      Math.round(L.cx - pixelTextWidth(label) / 2),
-      Math.round(L.cy + WHEEL_R + 20), color, '#0f1632');
+      Math.round(Math.max(2, Math.min(VIEW_W - lw - 2, L.cx - lw / 2))),
+      Math.round(L.cy + WHEEL_R + WHEEL_PAD + 6), color, '#0f1632');
   }
 
   // ------------------------------------------------------------ lighting & weather
@@ -6232,9 +6260,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.23'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.24'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.24', 'THE BUILD WHEEL IS AN EVEN RING WHATEVER IT HOLDS, AND ITS MIDDLE IS NOW A CANCEL BUTTON YOU CAN FIND.'],
     ['1.23', 'ENEMY WORKER BOTS CAN BE SHOT DOWN WITH THE BOW, AND A DOWNED ONE SPILLS THE GOLD IT WAS CARRYING.'],
     ['1.22', 'TURRETS WORK: A BIGGER GUN SWINGS ONTO THE NEAREST ENEMY, LINES UP THE SHOT ALONG A DASHED LINE, AND FIRES A GLOWING BOLT.'],
     ['1.21', 'YOU CAN NOW BREAK AN ENEMY TEAM BUILDING BY HOLDING E BESIDE IT, AND ANY DAMAGED BUILDING SHOWS A HEALTH BAR.'],
@@ -7679,6 +7708,9 @@
     // drop a slot (default the local one) on a tile - how to stage a landmark
     warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
     settings, perf, treeRare, cursorInfo,
+    // the radial wheel: open one by hand (state.wheel) and read back the
+    // geometry the hover test and the pixels both use
+    wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     // multiplayer slots: every slot, the local one, and the teams table
     players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,

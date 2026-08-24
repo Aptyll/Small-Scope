@@ -66,7 +66,8 @@ scoreboard and the event feed reports the death as an accident. See
 [multiplayer.md](multiplayer.md#kills-and-the-event-feed).
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
-`STRUCT_ORDER` (the build wheel draws the local team's `SPRITES.teamBuild[team][type][0]`), a
+`STRUCT_ORDER` (the build wheel draws the local team's `SPRITES.teamBuild[team][type][0]`, and
+sizes itself: a fifth entry is five even wedges, no layout to touch), a
 16×16 grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), entries in
 `isSolidTile()`, both map colour tables, and a functional tick branch in
 `updateStructures()`. `hitObject()`, the draws pass (via `structSprite`), construction, ownership
