@@ -28,6 +28,7 @@
   const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
   const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
   const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
+  const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
   const DODGE_CHARGES = 2;
@@ -1418,7 +1419,11 @@
     const o = objects[idx(tx, ty)];
     let t = -1;
     if (o) {
-      if (o.type === 'tree' || o.type === 'deadTree') t = TOOL_AXE;
+      // a building (any tile of its footprint - `part` resolves to the anchor) is a
+      // target only for the other team; you take your own down from the wheel instead
+      const st = structOf(o);
+      if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) t = TOOL_AXE; }
+      else if (o.type === 'tree' || o.type === 'deadTree') t = TOOL_AXE;
       else if (o.type === 'rock') t = TOOL_PICK;
       else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
     } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
@@ -1551,8 +1556,11 @@
     if (!inWorld(tx, ty)) return;
     contest('work:' + idx(tx, ty), p, () => {
       const o = objects[idx(tx, ty)];
-      if (o) { if (o.type !== 'stump' && o.type !== 'part' && !STRUCTS[o.type]) hitObject(o, p); }
-      else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty, p);
+      if (o) {
+        const st = structOf(o); // a `part` tile hits the building it belongs to
+        if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) hitObject(st, p); }
+        else if (o.type !== 'stump') hitObject(o, p);
+      } else if (ground[idx(tx, ty)] === 1) crackIce(tx, ty, p);
     });
   }
 
@@ -1680,10 +1688,18 @@
         SFX.swing();
       }
     } else if (STRUCTS[o.type]) {
-      o.hp -= 10;
+      // reached from swingHit only for a building on ANOTHER team
+      const c = structCenter(o);
+      o.hp -= STRUCT_HIT_DMG;
       if (near) SFX.hit();
-      burst(ox, oy - 4, '#a3794f', 5, 40, 0.4, true);
-      if (o.hp <= 0) destroyStructure(o, true);
+      burst(c.x, c.y - 4, '#a3794f', 5, 40, 0.4, true);
+      addDmgFloater(c.x, c.y - 12, STRUCT_HIT_DMG);
+      if (p === player) state.shake = Math.max(state.shake, 1);
+      if (o.hp <= 0) {
+        // the wreck pays out like a demolition: whoever is nearest picks the rubble up
+        destroyStructure(o, true);
+        logEvent(p.name + ' WRECKED A ' + STRUCTS[o.type].name, p);
+      }
     }
   }
 
@@ -3853,6 +3869,11 @@
             ctx.fillRect(px + (w >> 2), sy + (h * 5 >> 4), 1, 3); ctx.fillRect(px + (w >> 2) + 1, sy + (h >> 1), 1, 2);
             ctx.fillRect(px + (w * 5 >> 3), sy + (h * 3 >> 4), 1, 4); ctx.fillRect(px + (w * 5 >> 3) + 1, sy + (h * 7 >> 4), 1, 2);
           }
+          // damage readout: only once hurt, so an untouched base stays clean.
+          // the bay has its own bar inside drawBayOverlay - don't draw two.
+          if (o.type !== 'spawner' && o.hp < o.maxHp) {
+            drawHealthBar(px + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, spr.width - 4));
+          }
         }
       }
     }
@@ -4612,20 +4633,29 @@
     if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
     const t = workTarget(player);
     if (!t || !t.near) return;
+    const st = t.o && structOf(t.o);
+    const isStruct = !!(st && STRUCTS[st.type]);
     const tall = t.o && (t.o.type === 'tree' || t.o.type === 'deadTree');
-    const verb = !t.o ? 'CRACK ICE' : tall ? 'CHOP' :
+    const verb = !t.o ? 'CRACK ICE' : isStruct ? 'BREAK' : tall ? 'CHOP' :
       t.o.type === 'bush' ? 'PICK' : 'MINE';
-    // sit above the sprite: trees reach 8px above their tile, short objects start 6px below
-    const lift = t.o ? (tall ? 20 : 10) : 8;
+    // sit above the sprite: trees reach 8px above their tile, short objects start 6px
+    // below. A building is drawn up from its footprint's bottom edge and can be taller
+    // than its tiles, so clear its own sprite instead of its tile row.
+    const lift = isStruct ? structSprite(st).height - structH(st.type) * TILE + 12 :
+      t.o ? (tall ? 20 : 10) : 8;
+    // a multi-tile building takes the prompt on its centre, not the tile you aimed at
+    const hx = isStruct ? (st.tx + structW(st.type) / 2) * TILE : t.tx * TILE + 8;
+    const hty = isStruct ? st.ty * TILE : t.ty * TILE;
+    const hby = isStruct ? (st.ty + structH(st.type)) * TILE : t.ty * TILE + TILE;
     const pressed = !!player.input.work;
     const capW = 9, gapW = 3;
     const totalW = capW + gapW + pixelTextWidth(verb);
-    const x = Math.round(t.tx * TILE + 8 - ox - totalW / 2);
-    let y = Math.round(t.ty * TILE - oy - lift);
+    const x = Math.round(hx - ox - totalW / 2);
+    let y = Math.round(hty - oy - lift);
     // an adjacent target puts the prompt over the player's head: flip it under the tile instead
     const px0 = Math.round(player.x - ox), py0 = Math.round(player.y - oy);
     if (x < px0 + 9 && x + totalW > px0 - 9 && y < py0 + 5 && y + 10 > py0 - 14) {
-      y = Math.round(t.ty * TILE - oy + TILE + 3);
+      y = Math.round(hby - oy + 3);
     }
     // key-cap: navy rim, icy face, top highlight; pressed = face drops a pixel, no highlight
     const cy = y + (pressed ? 1 : 0);
@@ -5908,9 +5938,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.20'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.21'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.21', 'YOU CAN NOW BREAK AN ENEMY TEAM BUILDING BY HOLDING E BESIDE IT, AND ANY DAMAGED BUILDING SHOWS A HEALTH BAR.'],
     ['1.20', 'THE NIGHT GLOW NOW SITS EXACTLY ON YOU INSTEAD OF DRIFTING A FRACTION OF A PIXEL AS YOU MOVE.'],
     ['1.19', 'HOUSEKEEPING: EIGHT STALE LINES IN THE DEV NOTES NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],
     ['1.18', 'HOUSEKEEPING: THE DEV NOTES GAIN A STANDING FIX LIST FOR STALE DOCUMENTATION; NOTHING IN THE GAME CHANGED.'],

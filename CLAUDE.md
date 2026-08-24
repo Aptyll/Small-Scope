@@ -2,7 +2,7 @@
 
 Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map.
 
-- Always-in-hand bow; **E** harvests (axe/pickaxe come out on their own); build on stumps.
+- Always-in-hand bow; **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
 - Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).

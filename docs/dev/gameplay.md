@@ -137,7 +137,9 @@ for combat abilities. Two verbs, two inputs:
 Whenever `workTarget()` is non-null and `near` (and tools aren't blocked or the bow drawn),
 `drawWorkHint()` — called right after `drawSelection` in the overlay pass — floats a
 Fortnite-style key prompt over the target: a 9×10 pixel key-cap with an **E** plus the verb
-(CHOP / MINE / PICK / CRACK ICE), lifted above trees by 20 px and short objects by 10. The cap
+(CHOP / MINE / PICK / BREAK / CRACK ICE), lifted above trees by 20 px and short objects by 10 —
+a building instead clears its own sprite (which is drawn up from the footprint's bottom edge and
+can be taller than its tiles) and centres the prompt on the footprint, not the tile aimed at. The cap
 visibly presses (face drops a pixel, highlight gone, label goes gold) while the local player's
 `input.work` is set.
 If the prompt would overlap the player sprite (an adjacent target) it flips under the tile
@@ -145,9 +147,15 @@ instead. Since it only appears in reach, it doubles as the "you're close enough"
 
 `hitObject()` keeps its hard tool gating (trees need the axe, rocks the pick, with
 `SFX.deny` + a `NEEDS AXE`/`NEEDS PICKAXE` floater) as a safety net, but since `tryWork`
-always picks the right tool it is no longer reachable in normal play. Stumps and structures
-are **not** E targets — they are the right-click wheel's domain — and there is no melee against
-animals anymore: the bow is the only weapon.
+always picks the right tool it is no longer reachable in normal play; buildings are not gated
+at all, since the axe is the only tool E ever brings out for one.
+
+**Stumps** are not E targets — they are the right-click wheel's domain. **Buildings on another
+team are**: `workTarget()` resolves the tile through `structOf()` (so any tile of a 3×2 footprint
+counts, via its `part`) and returns the axe when `ownsStruct()` is false, and `swingHit` routes
+the swing to the anchor. Your own buildings stay wheel-only, so E is never ambiguous. See
+[Base building](#base-building) for the damage numbers. There is still no melee against animals:
+the bow is the only weapon aimed at a living thing.
 
 The bow is **hold-to-charge**: the press edge starts `p.charging`/`p.chargeT` (movement
 targets scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter
@@ -385,13 +393,24 @@ Mechanics, all in `game.js`:
   roll-out timer as a bar under them; a flickering slat across each vent grille; a roof **beacon**
   that blinks amber while a bot is due; and an hp bar over the roof once damaged. `removeStruct()`
   clears the whole footprint and kills its robots with it.
+- **Buildings take damage from E, but only from the other team.** `hitObject()`'s structure
+  branch deals `STRUCT_HIT_DMG` (10) a swing, at the `swingCd` of 0.34 s — so ~2 s for a tier-1
+  wall (60 hp), ~10 s for a tier-3 one (300 hp), ~7.5 s for the bay (220 hp). It flashes and
+  shakes the building like any other struck object, floats the damage, and shakes the camera for
+  the local player. Damage is **contested** with everything else E does, since it runs inside
+  `swingHit`'s `contest('work:' + idx)`. At 0 hp it calls `destroyStructure(o, true)` — the wreck
+  pays out exactly like a demolition, so the rubble is loot for whoever is standing closest — and
+  logs `<NAME> WRECKED A <TYPE>` to the event feed. Nothing else damages a building: arrows die
+  on solid tiles without hurting them, and no AI or wildlife targets one.
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), spawned as
   that many separate 1-gold drops — 23 of them for a fully-upgraded wall. `demolishStruct()` →
-  `destroyStructure(o, true)` is the **live** path for that, reached from `runCmd` for the wheel's
-  demolish order: do not read it as dead code. What *is* unreachable is the `hitObject()`
-  structure-damage branch — `swingHit` filters `STRUCTS` types out before calling it and nothing
-  else calls `hitObject`, so **buildings currently take no damage from anything** and demolish is
-  the only way one comes down. `canAfford`/`pay`/`costText` are generic over every `inv` key.
+  `destroyStructure(o, true)` is the live path for that, reached from `runCmd` for the wheel's
+  demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key.
+- **Every damaged building wears an hp bar** (`drawHealthBar`, centred on the sprite, `sy - 5`),
+  drawn only once `hp < maxHp` so an untouched base stays clean — and never while `building`, when
+  hp is climbing rather than falling. The bot bay is excluded: `drawBayOverlay` draws its own at
+  `sy - 11`. Below 60% hp a building also picks up four crack marks placed as fractions of its
+  sprite, so damage reads without the bar.
 - None of the four structures emits light (see [Lighting](rendering.md#lighting)).
 
 ## Robots

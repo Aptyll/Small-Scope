@@ -130,4 +130,6 @@ the arrow speed/damage formulas in `fireArrow()`,
   (`SFX.monsterDie` is live again — every animal death plays it).
 - The turret type (its tick is an idle no-op), the spawner's guard mode (loiters), and the
   `tracers` pass are kept working but have no trigger — they went idle with the raiders. Wolves
-  are hostile but only to players: nothing targets a building or a robot.
+  are hostile but only to players, and nothing targets a robot. Buildings are no longer immune:
+  a **player** on another team breaks one with E (see
+  [Base building](gameplay.md#base-building)), but no AI or wildlife does.
