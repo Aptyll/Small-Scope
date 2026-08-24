@@ -2905,6 +2905,30 @@
   // what the log says when nobody gets the credit
   const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES' };
 
+  // Death empties the wallet. Gold goes to the credited killer outright
+  // (through gainGold, so a kill also levels the killer - the bounty is the
+  // point of taking the fight); with no killer to pay, it spills as coins at
+  // the corpse instead. Everything else in the wallet - food today, any
+  // future resource key - always spills as pickups, split like a downed
+  // worker's carry. Lifetime xp is untouched, and the standings rank on xp
+  // (scoreOf), so a looted slot keeps the place it earned.
+  function spillInventory(p, killer) {
+    for (const k in p.inv) {
+      const n = p.inv[k];
+      p.inv[k] = 0;
+      if (n <= 0) continue;
+      if (k === 'gold' && killer && !killer.dead) {
+        gainGold(killer, n);
+        addFloater(killer.x, killer.y - 14, '+' + n, RES_COLORS.gold);
+        if (killer === player) SFX.pickup();
+        continue;
+      }
+      const parts = Math.min(k === 'gold' ? 5 : 3, n);
+      const base = Math.floor(n / parts), rem = n % parts;
+      for (let i = 0; i < parts; i++) spawnDrop(p.x, p.y - 4, k, base + (i < rem ? 1 : 0));
+    }
+  }
+
   // any slot can go down, and going down is final - the slot is out of the
   // match. Only the local one takes the screen with it (the death overlay).
   function die(p, src, cause) {
@@ -2920,6 +2944,7 @@
     // kill credit and the feed line: the killer's colours if there is one,
     // otherwise the victim's, since the victim is who the line is about
     const killer = src && src !== p ? src : null;
+    spillInventory(p, killer);
     if (killer) killer.kills++;
     logEvent(killer ? killer.name + ' SHOT ' + p.name
       : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
@@ -3932,7 +3957,7 @@
 
     // drops (under entities)
     for (const d of drops) {
-      const spr = d.type === 'gold' ? SPRITES.itemGold : SPRITES.itemBerry;
+      const spr = d.type === 'gold' ? SPRITES.itemGold : d.type === 'fish' ? SPRITES.itemFish : SPRITES.itemBerry;
       // shadow
       ctx.fillStyle = 'rgba(120,140,175,0.35)';
       ctx.fillRect(Math.round(d.x - ex) - 2, Math.round(d.y - ey) + 2, 4, 2);
@@ -6260,9 +6285,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.24'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.25'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.25', 'DYING NOW COSTS THE PURSE: YOUR KILLER POCKETS YOUR GOLD, AN ACCIDENT SPILLS IT ON THE SNOW, AND YOUR FOOD ALWAYS DROPS.'],
     ['1.24', 'THE BUILD WHEEL IS AN EVEN RING WHATEVER IT HOLDS, AND ITS MIDDLE IS NOW A CANCEL BUTTON YOU CAN FIND.'],
     ['1.23', 'ENEMY WORKER BOTS CAN BE SHOT DOWN WITH THE BOW, AND A DOWNED ONE SPILLS THE GOLD IT WAS CARRYING.'],
     ['1.22', 'TURRETS WORK: A BIGGER GUN SWINGS ONTO THE NEAREST ENEMY, LINES UP THE SHOT ALONG A DASHED LINE, AND FIRES A GLOWING BOLT.'],

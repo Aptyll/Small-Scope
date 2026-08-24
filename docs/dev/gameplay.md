@@ -318,9 +318,12 @@ rather than a different resource (the League model: one number, many ways to ear
 Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
 (`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` (gold through
 `gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-levels)) and floats
-`+n` in `RES_COLORS[type]`. Only `gold` and `berry` drops exist (fish go straight to `inv`).
+`+n` in `RES_COLORS[type]`. A drop's `type` is an `inv` key — the pickup and the AI's loot step
+are generic over them; sources pay `gold` and `berry` (a caught fish goes straight to `inv`), and
+death spills can carry `fish` too (`SPRITES.itemFish` in the drop draw pass).
 The HUD shows the local wallet's gold counter (`itemGold`) left of the minimap; the berry/fish
-indicators sit top-left as before. `die(p)` keeps 60% of all three. Robots carry a single gold
+indicators sit top-left as before. Death empties the wallet — see
+[Death is final](#death-is-final). Robots carry a single gold
 number (`b.carry`) and deposit at 8+ into their **owner's** wallet (via `gainGold`, so robot
 income levels the owner too). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
@@ -476,8 +479,16 @@ finally dies; nothing else — a swing, wildlife, the AI's target picker — goe
 ## Death is final
 
 `die(p, src, cause)` marks that slot dead, drops its bow draw and clears its momentum; there is no
-respawn — a dead slot stays out for the rest of the match (the wallet is untouched, so the
-standings still show what it earned). It also credits the kill and writes the feed line — see
+respawn — a dead slot stays out for the rest of the match. **Death empties the wallet**
+(`spillInventory(p, killer)`, right beside `die`): a credited killer pockets the victim's gold
+outright through `gainGold` — so a kill levels the killer, which is the bounty that makes taking
+the fight worth it — while an uncredited death (ice, wolves, or the killer already dead) spills it
+as up to 5 coins at the corpse. Every **other** `inv` key always spills as pickups, split into up
+to 3 drops like a downed worker's carry — food today, and any future resource key (wood, stone,
+hide) will spill through the same loop without touching death code; the drop draw pass and pickup
+handler are already generic per type (`itemFish` included). The standings are unaffected because
+`scoreOf` ranks lifetime `xp`, not the purse, so a looted slot keeps the place it earned. `die`
+also credits the kill and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — and then
 `checkLastStanding()` asks whether the local slot is now the only one left (with at least one
 rival to have beaten), which ends the match as a win. Either way the local slot leaves through

@@ -142,8 +142,10 @@ team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one 
 its income and spills the gold it was carrying, so a base's economy can be raided without ever
 touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
-`die(p, src, cause)` marks the slot dead for good — no respawn, the wallet kept for the
-standings; `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
+`die(p, src, cause)` marks the slot dead for good — no respawn, and the wallet is emptied: the
+killer pockets the gold via `gainGold`, an uncredited death spills it, and food always spills
+(see [Death is final](gameplay.md#death-is-final); the standings rank lifetime `xp`, so they
+still show what the slot earned); `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
 the screen with it (`endMatch('lost')` → `state.mode = 'dead'` and the death overlay: spectate a
 living rival through `viewPlayer()`/`specNext()`, or `toLobby()` back to the title), and every
 death runs `checkLastStanding()`, which ends the match as a win when the local slot is the only one
