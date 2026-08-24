@@ -31,7 +31,17 @@ still reads as tier), and `robotTeam[team]`. A new character or building sprite 
 those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The tool
 icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
 `drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the `TOOLS`
-table) and by `drawRobot()` for a bot's swing — there is no tool bar. Wildlife is
+table) and by `drawRobot()` for a bot's swing — there is no tool bar.
+
+**The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
+and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not
+baked at all: `drawTurretHead()` in game.js rasterises them pixel by pixel at the live bearing and
+dilates the result into a 1px dark rim, exactly as the arrows do, because a baked grid would lock
+the gun to one angle. The pivot is sprite-local **(16, 14)**, just above the collar. Two knock-ons:
+the sprite is wider than its one-tile footprint, so the draw pass centres it (`sx` in the structure
+branch of `render()`); and a 32px sprite is too big for a radial-wheel segment, so `turretIcon` (the
+old 16×16 cannon) is baked into `teamBuild[team].icon.turret`, the same escape hatch the bay uses.
+Wildlife is
 side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stand + two walk frames
 sharing a `deerHead` upper body), wolves are 16×13 (a shared `wolfBody` plus three leg rows per
 frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — and left variants are

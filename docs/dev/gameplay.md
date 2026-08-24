@@ -379,9 +379,20 @@ Mechanics, all in `game.js`:
   yellow progress bar renders above every site (centred over the roof for a big one). Sites are
   solid from placement. A big building y-sorts by the bottom of its footprint and sits its snow
   skirt on that edge.
-- **Turret**: currently idle — its targeting/firing tick was removed with the raiders, so it is
-  a decorative buildable until a new threat exists (the `tracers` array and its render pass are
-  kept for that). **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
+- **Turret**: picks the nearest enemy player or worker bot inside `tiers[tier].range`, swings the
+  gun onto it at `traverse` rad/s (2.2 / 3.0 / 3.8 — it never snaps), and once the bearing is
+  inside `TUR_LOCK` (0.14 rad) charges for `aim` seconds (0.55 / 0.45 / 0.35) before firing a
+  **bolt** every `rate` seconds. Losing the bearing bleeds the charge back down rather than
+  cancelling it. Targeting runs through `turretMark`/`turretHolds`, which reject anything on the
+  turret's own team, anything dead, and any slot still `inAir` on the eagle; `turretSees` walks
+  tiles from the pivot and holds fire when a solid tile blocks the shot, skipping the turret's own
+  footprint (the pivot sits above the tile, so the first samples fall back inside the mount). With
+  no mark it sweeps ±1.15 rad at a third of its traverse, so a live turret never reads as a prop.
+  A bolt is an ordinary entry in `arrows` tagged `kind: 'bolt'`, so it inherits arrow collision,
+  friendly fire and kill credit for free — it just draws differently and flies at `BOLT_SPD` (250).
+  `fireBolt` walks the spawn point out of the turret's own footprint first: turrets are solid
+  tiles and bolts die on solid tiles, so a depressed barrel would otherwise shoot itself.
+  **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
   coin drop at its base, capped at 6 uncollected drops nearby. **Bot bay** (`spawner`):
   keeps `tiers[0].bots` (3) robots alive, rolling them out **one at a time** — the first 1 s after
   completion, then 4 s apart; a lost bot takes 12 s to replace (`respawnT`/`respawnTotal`).

@@ -658,7 +658,8 @@
 
   // ------------------------------------------------- tiered structures
   // One 16x16 grid per building, baked with WPAL / WPAL_STONE / WPAL_GOLD.
-  const turret = [
+  // wheel glyph only: the live turret is the 32x32 mount below, too big for a segment
+  const turretIcon = [
     '................',
     '.....okkko......',
     '....okKKKko.....',
@@ -675,6 +676,44 @@
     '...ouuuUUuvo....',
     '...ovvvvvvvvo...',
     '..ssssssssssss..',
+  ];
+  // The live turret: a 32x32 armoured mount. Rows 0-15 are deliberately empty -
+  // that is where drawTurretHead() rasterises the rotating housing and barrel,
+  // pivoting on sprite-local (16, 14) just above the collar. Baking the barrel
+  // into the grid would lock the gun to one angle.
+  const turret = [
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '..........oooooooooooo..........',
+    '.........okkkkkkkkkkkko.........',
+    '........okKKKKKKKKKKKKko........',
+    '........okKwwwwwwwwwwKko........',
+    '........okKKKKKKKKKKKKko........',
+    '.........okkkkkkkkkkkko.........',
+    '..........oUUUUUUUUUUo..........',
+    '..........oUuuuuuuuuUo..........',
+    '.........ooUuvvvvvvuUoo.........',
+    '.........oUUuveeeevuUUo.........',
+    '.........oUuuvvvvvvuuUo.........',
+    '........ooUuuuuuuuuuuUoo........',
+    '........oUUuukkkkkkuuUUo........',
+    '.......ooUvvvvvvvvvvvvUoo.......',
+    '.......ovvvvvvvvvvvvvvvvo.......',
+    '......ssssssssssssssssssss......',
   ];
   const generator = [
     '................',
@@ -1340,7 +1379,8 @@
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: [bake(bay, bayTeamPal(t))],
-    icon: { spawner: bake(bayIcon, bayTeamPal(t)) }, // wheel glyphs for sprites too big to be their own icon
+    // wheel glyphs for sprites too big to be their own icon
+    icon: { spawner: bake(bayIcon, bayTeamPal(t)), turret: bake(turretIcon, teamBuildPal(WPAL, t)) },
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
 

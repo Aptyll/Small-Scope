@@ -77,7 +77,8 @@ slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
-arrows → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
+arrows (bolts branch to `drawBolt`) → `drawTurretFx` (each turret's charging aim line and its
+muzzle flash) → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
 eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` (snow, see below) →
 `renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of

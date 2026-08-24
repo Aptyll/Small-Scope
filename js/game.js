@@ -29,6 +29,14 @@
   const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
   const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
   const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
+  // turret gunnery. The head is NOT baked into the sprite (see js/sprites.js) - it
+  // is rasterised at the live angle, pivoting on sprite-local (16, 14).
+  const TUR_PIVOT_Y = -4;   // px: the pivot, relative to the anchor tile's top edge
+  const TUR_BARREL = 16;    // px from pivot to muzzle
+  const TUR_LOCK = 0.14;    // rad: inside this of the mark, the shot starts charging
+  const TUR_MZ = 0.09;      // muzzle flash duration
+  const BOLT_SPD = 250;     // px/s
+  const BOLT_LIFE = 1.1;
   const DODGE_T = 0.28;     // roll duration (s)
   const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
   const DODGE_CHARGES = 2;
@@ -104,10 +112,11 @@
       { cost: { gold: 12 }, hp: 140, buildT: 2.4 },
       { cost: { gold: 30 }, hp: 300, buildT: 2.4 },
     ]},
+    // traverse = rad/s the head swings; aim = seconds held on target before it fires
     turret: { name: 'TURRET', tiers: [
-      { cost: { gold: 10 }, hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0  },
-      { cost: { gold: 25 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8  },
-      { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65 },
+      { cost: { gold: 10 }, hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0,  traverse: 2.2, aim: 0.55 },
+      { cost: { gold: 25 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8,  traverse: 3.0, aim: 0.45 },
+      { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65, traverse: 3.8, aim: 0.35 },
     ]},
     generator: { name: 'GENERATOR', tiers: [
       { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 10 },
@@ -1775,7 +1784,9 @@
     for (const [x, y] of footprint(type, tx, ty)) {
       if (x !== tx || y !== ty) objects[idx(x, y)] = { type: 'part', tx: x, ty: y, of: o, flash: 0, shake: 0 };
     }
-    if (type === 'turret') o.cd = 0;
+    // ang: where the barrel points. tgt/chg: the mark and how locked on it is.
+    // rec/mz: recoil slide and muzzle flash. scan: the idle sweep's phase.
+    if (type === 'turret') { o.cd = 0; o.ang = -Math.PI / 2; o.tgt = null; o.chg = 0; o.rec = 0; o.mz = 0; o.scan = 0; }
     if (type === 'generator') o.payT = 0;
     if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
     o.sparkT = 0;
@@ -2422,6 +2433,70 @@
   // audio/screen gating: is this happening near the local listener?
   function nearPlayer(x, y, r) { return !!player && Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
+  // ---- turret gunnery ------------------------------------------------------
+  // The head pivots above the tile, so every bearing, range and sight line is
+  // measured from there rather than from the footprint's centre.
+  function turretPivot(o) { return { x: (o.tx + 0.5) * TILE, y: o.ty * TILE + TUR_PIVOT_Y }; }
+  // players carry an `input` struct, worker bots do not - aim at the body of each
+  function turretAimY(tg) { return tg.input ? tg.y - BOW_Y : tg.y - 4; }
+  function turretMuzzle(o) {
+    const pv = turretPivot(o), c = Math.cos(o.ang || 0), sn = Math.sin(o.ang || 0);
+    const r = TUR_BARREL - (o.rec || 0) * 3;
+    return { x: pv.x + c * r, y: pv.y + sn * r, nx: c, ny: sn };
+  }
+  // bolts die on solid tiles, so a turret that cannot see its mark holds fire
+  // rather than shooting the wall in front of it. Its own footprint is skipped:
+  // the pivot sits above the tile, so the first samples fall back inside the mount.
+  function turretSees(o, pv, tx, ty) {
+    const dx = tx - pv.x, dy = ty - pv.y, d = Math.hypot(dx, dy) || 1;
+    for (let s2 = 6; s2 < d; s2 += 6) {
+      const gx = Math.floor((pv.x + dx / d * s2) / TILE), gy = Math.floor((pv.y + dy / d * s2) / TILE);
+      if (structOf(objAt(gx, gy)) === o) continue;
+      if (isSolidTile(gx, gy)) return false;
+    }
+    return true;
+  }
+  // a valid mark is an enemy player (never one still on the eagle) or worker bot
+  function turretFoe(o, tg) {
+    if (!tg || tg.dead || tg.team === o.team) return false;
+    return tg.input ? (tg.active && !inAir(tg)) : true;
+  }
+  function turretHolds(o, tg, range, pv) {
+    return turretFoe(o, tg) &&
+      Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y) <= range &&
+      turretSees(o, pv, tg.x, turretAimY(tg));
+  }
+  function turretMark(o, range, pv) {
+    let best = null, bd = range;
+    const test = (tg) => {
+      if (!turretFoe(o, tg)) return;
+      const d = Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y);
+      if (d < bd && turretSees(o, pv, tg.x, turretAimY(tg))) { bd = d; best = tg; }
+    };
+    for (const p of players) test(p);
+    for (const b of robots) test(b);
+    return best;
+  }
+  // the shot leaves the barrel tip and rides the normal arrow pipeline, so it
+  // hits players and animals, respects friendly fire, and credits the owner
+  function fireBolt(o, t, pv) {
+    const m = turretMuzzle(o), team = o.team === undefined ? 0 : o.team;
+    // A turret is a solid tile and bolts die on solid tiles, so a depressed barrel
+    // would otherwise shoot itself: walk the spawn point out of our own footprint.
+    let bx = m.x, by = m.y;
+    for (let g = 0; g < 8 && structOf(objAt(Math.floor(bx / TILE), Math.floor(by / TILE))) === o; g++) {
+      bx += m.nx * 4; by += m.ny * 4;
+    }
+    arrows.push({
+      kind: 'bolt', x: bx, y: by,
+      vx: m.nx * BOLT_SPD, vy: m.ny * BOLT_SPD,
+      t: 0, life: BOLT_LIFE, dmg: t.dmg, pow: 1,
+      owner: o.owner === undefined ? 0 : o.owner, team: team, trailD: 0,
+    });
+    burst(m.x, m.y, TEAMS[team].mark, 4, 60, 0.22, true);
+    if (nearPlayer(pv.x, pv.y)) SFX.turretFire();
+  }
+
   function updateStructures(dt) {
     for (let i = tracers.length - 1; i >= 0; i--) {
       tracers[i].t -= dt;
@@ -2476,7 +2551,36 @@
       }
       const t = STRUCTS[o.type].tiers[o.tier];
       if (o.type === 'turret') {
-        // idle: nothing hostile exists since raiders were removed
+        o.cd -= dt;
+        o.rec = Math.max(0, o.rec - dt * 7);
+        o.mz = Math.max(0, o.mz - dt);
+        const pv = turretPivot(o);
+        if (o.tgt && !turretHolds(o, o.tgt, t.range, pv)) o.tgt = null;
+        if (!o.tgt) o.tgt = turretMark(o, t.range, pv);
+        let want, rate = t.traverse;
+        if (o.tgt) {
+          want = Math.atan2(turretAimY(o.tgt) - pv.y, o.tgt.x - pv.x);
+        } else {
+          // idle sweep, at a third of the traverse: a live turret should never
+          // read as a dead prop, and the sweep telegraphs its arc to a raider
+          o.scan += dt * 0.55;
+          want = -Math.PI / 2 + Math.sin(o.scan) * 1.15;
+          rate = t.traverse * 0.35;
+        }
+        let da = want - o.ang;
+        while (da > Math.PI) da -= Math.PI * 2;
+        while (da < -Math.PI) da += Math.PI * 2;
+        const step = rate * dt;
+        o.ang += Math.max(-step, Math.min(step, da));  // swing, never snap
+        if (o.tgt && Math.abs(da) < TUR_LOCK) {
+          o.chg = Math.min(1, o.chg + dt / t.aim);
+          if (o.chg >= 1 && o.cd <= 0) {
+            fireBolt(o, t, pv);
+            o.cd = t.rate; o.chg = 0; o.rec = 1; o.mz = TUR_MZ;
+          }
+        } else {
+          o.chg = Math.max(0, o.chg - dt * 2.5); // lost the lock: bleed the charge
+        }
       } else if (o.type === 'generator') {
         o.payT -= dt;
         if (o.payT <= 0) {
@@ -3824,6 +3928,8 @@
       } else if (STRUCTS[o.type]) {
         const spr = structSprite(o);
         const sy = py + structH(o.type) * TILE - spr.height; // skirt on the footprint's bottom edge
+        // a sprite wider than its footprint (the 32x32 turret on one tile) centres over it
+        const sx = px + ((structW(o.type) * TILE - spr.width) >> 1);
         if (o.building) {
           const p = o.buildT / o.buildTotal;
           if (spr.width > 16) {
@@ -3842,14 +3948,14 @@
             const r = bigBuildReveal(o);
             if (r.rows > 0) {
               ctx.save();
-              ctx.beginPath(); ctx.rect(px - 2, sy + spr.height - r.rows, spr.width + 4, r.rows); ctx.clip();
-              drawSpriteFlash(spr, px + sh, sy, o.flash);
+              ctx.beginPath(); ctx.rect(sx - 2, sy + spr.height - r.rows, spr.width + 4, r.rows); ctx.clip();
+              drawSpriteFlash(spr, sx + sh, sy, o.flash);
               ctx.restore();
               if (r.rows < spr.height) {
                 const ey = sy + spr.height - r.rows;
-                ctx.fillStyle = '#fff1b0'; ctx.fillRect(px + 2, ey, spr.width - 4, 1);
+                ctx.fillStyle = '#fff1b0'; ctx.fillRect(sx + 2, ey, spr.width - 4, 1);
                 ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now * 40);
-                ctx.fillStyle = '#ffd95c'; ctx.fillRect(px + 4, ey - 1, spr.width - 8, 1);
+                ctx.fillStyle = '#ffd95c'; ctx.fillRect(sx + 4, ey - 1, spr.width - 8, 1);
                 ctx.globalAlpha = 1;
               }
             }
@@ -3860,19 +3966,21 @@
             ctx.drawImage(SPRITES.scaffold[2], px, py);
           }
         } else {
-          drawSpriteFlash(spr, px + sh, sy, o.flash);
-          if (o.type === 'spawner') drawBayOverlay(o, px + sh, sy, now);
+          drawSpriteFlash(spr, sx + sh, sy, o.flash);
+          if (o.type === 'spawner') drawBayOverlay(o, sx + sh, sy, now);
+          // the gun is not in the grid: rasterise it at the live bearing, on the collar
+          if (o.type === 'turret') drawTurretHead(o, sx + sh + 16, sy + 12);
           if (o.hp < o.maxHp * 0.6) {
             // four crack marks, placed as fractions of the sprite so they fit any size
             const w = spr.width, h = spr.height;
             ctx.fillStyle = 'rgba(40,25,15,0.5)';
-            ctx.fillRect(px + (w >> 2), sy + (h * 5 >> 4), 1, 3); ctx.fillRect(px + (w >> 2) + 1, sy + (h >> 1), 1, 2);
-            ctx.fillRect(px + (w * 5 >> 3), sy + (h * 3 >> 4), 1, 4); ctx.fillRect(px + (w * 5 >> 3) + 1, sy + (h * 7 >> 4), 1, 2);
+            ctx.fillRect(sx + (w >> 2), sy + (h * 5 >> 4), 1, 3); ctx.fillRect(sx + (w >> 2) + 1, sy + (h >> 1), 1, 2);
+            ctx.fillRect(sx + (w * 5 >> 3), sy + (h * 3 >> 4), 1, 4); ctx.fillRect(sx + (w * 5 >> 3) + 1, sy + (h * 7 >> 4), 1, 2);
           }
           // damage readout: only once hurt, so an untouched base stays clean.
           // the bay has its own bar inside drawBayOverlay - don't draw two.
           if (o.type !== 'spawner' && o.hp < o.maxHp) {
-            drawHealthBar(px + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, spr.width - 4));
+            drawHealthBar(sx + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)));
           }
         }
       }
@@ -3915,6 +4023,7 @@
     // Points are addressed as (back along the shaft, sideways): i px behind the
     // head, j px along the perpendicular.
     for (const a of arrows) {
+      if (a.kind === 'bolt') { drawBolt(a, ex, ey); continue; }
       const vd = Math.hypot(a.vx, a.vy) || 1;
       const nx = a.vx / vd, ny = a.vy / vd;
       const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
@@ -3942,6 +4051,8 @@
       ctx.fillStyle = '#ffffff'; // the tip stays the brightest pixel on screen
       ctx.fillRect(hx, hy, 1, 1);
     }
+
+    drawTurretFx(ex, ey, now);
 
     // turret tracers
     for (const t of tracers) {
@@ -4280,6 +4391,138 @@
   //   vents    - a slat flickers across each grille
   //   beacon   - roof corner, amber blink while a bot is due, grey otherwise
   //   hp       - a bar over the roof, only once damaged
+  // ---- the turret's rotating half -------------------------------------------
+  // The grid stops at the collar; the housing and barrel are rasterised pixel by
+  // pixel at the live angle and dilated into a 1px dark rim - the same trick the
+  // arrows use - so the gun stays crisp and readable at any bearing over snow.
+  const TUR_METAL = [
+    { d: '#6b4a30', m: '#8a6142', l: '#a3794f' }, // tier 1: iron-banded timber
+    { d: '#666d84', m: '#8b93a8', l: '#a8b0c4' }, // tier 2: stone grey
+    { d: '#b9884f', m: '#d8a850', l: '#f2cc6a' }, // tier 3: gilt
+  ];
+  const TUR_RIM = '#0d1226';
+  // shared by the head and its bolts: plus-dilate the pixel map into a dark rim,
+  // paint the rim, then the body over it
+  function paintRimmed(body) {
+    const rim = new Set();
+    for (const k of body.keys()) {
+      const i = k.indexOf(','), x = +k.slice(0, i), y = +k.slice(i + 1);
+      const n = [(x - 1) + ',' + y, (x + 1) + ',' + y, x + ',' + (y - 1), x + ',' + (y + 1)];
+      for (const q of n) if (!body.has(q)) rim.add(q);
+    }
+    ctx.fillStyle = TUR_RIM;
+    for (const k of rim) { const i = k.indexOf(','); ctx.fillRect(+k.slice(0, i), +k.slice(i + 1), 1, 1); }
+    for (const [k, col] of body) { const i = k.indexOf(','); ctx.fillStyle = col; ctx.fillRect(+k.slice(0, i), +k.slice(i + 1), 1, 1); }
+  }
+  function drawTurretHead(o, cx, cy) {
+    const ang = o.ang || 0, ca = Math.cos(ang), sa = Math.sin(ang);
+    const tm = TEAMS[o.team === undefined ? 0 : o.team];
+    const M = TUR_METAL[Math.min(TUR_METAL.length - 1, o.tier)];
+    const rec = -(o.rec || 0) * 3;   // recoil slides the barrel back through the mantlet
+    const chg = o.chg || 0;
+    const body = new Map();
+    // f runs along the barrel, sd across it; every point rotates about the pivot.
+    // Later writes win, so this paints back-to-front: casemate, then the plate the
+    // barrel comes through, then the barrel itself.
+    const put = (f, sd, c) => {
+      body.set(Math.round(cx + f * ca - sd * sa) + ',' + Math.round(cy + f * sa + sd * ca), c);
+    };
+    // casemate: a rounded armour shell, lit from the top like the rest of the art
+    for (let f = -5; f <= 4; f++) for (let sd = -4; sd <= 4; sd++) {
+      if (((f + 0.5) * (f + 0.5)) / 26 + (sd * sd) / 18 > 1) continue;
+      put(f, sd, sd <= -3 ? tm.coatL : sd >= 3 ? tm.coatD : tm.coat);
+    }
+    for (let f = -4; f <= 1; f++) put(f, -3, tm.trim);                    // hull highlight
+    for (const rv of [[-3, -1], [-3, 1], [0, -2], [0, 2]]) put(rv[0], rv[1], tm.coatD); // rivets
+    // vision slit: team colour at rest, hot white the instant the shot is ready
+    const eye = chg > 0.99 ? '#ffffff' : chg > 0.45 ? tm.glow : tm.mark;
+    for (let f = -3; f <= 0; f++) put(f, -2, eye);
+    for (let f = -6; f <= -5; f++) for (let sd = -2; sd <= 2; sd++) put(f, sd, M.d); // breech block
+    for (let f = 2; f <= 5; f++) for (let sd = -3; sd <= 3; sd++) {       // mantlet plate
+      put(f, sd, sd <= -2 ? M.l : sd >= 2 ? M.d : M.m);
+    }
+    // barrel: light top edge, dark underside, so it reads as round at any bearing
+    for (let f = 5; f <= 16; f++) for (let sd = -2; sd <= 2; sd++) {
+      put(f + rec, sd, sd === -2 ? M.l : sd === 2 ? M.d : M.m);
+    }
+    for (let f = 13; f <= 16; f++) for (let sd = -3; sd <= 3; sd++) {     // muzzle brake
+      put(f + rec, sd, sd <= -2 ? M.l : sd >= 2 ? M.d : M.m);
+    }
+    put(14 + rec, -3, M.d); put(14 + rec, 3, M.d);                        // brake slots
+    for (let sd = -1; sd <= 1; sd++) put(16 + rec, sd, '#131a2e');        // the bore, looking down it
+    paintRimmed(body);
+  }
+  // a turret bolt: a stubby bright slug with a halo, deliberately nothing like an arrow
+  function drawBolt(a, ex, ey) {
+    const vd = Math.hypot(a.vx, a.vy) || 1;
+    const nx = a.vx / vd, ny = a.vy / vd, qx = -ny, qy = nx;
+    const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
+    if (hx < -16 || hx > VIEW_W + 16 || hy < -16 || hy > VIEW_H + 16) return;
+    const tm = TEAMS[a.team];
+    ctx.globalAlpha = 0.28;                       // soft halo under the rim
+    ctx.fillStyle = tm.mark;
+    ctx.fillRect(hx - 3, hy, 7, 1); ctx.fillRect(hx, hy - 3, 1, 7);
+    ctx.globalAlpha = 1;
+    const body = new Map();
+    const put = (i, j, c) => {
+      body.set(Math.round(hx - nx * i + qx * j) + ',' + Math.round(hy - ny * i + qy * j), c);
+    };
+    put(4, 0, tm.coatD); put(3, 0, tm.mark); put(2, 0, tm.mark);
+    put(1, -1, tm.mark); put(1, 1, tm.mark);
+    put(1, 0, '#ffffff'); put(0, 0, '#ffffff');   // hot core at the nose
+    paintRimmed(body);
+  }
+  // aim line and muzzle flash, over the world so they read against the mount
+  function drawTurretFx(ex, ey, now) {
+    for (const o of structures) {
+      if (o.type !== 'turret' || o.building) continue;
+      const tm = TEAMS[o.team === undefined ? 0 : o.team];
+      const m = turretMuzzle(o);
+      const mx = Math.round(m.x - ex), my = Math.round(m.y - ey);
+      if (mx < -90 || my < -90 || mx > VIEW_W + 90 || my > VIEW_H + 90) continue;
+      if (o.tgt && o.chg > 0.02) {
+        // a dashed line crawling out to the mark, brightening and tightening as it locks
+        const tx = o.tgt.x - ex, ty = turretAimY(o.tgt) - ey;
+        const dx = tx - mx, dy = ty - my, d = Math.hypot(dx, dy) || 1;
+        const nx = dx / d, ny = dy / d;
+        const hot = o.chg > 0.99;
+        ctx.globalAlpha = 0.25 + 0.6 * o.chg;
+        for (let q = (now * 30) % 6; q < d - 2; q += 6) {
+          for (let k = 0; k < 3 && q + k < d - 2; k++) {
+            const x = Math.round(mx + nx * (q + k)), y = Math.round(my + ny * (q + k));
+            ctx.fillStyle = TUR_RIM; ctx.fillRect(x, y + 1, 1, 1);   // shadow, so it reads on snow
+            ctx.fillStyle = hot ? '#ffffff' : tm.mark; ctx.fillRect(x, y, 1, 1);
+          }
+        }
+        const r = Math.round(8 - 4 * o.chg), rx = Math.round(tx), ry = Math.round(ty);
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.fillStyle = pass ? (hot ? '#ffffff' : tm.mark) : TUR_RIM;
+          const oy2 = pass ? 0 : 1;
+          for (const c2 of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+            ctx.fillRect(rx + c2[0] * r, ry + c2[1] * r + oy2, c2[0] * 2, 1);
+            ctx.fillRect(rx + c2[0] * r, ry + c2[1] * r + oy2, 1, c2[1] * 2);
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+      if (o.mz > 0) {
+        // the shot: a four-point star at the barrel tip for a couple of frames
+        const a2 = o.mz / TUR_MZ, L = Math.round(3 + 5 * a2), h = Math.max(1, L >> 1);
+        ctx.globalAlpha = Math.min(1, a2);
+        ctx.fillStyle = tm.mark;
+        ctx.fillRect(mx - L, my, L * 2 + 1, 1);
+        ctx.fillRect(mx, my - L, 1, L * 2 + 1);
+        for (let k = 1; k <= h; k++) {
+          ctx.fillRect(mx - k, my - k, 1, 1); ctx.fillRect(mx + k, my - k, 1, 1);
+          ctx.fillRect(mx - k, my + k, 1, 1); ctx.fillRect(mx + k, my + k, 1, 1);
+        }
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(mx - 1, my - 1, 3, 3);
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
   function drawBayOverlay(o, px, sy, now) {
     const t = STRUCTS.spawner.tiers[o.tier];
     const due = o.bots.length < t.bots;
@@ -5938,9 +6181,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.21'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.22'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.22', 'TURRETS WORK: A BIGGER GUN SWINGS ONTO THE NEAREST ENEMY, LINES UP THE SHOT ALONG A DASHED LINE, AND FIRES A GLOWING BOLT.'],
     ['1.21', 'YOU CAN NOW BREAK AN ENEMY TEAM BUILDING BY HOLDING E BESIDE IT, AND ANY DAMAGED BUILDING SHOWS A HEALTH BAR.'],
     ['1.20', 'THE NIGHT GLOW NOW SITS EXACTLY ON YOU INSTEAD OF DRIFTING A FRACTION OF A PIXEL AS YOU MOVE.'],
     ['1.19', 'HOUSEKEEPING: EIGHT STALE LINES IN THE DEV NOTES NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],

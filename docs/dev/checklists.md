@@ -128,8 +128,10 @@ the arrow speed/damage formulas in `fireArrow()`,
   the single-currency change (no ore object, no wood/stone drops or HUD counters).
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
-- The turret type (its tick is an idle no-op), the spawner's guard mode (loiters), and the
-  `tracers` pass are kept working but have no trigger — they went idle with the raiders. Wolves
-  are hostile but only to players, and nothing targets a robot. Buildings are no longer immune:
-  a **player** on another team breaks one with E (see
-  [Base building](gameplay.md#base-building)), but no AI or wildlife does.
+- The spawner's guard mode (loiters) and the `tracers` pass are kept working but have no trigger —
+  they went idle with the raiders. The **turret is live again** (it shoots enemy players and worker
+  bots) but it does not use `tracers`: it fires a travelling bolt through the `arrows` array, so
+  the `tracers` pass still has nothing pushing to it. Wolves are hostile but only to players, and
+  nothing targets a robot except a turret. Buildings are not immune either: a **player** on another
+  team breaks one with E (see [Base building](gameplay.md#base-building)), but no AI or wildlife
+  does, and arrows and bolts pass buildings without damaging them.

@@ -104,6 +104,8 @@
     bowDraw() { noise(0.14, 0.06, 350); tone(160, 0.12, 'triangle', 0.04, 60); },
     dodge() { noise(0.16, 0.14, 550); tone(340, 0.12, 'triangle', 0.06, -220); },
     arrow() { noise(0.09, 0.18, 1800); tone(720, 0.06, 'triangle', 0.07, -260); },
+    // turret: a hard electric crack with a low thump under it, so it never reads as a bow
+    turretFire() { tone(880, 0.05, 'square', 0.07, -520); noise(0.07, 0.2, 2600); tone(230, 0.11, 'triangle', 0.09, -90, 0.02); },
     hit() { noise(0.06, 0.25, 800); tone(140, 0.08, 'sawtooth', 0.1, -50); },
     hurt() { tone(200, 0.18, 'sawtooth', 0.16, -120); noise(0.12, 0.2, 500); },
     place() { tone(240, 0.06, 'triangle', 0.14); tone(360, 0.08, 'triangle', 0.12, 0, 0.05); },

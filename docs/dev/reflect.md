@@ -55,13 +55,13 @@ The codebase carries at least seven live hint strings:
 
 | Location | String |
 | --- | --- |
-| [js/game.js:1639](../../js/game.js) | `showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5)` |
-| [js/game.js:3144](../../js/game.js) | `showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6)` |
-| [js/game.js:5327](../../js/game.js) | `'(Q)'` keycap beside the berry counter |
-| [js/game.js:5333](../../js/game.js) | `'(F)'` keycap beside the fish counter |
-| [js/game.js:5631](../../js/game.js) | `'M CLOSE'` |
-| [js/game.js:5846](../../js/game.js) | `'ESC CLOSE'` |
-| [js/game.js:6525](../../js/game.js), [:6543](../../js/game.js) | `'ESC BACK'` |
+| [js/game.js:1648](../../js/game.js) | `showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5)` |
+| [js/game.js:3248](../../js/game.js) | `showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6)` |
+| [js/game.js:5570](../../js/game.js) | `'(Q)'` keycap beside the berry counter |
+| [js/game.js:5576](../../js/game.js) | `'(F)'` keycap beside the fish counter |
+| [js/game.js:5874](../../js/game.js) | `'M CLOSE'` |
+| [js/game.js:6089](../../js/game.js) | `'ESC CLOSE'` |
+| [js/game.js:6769](../../js/game.js), [:6787](../../js/game.js) | `'ESC BACK'` |
 
 Plus the entire settings panel, which is text rows and ON/OFF values with no iconography, and the
 eagle drop's `SPACE - JUMP` and `THE EAGLE DROPS YOU AT THE END OF ITS LINE`.
@@ -93,17 +93,16 @@ This is scoped as a **documentation** goal. It does not commit to building any a
 
 Recorded so a future session knows these were **seen and excluded**, not missed.
 
-- **Only a player breaks a building, and only by hand.** Buildings now take E damage from the
-  other team (see [Base building](gameplay.md#base-building)), but three gaps remain, all of them
-  unbuilt features rather than drift: **arrows** still pass buildings without hurting them (they
-  die on the solid tile); **no AI slot** ever attacks one — `updateAI`'s ladder has no siege step,
-  so bots build bases they will never assault; and the **turret still does not shoot**, its tick
-  being an explicit no-op (`// idle: nothing hostile exists since raiders were removed`,
-  [js/game.js:2479](../../js/game.js)), so a base cannot defend itself either. Attack and defence
-  should probably be designed together rather than one at a time.
+- **Sieges are still one-sided in one direction: nothing shoots buildings.** A player breaks a
+  building by hand and a turret shoots people, but **arrows and bolts pass buildings without
+  damaging them** (they die on the solid tile), so a base can only ever be taken down at melee
+  range. Whether ranged siege should exist is a design question, not drift.
+- **No AI slot attacks anything built.** `updateAI`'s ladder has no siege step, so bots build
+  bases, and now defend them with turrets, but will never assault yours. This is the biggest
+  remaining asymmetry: the player is the only attacker in the game.
 - **Multiplayer and Tutorial are stubs.** `MENU_FROZEN = 1` seals the Multiplayer plank under ice
-  until it exists ([js/game.js:5938](../../js/game.js)). Roadmap, not drift.
-- **`updatePlay`'s 53,824-slot scan** ([js/game.js:3303](../../js/game.js)) is described accurately
+  until it exists ([js/game.js:6181](../../js/game.js)). Roadmap, not drift.
+- **`updatePlay`'s 53,824-slot scan** ([js/game.js:3407](../../js/game.js)) is described accurately
   in [world.md](world.md). Whether it is worth optimising needs a profile first — it may well be
   free.
 
@@ -111,7 +110,7 @@ Recorded so a future session knows these were **seen and excluded**, not missed.
 
 ## How this was verified
 
-- Line numbers were read directly and are accurate as of `PATCH 1.21`. See the drift warning
+- Line numbers were read directly and are accurate as of `PATCH 1.22`. See the drift warning
   above: anything cited beyond ~5900 moves by one line per patch note.
 - Runtime behaviour was confirmed in the browser against `?seed=4242`, using `window.DBG` to stage
   each scene rather than playing to it — with `DBG.freeze = true` to stop the rAF loop so stepping
