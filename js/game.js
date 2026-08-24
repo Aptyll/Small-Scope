@@ -4362,7 +4362,10 @@
         if (dragSlider) return { kind: 'grab' };
         return { kind: settingsHit() ? 'hand' : 'arrow' };
       }
-      if (m.screen === 'select') return { kind: m.screenT >= 1 && selectHit() >= 0 ? 'hand' : 'arrow' };
+      if (m.screen === 'select') {
+        const g = m.screenT >= 1 ? gearSelHit() : null;
+        return { kind: m.screenT >= 1 && (selectHit() >= 0 || (g && g.dir)) ? 'hand' : 'arrow' };
+      }
       if (!m.panel) { const h = menuHit(); if (h >= 0 && h !== MENU_FROZEN) return { kind: 'hand' }; } // the frozen plank isn't clickable, so no hand
       return { kind: 'arrow' };
     }
@@ -4845,6 +4848,28 @@
 
   // every player draws through here - the local one, the AI fills, network
   // peers later. Team palette on the sprite, name tag on everybody else.
+  // gear on the body: bought depth is visible depth. Each piece at level 2+
+  // lays a band of its material across the sprite - hat, coat, hips, one mark
+  // per foot - so a fed player reads iron -> steel -> gold at a glance without
+  // a number. Level 1 (the free pick) draws nothing: the baseline look is the
+  // champion's. Rows are sprite-relative to the shared 16x16 body plan.
+  const GEAR_MARKS = [
+    { y: 3, x: 5, w: 6 },          // helmet: across the hat/hood
+    { y: 8, x: 5, w: 6 },          // chest: across the coat
+    { y: 11, x: 5, w: 6 },         // legs: across the hips
+    { y: 13, x: 5, w: 2, x2: 9 },  // boots: one mark per foot
+  ];
+  function drawGearMarks(p, px, py) {
+    for (let i = 0; i < GEAR_MARKS.length; i++) {
+      const lv = p.gearLv[i];
+      if (lv < 2) continue;
+      const m = GEAR_MARKS[i];
+      ctx.fillStyle = GEAR_MATS[lv - 1];
+      ctx.fillRect(px + m.x, py + m.y, m.w, 1);
+      if (m.x2 !== undefined) ctx.fillRect(px + m.x2, py + m.y, m.w, 1);
+    }
+  }
+
   function drawPlayer(p, ex, ey, now) {
     const local = p === player;
     const set = champSet(p)[p.dir];
@@ -4896,6 +4921,7 @@
       if (toolBehind) drawHeldTool(p, px, py);
       if (p.invuln > 0 && state.mode !== 'title' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
       drawSpriteFlash(spr, px, py, p.hurtT > 0.12 ? 1 : 0);
+      if (state.mode !== 'title') drawGearMarks(p, px, py); // on the body, under the held tool
       ctx.globalAlpha = 1;
       if (held && !toolBehind) drawHeldTool(p, px, py);
     }
@@ -6473,9 +6499,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.26'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.27'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.27', 'PICK YOUR FOUR GEAR PIECES ON THE CHAMPION SCREEN, AND WORN GEAR NOW SHOWS ON YOUR CHARACTER AS IT LEVELS.'],
     ['1.26', 'GEAR ARRIVES: FOUR PIECES THAT LEVEL UP FOR GOLD FROM ANYWHERE - CLICK THE NEW PLATES BOTTOM-RIGHT OR PRESS 1-4.'],
     ['1.25', 'DYING NOW COSTS THE PURSE: YOUR KILLER POCKETS YOUR GOLD, AN ACCIDENT SPILLS IT ON THE SNOW, AND YOUR FOOD ALWAYS DROPS.'],
     ['1.24', 'THE BUILD WHEEL IS AN EVEN RING WHATEVER IT HOLDS, AND ITS MIDDLE IS NOW A CANCEL BUTTON YOU CAN FIND.'],
@@ -7171,7 +7198,33 @@
     const cx = Math.round(VIEW_W / 2);
     const cards = CHAMPS.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
     const lock = { x: cx - 56, y: toy + 228, w: 112, h: 20 };
-    return { toy, cx, cards, lock };
+    // the gear loadout: one row per piece under the cards - icon, then
+    // < NAME > cycling that slot's three variants (see gearSelHit for the cells)
+    const gearRows = GEAR_SLOTS.map((_, i) => ({ x: cards[0].x, y: toy + 142 + i * 16 }));
+    return { toy, cx, cards, lock, gearRows };
+  }
+
+  // which gear-row cell the pointer is on: {row, dir:-1|1} over an arrow,
+  // {row, dir:0} over the rest of the row (the blurb hover), null off them
+  function gearSelHit() {
+    const { gearRows } = selectLayout();
+    for (let i = 0; i < gearRows.length; i++) {
+      const r = gearRows[i];
+      if (mouse.y < r.y - 2 || mouse.y >= r.y + 13) continue;
+      if (mouse.x >= r.x + 14 && mouse.x < r.x + 24) return { row: i, dir: -1 };
+      if (mouse.x >= r.x + 102 && mouse.x < r.x + 112) return { row: i, dir: 1 };
+      if (mouse.x >= r.x && mouse.x < r.x + 112) return { row: i, dir: 0 };
+    }
+    return null;
+  }
+
+  // pre-match variant swap for the local slot (the arrows' click), full heal
+  // like setChamp since nothing has been risked yet
+  function cycleGear(i, dir) {
+    player.gear[i] = (player.gear[i] + dir + 3) % 3;
+    refreshKit(player);
+    player.hp = player.maxHp;
+    SFX.pickup();
   }
 
   // what the pointer is over: card index, CHAMPS.length for LOCK IN, -1 for nothing
@@ -7223,6 +7276,8 @@
   function selectClick() {
     const m = state.menu;
     if (m.lockT > 0 || m.screenT < 1) return;
+    const g = gearSelHit();
+    if (g && g.dir) { cycleGear(g.row, g.dir); return; }
     const h = selectHit();
     if (h < 0) return;
     if (h === CHAMPS.length) { m.pressT = 0.12; lockIn(); }
@@ -7260,10 +7315,19 @@
     }
   }
 
+  // a small pixel chevron for the gear rows' cycle arrows
+  function drawSelArrow(x, y, dir, hot) {
+    ctx.fillStyle = hot ? '#ffd95c' : '#5a7fb8';
+    for (let dy = 0; dy < 7; dy++) {
+      const c0 = Math.abs(dy - 3);
+      ctx.fillRect(x + (dir < 0 ? c0 : 3 - c0), y + dy, 2, 1);
+    }
+  }
+
   // a (0..1) is the screen's own visibility; out is the play-intro exit
   function renderSelect(now, a) {
     const m = state.menu;
-    const { toy, cx, cards, lock } = selectLayout();
+    const { toy, cx, cards, lock, gearRows } = selectLayout();
     const c = CHAMPS[m.csel];
     const slideIn = 1 - a;
 
@@ -7281,6 +7345,31 @@
       drawChampCard(rr, i, m.chover[i], now, m.csel === i);
     }
     ctx.globalAlpha = a;
+
+    // gear loadout, under the cards: each row is icon + < NAME > cycling the
+    // slot's three variants, three dots saying which is on; hovering a row
+    // prints its blurb under the block. The picks write straight to
+    // player.gear, so what leaves this screen is what lands from the eagle.
+    const gh = m.screenT >= 1 && mouse.inside ? gearSelHit() : null;
+    let gearBlurb = null;
+    for (let i = 0; i < gearRows.length; i++) {
+      const rx = gearRows[i].x - Math.round(slideIn * 80), ry = gearRows[i].y;
+      const v = player.gear[i], g = GEAR[i][v];
+      const hot = gh && gh.row === i;
+      ctx.drawImage(SPRITES.gearIcons[i][0], rx, ry);
+      drawSelArrow(rx + 17, ry + 2, -1, hot && gh.dir === -1);
+      drawSelArrow(rx + 105, ry + 2, 1, hot && gh.dir === 1);
+      const nw = pixelTextWidth(g.name);
+      drawPixelTextShadow(ctx, g.name, rx + 26 + Math.round((76 - nw) / 2), ry + 2, hot ? '#ffd95c' : '#cfe0ff', '#0a0e23');
+      for (let d = 0; d < 3; d++) {
+        ctx.fillStyle = d === v ? '#ffd95c' : '#35426e';
+        ctx.fillRect(rx + 60 + (d - 1) * 5, ry + 11, 2, 1);
+      }
+      if (hot) gearBlurb = g.blurb;
+    }
+    if (gearBlurb) {
+      drawPixelTextShadow(ctx, gearBlurb, gearRows[0].x - Math.round(slideIn * 80), toy + 210, '#9fb6d8', 'rgba(15,22,50,0.9)');
+    }
 
     // the champion, big: 6x sprite over a soft plinth, swapping with a quick rise
     const sw = easeOut(m.cswapT);
@@ -7944,6 +8033,7 @@
     GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearRects, gearHit,
     gearCost: (i, p) => gearCost(p || player, i),
     buyGear: (i, p) => buyGear(p || player, i),
+    gearSelHit, cycleGear,
     setGear: (i, v, p) => { const q = p || player; q.gear[i] = v; refreshKit(q); return q.kit; },
     // the match readouts: stage feed lines without staging the kills behind
     // them, and check the standings (hold TAB in game, or set keys.tab here)

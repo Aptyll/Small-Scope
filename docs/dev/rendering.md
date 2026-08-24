@@ -407,7 +407,10 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
   card clicks move `menu.csel` (`menu.cswapT` pops the big sprite), Enter/Space/LOCK IN call
   `lockIn()` — which stamps `setChamp(player, csel)`, holds `menu.lockT` for the press, then
-  `beginDrop()` (the eagle ride, below); Esc/Backspace go back to the menu.
+  `beginDrop()` (the eagle ride, below); Esc/Backspace go back to the menu. Under the cards sit
+  the four **gear rows** (`gearRows` in `selectLayout`): icon + `< NAME >` cycling that slot's
+  three variants via `gearSelHit()`/`cycleGear()` (mouse only), three dots for which is on, the
+  hovered row's blurb printed under the block — see [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
   is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over

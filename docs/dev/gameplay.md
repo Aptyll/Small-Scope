@@ -343,9 +343,16 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 
 The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
 (4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
-(every boot builds fresh `Player`s). The human currently plays the default loadout (variant 0 of
-each slot: LONGSIGHT/BULWARK/STRIDER/SKATES); picking variants joins the champion select screen
-in an upcoming patch. AI slots hash all four variants from the seed in `initPlayers()`.
+(every boot builds fresh `Player`s). The human picks variants on the **champion select screen**
+(four `< NAME >` rows under the cards — `gearRows` in `selectLayout`, `gearSelHit`/`cycleGear`,
+drawn by `renderSelect`; the picks write straight to `player.gear`). AI slots hash all four
+variants from the seed in `initPlayers()`.
+
+**Worn gear shows on the sprite**: each piece at level 2+ lays a 1 px band of its material across
+the shared 16×16 body plan — hat, coat, hips, one mark per foot (`GEAR_MARKS`/`drawGearMarks`,
+called from `drawPlayer` under the held tool; skipped while rolling, in a hole, or in title). The
+free level-1 pick draws nothing, so the baseline look stays the champion's; a fed player reads
+iron → steel → gold at a glance, the same materials the HUD plates wear.
 
 **Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
 `refreshKit(p)` copies the champion kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
