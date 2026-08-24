@@ -350,8 +350,10 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
 `state.menu`:
 
-- **Items** `MENU_ITEMS` (PLAY / SETTINGS / HOW TO PLAY / PLACEHOLDER — the last is a stub that
-  only sounds) plus the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
+- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / TUTORIAL / SETTINGS — MULTIPLAYER is
+  `MENU_FROZEN`: drawn sealed under an ice glaze by `drawMenuButton(..., frozen)` and inert to
+  hover, keyboard and clicks until multiplayer exists; arrow keys skip over it and the hand
+  cursor ignores it) plus the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
   `MENU_PITCH` apart from `MENU_Y0`; the slab and pillars size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
   (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
   when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.
@@ -384,7 +386,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   zero alpha underneath. SETTINGS is the existing panel via `renderSettings(now, { bare, slide })`
   (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
-  slab closes it. HOW TO PLAY is `helpPanelCv` (controls + the rules of the frostlands); PATCH
+  slab closes it. TUTORIAL is `helpPanelCv` (controls + the rules of the frostlands); PATCH
   NOTES is `patchPanelCv`, opened by clicking the `PATCH_TXT` tag bottom-right (`patchTagRect` /
   `overPatchTag`; the tag turns gold with an underline on hover): the frame is baked once, the
   entries (newest first, word-wrapped) into `patchNotesCv` as tall as they need, and render blits

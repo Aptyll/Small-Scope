@@ -4035,7 +4035,7 @@
         return { kind: settingsHit() ? 'hand' : 'arrow' };
       }
       if (m.screen === 'select') return { kind: m.screenT >= 1 && selectHit() >= 0 ? 'hand' : 'arrow' };
-      if (!m.panel && menuHit() >= 0) return { kind: 'hand' };
+      if (!m.panel) { const h = menuHit(); if (h >= 0 && h !== MENU_FROZEN) return { kind: 'hand' }; } // the frozen plank isn't clickable, so no hand
       return { kind: 'arrow' };
     }
     if (state.mode === 'dead') return { kind: deadHit() >= 0 || specHit() ? 'hand' : 'arrow' };
@@ -5730,7 +5730,7 @@
 
   // the dark frost slab every baked panel sits on: chamfered, mottled, bevelled,
   // crystal corners, and a gold title between ornament dashes. Shared by the
-  // settings panel and the main menu's HOW TO PLAY panel so they read as a set.
+  // settings panel and the main menu's TUTORIAL panel so they read as a set.
   function bakeFrostSlab(g, w, h, title) {
     const cham = (x, y, ww, hh) => {
       g.fillRect(x + 2, y, ww - 4, hh);
@@ -5889,18 +5889,20 @@
 
   // ------------------------------------------------------------ main menu
   // The title screen is a real menu over the living world: the camera drifts
-  // around the interior while animals, fish and snow keep running, four items
-  // (PLAY / SETTINGS / HOW TO PLAY / the reroll die) take mouse or arrows+enter,
-  // and every mode change is a transition rather than a cut.
+  // around the interior while animals, fish and snow keep running, the items
+  // (SINGLEPLAYER / MULTIPLAYER / TUTORIAL / SETTINGS / the reroll die) take
+  // mouse or arrows+enter, and every mode change is a transition rather than a cut.
   const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
   const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
   const PANEL_SLIDE_T = 0.32;
-  const MENU_ITEMS = ['PLAY', 'SETTINGS', 'HOW TO PLAY', 'PLACEHOLDER']; // the 4th is a stub: it sounds, does nothing
+  const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'TUTORIAL', 'SETTINGS'];
+  const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.15'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.16'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.16', 'THE MENU IS NOW SINGLEPLAYER, MULTIPLAYER, TUTORIAL, SETTINGS - MULTIPLAYER IS FROZEN IN ICE UNTIL IT ARRIVES.'],
     ['1.15', 'DYING OR PAUSING REPLAYS YOUR LAST FOUR SECONDS ON A LOOP, AT HALF SPEED, IN THE BOTTOM-LEFT CORNER.'],
     ['1.14', 'ARROWS ARE DRAWN PIXEL BY PIXEL, CARRY YOUR TEAM COLOUR ON THE FLETCHING, AND LEAVE A FADING TRAIL.'],
     ['1.13', 'THE MINIMAP IS DRAWN PIXEL BY PIXEL: ITS RIM, MAP EDGE AND DAY RING ARE CRISP.'],
@@ -5957,19 +5959,21 @@
   function menuSelect(i) {
     const m = state.menu;
     const N = MENU_ITEMS.length + 1;
-    const n = ((i % N) + N) % N;
+    const dir = i >= m.sel ? 1 : -1;
+    let n = ((i % N) + N) % N;
+    if (n === MENU_FROZEN) n = (((n + dir) % N) + N) % N; // the frozen plank refuses the selection
     if (n === m.sel) return;
     m.sel = n;
     SFX.pickup();
   }
 
   function menuActivate(i) {
+    if (i === MENU_FROZEN) return; // solid ice: no sound, no light, nothing
     SFX.unlock();
     if (i === 0) beginSelect();
-    else if (i === 1) openMenuPanel('settings');
     else if (i === 2) openMenuPanel('help');
+    else if (i === 3) openMenuPanel('settings');
     else if (i === MENU_ITEMS.length) rerollWorld();
-    // any other item is a placeholder: it sounds and lights up but does nothing yet
   }
 
   function openMenuPanel(kind) {
@@ -6024,7 +6028,7 @@
     }
     if (overPatchTag()) { openMenuPanel('patch'); return; }
     const h = menuHit();
-    if (h < 0) return;
+    if (h < 0 || h === MENU_FROZEN) return;
     m.sel = h;
     m.pressT = 0.12;
     menuActivate(h);
@@ -6082,7 +6086,7 @@
     if (m.moved) {
       m.moved = false;
       const h = menuHit();
-      if (h >= 0 && h !== m.sel) m.sel = h;
+      if (h >= 0 && h !== MENU_FROZEN && h !== m.sel) m.sel = h;
     }
     for (let i = 0; i <= MENU_ITEMS.length; i++) {
       const target = m.sel === i ? 1 : 0;
@@ -6121,8 +6125,9 @@
   }
 
   // a frost plank: snow-capped slab with icicles hanging off it. hv (0..1) is the
-  // hover ease - it lifts and warms; pressed sinks it a px
-  function drawMenuButton(r, label, hv, now, pressed) {
+  // hover ease - it lifts and warms; pressed sinks it a px. frozen seals the
+  // plank under an ice glaze - heavier icicles, muted label, nothing animates
+  function drawMenuButton(r, label, hv, now, pressed, frozen) {
     const a0 = ctx.globalAlpha; // respect the caller's fade (the menu and select screens animate alpha)
     const lift = Math.round(hv * 2) - (pressed ? 2 : 0);
     const x = r.x, y = r.y - lift, w = r.w, h = r.h;
@@ -6164,11 +6169,12 @@
       ctx.fillRect(x + px, y + 1 - sh, 1, sh);
       if (hb > 0.3 && hb < 0.5) { ctx.fillStyle = '#b8cce6'; ctx.fillRect(x + px, y + 1, 1, 1); }
     }
-    // icicles off the bottom edge, tips glinting when hot
+    // icicles off the bottom edge, tips glinting when hot; a frozen plank grows them thick
+    const ith = frozen ? 0.62 : 0.84;
     for (let px = 4; px < w - 4; px++) {
       const hb = hash2(px * 7 + 1, r.y * 17 + 3);
-      if (hb < 0.84) continue;
-      const len = 2 + Math.floor((hb - 0.84) * 25); // 2..5
+      if (hb < ith) continue;
+      const len = 2 + Math.floor((hb - ith) * (frozen ? 16 : 25)); // 2..5, frozen 2..8
       ctx.fillStyle = '#a8c8e8';
       ctx.fillRect(x + px, y + h, 1, len);
       ctx.fillStyle = '#e8f4ff';
@@ -6178,7 +6184,23 @@
     // label
     const tw = pixelTextWidth(label, 2);
     const lx = Math.round(x + (w - tw) / 2), ly = y + Math.round((h - 10) / 2) + (pressed ? 1 : 0);
-    drawPixelTextShadow(ctx, label, lx, ly, hv > 0.5 ? '#ffd95c' : '#cfe0ff', '#0a0e23', 2);
+    drawPixelTextShadow(ctx, label, lx, ly, frozen ? '#8fa6c8' : hv > 0.5 ? '#ffd95c' : '#cfe0ff', '#0a0e23', 2);
+    if (frozen) {
+      // sealed under a sheet of ice: a pale glaze over everything, rime creeping
+      // in from the sides, and static glints - hash2 only, so nothing ever moves
+      ctx.fillStyle = 'rgba(150,190,230,0.33)'; chamRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(232,244,255,0.75)';
+      ctx.fillRect(x + 2, y + 1, w - 4, 1);
+      ctx.fillStyle = 'rgba(200,224,248,0.45)';
+      for (let yy = 2; yy < h - 2; yy++) {
+        const rl = 1 + ((hash2(yy * 5 + 3, r.y * 3) * 4) | 0), rr2 = 1 + ((hash2(yy * 9 + 1, r.y * 7) * 4) | 0);
+        ctx.fillRect(x + 1, y + yy, rl, 1); ctx.fillRect(x + w - 1 - rr2, y + yy, rr2, 1);
+      }
+      for (let gx = 4; gx < w - 4; gx += 2) {
+        const hb = hash2(gx * 13 + 7, r.y * 5 + 1);
+        if (hb > 0.9) { ctx.fillStyle = '#e8f4ff'; ctx.fillRect(x + gx, y + 3 + ((hb * 97) | 0) % (h - 6), 1, 1); }
+      }
+    }
   }
 
   // the reroll die (11x11): face cycles while hovered, tumbles while rolling
@@ -6342,7 +6364,7 @@
   helpPanelCv.width = SET_W; helpPanelCv.height = SET_H;
   function buildHelpPanel() {
     const g = helpPanelCv.getContext('2d');
-    bakeFrostSlab(g, SET_W, SET_H, 'HOW TO PLAY');
+    bakeFrostSlab(g, SET_W, SET_H, 'TUTORIAL');
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
       [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['TAB', 'SCOREBOARD'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
@@ -6704,7 +6726,7 @@
         drawPixelTextShadow(ctx, SEED_TXT, tx, ty, hv > 0.5 ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
         drawDie(tx + pixelTextWidth(SEED_TXT) + 6, rr.y - lift, hv, now);
       } else {
-        drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed);
+        drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed, i === MENU_FROZEN);
       }
       ctx.globalAlpha = 1;
     }
