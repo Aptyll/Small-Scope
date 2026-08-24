@@ -291,7 +291,7 @@
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
   let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92, ROW_SEED = SET_Y + 108, ROW_CURSOR = SET_Y + 124;
+    ROW_INFO = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
 
   const mmCv = document.createElement('canvas');
   mmCv.width = WORLD; mmCv.height = WORLD;
@@ -359,7 +359,7 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, fps: false, seed: true, pixelCursor: true };
+  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, info: false, pixelCursor: true };
   // minimap zoom steps, px per world tile: index settings.mmZoom (2 = the 1:1 baseline)
   const MM_ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3];
   function mmScale() { return MM_ZOOMS[Math.max(0, Math.min(MM_ZOOMS.length - 1, settings.mmZoom | 0))]; }
@@ -396,7 +396,7 @@
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_SEED = SET_Y + 108; ROW_CURSOR = SET_Y + 124;
+    ROW_SHAKE = SET_Y + 76; ROW_INFO = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
     fitFlakes();
     renderBars();
     layoutReplay();
@@ -668,8 +668,11 @@
   window.addEventListener('keydown', (e) => {
     // Tab is held to read the scoreboard (scoreboardOpen()), so it must never
     // reach the browser's focus traversal
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab'].includes(e.key)) e.preventDefault();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab', 'F3'].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
+    // F3 flips the info stack in any mode, minecraft-style (the browser's own
+    // F3 find bar is suppressed above)
+    if (e.key === 'F3') { settings.info = !settings.info; saveSettings(); return; }
     if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
     if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
@@ -4333,20 +4336,22 @@
     ctx.restore();
   }
 
-  // fps + seed readouts: one vertical stack on the left edge at the top
-  // quarter of the view, clear of the berry/fish counters above it, above
-  // every overlay. Each line has its own toggle in the ESC menu (settings.fps
-  // / settings.seed); the seed line sits out title, where the menu prints the
-  // seed itself with the reroll die.
+  // the info stack (settings.info - the INFO row in the ESC menu, or F3, the
+  // minecraft reflex): fps, the framed slot's tile coordinates, and the run
+  // seed as one vertical list on the left edge at the top quarter of the view,
+  // clear of the berry/fish counters above it, above every overlay. In title
+  // only the fps line shows - nobody stands anywhere yet, and the menu prints
+  // the seed itself with the reroll die.
   function drawTags() {
+    if (!settings.info) return;
     let y = Math.round(VIEW_H * 0.25);
-    if (settings.fps) {
-      drawPixelTextOutline(ctx, 'FPS ' + perf.fps, 5, y,
-        perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
-      y += 10;
-    }
-    if (settings.seed && state.mode !== 'title') {
-      drawPixelTextOutline(ctx, SEED_TXT, 5, y, '#9fb6d8', '#0f1632');
+    drawPixelTextOutline(ctx, 'FPS ' + perf.fps, 5, y,
+      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
+    if (state.mode !== 'title') {
+      const vp = viewPlayer(); // spectators read the slot the camera frames
+      drawPixelTextOutline(ctx, 'X ' + Math.floor(vp.x / TILE) + ' Y ' + Math.floor(vp.y / TILE),
+        5, y + 10, '#cfe0ff', '#0f1632');
+      drawPixelTextOutline(ctx, SEED_TXT, 5, y + 20, '#9fb6d8', '#0f1632');
     }
   }
 
@@ -6381,23 +6386,22 @@
     drawPixelText(g, 'MUTE SOUND', 14, ROW_MUTE - SET_Y, L);
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
-    drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
-    drawPixelText(g, 'SEED DISPLAY', 14, ROW_SEED - SET_Y, L);
+    drawPixelText(g, 'INFO DISPLAY', 14, ROW_INFO - SET_Y, L);
     drawPixelText(g, 'CURSOR', 14, ROW_CURSOR - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 142, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 126, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 145, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 145, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
-      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY']],
-      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH']],
+      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 156;
+      let y = 140;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -6431,8 +6435,7 @@
     if (inRow(ROW_MUTE)) return 'mute';
     if (inRow(ROW_MAP)) return 'map';
     if (inRow(ROW_SHAKE)) return 'shake';
-    if (inRow(ROW_FPS)) return 'fps';
-    if (inRow(ROW_SEED)) return 'seed';
+    if (inRow(ROW_INFO)) return 'info';
     if (inRow(ROW_CURSOR)) return 'cursor';
     return null;
   }
@@ -6444,8 +6447,7 @@
     if (hit === 'vol' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
     if (hit === 'mute') settings.muted = SFX.toggleMute();
     else if (hit === 'shake') settings.shake = !settings.shake;
-    else if (hit === 'fps') settings.fps = !settings.fps;
-    else if (hit === 'seed') settings.seed = !settings.seed;
+    else if (hit === 'info') settings.info = !settings.info;
     else if (hit === 'cursor') settings.pixelCursor = !settings.pixelCursor;
     SFX.pickup();
     saveSettings();
@@ -6486,8 +6488,7 @@
     drawToggleRow(ROW_MUTE, SFX.isMuted());
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
-    drawToggleRow(ROW_FPS, settings.fps);
-    drawToggleRow(ROW_SEED, settings.seed);
+    drawToggleRow(ROW_INFO, settings.info);
     drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
     if (slide) ctx.restore();
   }
@@ -6504,9 +6505,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.29'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.30'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.30', 'F3 NOW FLIPS ONE INFO READOUT - FPS, YOUR X AND Y, AND THE SEED - IN PLACE OF THE OLD SEPARATE TOGGLES.'],
     ['1.29', 'THE SEED READOUT CAN BE TOGGLED OFF IN SETTINGS, AND FPS AND SEED NOW SHARE ONE SMALL STACK ON THE LEFT EDGE.'],
     ['1.28', 'GEAR GETS ITS OWN FULL PICK SCREEN AFTER CHAMPION SELECT, AND ALL TWELVE PIECES NOW WEAR THEIR OWN ICON.'],
     ['1.27', 'PICK YOUR FOUR GEAR PIECES ON THE CHAMPION SCREEN, AND WORN GEAR NOW SHOWS ON YOUR CHARACTER AS IT LEVELS.'],

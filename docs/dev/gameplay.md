@@ -563,23 +563,25 @@ runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-men
 
 ## Settings
 
-`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `fps`, `seed`, `pixelCursor`) persists to
+`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
-itself against. (Old saves may still carry a `res` key from the removed resolution setting;
-`Object.assign` in `loadSettings` copies it harmlessly and nothing reads it.)
+itself against. (Old saves may still carry `res`, `fps` or `seed` keys from removed settings;
+`Object.assign` in `loadSettings` copies them harmlessly and nothing reads them.)
 
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
 still refits the canvas when the browser toggles it.
 
-`settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
-unclamped frame deltas into `perf` and refreshes `perf.fps` every half second, red below 45.
-It prints as one line of the **fps/seed stack** — `drawTags()`, a vertical list on the left edge
-at the top quarter of the view, clear of the berry/fish counters, drawn above every overlay.
-`settings.seed` (its own toggle row, default on) is the stack's second line, the run seed —
-see [world.md](world.md#determinism-and-noise). Beneath the minimap `renderMinimap()` prints one
-centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with `aliveCount()` — slots active and
-not dead, riders included — then the elapsed clock.
+`settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
+keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows
+the **info stack** — `drawTags()`, a vertical list on the left edge at the top quarter of the
+view, clear of the berry/fish counters, drawn above every overlay. Three lines: **fps** (`loop()`
+accumulates raw unclamped frame deltas into `perf` and refreshes `perf.fps` every half second,
+red below 45), the **tile coordinates** of the slot the camera frames (`viewPlayer()`, so
+spectators read the watched slot), and the **run seed** — see
+[world.md](world.md#determinism-and-noise). In title only the fps line shows. Beneath the minimap
+`renderMinimap()` prints one centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with
+`aliveCount()` — slots active and not dead, riders included — then the elapsed clock.
 
 ## Audio
 
