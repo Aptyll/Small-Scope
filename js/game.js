@@ -4344,14 +4344,22 @@
   // the seed itself with the reroll die.
   function drawTags() {
     if (!settings.info) return;
+    // two columns: a dim label, then the value on one shared x so the numbers
+    // line up down the stack - the same dim-label / bright-value pairing the
+    // berry and fish counters use. Red is the only colour that means anything
+    // here (a bad frame rate); nothing else is tinted for decoration.
+    const lx = 5, vx = lx + pixelTextWidth('SEED') + 5;
     let y = Math.round(VIEW_H * 0.25);
-    drawPixelTextOutline(ctx, 'FPS ' + perf.fps, 5, y,
-      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
+    const line = (label, value, col) => {
+      drawPixelTextOutline(ctx, label, lx, y, '#7a8bb8', '#0f1632');
+      drawPixelTextOutline(ctx, value, vx, y, col || '#f4f7ff', '#0f1632');
+      y += 10;
+    };
+    line('FPS', String(perf.fps), perf.fps < 45 ? '#ff9a8a' : '#f4f7ff');
     if (state.mode !== 'title') {
       const vp = viewPlayer(); // spectators read the slot the camera frames
-      drawPixelTextOutline(ctx, 'X ' + Math.floor(vp.x / TILE) + ' Y ' + Math.floor(vp.y / TILE),
-        5, y + 10, '#cfe0ff', '#0f1632');
-      drawPixelTextOutline(ctx, SEED_TXT, 5, y + 20, '#9fb6d8', '#0f1632');
+      line('POS', Math.floor(vp.x / TILE) + ', ' + Math.floor(vp.y / TILE));
+      line('SEED', String(SEED));
     }
   }
 
@@ -6505,9 +6513,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.30'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.31'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.31', 'THE F3 READOUT IS NOW A TIDY LABELLED COLUMN IN THE HUD\'S OWN COLOURS, WITH RED SAVED FOR A BAD FRAME RATE.'],
     ['1.30', 'F3 NOW FLIPS ONE INFO READOUT - FPS, YOUR X AND Y, AND THE SEED - IN PLACE OF THE OLD SEPARATE TOGGLES.'],
     ['1.29', 'THE SEED READOUT CAN BE TOGGLED OFF IN SETTINGS, AND FPS AND SEED NOW SHARE ONE SMALL STACK ON THE LEFT EDGE.'],
     ['1.28', 'GEAR GETS ITS OWN FULL PICK SCREEN AFTER CHAMPION SELECT, AND ALL TWELVE PIECES NOW WEAR THEIR OWN ICON.'],

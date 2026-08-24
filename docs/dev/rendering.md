@@ -88,8 +88,8 @@ map/settings overlays → `renderTitle` (the main menu, also during the play int
 `renderReplay` (the replay window, above both the death dim and the pause dim) →
 the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
 [Scoreboard and event feed](#scoreboard-and-event-feed)) →
-the info stack (`drawTags`, left edge at the top quarter: fps, tile coords, seed — one ESC-menu
-toggle or F3; only the fps line in `title`, where the menu prints the seed) → the screen fade
+the info stack (`drawTags`, left edge at the top quarter: FPS / POS / SEED as aligned
+label-value rows — one ESC-menu toggle or F3; only the fps line in `title`) → the screen fade
 (`state.fade`, the reroll whiteout) → the pixel cursor (always last). The bow's
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
