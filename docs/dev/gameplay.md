@@ -329,6 +329,49 @@ income levels the owner too). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
 (`canAfford`/`pay` also take the player whose wallet is meant).
 
+## Gear
+
+Every slot wears four pieces — **helmet, chest, legs, boots** (`GEAR_SLOTS`) — each one of three
+variants with a distinct lane, all in the `GEAR` table in the `players` banner:
+
+| Slot | Variants (per piece level) |
+| --- | --- |
+| helmet | LONGSIGHT +1 arrow dmg · QUICKDRAW −8% draw time · HUNTSMAN +15% animal-kill gold |
+| chest | BULWARK +8 max hp · IRONHIDE −1 dmg from every hit (min 1) · HEARTHWEAVE +25% food heal, passive heal runs at night |
+| legs | STRIDER +4% walk speed · SLIDEWORN −12% fatigue, slide engages 5 sooner · PACKMULE +1 gold on fells/breaks |
+| boots | SKATES +8% ice cap, +0.15 steer · DANCER −0.4 s dodge refill · GHOSTSTEP wolves/turrets acquire at −10% range |
+
+The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
+(4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
+(every boot builds fresh `Player`s). The human currently plays the default loadout (variant 0 of
+each slot: LONGSIGHT/BULWARK/STRIDER/SKATES); picking variants joins the champion select screen
+in an upcoming patch. AI slots hash all four variants from the seed in `initPlayers()`.
+
+**Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
+`refreshKit(p)` copies the champion kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
+`nightHeal`, `walkMul`, `harvest`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
+returns that cache, so every existing kit read site (movement, `fireArrow`, dodge timing, the AI,
+the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
+Sites that read the gear-only fields: `damagePlayer` (`dr`), `eatBerry`/`eatFish` and the daylight
+regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvest`), `animalDies`
+(`huntMul`, paid to `a.lastHit` — stamped by the arrow loop — as one extra coin), the wolf
+target pick and `turretMark`/`turretHolds` (`stealth`), and the three dodge-refill sites
+(`dodgeCd`).
+
+**Buying** goes through `input.cmd = {kind:'gear', piece}` → `runCmd` → `buyGear(p, i)` — the one
+entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
+bump on the spot like a hero level. No tile, no reach, no contest — it only touches the buyer's
+own wallet. The human sends it from keys **1–4** or by clicking the **gear row**: four plates
+bottom-right (`gearRects`/`gearHit`/`drawGearRow`, UI banner), one per piece head-to-toe. A
+plate's icon wears the **material of its level** (`SPRITES.gearIcons`, leather → iron → steel →
+gold), pips under the icon count the buys, a 1 px meter under the plate fills as the purse
+approaches the next cost, an affordable piece grows a bobbing gold chevron, hover lifts the plate
+and shows the cost (coin + number, nothing else), and a maxed piece goes quiet behind a gold rim.
+`gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
+can never disagree; the click is swallowed **before** `clickAction`, the one left-clickable HUD
+widget in play. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
+float so they still build.
+
 ## Base building
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
@@ -340,7 +383,7 @@ there are no free-placed buildables. All the data lives in the `STRUCTS` table: 
 wall/turret/generator (the wood → stone → gold *look* is just the sprite palette) and **one for the
 bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats. `tiers[0]` is what the wheel
 builds; upgrading pays the next tier's cost and re-runs a shorter construction, and the last tier
-(`tiers.length - 1`) reports MAX TIER. Building is the only gold sink.
+(`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear) are the two gold sinks.
 
 Mechanics, all in `game.js`:
 

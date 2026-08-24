@@ -1165,6 +1165,65 @@
     '........',
   ];
 
+  // ---------------------------------------------------------------- gear icons
+  // The HUD's four gear plates (game.js UI banner): one 10x10 glyph per slot,
+  // baked once per material - leather / iron / steel / gold - so the icon
+  // itself says the piece's level in the tier language the buildings taught.
+  const GEAR_MAT_PALS = [
+    { '.': null, 'o': '#141a2c', 'm': '#8a6a4a', 'h': '#b08a5e', 'd': '#5f4830' }, // leather
+    { '.': null, 'o': '#141a2c', 'm': '#9aa3ad', 'h': '#c8ccd4', 'd': '#646c76' }, // iron
+    { '.': null, 'o': '#141a2c', 'm': '#9fc4dd', 'h': '#ddf1f8', 'd': '#5f87a8' }, // steel
+    { '.': null, 'o': '#141a2c', 'm': '#f2cc6a', 'h': '#ffedb0', 'd': '#b8912f' }, // gold
+  ];
+  const gearHelmet = [
+    '..oooooo..',
+    '.ommhhmmo.',
+    'ommmhhmmmo',
+    'ommmmmmmmo',
+    'odmmmmmmdo',
+    'odo....odo',
+    'odo....odo',
+    'oddo..oddo',
+    '.oddooddo.',
+    '..oooooo..',
+  ];
+  const gearChest = [
+    'ooo....ooo',
+    'ohmoooomdo',
+    'ohmmmmmmdo',
+    'oommhhmmoo',
+    '.ommmmmmd.',
+    '.ommmmmmd.',
+    '.odmmmmdo.',
+    '..ommmmd..',
+    '..oddddo..',
+    '...oooo...',
+  ];
+  const gearLegs = [
+    'oooo..oooo',
+    'ohmo..ohmo',
+    'ohmo..ohmo',
+    'ommo..ommo',
+    'oddo..oddo',
+    'ommo..ommo',
+    'ommo..ommo',
+    'oddo..oddo',
+    'oooo..oooo',
+    '..........',
+  ];
+  const gearBoots = [
+    '..oo...oo.',
+    '..omo.omo.',
+    '..omo.omo.',
+    '..omo.omo.',
+    '..omo.omo.',
+    '.oomo.omoo',
+    'ohmmoommho',
+    '.oooooooo.',
+    '..........',
+    '..........',
+  ];
+
   // ---------------------------------------------------------------- heart
   const HPAL = {
     '.': null,
@@ -1776,6 +1835,8 @@
     itemBerry: bake(itemBerry, ITPAL),
     itemGold: bake(itemGold, ITPAL),
     itemFish: bake(itemFish, FIPAL),
+    // gearIcons[slot][material]: helmet/chest/legs/boots x leather/iron/steel/gold
+    gearIcons: [gearHelmet, gearChest, gearLegs, gearBoots].map((g) => GEAR_MAT_PALS.map((pal) => bake(g, pal))),
     itemAxe: bake(itemAxe, AXPAL),
     itemBow: bake(itemBow, AXPAL),
     itemPick: bake(itemPick, AXPAL),

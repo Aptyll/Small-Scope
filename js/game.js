@@ -433,9 +433,12 @@
         bowCharge: 0.6, dmgBase: 3, dmgPow: 6, spdDmg: 7, dodgeSpeed: 245, maxHp: 85 },
     },
   ];
-  function kitOf(p) { return CHAMPS[p.champ].kit; }
+  // the kit every sim site reads: the champion's numbers with the slot's gear
+  // folded in. refreshKit() rebuilds the cache whenever champion or gear
+  // changes; kitOf() itself is called many times a frame and must stay a read.
+  function kitOf(p) { return p.kit || CHAMPS[p.champ].kit; }
   // swap a slot's champion: kit hp applies on the spot (full heal, it's a pre-match choice)
-  function setChamp(p, c) { p.champ = c; p.maxHp = levelMaxHp(p); p.hp = p.maxHp; }
+  function setChamp(p, c) { p.champ = c; refreshKit(p); p.hp = p.maxHp; }
   // kit hp plus the flat per-level growth
   function levelMaxHp(p) { return kitOf(p).maxHp + LVL_HP * (p.level - 1); }
   // the one way gold enters a wallet: pays the purse and the same amount of XP
@@ -462,6 +465,70 @@
     return [t.trim, t.hatL, t.trimD, t.hat][Math.floor(p.id / TEAM_COUNT) % 4];
   }
 
+  // ---- gear ----------------------------------------------------------------
+  // Four pieces - helmet, chest, legs, boots - each picked from three variants
+  // at champ select (that free pick is level 1) and bought to level GEAR_LV_MAX
+  // in-match, from anywhere, per piece. A variant's mod() writes its bonus into
+  // the effective kit at the piece's level, so the whole system is one table
+  // plus refreshKit(); the sim never reads gear directly. Levels reset with the
+  // match because every boot builds fresh Players. The HUD row (UI banner) and
+  // the bots both buy through input.cmd {kind:'gear', piece}, never directly.
+  const GEAR_SLOTS = ['HELMET', 'CHEST', 'LEGS', 'BOOTS'];
+  const GEAR_COSTS = [10, 20, 35]; // gold to reach piece level 2 / 3 / 4
+  const GEAR_LV_MAX = 4;
+  const GEAR_MATS = ['#8a6a4a', '#9aa3ad', '#9fc4dd', '#f2cc6a']; // leather/iron/steel/gold, by piece level
+  const GEAR = [
+    [ // helmet: how you kill
+      { name: 'LONGSIGHT', blurb: 'ARROWS HIT HARDER', mod: (k, L) => { k.dmgBase += L; } },
+      { name: 'QUICKDRAW', blurb: 'FASTER FULL DRAW', mod: (k, L) => { k.bowCharge *= 1 - 0.08 * L; } },
+      { name: 'HUNTSMAN', blurb: 'ANIMALS PAY MORE', mod: (k, L) => { k.huntMul += 0.15 * L; } },
+    ],
+    [ // chest: how you last
+      { name: 'BULWARK', blurb: 'MORE HEALTH', mod: (k, L) => { k.maxHp += 8 * L; } },
+      { name: 'IRONHIDE', blurb: 'EVERY HIT HURTS LESS', mod: (k, L) => { k.dr += L; } },
+      { name: 'HEARTHWEAVE', blurb: 'FOOD AND NIGHTS ARE KINDER', mod: (k, L) => { k.foodMul += 0.25 * L; k.nightHeal = true; } },
+    ],
+    [ // legs: how you cross snow
+      { name: 'STRIDER', blurb: 'WALK FASTER', mod: (k, L) => { k.walkMul += 0.04 * L; } },
+      { name: 'SLIDEWORN', blurb: 'LONGER, EARLIER SLIDES', mod: (k, L) => { k.fatigue *= 1 - 0.12 * L; k.slideMin -= 5 * L; } },
+      { name: 'PACKMULE', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k, L) => { k.harvest += L; } },
+    ],
+    [ // boots: how you skate and dodge
+      { name: 'SKATES', blurb: 'FASTER, SHARPER ON ICE', mod: (k, L) => { k.iceMax *= 1 + 0.08 * L; k.iceSteer += 0.15 * L; } },
+      { name: 'DANCER', blurb: 'DODGES COME BACK SOONER', mod: (k, L) => { k.dodgeCd -= 0.4 * L; } },
+      { name: 'GHOSTSTEP', blurb: 'WOLVES AND TURRETS SEE YOU LATE', mod: (k, L) => { k.stealth -= 0.10 * L; } },
+    ],
+  ];
+  // rebuild p.kit from champion + gear. The gear-free defaults added here are
+  // the fields no champion kit carries; a variant's mod() edits them in place.
+  function refreshKit(p) {
+    const k = Object.assign({}, CHAMPS[p.champ].kit, {
+      huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
+      harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
+    });
+    for (let i = 0; i < GEAR.length; i++) GEAR[i][p.gear[i]].mod(k, p.gearLv[i]);
+    p.kit = k;
+    p.maxHp = levelMaxHp(p);
+    if (p.hp === undefined || p.hp > p.maxHp) p.hp = p.maxHp;
+  }
+  function gearCost(p, i) { return p.gearLv[i] >= GEAR_LV_MAX ? null : { gold: GEAR_COSTS[p.gearLv[i] - 1] }; }
+  // the one entry point for an upgrade, reached through runCmd so every buyer -
+  // HUD click, number key, bot - goes the same way. A BULWARK bump heals the
+  // new hp on the spot, the way a hero level does.
+  function buyGear(p, i) {
+    const cost = gearCost(p, i);
+    if (!cost || !canAfford(cost, p)) { if (p === player) SFX.deny(); return; }
+    pay(cost, p);
+    p.gearLv[i]++;
+    const oldMax = p.maxHp;
+    refreshKit(p);
+    if (p.maxHp > oldMax) p.hp = Math.min(p.maxHp, p.hp + (p.maxHp - oldMax));
+    addFloater(p.x, p.y - 18, GEAR[i][p.gear[i]].name + ' ' + p.gearLv[i], GEAR_MATS[p.gearLv[i] - 1]);
+    burst(p.x, p.y - 8, GEAR_MATS[p.gearLv[i] - 1], 8, 40, 0.45);
+    if (p === player) SFX.levelUp();
+    else if (nearPlayer(p.x, p.y)) SFX.pickup();
+  }
+
   // one frame of intent - the whole interface between a controller and the sim
   function makeInput() {
     return {
@@ -472,7 +539,7 @@
       slide: false,        // shift held
       dodge: false,        // edge-triggered, cleared once the sim reads it
       eatBerry: false, eatFish: false, // edge-triggered
-      cmd: null,           // one-shot order: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
+      cmd: null,           // one-shot order: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id} or {kind:'gear', piece}
     };
   }
 
@@ -485,9 +552,11 @@
       this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
       this.inv = { gold: 0, berry: 0, fish: 0 };
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
+      this.gear = [0, 0, 0, 0];           // chosen GEAR variant per slot (helmet/chest/legs/boots)
+      this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
       this.kills = 0;                     // rivals downed; scoreboard only, survives death
-      this.maxHp = 100;
+      refreshKit(this);                   // builds this.kit and this.maxHp from champ + gear
       this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
       this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
       this.dropU = 1;                     // route fraction at which an AI slot jumps
@@ -535,8 +604,12 @@
   function initPlayers() {
     players.length = 0;
     for (let i = 0; i < MAX_PLAYER_SLOTS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
-    // AI slots draw their champion from the seed so a replayed world fields the same roster
-    for (const p of players) if (p.control === 'ai') setChamp(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1);
+    // AI slots draw their champion AND their four gear variants from the seed,
+    // so a replayed world fields the same roster in the same loadouts
+    for (const p of players) if (p.control === 'ai') {
+      for (let i = 0; i < GEAR_SLOTS.length; i++) p.gear[i] = Math.floor(hash2(p.id * 29 + i * 13 + 5, 191) * 3) % 3;
+      setChamp(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1); // refreshes the kit too
+    }
     player = players[0];
     inv = player.inv;
   }
@@ -605,6 +678,9 @@
     if (e.key === ' ') player.input.dodge = true;
     if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
     if (e.key.toLowerCase() === 'f') player.input.eatFish = true;
+    // 1-4 buy the next level of that gear piece, left to right like the HUD row
+    // (sampleHumanInput zeroes cmd while an overlay is up, so no guard needed)
+    if (e.key >= '1' && e.key <= '4') player.input.cmd = { kind: 'gear', piece: e.key.charCodeAt(0) - 49 };
     if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
       if (state.wheel) state.wheel = null;
@@ -657,6 +733,10 @@
     if (state.wheel) { state.wheel = null; return; } // left-click while it is open: cancel
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
+    // the gear row swallows its clicks before the bow ever sees them - the one
+    // left-clickable HUD widget in play; a plate that can't sell just denies
+    const gi = gearHit(mouse.x, mouse.y);
+    if (gi >= 0) { SFX.unlock(); player.input.cmd = { kind: 'gear', piece: gi }; return; }
     mouse.down = true;
     clickAction(player);
   });
@@ -1091,18 +1171,20 @@
   function eatBerry(p) {
     if (p.inv.berry <= 0 || p.hp >= p.maxHp) return;
     p.inv.berry--;
-    p.hp = Math.min(p.maxHp, p.hp + 20);
+    const heal = Math.round(20 * kitOf(p).foodMul); // HEARTHWEAVE makes meals bigger
+    p.hp = Math.min(p.maxHp, p.hp + heal);
     if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
-    addFloater(p.x, p.y - 14, '+20', '#8fe08a');
+    addFloater(p.x, p.y - 14, '+' + heal, '#8fe08a');
     burst(p.x, p.y - 8, '#f2707a', 6, 30, 0.4);
   }
 
   function eatFish(p) {
     if (p.inv.fish <= 0 || p.hp >= p.maxHp) return;
     p.inv.fish--;
-    p.hp = Math.min(p.maxHp, p.hp + 50);
+    const heal = Math.round(50 * kitOf(p).foodMul);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
     if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
-    addFloater(p.x, p.y - 14, '+50', '#8fe08a');
+    addFloater(p.x, p.y - 14, '+' + heal, '#8fe08a');
     burst(p.x, p.y - 8, '#7ac0e8', 6, 30, 0.4);
   }
 
@@ -1496,11 +1578,11 @@
     p.dodgeT = DODGE_T;
     p.dodgeDustT = 0;
     // remember the fill level before the spend so the bar can ghost the lost chunk
-    const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+    const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / kitOf(p).dodgeCd : 0;
     p.stamGhost = Math.max(p.stamGhost, (p.dodgeCharges + regenP) / DODGE_CHARGES);
     p.stamGhostT = 0.3;
     p.dodgeCharges--;
-    if (p.dodgeRegenT <= 0) p.dodgeRegenT = DODGE_CD;
+    if (p.dodgeRegenT <= 0) p.dodgeRegenT = kitOf(p).dodgeCd; // DANCER shortens the refill
     p.invuln = Math.max(p.invuln, DODGE_T + 0.05);
     p.kbx = p.kby = 0;
     if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
@@ -1647,7 +1729,7 @@
           state.hints.stump = true;
           showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
         }
-        spawnDrop(ox, oy, 'gold', YIELD.treeFall);
+        spawnDrop(ox, oy, 'gold', YIELD.treeFall + kitOf(p).harvest); // PACKMULE fattens the fell
         burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
         burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
         if (o.rare) {
@@ -1669,7 +1751,7 @@
         objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
         if (near) SFX.treeFall();
         if (p === player) state.shake = Math.max(state.shake, 2);
-        spawnDrop(ox, oy, 'gold', YIELD.deadTreeFall);
+        spawnDrop(ox, oy, 'gold', YIELD.deadTreeFall + kitOf(p).harvest);
         burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
         burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
         flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
@@ -1683,7 +1765,7 @@
         objects[idx(o.tx, o.ty)] = null;
         if (near) SFX.break_();
         if (p === player) state.shake = Math.max(state.shake, 2);
-        spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2);
+        spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2 + kitOf(p).harvest);
         burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
       }
     } else if (o.type === 'bush') {
@@ -2061,10 +2143,19 @@
     a.moving = moving;
   }
 
-  // what a kill pays: one profile per kind, all of it out of the YIELD table
+  // what a kill pays: one profile per kind, all of it out of the YIELD table.
+  // A HUNTSMAN's kill (a.lastHit, stamped by the arrow loop) drops one extra
+  // coin worth the bonus - the drop is neutral like the rest, but the hunter
+  // is the one standing over it.
   function animalDies(a) {
     a.dead = true;
     if (nearPlayer(a.x, a.y)) SFX.monsterDie();
+    const hunter = a.lastHit !== undefined ? players[a.lastHit] : null;
+    const y = YIELD[a.kind];
+    if (hunter && !hunter.dead && y && y.coins) {
+      const bonus = Math.ceil(y.coins * y.each * (kitOf(hunter).huntMul - 1));
+      if (bonus > 0) spawnDrop(a.x, a.y, 'gold', bonus);
+    }
     if (a.kind === 'rabbit') {
       burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
       burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
@@ -2116,11 +2207,13 @@
     const leashed = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_LEASH;
     if (t && (!t.active || t.dead || inAir(t) || !leashed(t))) { t = null; navClear(a); }
     if (!t) {
-      let bd = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
+      const sight = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
+      let bd = sight;
       for (const p of players) {
         if (!p.active || p.dead || inAir(p) || !leashed(p)) continue;
         const d = Math.hypot(p.x - a.x, p.y - a.y);
-        if (d < bd) { bd = d; t = p; }
+        // GHOSTSTEP shortens how far this particular quarry is noticed from
+        if (d < bd && d < sight * kitOf(p).stealth) { bd = d; t = p; }
       }
       if (t) wakePack(a, t);
     }
@@ -2463,7 +2556,7 @@
   }
   function turretHolds(o, tg, range, pv) {
     return turretFoe(o, tg) &&
-      Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y) <= range &&
+      Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y) <= range * (tg instanceof Player ? kitOf(tg).stealth : 1) &&
       turretSees(o, pv, tg.x, turretAimY(tg));
   }
   function turretMark(o, range, pv) {
@@ -2471,6 +2564,8 @@
     const test = (tg) => {
       if (!turretFoe(o, tg)) return;
       const d = Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y);
+      // GHOSTSTEP shrinks the ring this target is acquired (and held) inside
+      if (d > range * (tg instanceof Player ? kitOf(tg).stealth : 1)) return;
       if (d < bd && turretSees(o, pv, tg.x, turretAimY(tg))) { bd = d; best = tg; }
     };
     for (const p of players) test(p);
@@ -2871,8 +2966,9 @@
     player.input.cmd = { kind: w.kind === 'build' ? 'build' : L.opts[L.seg].id, tx: w.tx, ty: w.ty, id: L.opts[L.seg].id };
   }
 
-  // run a queued build/manage order for any player
+  // run a queued build/manage/gear order for any player
   function runCmd(p, c) {
+    if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
     if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
     const o = structOf(objAt(c.tx, c.ty));
     if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
@@ -2891,6 +2987,7 @@
   // world; cause: a DEATH_CAUSE key naming what the world did, when src is null
   function damagePlayer(p, dmg, dx, dy, src, cause) {
     if (p.dead || p.invuln > 0) return;
+    dmg = Math.max(1, dmg - kitOf(p).dr); // IRONHIDE flattens every hit, but never to zero
     p.hp -= dmg;
     p.hurtT = 0.25;
     p.invuln = 0.7;
@@ -3138,8 +3235,17 @@
     }
     if (!loot) ai.lootT = 0;
 
-    // 6. spend the purse: building is the only gold sink, so a bot with money
-    //    looks for a stump to build on, then for its own work to upgrade
+    // 6. spend the purse: gear first when the purse is fat enough to keep a
+    //    building float (buyGear re-validates, so a stale order is harmless),
+    //    then a stump to build on, then its own work to upgrade
+    if (!inp.cmd) {
+      let gi = -1, gc = 1e9;
+      for (let i = 0; i < GEAR_SLOTS.length; i++) {
+        const c = gearCost(p, i);
+        if (c && c.gold < gc) { gc = c.gold; gi = i; }
+      }
+      if (gi >= 0 && p.inv.gold >= gc + 15) inp.cmd = { kind: 'gear', piece: gi };
+    }
     if (ai.buildT <= 0 && p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold) {
       const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
       if (st) {
@@ -3412,6 +3518,7 @@
           if (animalHit(an, a.x, a.y)) {
             an.hp -= a.dmg;
             an.flash = 0.12;
+            an.lastHit = a.owner; // whose HUNTSMAN bonus the kill pays (animalDies)
             // a wolf does not run from an arrow - the whole den comes for you
             if (an.kind === 'wolf') wakePack(an, players[a.owner]);
             else if (an.kind === 'bird') flushBirds(an.home, a);
@@ -3586,7 +3693,7 @@
       if (p.dodgeT <= 0) burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true);
     } else {
       const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
-      const walkMax = PLAYER_SPEED * chargeMul;
+      const walkMax = PLAYER_SPEED * kit.walkMul * chargeMul; // STRIDER lengthens the stride
 
       if (!onIce && !p.sliding && sp <= walkMax + 6) {
         // plain snow walking: near-instant vector approach, tuned so it feels
@@ -3659,12 +3766,12 @@
       p.dodgeRegenT -= dt;
       if (p.dodgeRegenT <= 0) {
         p.dodgeCharges++;
-        p.dodgeRegenT = p.dodgeCharges < DODGE_CHARGES ? DODGE_CD : 0;
+        p.dodgeRegenT = p.dodgeCharges < DODGE_CHARGES ? kit.dodgeCd : 0;
       }
     }
     // spent-stamina ghost: hold briefly, then drain toward the live fill
     {
-      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / kit.dodgeCd : 0;
       const frac = (p.dodgeCharges + regenP) / DODGE_CHARGES;
       if (p.stamGhostT > 0) p.stamGhostT -= dt;
       else p.stamGhost -= dt * 1.6;
@@ -3751,8 +3858,8 @@
     p.hurtT = Math.max(0, p.hurtT - dt);
     p.invuln = Math.max(0, p.invuln - dt);
 
-    // gentle regen in daylight
-    if (p.hp < p.maxHp && state.darkness < 0.3) {
+    // gentle regen in daylight (HEARTHWEAVE keeps the hearth lit after dark)
+    if (p.hp < p.maxHp && (state.darkness < 0.3 || kit.nightHeal)) {
       p.hp = Math.min(p.maxHp, p.hp + dt * 0.6);
     }
   }
@@ -4267,6 +4374,7 @@
     }
     if (state.mapOpen || state.paused) return { kind: 'arrow' };
     if (state.wheel) return { kind: wheelLayout().seg >= 0 ? 'hand' : 'arrow' };
+    if (gearHit(mouse.x, mouse.y) >= 0) return { kind: 'hand' }; // the gear row is clickable HUD
 
     const wx = mouse.x + camX, wy = mouse.y + camY;
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
@@ -4825,7 +4933,7 @@
       ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx, by - 1, 14, 3);
-      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / DODGE_CD : 0;
+      const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / kitOf(p).dodgeCd : 0;
       const frac = (p.dodgeCharges + regenP) / DODGE_CHARGES;
       // ghost of the chunk just spent: pale segment that drains into place
       const gw = Math.round(14 * Math.max(frac, p.stamGhost)) - Math.round(14 * frac);
@@ -5656,6 +5764,80 @@
     stamp(0, 0, color);
   }
 
+  // ---- gear row: four plates bottom-right, head to toe, keys 1-4 -----------
+  // Each plate is a piece: its icon wears the material of its level (the
+  // sprites' leather -> iron -> steel -> gold), pips under the icon count the
+  // buys, a 1px meter under the plate fills as the purse approaches the next
+  // cost, and an affordable piece grows a bobbing gold chevron - the ask to
+  // spend, League-style. Hover lifts the plate and shows the cost; a click or
+  // the piece's number key buys through input.cmd (see the input banner).
+  const GEAR_PLATE = 16, GEAR_GAP = 3;
+  function gearRects() {
+    const w = GEAR_SLOTS.length * GEAR_PLATE + (GEAR_SLOTS.length - 1) * GEAR_GAP;
+    const x0 = VIEW_W - 8 - w, y0 = VIEW_H - 8 - GEAR_PLATE - 10; // the seed tag keeps the corner below
+    const rs = [];
+    for (let i = 0; i < GEAR_SLOTS.length; i++) rs.push({ x: x0 + i * (GEAR_PLATE + GEAR_GAP), y: y0, w: GEAR_PLATE, h: GEAR_PLATE });
+    return rs;
+  }
+  // which plate the pointer is on, or -1; shared by the click handler, the
+  // cursor and the row's own hover so they can never disagree
+  function gearHit(mx, my) {
+    if (state.mode !== 'play' || player.dead || state.paused ||
+        state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
+    const rs = gearRects();
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i];
+      if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h + 3) return i;
+    }
+    return -1;
+  }
+  function drawGearRow(now) {
+    if (player.dead) return;
+    const rs = gearRects();
+    const hov = mouse.inside ? gearHit(mouse.x, mouse.y) : -1;
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i], lv = player.gearLv[i], cost = gearCost(player, i);
+      const afford = cost && player.inv.gold >= cost.gold;
+      const y = r.y - (hov === i ? 1 : 0); // the plank lift
+      // a maxed piece goes quiet behind a gold rim; a hovered one brightens
+      ctx.fillStyle = !cost ? '#8a7a3a' : hov === i ? '#8fa0c8' : '#35426e';
+      ctx.fillRect(r.x, y, r.w, r.h);
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+      ctx.drawImage(SPRITES.gearIcons[i][lv - 1], r.x + 3, y + 2);
+      for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // buy pips under the icon
+        ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
+        ctx.fillRect(r.x + 2 + k * 4, y + r.h - 3, 3, 1);
+      }
+      if (cost) { // the saving meter: how close the purse is to the next level
+        const frac = Math.min(1, player.inv.gold / cost.gold);
+        ctx.fillStyle = '#26305a';
+        ctx.fillRect(r.x, r.y + r.h + 1, r.w, 1);
+        ctx.fillStyle = afford ? '#f5c542' : '#8a7a3a';
+        ctx.fillRect(r.x, r.y + r.h + 1, Math.round(r.w * frac), 1);
+      }
+      if (afford) { // the ask: two gold carets bobbing over the plate
+        const bob = Math.round(Math.sin(now * 6));
+        const cx = r.x + (r.w >> 1);
+        const px = [[0, 0], [-1, 1], [1, 1], [-2, 2], [2, 2]];
+        for (const [off, col] of [[1, '#0f1632'], [0, '#f5c542']]) {
+          ctx.fillStyle = col;
+          for (const [dx, dy] of px) {
+            ctx.fillRect(cx + dx + off, y - 10 + bob + dy + off, 1, 1);
+            ctx.fillRect(cx + dx + off, y - 6 + bob + dy + off, 1, 1);
+          }
+        }
+      }
+      if (hov === i && cost) { // hover: the price, coin + number, nothing else
+        const txt = String(cost.gold);
+        const tw = 10 + pixelTextWidth(txt);
+        const tx0 = Math.min(r.x + (r.w >> 1) - (tw >> 1), VIEW_W - 4 - tw);
+        ctx.drawImage(SPRITES.itemGold, tx0, y - 22);
+        drawPixelTextOutline(ctx, txt, tx0 + 10, y - 20, afford ? '#f5c542' : '#9fb6d8', '#0f1632');
+      }
+    }
+  }
+
   function renderUI(now) {
     if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
 
@@ -5707,7 +5889,13 @@
     renderMinimap(now);
     ctx.restore();
 
-    // (the bottom strip is deliberately empty: reserved for combat abilities)
+    // gear plates, bottom-right; they ride the intro slide in from the right
+    ctx.save();
+    ctx.translate(Math.round(slide * 60), 0);
+    drawGearRow(now);
+    ctx.restore();
+
+    // (the bottom-centre strip is deliberately empty: reserved for combat abilities)
 
     // arriving at a named place announces it, top centre: the name big, its
     // personality under it. Fades on the plate, so it uses the shadow font.
@@ -6285,9 +6473,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.25'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.26'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.26', 'GEAR ARRIVES: FOUR PIECES THAT LEVEL UP FOR GOLD FROM ANYWHERE - CLICK THE NEW PLATES BOTTOM-RIGHT OR PRESS 1-4.'],
     ['1.25', 'DYING NOW COSTS THE PURSE: YOUR KILLER POCKETS YOUR GOLD, AN ACCIDENT SPILLS IT ON THE SNOW, AND YOUR FOOD ALWAYS DROPS.'],
     ['1.24', 'THE BUILD WHEEL IS AN EVEN RING WHATEVER IT HOLDS, AND ITS MIDDLE IS NOW A CANCEL BUTTON YOU CAN FIND.'],
     ['1.23', 'ENEMY WORKER BOTS CAN BE SHOT DOWN WITH THE BOW, AND A DOWNED ONE SPILLS THE GOLD IT WAS CARRYING.'],
@@ -7751,6 +7940,11 @@
     findPath, walkable, navTo, showPaths: false,
     // hero levels: pay a slot gold (and XP) the way a pickup would
     gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
+    // gear: the table, a slot's effective kit, and buy/pick without the HUD
+    GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearRects, gearHit,
+    gearCost: (i, p) => gearCost(p || player, i),
+    buyGear: (i, p) => buyGear(p || player, i),
+    setGear: (i, v, p) => { const q = p || player; q.gear[i] = v; refreshKit(q); return q.kit; },
     // the match readouts: stage feed lines without staging the kills behind
     // them, and check the standings (hold TAB in game, or set keys.tab here)
     events, logEvent, scoreGroups, scoreboardOpen,

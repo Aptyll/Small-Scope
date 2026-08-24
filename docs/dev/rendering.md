@@ -322,7 +322,8 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
-  so hover and click can never disagree) or a live wheel segment; **grab** — dragging a
+  so hover and click can never disagree), a live wheel segment, or a gear plate (`gearHit()`, the
+  one left-clickable HUD widget in play — see [gameplay.md](gameplay.md#gear)); **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work

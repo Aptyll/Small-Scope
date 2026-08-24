@@ -5,6 +5,8 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - Always-in-hand bow; **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
 - Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
+- **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere
+  (keys 1–4 / the HUD plates); the sim reads champions *and* gear only through `kitOf(p)`.
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
 - Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to the lobby.
 - The world has named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY (birds).

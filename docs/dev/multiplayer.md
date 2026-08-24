@@ -47,6 +47,7 @@ dodge         edge-triggered, cleared by the sim when it reads it
 eatBerry      edge-triggered (Q)
 eatFish       edge-triggered (F)
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
+              or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
 ```
 
 `sampleHumanInput(player)` (input banner) folds `keys`/`mouse` into slot 0's struct once per step,
@@ -62,7 +63,9 @@ bot's chop resolve through exactly the same function.
 
 Every slot also carries a champion (`p.champ`, an index into `CHAMPS` in the `players` banner).
 A champion is a look plus a kit — the handful of numbers the sim reads through `kitOf(p)`
-instead of the bare constants: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
+instead of the bare constants. **`kitOf(p)` returns the *effective* kit**: the champion's numbers
+with the slot's [gear](gameplay.md#gear) folded in by `refreshKit(p)` (cached on `p.kit`, rebuilt
+on champion or gear change — never per frame). The champion fields: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
 (snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
 `dmgBase`/`dmgPow` (arrow damage = base + pow × draw), `spdDmg` (extra damage scaled by the
 shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
@@ -76,8 +79,9 @@ aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre
 | 1 | **SKADI**, the Skater | hood, goggles, trailing scarf, skate blades (`SPRITES.champ[1]`) | ice cap ×1.35, sharper carves, slide engages at 60 and fatigues half as fast, draw 0.6 s at 85 % speed, arrows 3 + 6·draw **+ up to 7 for speed**, dash 245, 85 hp |
 
 The local slot picks on the champion select screen (see
-[Main menu](rendering.md#main-menu-title)); AI slots hash theirs from the seed in `initPlayers()`
-so a replayed world fields the same roster. Sprites live in `SPRITES.champ[c][team]` — same
+[Main menu](rendering.md#main-menu-title)); AI slots hash theirs — champion **and** all four gear
+variants — from the seed in `initPlayers()` so a replayed world fields the same roster in the
+same loadouts. Sprites live in `SPRITES.champ[c][team]` — same
 16×16 body plan and frame set as the player, so `drawPlayer`/`drawGhost` just swap the set via
 `champSet(p)`; `SPRITES.playerTeam` is champion 0.
 
@@ -200,8 +204,9 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
 4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
 5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
-6. **spend** — with gold in hand, build a generator (or, 30% of the time and only where
-   `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
+6. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
+   plus a 15-gold float; then, with gold in hand, build a generator (or, 30% of the time and only
+   where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
 7. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
 8. **roam** — wander between its landing site and the map centre.
