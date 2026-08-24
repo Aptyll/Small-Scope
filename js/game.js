@@ -350,7 +350,8 @@
       iceT: 0, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
       // champion select: which screen the menu shows, its cross-fade, the
       // highlighted champion, per-card hover eases, swap pop, lock-in hold
-      screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0 },
+      screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
+      gearT: 0, grow: 0 },
     intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
     introLen: 1,         // that transition's full length (the camera ease divides by it)
     introFrom: null,     // camera position the transition started from
@@ -496,7 +497,7 @@
     [ // boots: how you skate and dodge
       { name: 'SKATES', blurb: 'FASTER, SHARPER ON ICE', mod: (k, L) => { k.iceMax *= 1 + 0.08 * L; k.iceSteer += 0.15 * L; } },
       { name: 'DANCER', blurb: 'DODGES COME BACK SOONER', mod: (k, L) => { k.dodgeCd -= 0.4 * L; } },
-      { name: 'GHOSTSTEP', blurb: 'WOLVES AND TURRETS SEE YOU LATE', mod: (k, L) => { k.stealth -= 0.10 * L; } },
+      { name: 'GHOSTSTEP', blurb: 'FOES SPOT YOU FROM CLOSER', mod: (k, L) => { k.stealth -= 0.10 * L; } },
     ],
   ];
   // rebuild p.kit from champion + gear. The gear-free defaults added here are
@@ -4362,10 +4363,8 @@
         if (dragSlider) return { kind: 'grab' };
         return { kind: settingsHit() ? 'hand' : 'arrow' };
       }
-      if (m.screen === 'select') {
-        const g = m.screenT >= 1 ? gearSelHit() : null;
-        return { kind: m.screenT >= 1 && (selectHit() >= 0 || (g && g.dir)) ? 'hand' : 'arrow' };
-      }
+      if (m.screen === 'gear') return { kind: m.gearT >= 1 && gearScreenHit() ? 'hand' : 'arrow' };
+      if (m.screen === 'select') return { kind: m.screenT >= 1 && m.gearT <= 0 && selectHit() >= 0 ? 'hand' : 'arrow' };
       if (!m.panel) { const h = menuHit(); if (h >= 0 && h !== MENU_FROZEN) return { kind: 'hand' }; } // the frozen plank isn't clickable, so no hand
       return { kind: 'arrow' };
     }
@@ -5797,7 +5796,7 @@
   // cost, and an affordable piece grows a bobbing gold chevron - the ask to
   // spend, League-style. Hover lifts the plate and shows the cost; a click or
   // the piece's number key buys through input.cmd (see the input banner).
-  const GEAR_PLATE = 16, GEAR_GAP = 3;
+  const GEAR_PLATE = 18, GEAR_GAP = 3;
   function gearRects() {
     const w = GEAR_SLOTS.length * GEAR_PLATE + (GEAR_SLOTS.length - 1) * GEAR_GAP;
     const x0 = VIEW_W - 8 - w, y0 = VIEW_H - 8 - GEAR_PLATE - 10; // the seed tag keeps the corner below
@@ -5830,10 +5829,10 @@
       ctx.fillRect(r.x, y, r.w, r.h);
       ctx.fillStyle = '#0f1632';
       ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
-      ctx.drawImage(SPRITES.gearIcons[i][lv - 1], r.x + 3, y + 2);
+      ctx.drawImage(SPRITES.gearIcons[i][player.gear[i]][lv - 1], r.x + 3, y + 2);
       for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // buy pips under the icon
         ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
-        ctx.fillRect(r.x + 2 + k * 4, y + r.h - 3, 3, 1);
+        ctx.fillRect(r.x + 3 + k * 4, y + r.h - 3, 3, 1);
       }
       if (cost) { // the saving meter: how close the purse is to the next level
         const frac = Math.min(1, player.inv.gold / cost.gold);
@@ -6499,9 +6498,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.27'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.28'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.28', 'GEAR GETS ITS OWN FULL PICK SCREEN AFTER CHAMPION SELECT, AND ALL TWELVE PIECES NOW WEAR THEIR OWN ICON.'],
     ['1.27', 'PICK YOUR FOUR GEAR PIECES ON THE CHAMPION SCREEN, AND WORN GEAR NOW SHOWS ON YOUR CHARACTER AS IT LEVELS.'],
     ['1.26', 'GEAR ARRIVES: FOUR PIECES THAT LEVEL UP FOR GOLD FROM ANYWHERE - CLICK THE NEW PLATES BOTTOM-RIGHT OR PRESS 1-4.'],
     ['1.25', 'DYING NOW COSTS THE PURSE: YOUR KILLER POCKETS YOUR GOLD, AN ACCIDENT SPILLS IT ON THE SNOW, AND YOUR FOOD ALWAYS DROPS.'],
@@ -6637,7 +6637,8 @@
     const m = state.menu;
     const k = e.key.toLowerCase();
     if (state.fade) return; // a reroll is already leaving
-    if (m.screen === 'select') { if (m.screenT >= 1) selectKey(k); return; }
+    if (m.screen === 'gear') { if (m.gearT >= 1) gearKey(k); return; }
+    if (m.screen === 'select') { if (m.screenT >= 1 && m.gearT <= 0) selectKey(k); return; }
     if (m.panel) {
       if (k === 'escape' || k === 'backspace' || (m.panel !== 'settings' && (k === 'enter' || k === ' '))) closeMenuPanel();
       else if (m.panel === 'patch' && (k === 'arrowup' || k === 'w')) patchScrollBy(-8);
@@ -6653,6 +6654,7 @@
     const m = state.menu;
     SFX.unlock();
     if (state.fade) return;
+    if (m.screen === 'gear') { gearClick(); return; }
     if (m.screen === 'select') { selectClick(); return; }
     if (m.panel) {
       if (!menuPanelReady()) return;
@@ -6679,6 +6681,7 @@
     state.mode = 'play';
     state.menu.panel = null;
     state.menu.screen = 'menu';
+    state.menu.gearT = 0;
     SFX.dawnChime();
   }
 
@@ -6737,9 +6740,12 @@
       s.vy += 260 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
       if (s.life <= 0) m.shards.splice(i, 1);
     }
-    // champion select cross-fade and its own hovers
-    const st = m.screen === 'select' ? 1 : 0;
+    // champion select cross-fade and its own hovers; the gear page rides a
+    // second ease (gearT) so select <-> gear cross-fade inside the surface
+    const st = m.screen === 'select' || m.screen === 'gear' ? 1 : 0;
     m.screenT = Math.max(0, Math.min(1, m.screenT + (st ? 1 : -1) * dt / 0.35));
+    const gt = m.screen === 'gear' ? 1 : 0;
+    m.gearT = Math.max(0, Math.min(1, m.gearT + (gt ? 1 : -1) * dt / 0.3));
     m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
     const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
     for (let i = 0; i < CHAMPS.length; i++) {
@@ -7198,43 +7204,91 @@
     const cx = Math.round(VIEW_W / 2);
     const cards = CHAMPS.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
     const lock = { x: cx - 56, y: toy + 228, w: 112, h: 20 };
-    // the gear loadout: one row per piece under the cards - icon, then
-    // < NAME > cycling that slot's three variants (see gearSelHit for the cells)
-    const gearRows = GEAR_SLOTS.map((_, i) => ({ x: cards[0].x, y: toy + 142 + i * 16 }));
-    return { toy, cx, cards, lock, gearRows };
+    // the current loadout, shown as its four variant icons under the stat pips;
+    // the strip is a button into the gear screen
+    const loadout = { x: cx + 120, y: toy + 168, w: 4 * 17 - 3, h: 16 };
+    return { toy, cx, cards, lock, loadout };
   }
 
-  // which gear-row cell the pointer is on: {row, dir:-1|1} over an arrow,
-  // {row, dir:0} over the rest of the row (the blurb hover), null off them
-  function gearSelHit() {
-    const { gearRows } = selectLayout();
-    for (let i = 0; i < gearRows.length; i++) {
-      const r = gearRows[i];
-      if (mouse.y < r.y - 2 || mouse.y >= r.y + 13) continue;
-      if (mouse.x >= r.x + 14 && mouse.x < r.x + 24) return { row: i, dir: -1 };
-      if (mouse.x >= r.x + 102 && mouse.x < r.x + 112) return { row: i, dir: 1 };
-      if (mouse.x >= r.x && mouse.x < r.x + 112) return { row: i, dir: 0 };
+  // ---- the gear screen: the full-page loadout picker (League runes-style) ---
+  // Entered from champ select's LOCK IN (or its loadout strip). All 12
+  // variants are on screen at once as cards - four rows, one per piece, three
+  // options each - so the choice is a read, not a cycle. Clicking a card picks
+  // it (writes straight to player.gear); FLY launches the match via lockIn().
+  function gearLayout() {
+    const toy = Math.round((VIEW_H - 270) / 2);
+    const cx = Math.round(VIEW_W / 2);
+    const w = 132, h = 34, gapx = 6, gapy = 4;
+    const x0 = cx - Math.round((3 * w + 2 * gapx) / 2);
+    const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: toy + 56 + i * (h + gapy), w, h })));
+    const fly = { x: cx - 56, y: toy + 224, w: 112, h: 20 };
+    return { toy, cx, rows, fly };
+  }
+
+  // what the pointer is over on the gear screen: {row, v}, 'fly', or null
+  function gearScreenHit() {
+    const { rows, fly } = gearLayout();
+    for (let i = 0; i < rows.length; i++) {
+      for (let v = 0; v < rows[i].length; v++) {
+        const r = rows[i][v];
+        if (mouse.x >= r.x && mouse.x < r.x + r.w && mouse.y >= r.y - 1 && mouse.y < r.y + r.h + 1) return { row: i, v };
+      }
     }
+    if (mouse.x >= fly.x - 2 && mouse.x < fly.x + fly.w + 2 && mouse.y >= fly.y - 3 && mouse.y < fly.y + fly.h + 3) return 'fly';
     return null;
   }
 
-  // pre-match variant swap for the local slot (the arrows' click), full heal
-  // like setChamp since nothing has been risked yet
-  function cycleGear(i, dir) {
-    player.gear[i] = (player.gear[i] + dir + 3) % 3;
+  function beginGear() {
+    const m = state.menu;
+    m.screen = 'gear';
+    m.grow = 0;
+    SFX.place();
+  }
+  function leaveGear() {
+    state.menu.screen = 'select';
+    SFX.pickup();
+  }
+  // pre-match variant pick for the local slot, full heal like setChamp since
+  // nothing has been risked yet
+  function pickGear(i, v) {
+    if (player.gear[i] === v) return;
+    player.gear[i] = v;
     refreshKit(player);
     player.hp = player.maxHp;
     SFX.pickup();
   }
 
-  // what the pointer is over: card index, CHAMPS.length for LOCK IN, -1 for nothing
+  function gearKey(k) {
+    const m = state.menu;
+    if (m.lockT > 0) return;
+    if (k === 'escape' || k === 'backspace') leaveGear();
+    else if (k === 'arrowup' || k === 'w') { m.grow = (m.grow + 3) % 4; SFX.pickup(); }
+    else if (k === 'arrowdown' || k === 's') { m.grow = (m.grow + 1) % 4; SFX.pickup(); }
+    else if (k === 'arrowleft' || k === 'a') pickGear(m.grow, (player.gear[m.grow] + 2) % 3);
+    else if (k === 'arrowright' || k === 'd') pickGear(m.grow, (player.gear[m.grow] + 1) % 3);
+    else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); }
+  }
+
+  function gearClick() {
+    const m = state.menu;
+    if (m.lockT > 0 || m.gearT < 1) return;
+    const h = gearScreenHit();
+    if (!h) return;
+    if (h === 'fly') { m.pressT = 0.12; lockIn(); return; }
+    m.grow = h.row;
+    pickGear(h.row, h.v);
+  }
+
+  // what the pointer is over: card index, CHAMPS.length for LOCK IN,
+  // CHAMPS.length + 1 for the loadout strip, -1 for nothing
   function selectHit() {
-    const { cards, lock } = selectLayout();
+    const { cards, lock, loadout } = selectLayout();
     for (let i = 0; i < cards.length; i++) {
       const r = cards[i];
       if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
     }
     if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return cards.length;
+    if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 2 && mouse.y < loadout.y + loadout.h + 2) return cards.length + 1;
     return -1;
   }
 
@@ -7270,17 +7324,15 @@
     if (k === 'escape' || k === 'backspace') leaveSelect();
     else if (k === 'arrowup' || k === 'w') selectChamp(m.csel - 1);
     else if (k === 'arrowdown' || k === 's') selectChamp(m.csel + 1);
-    else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); }
+    else if (k === 'enter' || k === ' ') { m.pressT = 0.12; beginGear(); } // champion locked: on to the gear page
   }
 
   function selectClick() {
     const m = state.menu;
-    if (m.lockT > 0 || m.screenT < 1) return;
-    const g = gearSelHit();
-    if (g && g.dir) { cycleGear(g.row, g.dir); return; }
+    if (m.lockT > 0 || m.screenT < 1 || m.gearT > 0) return;
     const h = selectHit();
     if (h < 0) return;
-    if (h === CHAMPS.length) { m.pressT = 0.12; lockIn(); }
+    if (h >= CHAMPS.length) { m.pressT = 0.12; beginGear(); } // LOCK IN or the loadout strip
     else { selectChamp(h); if (h === m.csel) m.csel = h; }
   }
 
@@ -7315,19 +7367,10 @@
     }
   }
 
-  // a small pixel chevron for the gear rows' cycle arrows
-  function drawSelArrow(x, y, dir, hot) {
-    ctx.fillStyle = hot ? '#ffd95c' : '#5a7fb8';
-    for (let dy = 0; dy < 7; dy++) {
-      const c0 = Math.abs(dy - 3);
-      ctx.fillRect(x + (dir < 0 ? c0 : 3 - c0), y + dy, 2, 1);
-    }
-  }
-
   // a (0..1) is the screen's own visibility; out is the play-intro exit
   function renderSelect(now, a) {
     const m = state.menu;
-    const { toy, cx, cards, lock, gearRows } = selectLayout();
+    const { toy, cx, cards, lock, loadout } = selectLayout();
     const c = CHAMPS[m.csel];
     const slideIn = 1 - a;
 
@@ -7346,30 +7389,6 @@
     }
     ctx.globalAlpha = a;
 
-    // gear loadout, under the cards: each row is icon + < NAME > cycling the
-    // slot's three variants, three dots saying which is on; hovering a row
-    // prints its blurb under the block. The picks write straight to
-    // player.gear, so what leaves this screen is what lands from the eagle.
-    const gh = m.screenT >= 1 && mouse.inside ? gearSelHit() : null;
-    let gearBlurb = null;
-    for (let i = 0; i < gearRows.length; i++) {
-      const rx = gearRows[i].x - Math.round(slideIn * 80), ry = gearRows[i].y;
-      const v = player.gear[i], g = GEAR[i][v];
-      const hot = gh && gh.row === i;
-      ctx.drawImage(SPRITES.gearIcons[i][0], rx, ry);
-      drawSelArrow(rx + 17, ry + 2, -1, hot && gh.dir === -1);
-      drawSelArrow(rx + 105, ry + 2, 1, hot && gh.dir === 1);
-      const nw = pixelTextWidth(g.name);
-      drawPixelTextShadow(ctx, g.name, rx + 26 + Math.round((76 - nw) / 2), ry + 2, hot ? '#ffd95c' : '#cfe0ff', '#0a0e23');
-      for (let d = 0; d < 3; d++) {
-        ctx.fillStyle = d === v ? '#ffd95c' : '#35426e';
-        ctx.fillRect(rx + 60 + (d - 1) * 5, ry + 11, 2, 1);
-      }
-      if (hot) gearBlurb = g.blurb;
-    }
-    if (gearBlurb) {
-      drawPixelTextShadow(ctx, gearBlurb, gearRows[0].x - Math.round(slideIn * 80), toy + 210, '#9fb6d8', 'rgba(15,22,50,0.9)');
-    }
 
     // the champion, big: 6x sprite over a soft plinth, swapping with a quick rise
     const sw = easeOut(m.cswapT);
@@ -7378,7 +7397,8 @@
     ctx.fillStyle = '#0a0e23';
     ctx.beginPath(); ctx.ellipse(cx, toy + 150, 46, 8, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = a * sw;
-    const spr = SPRITES.champ[m.csel][0].down[0];
+    // the big sprite walks in place - a living pick, not a poster
+    const spr = SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)];
     ctx.drawImage(spr, bx, by, 96, 96);
     // name + role
     const nm = c.name;
@@ -7397,11 +7417,91 @@
     drawStatPips(sx, toy + 140, 'TOUGH', c.stats.tough, '#9fe0a8');
     ctx.globalAlpha = a;
 
+    // the loadout strip: your four picked variants as icons, right where the
+    // pips end. It is a button - clicking it (or LOCK IN) opens the gear page.
+    const hover = m.screenT >= 1 && !m.gearT ? selectHit() : -1;
+    const lox = loadout.x + Math.round(slideIn * 80);
+    const lolift = hover === CHAMPS.length + 1 ? 1 : 0;
+    for (let i = 0; i < GEAR_SLOTS.length; i++) {
+      const x = lox + i * 17, y = loadout.y - lolift;
+      ctx.fillStyle = lolift ? '#8fa0c8' : '#35426e';
+      ctx.fillRect(x, y, 14, 16);
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(x + 1, y + 1, 12, 14);
+      ctx.drawImage(SPRITES.gearIcons[i][player.gear[i]][0], x + 1, y + 2);
+    }
+
     // lock in
-    const over = m.screenT >= 1 && selectHit() === CHAMPS.length;
+    const over = hover === CHAMPS.length;
     const pressed = m.pressT > 0 || m.lockT > 0;
     drawMenuButton({ x: lock.x, y: lock.y + Math.round(slideIn * 20), w: lock.w, h: lock.h }, 'LOCK IN', over ? 1 : 0.7, now, pressed);
     const t3 = 'ENTER LOCK IN - ESC BACK';
+    drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 258, '#5a6690', 'rgba(15,22,50,0.9)');
+    ctx.globalAlpha = 1;
+  }
+
+  // the gear page: four rows of three cards, every variant visible at once.
+  // A card is icon + name + blurb; the picked one is gold-trimmed, the
+  // keyboard-focused row's pick wears pulsing corner ticks. FLY launches.
+  function drawGearCard(r, slot, v, hot, picked, focused, now) {
+    const lift = hot ? 2 : 0;
+    const x = r.x, y = r.y - lift, w = r.w, h = r.h;
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(x + 2, r.y + 2, w, h);
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = picked ? '#1f2b5c' : '#141c3c'; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.fillStyle = picked ? '#5a7fb8' : '#35426e';
+    ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
+    ctx.fillStyle = '#080c1c';
+    ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
+    if (picked) {
+      ctx.fillStyle = '#c89a3c';
+      ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
+    }
+    // icon well, the variant's own glyph (leather: everyone leaves at level 1)
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 4, y + 9, 16, 16);
+    ctx.fillStyle = picked ? '#2a3a6e' : '#1c2750'; ctx.fillRect(x + 5, y + 10, 14, 14);
+    ctx.drawImage(SPRITES.gearIcons[slot][v][0], x + 6, y + 11);
+    const g = GEAR[slot][v];
+    drawPixelTextShadow(ctx, g.name, x + 24, y + 8, picked ? '#ffd95c' : hot ? '#f4f7ff' : '#cfe0ff', '#0a0e23');
+    drawPixelTextShadow(ctx, g.blurb, x + 24, y + 19, picked || hot ? '#9fb6d8' : '#5a6690', '#0a0e23');
+    if (focused) { // keyboard cursor: four corner ticks, breathing
+      ctx.globalAlpha *= 0.7 + 0.3 * Math.sin(now * 6);
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(x - 1, y - 1, 4, 1); ctx.fillRect(x - 1, y - 1, 1, 4);
+      ctx.fillRect(x + w - 3, y - 1, 4, 1); ctx.fillRect(x + w, y - 1, 1, 4);
+      ctx.fillRect(x - 1, y + h, 4, 1); ctx.fillRect(x - 1, y + h - 3, 1, 4);
+      ctx.fillRect(x + w - 3, y + h, 4, 1); ctx.fillRect(x + w, y + h - 3, 1, 4);
+      ctx.globalAlpha /= 0.7 + 0.3 * Math.sin(now * 6);
+    }
+  }
+
+  function renderGear(now, a) {
+    const m = state.menu;
+    const { toy, cx, rows, fly } = gearLayout();
+    const slideIn = 1 - a;
+
+    ctx.globalAlpha = a;
+    const t0 = 'CHOOSE YOUR GEAR';
+    drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 26 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
+    drawGoldRule(cx, toy + 41 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+
+    const gh = m.gearT >= 1 && mouse.inside ? gearScreenHit() : null;
+    for (let i = 0; i < rows.length; i++) {
+      for (let v = 0; v < rows[i].length; v++) {
+        const r = rows[i][v];
+        const rr = { x: r.x + Math.round(slideIn * (v - 1) * 40), y: r.y, w: r.w, h: r.h };
+        drawGearCard(rr, i, v, gh && gh !== 'fly' && gh.row === i && gh.v === v,
+          player.gear[i] === v, m.grow === i && player.gear[i] === v, now);
+        ctx.globalAlpha = a;
+      }
+    }
+
+    // fly: the champion, locked and loaded, takes the eagle
+    const over = gh === 'fly';
+    const pressed = m.pressT > 0 || m.lockT > 0;
+    drawMenuButton({ x: fly.x, y: fly.y + Math.round(slideIn * 20), w: fly.w, h: fly.h }, 'FLY', over ? 1 : 0.7, now, pressed);
+    ctx.drawImage(SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)], fly.x - 24, fly.y + 2);
+    const t3 = 'ENTER FLY - ESC BACK';
     drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 258, '#5a6690', 'rgba(15,22,50,0.9)');
     ctx.globalAlpha = 1;
   }
@@ -7505,7 +7605,10 @@
       ctx.globalAlpha = 1;
     }
 
-    if (sc > 0.005) renderSelect(now, sc * (1 - out));
+    // the two pick screens cross-fade into each other on gearT
+    const gc = easeInOut(state.menu.gearT);
+    if (sc > 0.005 && gc < 0.995) renderSelect(now, sc * (1 - out) * (1 - gc));
+    if (sc > 0.005 && gc > 0.005) renderGear(now, sc * (1 - out) * gc);
 
     // sub-panels slide up from the bottom edge over the still-visible world
     if (m.panel) {
@@ -8033,7 +8136,7 @@
     GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearRects, gearHit,
     gearCost: (i, p) => gearCost(p || player, i),
     buyGear: (i, p) => buyGear(p || player, i),
-    gearSelHit, cycleGear,
+    pickGear: (i, v) => pickGear(i, v), gearLayout, gearScreenHit, beginGear,
     setGear: (i, v, p) => { const q = p || player; q.gear[i] = v; refreshKit(q); return q.kit; },
     // the match readouts: stage feed lines without staging the kills behind
     // them, and check the standings (hold TAB in game, or set keys.tab here)

@@ -31,11 +31,12 @@ still reads as tier), and `robotTeam[team]`. A new character or building sprite 
 those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The tool
 icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
 `drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the `TOOLS`
-table) and by `drawRobot()` for a bot's swing — there is no tool bar. The four **gear icons**
-(`gearHelmet`/`gearChest`/`gearLegs`/`gearBoots`, 10×10) are the HUD's gear plates: one grid per
-piece baked once per **material** — `GEAR_MAT_PALS`, leather → iron → steel → gold — into
-`SPRITES.gearIcons[slot][material]`, so a piece's level is the icon's material
-(see [gameplay.md](gameplay.md#gear)).
+table) and by `drawRobot()` for a bot's swing — there is no tool bar. The **gear icons** are
+twelve 12×12 grids, **one per variant** (`gearLongsight` … `gearGhoststep`), each baked once per
+**material** — `GEAR_MAT_PALS`, leather → iron → steel → gold, plus the shared accent chars `w`
+(ice-white) and `r` (hearth-red) — into `SPRITES.gearIcons[slot][variant][material]`: the glyph
+says which piece, the material says its level. Drawn by the HUD's gear plates, the champ-select
+loadout strip and the gear page's cards (see [gameplay.md](gameplay.md#gear)).
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not

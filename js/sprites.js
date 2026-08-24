@@ -1166,62 +1166,195 @@
   ];
 
   // ---------------------------------------------------------------- gear icons
-  // The HUD's four gear plates (game.js UI banner): one 10x10 glyph per slot,
-  // baked once per material - leather / iron / steel / gold - so the icon
-  // itself says the piece's level in the tier language the buildings taught.
+  // One 12x12 glyph PER VARIANT (12 total), baked once per material - leather /
+  // iron / steel / gold - into SPRITES.gearIcons[slot][variant][material], so
+  // the icon carries WHICH piece you chose and its material carries the level.
+  // Shared accent chars across every material: w ice-white, r hearth-red.
   const GEAR_MAT_PALS = [
-    { '.': null, 'o': '#141a2c', 'm': '#8a6a4a', 'h': '#b08a5e', 'd': '#5f4830' }, // leather
-    { '.': null, 'o': '#141a2c', 'm': '#9aa3ad', 'h': '#c8ccd4', 'd': '#646c76' }, // iron
-    { '.': null, 'o': '#141a2c', 'm': '#9fc4dd', 'h': '#ddf1f8', 'd': '#5f87a8' }, // steel
-    { '.': null, 'o': '#141a2c', 'm': '#f2cc6a', 'h': '#ffedb0', 'd': '#b8912f' }, // gold
+    { '.': null, 'o': '#141a2c', 'm': '#8a6a4a', 'h': '#b08a5e', 'd': '#5f4830', 'w': '#ddf1f8', 'r': '#f2707a' }, // leather
+    { '.': null, 'o': '#141a2c', 'm': '#9aa3ad', 'h': '#c8ccd4', 'd': '#646c76', 'w': '#ddf1f8', 'r': '#f2707a' }, // iron
+    { '.': null, 'o': '#141a2c', 'm': '#9fc4dd', 'h': '#ddf1f8', 'd': '#5f87a8', 'w': '#ffffff', 'r': '#f2707a' }, // steel
+    { '.': null, 'o': '#141a2c', 'm': '#f2cc6a', 'h': '#ffedb0', 'd': '#b8912f', 'w': '#ffffff', 'r': '#f2707a' }, // gold
   ];
-  const gearHelmet = [
-    '..oooooo..',
-    '.ommhhmmo.',
-    'ommmhhmmmo',
-    'ommmmmmmmo',
-    'odmmmmmmdo',
-    'odo....odo',
-    'odo....odo',
-    'oddo..oddo',
-    '.oddooddo.',
-    '..oooooo..',
+  // helmet 0 LONGSIGHT: closed helm, one long glowing sight slit
+  const gearLongsight = [
+    '...oooooo...',
+    '..ommhhmmo..',
+    '.ommmmmmmmo.',
+    '.ommmmmmmmo.',
+    '.oddddddddo.',
+    '.owwwwwwwdo.',
+    '.oddddddddo.',
+    '.ommmmmmmmo.',
+    '.ommmmmmmmo.',
+    '..odo..odo..',
+    '..oo....oo..',
+    '............',
   ];
-  const gearChest = [
-    'ooo....ooo',
-    'ohmoooomdo',
-    'ohmmmmmmdo',
-    'oommhhmmoo',
-    '.ommmmmmd.',
-    '.ommmmmmd.',
-    '.odmmmmdo.',
-    '..ommmmd..',
-    '..oddddo..',
-    '...oooo...',
+  // helmet 1 QUICKDRAW: winged cap, white wings flared at the temples
+  const gearQuickdraw = [
+    '............',
+    '....oooo....',
+    '...ommmmo...',
+    '..ommhhmmo..',
+    '.oommmmmmoo.',
+    'owwommmmowwo',
+    'owwwodmowwwo',
+    '.oowod.dowo.',
+    '...o.oo.o...',
+    '............',
+    '............',
+    '............',
   ];
-  const gearLegs = [
-    'oooo..oooo',
-    'ohmo..ohmo',
-    'ohmo..ohmo',
-    'ommo..ommo',
-    'oddo..oddo',
-    'ommo..ommo',
-    'ommo..ommo',
-    'oddo..oddo',
-    'oooo..oooo',
-    '..........',
+  // helmet 2 HUNTSMAN: peaked hood with a white feather
+  const gearHuntsman = [
+    '.........ww.',
+    '......o.ww..',
+    '.....oowwo..',
+    '....ommwo...',
+    '...ommmmo...',
+    '..ommmmmmo..',
+    '.ommmmmmmdo.',
+    '.omdddddddo.',
+    '.odo.....do.',
+    '..oo.....o..',
+    '............',
+    '............',
   ];
-  const gearBoots = [
-    '..oo...oo.',
-    '..omo.omo.',
-    '..omo.omo.',
-    '..omo.omo.',
-    '..omo.omo.',
-    '.oomo.omoo',
-    'ohmmoommho',
-    '.oooooooo.',
-    '..........',
-    '..........',
+  // chest 0 BULWARK: a kite shield
+  const gearBulwark = [
+    '.oooooooooo.',
+    'omhhhhhhmmdo',
+    'ommmmmmmmmdo',
+    'ommmmmmmmmdo',
+    'ommmmmmmmmdo',
+    '.ommmmmmmdo.',
+    '.ommmmmmmdo.',
+    '..ommmmmdo..',
+    '...ommmdo...',
+    '....omdo....',
+    '.....oo.....',
+    '............',
+  ];
+  // chest 1 IRONHIDE: riveted breastplate with shoulder caps
+  const gearIronhide = [
+    'ooo......ooo',
+    'omdo.oo.omdo',
+    '.oommmmmmoo.',
+    '.ohmmmmmmdo.',
+    '.ommhmmhmmo.',
+    '.ommmmmmmdo.',
+    '.ommhmmhmmo.',
+    '.odmmmmmmdo.',
+    '..ommmmmmo..',
+    '..oddddddo..',
+    '...oooooo...',
+    '............',
+  ];
+  // chest 2 HEARTHWEAVE: quilted tunic with a hearth-red heart
+  const gearHearthweave = [
+    '.oo......oo.',
+    '.omoooooomo.',
+    '..ommmmmmo..',
+    '.ommmmmmmmo.',
+    '.omrrmrrmmo.',
+    '.omrrrrrmmo.',
+    '.ommrrrmmmo.',
+    '.ommmrmmmmo.',
+    '..ommmmmmo..',
+    '..oddddddo..',
+    '...oooooo...',
+    '............',
+  ];
+  // legs 0 STRIDER: greaves with speed ticks streaming off
+  const gearStrider = [
+    '..oooo.oooo.',
+    '..ohmo.ohmo.',
+    '..ohmo.ohmo.',
+    'w.ommo.ommo.',
+    '..oddo.oddo.',
+    'w.ommo.ommo.',
+    '..ommo.ommo.',
+    'w.oddo.oddo.',
+    '..oooo.oooo.',
+    '............',
+    '............',
+    '............',
+  ];
+  // legs 1 SLIDEWORN: greaves riding a slide board, spray behind
+  const gearSlideworn = [
+    '..oooo.oooo.',
+    '..ohmo.ohmo.',
+    '..ommo.ommo.',
+    '..ommo.ommo.',
+    '..oddo.oddo.',
+    '..oooo.oooo.',
+    '.owwwwwwwwo.',
+    '..oooooooo..',
+    'w.w.........',
+    '............',
+    '............',
+    '............',
+  ];
+  // legs 2 PACKMULE: a work belt with two hanging pouches
+  const gearPackmule = [
+    '............',
+    '.oooooooooo.',
+    '.ohmmhhmmho.',
+    '.oooooooooo.',
+    '..oooo.oooo.',
+    '..ommo.ommo.',
+    '..ommo.ommo.',
+    '..oddo.oddo.',
+    '...oo...oo..',
+    '............',
+    '............',
+    '............',
+  ];
+  // boots 0 SKATES: a boot on a white blade
+  const gearSkates = [
+    '....oooo....',
+    '....ohmo....',
+    '....ohmo....',
+    '....ommo....',
+    '....ommo....',
+    '....ommooo..',
+    '....ommmmdo.',
+    '....oddddo..',
+    '....o..o....',
+    '...wwwwwww..',
+    '............',
+    '............',
+  ];
+  // boots 1 DANCER: a light boot mid-step, motion ticks trailing
+  const gearDancer = [
+    '.....oo.....',
+    '.....omo....',
+    '....oomo....',
+    '....omo.w...',
+    '...oomo.....',
+    '...omoo.w...',
+    '..oommdo....',
+    '..ommmdo.w..',
+    '..odddo.....',
+    '...ooo......',
+    '............',
+    '............',
+  ];
+  // boots 2 GHOSTSTEP: a boot beside its fading afterimage
+  const gearGhoststep = [
+    '.oooo.......',
+    '.ohmo..d.d..',
+    '.ohmo.......',
+    '.ommo..d.d..',
+    '.ommoo......',
+    '.ommmdo.dd..',
+    '.odddo..d.d.',
+    '..ooo...dd..',
+    '............',
+    '............',
+    '............',
+    '............',
   ];
 
   // ---------------------------------------------------------------- heart
@@ -1835,8 +1968,14 @@
     itemBerry: bake(itemBerry, ITPAL),
     itemGold: bake(itemGold, ITPAL),
     itemFish: bake(itemFish, FIPAL),
-    // gearIcons[slot][material]: helmet/chest/legs/boots x leather/iron/steel/gold
-    gearIcons: [gearHelmet, gearChest, gearLegs, gearBoots].map((g) => GEAR_MAT_PALS.map((pal) => bake(g, pal))),
+    // gearIcons[slot][variant][material]: 12 distinct variant glyphs, each in
+    // leather / iron / steel / gold
+    gearIcons: [
+      [gearLongsight, gearQuickdraw, gearHuntsman],
+      [gearBulwark, gearIronhide, gearHearthweave],
+      [gearStrider, gearSlideworn, gearPackmule],
+      [gearSkates, gearDancer, gearGhoststep],
+    ].map((row) => row.map((g) => GEAR_MAT_PALS.map((pal) => bake(g, pal)))),
     itemAxe: bake(itemAxe, AXPAL),
     itemBow: bake(itemBow, AXPAL),
     itemPick: bake(itemPick, AXPAL),

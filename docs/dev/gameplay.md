@@ -343,10 +343,12 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 
 The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
 (4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
-(every boot builds fresh `Player`s). The human picks variants on the **champion select screen**
-(four `< NAME >` rows under the cards — `gearRows` in `selectLayout`, `gearSelHit`/`cycleGear`,
-drawn by `renderSelect`; the picks write straight to `player.gear`). AI slots hash all four
-variants from the seed in `initPlayers()`.
+(every boot builds fresh `Player`s). The human picks variants on the **gear page** — a full
+screen after champion select showing all 12 variants at once as cards (League runes-style; see
+[Main menu](rendering.md#main-menu-title)); `pickGear()` writes straight to `player.gear`. AI
+slots hash all four variants from the seed in `initPlayers()`. **Every variant has its own
+12×12 icon** (`SPRITES.gearIcons[slot][variant][material]`), so a pick is a distinct picture,
+not a label.
 
 **Worn gear shows on the sprite**: each piece at level 2+ lays a 1 px band of its material across
 the shared 16×16 body plan — hat, coat, hips, one mark per foot (`GEAR_MARKS`/`drawGearMarks`,
@@ -368,10 +370,10 @@ target pick and `turretMark`/`turretHolds` (`stealth`), and the three dodge-refi
 **Buying** goes through `input.cmd = {kind:'gear', piece}` → `runCmd` → `buyGear(p, i)` — the one
 entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
 bump on the spot like a hero level. No tile, no reach, no contest — it only touches the buyer's
-own wallet. The human sends it from keys **1–4** or by clicking the **gear row**: four plates
-bottom-right (`gearRects`/`gearHit`/`drawGearRow`, UI banner), one per piece head-to-toe. A
-plate's icon wears the **material of its level** (`SPRITES.gearIcons`, leather → iron → steel →
-gold), pips under the icon count the buys, a 1 px meter under the plate fills as the purse
+own wallet. The human sends it from keys **1–4** or by clicking the **gear row**: four 18 px
+plates bottom-right (`gearRects`/`gearHit`/`drawGearRow`, UI banner), one per piece head-to-toe.
+A plate shows **your variant's own icon** in the **material of its level** (leather → iron →
+steel → gold), pips under the icon count the buys, a 1 px meter under the plate fills as the purse
 approaches the next cost, an affordable piece grows a bobbing gold chevron, hover lifts the plate
 and shows the cost (coin + number, nothing else), and a maxed piece goes quiet behind a gold rim.
 `gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they

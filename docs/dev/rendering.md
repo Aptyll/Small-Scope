@@ -405,12 +405,17 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   the left (`drawChampCard`: portrait well + name + role), the highlighted one drawn 6× in the
   middle over a plinth with name, role, blurb lines and four stat-pip rows, and a LOCK IN plank.
   `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
-  card clicks move `menu.csel` (`menu.cswapT` pops the big sprite), Enter/Space/LOCK IN call
-  `lockIn()` — which stamps `setChamp(player, csel)`, holds `menu.lockT` for the press, then
-  `beginDrop()` (the eagle ride, below); Esc/Backspace go back to the menu. Under the cards sit
-  the four **gear rows** (`gearRows` in `selectLayout`): icon + `< NAME >` cycling that slot's
-  three variants via `gearSelHit()`/`cycleGear()` (mouse only), three dots for which is on, the
-  hovered row's blurb printed under the block — see [gameplay.md](gameplay.md#gear).
+  card clicks move `menu.csel` (`menu.cswapT` pops the big sprite, which walks in place), and the
+  **loadout strip** (the four picked variant icons under the stat pips) is a button. Enter/Space,
+  LOCK IN or the strip call `beginGear()` — champion locked, on to the **gear page**;
+  Esc/Backspace go back to the menu.
+- **Gear page** (`menu.screen = 'gear'`, cross-faded from select on `menu.gearT`): the full-page
+  loadout picker — all 12 variants at once as four rows of three cards (`gearLayout()`/
+  `gearScreenHit()`/`drawGearCard`), each card its variant's own icon + name + blurb, the picked
+  one gold-trimmed, the keyboard focus (`menu.grow`, W/S rows, A/D or Left/Right picks) wearing
+  pulsing corner ticks. Clicks pick via `pickGear()`; Enter or the **FLY** plank (the champion
+  sprite waits beside it) calls `lockIn()` — `setChamp`, `menu.lockT`, then `beginDrop()` (the
+  eagle ride, below); Esc returns to the champion screen. See [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
   is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over
