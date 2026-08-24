@@ -2285,7 +2285,11 @@
       },
     },
   };
-  const LANDMARK_ORDER = ['wolfDen', 'rookery']; // placement order: the pickiest site first
+  // placement order. NOT the pickiest site first - the rookery (r 6, ~113 tiles) is pickier than
+  // the den (r 5) and is placed second. Do NOT reorder to "fix" that: placeLandmarks draws from
+  // lmRng in this sequence, so the order is a seed-stability contract - changing it relocates
+  // every landmark in every existing seed.
+  const LANDMARK_ORDER = ['wolfDen', 'rookery'];
 
   // a free tile in a landmark's footprint, rMin..rMax tiles out from its centre
   function lmSpot(L, rMin, rMax) {
@@ -3932,7 +3936,7 @@
 
     // swing arcs (every player who is mid-swing)
     for (const p of players) {
-      if (!p.active || p.dead || p.swingT <= 0) continue;
+      if (!p.active || p.dead || inAir(p) || p.swingT <= 0) continue;
       const prog = 1 - p.swingT / 0.18;
       const a0 = p.swingDir - 1.1 + prog * 2.2;
       ctx.fillStyle = 'rgba(255,255,255,' + (0.8 - prog * 0.6).toFixed(2) + ')';
@@ -3957,7 +3961,7 @@
     }
 
     drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
-    renderLighting(ox, oy, now);
+    renderLighting(ox, oy, ex, ey, now);
     renderWeather(ex, ey);
     renderVignettes();
     replayTick(now); // banks the finished world frame - must stay above renderUI
@@ -4302,48 +4306,48 @@
     return set ? set[o.type][o.tier] : SPRITES[o.type][o.tier];
   }
 
-  function drawAnimal(a, ox, oy, now) {
-    if (a.kind === 'bird') { drawBird(a, ox, oy); return; }
+  function drawAnimal(a, ex, ey, now) {
+    if (a.kind === 'bird') { drawBird(a, ex, ey); return; }
     const rabbit = a.kind === 'rabbit';
     const wolf = a.kind === 'wolf';
     const set = SPRITES[a.kind][a.dir];
     const frame = a.moving ? 1 + (Math.floor(a.animT) % 2) : 0;
     const spr = set[frame];
-    const px = Math.round(a.x - spr.width / 2 - ox);
-    const py = Math.round(a.y + 4 - spr.height - oy);
+    const px = Math.round(a.x - spr.width / 2 - ex);
+    const py = Math.round(a.y + 4 - spr.height - ey);
     const sw = rabbit ? 4 : wolf ? 6 : 7;
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
-    ctx.fillRect(Math.round(a.x - ox) - sw, Math.round(a.y + 2 - oy), sw * 2, 2);
+    ctx.fillRect(Math.round(a.x - ex) - sw, Math.round(a.y + 2 - ey), sw * 2, 2);
     drawSpriteFlash(spr, px, py, a.flash);
-    drawHealthBar(a.x - ox, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
+    drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
   }
 
   // The only thing in the world that leaves the ground: the sprite lifts off
   // its own shadow by a.alt, which is the whole read on how high a bird is.
   // No health bar - three hp means every hit is a kill, and a bar over
   // something this small is all bar.
-  function drawBird(a, ox, oy) {
+  function drawBird(a, ex, ey) {
     const flying = a.flyT > 0;
     const spr = SPRITES.bird[a.dir][flying ? 1 + (Math.floor(a.animT) % 2) : 0];
-    const px = Math.round(a.x - spr.width / 2 - ox);
-    const py = Math.round(a.y - a.alt - spr.height - oy);
+    const px = Math.round(a.x - spr.width / 2 - ex);
+    const py = Math.round(a.y - a.alt - spr.height - ey);
     ctx.fillStyle = flying ? 'rgba(110,130,170,0.22)' : 'rgba(110,130,170,0.3)';
-    ctx.fillRect(Math.round(a.x - ox) - 2, Math.round(a.y + 1 - oy), 4, 1);
+    ctx.fillRect(Math.round(a.x - ex) - 2, Math.round(a.y + 1 - ey), 4, 1);
     drawSpriteFlash(spr, px, py, a.flash);
   }
 
   // Worker bot: one sprite, two tread frames. The whole thing bobs 1px while
   // driving so body and tread never part. No face - the states are the tread
   // rolling, the tool swinging at a target, and the gold held up front.
-  function drawRobot(b, ox, oy) {
+  function drawRobot(b, ex, ey) {
     const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
     const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
     const bob = b.moving ? Math.floor(b.animT / 2) % 2 : 0;
-    const bx = Math.round(b.x - 6 - ox);
-    const by = Math.round(b.y + 4 - oy) - spr.height - bob; // tread bottom sits at b.y + 4
+    const bx = Math.round(b.x - 6 - ex);
+    const by = Math.round(b.y + 4 - ey) - spr.height - bob; // tread bottom sits at b.y + 4
 
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
-    ctx.fillRect(bx + 1, Math.round(b.y + 3 - oy), 10, 2);
+    ctx.fillRect(bx + 1, Math.round(b.y + 3 - ey), 10, 2);
 
     let tdx = 0, tdy = 0, working = false;
     if (b.tgt && !b.moving) {
@@ -4376,19 +4380,19 @@
       ctx.restore();
     }
 
-    drawHealthBar(b.x - ox, by - 4, b.hp, b.maxHp, 8);
+    drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8);
   }
 
   // every player draws through here - the local one, the AI fills, network
   // peers later. Team palette on the sprite, name tag on everybody else.
-  function drawPlayer(p, ox, oy, now) {
+  function drawPlayer(p, ex, ey, now) {
     const local = p === player;
     const set = champSet(p)[p.dir];
     let frame = 0;
     if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
     const spr = set[frame];
-    const px = Math.round(p.x - 8 - ox);
-    const py = Math.round(p.y - 12 - oy);
+    const px = Math.round(p.x - 8 - ex);
+    const py = Math.round(p.y - 12 - ey);
     // shadow (not while swimming in a hole)
     if (p.fallT <= 0) {
       ctx.fillStyle = 'rgba(110,130,170,0.4)';
@@ -4438,13 +4442,13 @@
 
     if (state.mode === 'title') return;
 
-    drawHealthBar(p.x - ox, py - 7, p.hp, p.maxHp, 14);
+    drawHealthBar(p.x - ex, py - 7, p.hp, p.maxHp, 14);
     // level badge: a 7x7 square sharing its right frame column with the bar
     // backing's left edge (one 1px frame everywhere, never a doubled wall), and
     // spanning the health bar and the stamina bar stacked (py-8 .. py-2). Same
     // backing / track colours as the bars.
     {
-      const bx = Math.round(p.x - ox) - 14, by = py - 8;
+      const bx = Math.round(p.x - ex) - 14, by = py - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx, by, 6, 7); // 6 wide: the 7th column is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
@@ -4454,7 +4458,7 @@
     // rivals carry a name tag in their team colour so a fight stays legible
     if (!local) {
       drawPixelTextOutline(ctx, p.name,
-        Math.round(p.x - ox - pixelTextWidth(p.name) / 2), py - 18, // clear of the draw meter's frame (top row py-11) with a gap row
+        Math.round(p.x - ex - pixelTextWidth(p.name) / 2), py - 18, // clear of the draw meter's frame (top row py-11) with a gap row
         TEAMS[p.team].mark, '#0f1632');
     }
     // dodge stamina: one clean unsegmented bar under the health bar - charges
@@ -4464,7 +4468,7 @@
     // The track is painted one row taller than the fill so the gap between the two
     // bars is track grey, not frame colour - one clean outline around both.
     {
-      const bx = Math.round(p.x - ox) - 7, by = py - 4;
+      const bx = Math.round(p.x - ex) - 7, by = py - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
       ctx.fillStyle = '#3a3448';
@@ -4488,7 +4492,7 @@
     // row py-8 becomes the track-grey gap row, so the frame stays one outline.
     if (p.charging) {
       const frac = Math.min(1, p.chargeT / kitOf(p).bowCharge);
-      const x = Math.round(p.x - ox) - 7, y = py - 10;
+      const x = Math.round(p.x - ex) - 7, y = py - 10;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
       ctx.fillStyle = '#3a3448';
@@ -4500,9 +4504,9 @@
 
   // an unfilled slot: a flat team-tinted silhouette standing at its camp, so
   // the world shows who is missing rather than pretending the slot isn't there
-  function drawGhost(p, ox, oy) {
+  function drawGhost(p, ex, ey) {
     const spr = champSet(p)[p.dir][0];
-    const px = Math.round(p.x - 8 - ox), py = Math.round(p.y - 12 - oy);
+    const px = Math.round(p.x - 8 - ex), py = Math.round(p.y - 12 - ey);
     sctx.clearRect(0, 0, 32, 32);
     sctx.globalCompositeOperation = 'source-over';
     sctx.drawImage(spr, 0, 0);
@@ -4785,7 +4789,7 @@
   }
 
   // ------------------------------------------------------------ lighting & weather
-  function renderLighting(ox, oy, now) {
+  function renderLighting(ox, oy, ex, ey, now) {
     const dark = state.darkness;
     // dusk warm tint
     const duskT = state.time > DAY_LEN - 12 && state.time < DAY_LEN + 6 ?
@@ -4831,9 +4835,11 @@
       lctx.fillRect(lx - r, ly - r, r * 2, r * 2);
     }
     // personal glow so it's never pitch black around you - with no placeable
-    // fires it is the only night light, so it reaches a bit further
+    // fires it is the only night light, so it reaches a bit further. The player
+    // is a MOVER: round(world - exact camera), once, so the glow lands on the
+    // same pixel as the sprite. The `lights` loop above is static, hence ox/oy.
     {
-      const lx = player.x - ox, ly = player.y - 4 - oy;
+      const lx = Math.round(player.x - ex), ly = Math.round(player.y - 4 - ey);
       const grd = lctx.createRadialGradient(lx, ly, 1, lx, ly, 44);
       grd.addColorStop(0, 'rgba(255,255,255,0.6)');
       grd.addColorStop(1, 'rgba(255,255,255,0)');
@@ -5902,9 +5908,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.19'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.20'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.20', 'THE NIGHT GLOW NOW SITS EXACTLY ON YOU INSTEAD OF DRIFTING A FRACTION OF A PIXEL AS YOU MOVE.'],
     ['1.19', 'HOUSEKEEPING: EIGHT STALE LINES IN THE DEV NOTES NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],
     ['1.18', 'HOUSEKEEPING: THE DEV NOTES GAIN A STANDING FIX LIST FOR STALE DOCUMENTATION; NOTHING IN THE GAME CHANGED.'],
     ['1.17', 'THE FROZEN MULTIPLAYER PLANK SHIMMERS COLD WHEN HOVERED, AND KNOCKING ON IT CRACKS THE ICE - IT ALWAYS REFREEZES.'],
