@@ -11,13 +11,16 @@ declare victory. The three affordances:
 - **`window.DBG`** (end of [js/game.js](../../js/game.js)) — read the object literal for the
   current surface; it is the whole external API. The non-obvious members: `step(dt, n)` runs `n`
   fixed-`dt` update ticks and one render, `freeze = true` stops the rAF loop so stepping is
-  deterministic, `hideUI = true` drops the HUD/seed tag/cursor for captures, `buildStruct` stages
+  deterministic (it halts `render()` too, so the canvas holds the last frame — set the value you
+  want *before* freezing), `hideUI = true` drops the HUD/info stack/cursor for captures, `buildStruct` stages
   a construction site with no cost or validation, `warp(tx, ty, p?)` drops a slot on a tile, and
   `setControl(slot, mode)` hands a slot to an AI, a human or nobody. **Stage the scene** (place
   structures, warp to a landmark, jump `state.day`/`state.time`) instead of playing to reach it.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
-  are meaningless. The seed prints bottom-right every frame, so a screenshot carries its world.
+  are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
+  left edge — but only while `settings.info` is on, and it defaults **off**: flip it on (the ESC
+  menu's INFO row, or F3) before capturing anything you intend to compare later.
 - **`POST /shot`** in [serve.js](../../serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it, and `shot.png` is not gitignored — don't commit it.

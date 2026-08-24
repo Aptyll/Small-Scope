@@ -265,7 +265,7 @@ ground. `RP_CAP_*`, `RP_FPS` and `RP_SECS` are the knobs.
 **Per-frame cost while alive** is one `drawImage` at `RP_FPS`, straight off the finished world
 pass. Canvas-to-canvas stays on the GPU; `getImageData`/`toDataURL` would stall the pipeline every
 capture, so neither is used, and nothing is allocated per frame. The one downscale path (a view
-bigger than the corner) runs with `imageSmoothingEnabled` on `rpCtx` — nearest there would sample
+bigger than the corner) runs with `imageSmoothingEnabled` on `rpAtx` — nearest there would sample
 1 px in 9 and strobe an arrow in flight in and out of the recording.
 
 **Playback.** `replayShowing()` decides; every fresh open restarts at the oldest frame. The

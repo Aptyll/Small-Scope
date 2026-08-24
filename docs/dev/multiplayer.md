@@ -30,7 +30,7 @@ dodge charges, slide state, swing state, held tool, i-frames, footprint cadence 
 decides whether the slot gets 3 s of i-frames, so a future respawn path can pass `false`.
 
 Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireArrow`, `tryDodge`,
-`eatBerry`, `damagePlayer`, `die`, `respawn`, `placeStruct`, …), matching the rest of the file's
+`eatBerry`, `damagePlayer`, `die`, `spillInventory`, `placeStruct`, …), matching the rest of the file's
 style — the class is the state container, not a god object.
 
 ## The input struct

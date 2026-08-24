@@ -17,6 +17,11 @@ don't cite line numbers here, they go stale within a session.
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
 | slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
+| the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
+| the gear HUD plates (bottom-right) and their hit test | `gearRects`, `gearHit`, `drawGearRow` | `UI` › `gear row` |
+| picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
+| worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
+| the F3 readout: fps, coords, seed | `drawTags` | `render` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
