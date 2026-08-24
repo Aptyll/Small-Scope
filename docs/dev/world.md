@@ -138,9 +138,11 @@ returns the landmark a world position stands in; `updatePlay` feeds it `state.lo
 
 Every run picks a fresh `SEED` at boot from `Date.now() ^ Math.random()`, and **everything random
 derives from it** — there is no other entropy source. `?seed=N` in the URL overrides it, which is
-how you replay or diff a specific world. `drawSeedTag()` prints `SEED_TXT` bottom-right on every
-frame (drawn after the map, settings, and death overlays), so any screenshot carries the world
-it came from; in `title` mode the main menu prints the seed instead, next to the reroll die.
+how you replay or diff a specific world. `drawTags()` prints `SEED_TXT` in the fps/seed stack on
+the left edge at the top quarter of the view (drawn after the map, settings, and death overlays),
+so a screenshot carries the world it came from while `settings.seed` (a toggle row in the ESC
+menu, default **on**) is enabled; in `title` mode the main menu prints the seed instead, next to
+the reroll die.
 
 - `rng` is a single `mulberry32(SEED)` stream shared by worldgen *and* runtime effects (particle
   bursts, animal wanders, drop velocities). Worldgen is reproducible only because it runs first at

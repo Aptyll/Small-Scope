@@ -563,7 +563,7 @@ runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-men
 
 ## Settings
 
-`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `fps`, `pixelCursor`) persists to
+`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `fps`, `seed`, `pixelCursor`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry a `res` key from the removed resolution setting;
@@ -573,12 +573,13 @@ There is no fullscreen control in the ESC menu (players use F11); a `fullscreenc
 still refits the canvas when the browser toggles it.
 
 `settings.fps` (toggle row in the ESC menu) shows a performance monitor: `loop()` accumulates raw
-unclamped frame deltas into `perf` and refreshes `perf.fps` every half second; `drawFps()` prints
-it in the extreme top-right corner, drawn just before the seed tag so it survives every overlay,
-and turns red below 45. Beneath the minimap `renderMinimap()` prints one centred row: a 5×7
-pixel figure (`ALIVE_ICON`, no label) with `aliveCount()` — slots active and not dead, riders
-included — then the elapsed clock; the row is centred under the minimap, so it never collides
-with the fps readout.
+unclamped frame deltas into `perf` and refreshes `perf.fps` every half second, red below 45.
+It prints as one line of the **fps/seed stack** — `drawTags()`, a vertical list on the left edge
+at the top quarter of the view, clear of the berry/fish counters, drawn above every overlay.
+`settings.seed` (its own toggle row, default on) is the stack's second line, the run seed —
+see [world.md](world.md#determinism-and-noise). Beneath the minimap `renderMinimap()` prints one
+centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with `aliveCount()` — slots active and
+not dead, riders included — then the elapsed clock.
 
 ## Audio
 

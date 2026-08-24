@@ -88,7 +88,8 @@ map/settings overlays → `renderTitle` (the main menu, also during the play int
 `renderReplay` (the replay window, above both the death dim and the pause dim) →
 the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
 [Scoreboard and event feed](#scoreboard-and-event-feed)) →
-fps/seed tags (the seed tag is skipped in `title`, where the menu prints it) → the screen fade
+the fps/seed stack (`drawTags`, left edge at the top quarter; each line has its own ESC-menu
+toggle, and the seed line is skipped in `title`, where the menu prints it) → the screen fade
 (`state.fade`, the reroll whiteout) → the pixel cursor (always last). The bow's
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
@@ -172,7 +173,7 @@ scale, no blur. The outline colour is the opaque `#0f1632` (the eight passes ove
 translucent colour would stack unevenly). Sites: floaters (damage numbers, gold, `LEVEL n`),
 rival name tags, the E and fish prompts, the radial-wheel labels, the HUD counters (berry/fish,
 gold, the alive count and clock under the minimap — the alive icon is stamped with the same
-eight-offset rim by `drawAliveIcon`), `state.msg`, the fps and seed tags, and the drop-UI text.
+eight-offset rim by `drawAliveIcon`), `state.msg`, the fps/seed stack, and the drop-UI text.
 `drawPixelTextShadow` (a single bottom-right 1 px shadow) remains for text sitting on a panel,
 plank or overlay — the settings/map panels, the main menu, the death overlay, the scoreboard and
 the event feed's plates — where a full outline reads heavy. Checked at noon on open snow and at
@@ -314,7 +315,7 @@ every frame — no `relayout()` anchors, so it needs nothing on a resize.
 ## Cursor
 
 The native pointer is hidden over the canvas and a **pixel-art cursor is drawn in-canvas** as
-the very last thing in `render()` (above every overlay and the seed tag), so it sits on the
+the very last thing in `render()` (above every overlay and the fps/seed stack), so it sits on the
 game's pixel grid at every zoom level. `cursorInfo()` resolves the pointer state once per
 frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the pointer, and
 both the pixel cursor and the browser-cursor fallback read from it. It returns
@@ -384,7 +385,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   sinks it for a beat; the lift, warm fill and gold rule are the whole selection cue (no selector arrows).
 - **Die** (`drawDie`): shows `1 + (SEED % 6)` (faces 1–6), cycles faces and jitters while hovered, tumbles while
   `menu.rolling`. Activating it (`rerollWorld`) starts a whiteout via `state.fade`
-  (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the seed tag) and then
+  (`{ a, to, spd, color, then }`, stepped in `update()`, painted after the fps/seed stack) and then
   navigates to `?seed=<new>` — `SEED` is a const everything closes over, so a new world is a
   new page. Boot checks `sessionStorage['softfall.reroll']` and lands with the fade
   clearing from white and the die still settling.

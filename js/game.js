@@ -285,13 +285,13 @@
   const MAP_W = 192;             // the baked panel's map slot — the world scales into it
   const MAP_S = MAP_W / WORLD;   // tiles -> map px
 
-  const SET_W = 240, SET_H = 202;
+  const SET_W = 240, SET_H = 218;
   let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters these
   let SET_Y = Math.round((VIEW_H - SET_H) / 2);
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
   let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_FPS = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
+    ROW_FPS = SET_Y + 92, ROW_SEED = SET_Y + 108, ROW_CURSOR = SET_Y + 124;
 
   const mmCv = document.createElement('canvas');
   mmCv.width = WORLD; mmCv.height = WORLD;
@@ -359,7 +359,7 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, fps: false, pixelCursor: true };
+  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, fps: false, seed: true, pixelCursor: true };
   // minimap zoom steps, px per world tile: index settings.mmZoom (2 = the 1:1 baseline)
   const MM_ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3];
   function mmScale() { return MM_ZOOMS[Math.max(0, Math.min(MM_ZOOMS.length - 1, settings.mmZoom | 0))]; }
@@ -396,7 +396,7 @@
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
     ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
+    ROW_SHAKE = SET_Y + 76; ROW_FPS = SET_Y + 92; ROW_SEED = SET_Y + 108; ROW_CURSOR = SET_Y + 124;
     fitFlakes();
     renderBars();
     layoutReplay();
@@ -4301,9 +4301,7 @@
     if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
       (state.mode === 'play' || state.mode === 'dead')) renderEventLog();
     if (scoreboardOpen()) renderScoreboard();
-    if (settings.fps) drawFps();
-    // the menu prints the seed itself (with the reroll die) - don't double it up
-    if (!window.DBG.hideUI && state.mode !== 'title') drawSeedTag();
+    if (!window.DBG.hideUI) drawTags();
     if (state.fade && state.fade.a > 0) {
       ctx.globalAlpha = Math.min(1, state.fade.a);
       ctx.fillStyle = state.fade.color;
@@ -4335,17 +4333,21 @@
     ctx.restore();
   }
 
-  // fps readout, very top-right corner, above every overlay
-  function drawFps() {
-    const t = 'FPS ' + perf.fps;
-    drawPixelTextOutline(ctx, t, VIEW_W - pixelTextWidth(t) - 3, 2,
-      perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
-  }
-
-  // run seed, bottom-right corner - identifies the world and can be replayed via ?seed=N
-  function drawSeedTag() {
-    drawPixelTextOutline(ctx, SEED_TXT, VIEW_W - pixelTextWidth(SEED_TXT) - 4, VIEW_H - 8,
-      '#9fb6d8', '#0f1632');
+  // fps + seed readouts: one vertical stack on the left edge at the top
+  // quarter of the view, clear of the berry/fish counters above it, above
+  // every overlay. Each line has its own toggle in the ESC menu (settings.fps
+  // / settings.seed); the seed line sits out title, where the menu prints the
+  // seed itself with the reroll die.
+  function drawTags() {
+    let y = Math.round(VIEW_H * 0.25);
+    if (settings.fps) {
+      drawPixelTextOutline(ctx, 'FPS ' + perf.fps, 5, y,
+        perf.fps < 45 ? '#ff9a8a' : '#9fe0a8', '#0f1632');
+      y += 10;
+    }
+    if (settings.seed && state.mode !== 'title') {
+      drawPixelTextOutline(ctx, SEED_TXT, 5, y, '#9fb6d8', '#0f1632');
+    }
   }
 
   // ------------------------------------------------------------ cursor & aim line
@@ -5799,7 +5801,7 @@
   const GEAR_PLATE = 18, GEAR_GAP = 3;
   function gearRects() {
     const w = GEAR_SLOTS.length * GEAR_PLATE + (GEAR_SLOTS.length - 1) * GEAR_GAP;
-    const x0 = VIEW_W - 8 - w, y0 = VIEW_H - 8 - GEAR_PLATE - 10; // the seed tag keeps the corner below
+    const x0 = VIEW_W - 8 - w, y0 = VIEW_H - 9 - GEAR_PLATE; // the saving meter rides 1px below the plates
     const rs = [];
     for (let i = 0; i < GEAR_SLOTS.length; i++) rs.push({ x: x0 + i * (GEAR_PLATE + GEAR_GAP), y: y0, w: GEAR_PLATE, h: GEAR_PLATE });
     return rs;
@@ -6380,21 +6382,22 @@
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'FPS DISPLAY', 14, ROW_FPS - SET_Y, L);
+    drawPixelText(g, 'SEED DISPLAY', 14, ROW_SEED - SET_Y, L);
     drawPixelText(g, 'CURSOR', 14, ROW_CURSOR - SET_Y, L);
     // controls divider
     const ct = 'CONTROLS';
     const cw = pixelTextWidth(ct);
     const cx0 = Math.round((SET_W - cw) / 2);
-    drawPixelText(g, ct, cx0, 126, '#7a8bb8');
+    drawPixelText(g, ct, cx0, 142, '#7a8bb8');
     g.fillStyle = '#2c3a68';
-    g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
+    g.fillRect(14, 145, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 145, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 140;
+      let y = 156;
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -6404,7 +6407,7 @@
     }
     // close hint
     const hint = 'ESC CLOSE';
-    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 192, '#5a6690');
+    drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 208, '#5a6690');
   }
 
   function applySliderDrag() {
@@ -6429,6 +6432,7 @@
     if (inRow(ROW_MAP)) return 'map';
     if (inRow(ROW_SHAKE)) return 'shake';
     if (inRow(ROW_FPS)) return 'fps';
+    if (inRow(ROW_SEED)) return 'seed';
     if (inRow(ROW_CURSOR)) return 'cursor';
     return null;
   }
@@ -6441,6 +6445,7 @@
     if (hit === 'mute') settings.muted = SFX.toggleMute();
     else if (hit === 'shake') settings.shake = !settings.shake;
     else if (hit === 'fps') settings.fps = !settings.fps;
+    else if (hit === 'seed') settings.seed = !settings.seed;
     else if (hit === 'cursor') settings.pixelCursor = !settings.pixelCursor;
     SFX.pickup();
     saveSettings();
@@ -6482,6 +6487,7 @@
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_FPS, settings.fps);
+    drawToggleRow(ROW_SEED, settings.seed);
     drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
     if (slide) ctx.restore();
   }
@@ -6498,9 +6504,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.28'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.29'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.29', 'THE SEED READOUT CAN BE TOGGLED OFF IN SETTINGS, AND FPS AND SEED NOW SHARE ONE SMALL STACK ON THE LEFT EDGE.'],
     ['1.28', 'GEAR GETS ITS OWN FULL PICK SCREEN AFTER CHAMPION SELECT, AND ALL TWELVE PIECES NOW WEAR THEIR OWN ICON.'],
     ['1.27', 'PICK YOUR FOUR GEAR PIECES ON THE CHAMPION SCREEN, AND WORN GEAR NOW SHOWS ON YOUR CHARACTER AS IT LEVELS.'],
     ['1.26', 'GEAR ARRIVES: FOUR PIECES THAT LEVEL UP FOR GOLD FROM ANYWHERE - CLICK THE NEW PLATES BOTTOM-RIGHT OR PRESS 1-4.'],
