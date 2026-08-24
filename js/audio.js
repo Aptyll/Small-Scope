@@ -108,6 +108,8 @@
     hurt() { tone(200, 0.18, 'sawtooth', 0.16, -120); noise(0.12, 0.2, 500); },
     place() { tone(240, 0.06, 'triangle', 0.14); tone(360, 0.08, 'triangle', 0.12, 0, 0.05); },
     deny() { tone(140, 0.12, 'square', 0.08, -30); },
+    // knocking on solid ice: a glassy crack over a dull refusal
+    iceKnock() { noise(0.06, 0.3, 3200); tone(1400, 0.08, 'triangle', 0.06, -700); tone(130, 0.12, 'square', 0.07, -25); },
     break_() { noise(0.2, 0.3, 700); tone(120, 0.15, 'triangle', 0.12, -60); },
     monsterDie() { tone(500, 0.2, 'triangle', 0.12, -350); noise(0.15, 0.15, 3000); },
     eat() { tone(300, 0.05, 'triangle', 0.1); tone(260, 0.05, 'triangle', 0.1, 0, 0.07); },

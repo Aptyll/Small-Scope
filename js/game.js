@@ -335,6 +335,9 @@
     menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row
       panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
       moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
+      // the frozen plank: refusal shudder timer, per-knock crack seed, the
+      // struck point (plank-local) and the ice chips it sprays (screen-space)
+      iceT: 0, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
       // champion select: which screen the menu shows, its cross-fade, the
       // highlighted champion, per-card hover eases, swap pop, lock-in hold
       screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0 },
@@ -5899,9 +5902,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.16'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.17'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.17', 'THE FROZEN MULTIPLAYER PLANK SHIMMERS COLD WHEN HOVERED, AND KNOCKING ON IT CRACKS THE ICE - IT ALWAYS REFREEZES.'],
     ['1.16', 'THE MENU IS NOW SINGLEPLAYER, MULTIPLAYER, TUTORIAL, SETTINGS - MULTIPLAYER IS FROZEN IN ICE UNTIL IT ARRIVES.'],
     ['1.15', 'DYING OR PAUSING REPLAYS YOUR LAST FOUR SECONDS ON A LOOP, AT HALF SPEED, IN THE BOTTOM-LEFT CORNER.'],
     ['1.14', 'ARROWS ARE DRAWN PIXEL BY PIXEL, CARRY YOUR TEAM COLOUR ON THE FLETCHING, AND LEAVE A FADING TRAIL.'],
@@ -5967,8 +5971,32 @@
     SFX.pickup();
   }
 
+  // knocking on the frozen plank: it shudders, cracks flash from the struck
+  // point and heal as it refreezes, and a spray of ice chips falls away
+  function iceRefuse() {
+    const m = state.menu;
+    if (m.iceT > 0.3) return; // still mid-shudder
+    const { rects } = menuLayout();
+    const r = rects[MENU_FROZEN];
+    m.iceT = 0.45;
+    m.iceSeed = (m.iceSeed + 1) | 0;
+    m.iceX = Math.max(4, Math.min(r.w - 4, mouse.x - r.x));
+    m.iceY = Math.max(3, Math.min(r.h - 3, mouse.y - r.y));
+    for (let i = 0; i < 12; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.6; // upward fan off the impact
+      const sp = 30 + Math.random() * 70;
+      m.shards.push({
+        x: r.x + m.iceX, y: r.y + m.iceY,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 20,
+        life: 0.4 + Math.random() * 0.4, w: Math.random() < 0.3 ? 2 : 1,
+        c: ['#e8f4ff', '#a8c8e8', '#f4f7ff'][i % 3],
+      });
+    }
+    SFX.iceKnock();
+  }
+
   function menuActivate(i) {
-    if (i === MENU_FROZEN) return; // solid ice: no sound, no light, nothing
+    if (i === MENU_FROZEN) return; // solid ice - iceRefuse() is the only answer
     SFX.unlock();
     if (i === 0) beginSelect();
     else if (i === 2) openMenuPanel('help');
@@ -6028,7 +6056,8 @@
     }
     if (overPatchTag()) { openMenuPanel('patch'); return; }
     const h = menuHit();
-    if (h < 0 || h === MENU_FROZEN) return;
+    if (h < 0) return;
+    if (h === MENU_FROZEN) { iceRefuse(); return; }
     m.sel = h;
     m.pressT = 0.12;
     menuActivate(h);
@@ -6088,9 +6117,18 @@
       const h = menuHit();
       if (h >= 0 && h !== MENU_FROZEN && h !== m.sel) m.sel = h;
     }
+    // the frozen plank can't be selected, so its hover ease tracks the pointer instead
+    const iceHover = !m.panel && m.screen === 'menu' && menuHit() === MENU_FROZEN ? 1 : 0;
     for (let i = 0; i <= MENU_ITEMS.length; i++) {
-      const target = m.sel === i ? 1 : 0;
+      const target = i === MENU_FROZEN ? iceHover : m.sel === i ? 1 : 0;
       m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
+    }
+    // the refusal shudder heals and the ice chips fall
+    if (m.iceT > 0) m.iceT = Math.max(0, m.iceT - dt);
+    for (let i = m.shards.length - 1; i >= 0; i--) {
+      const s = m.shards[i];
+      s.vy += 260 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+      if (s.life <= 0) m.shards.splice(i, 1);
     }
     // champion select cross-fade and its own hovers
     const st = m.screen === 'select' ? 1 : 0;
@@ -6129,6 +6167,8 @@
   // plank under an ice glaze - heavier icicles, muted label, nothing animates
   function drawMenuButton(r, label, hv, now, pressed, frozen) {
     const a0 = ctx.globalAlpha; // respect the caller's fade (the menu and select screens animate alpha)
+    const cold = frozen ? hv : 0; // the frozen plank hovers cold: it chills instead of lifting and warming
+    if (frozen) hv = 0;
     const lift = Math.round(hv * 2) - (pressed ? 2 : 0);
     const x = r.x, y = r.y - lift, w = r.w, h = r.h;
     // shadow stays on the ground while the plank lifts
@@ -6186,8 +6226,11 @@
     const lx = Math.round(x + (w - tw) / 2), ly = y + Math.round((h - 10) / 2) + (pressed ? 1 : 0);
     drawPixelTextShadow(ctx, label, lx, ly, frozen ? '#8fa6c8' : hv > 0.5 ? '#ffd95c' : '#cfe0ff', '#0a0e23', 2);
     if (frozen) {
+      const m = state.menu;
       // sealed under a sheet of ice: a pale glaze over everything, rime creeping
-      // in from the sides, and static glints - hash2 only, so nothing ever moves
+      // in from the sides, and static glints - the plank itself never animates.
+      // hover wakes the surface: a pale rim, a sheen sweeping the glaze, frost
+      // breath rising off the cap. A knock (iceT) flashes cracks that heal shut
       ctx.fillStyle = 'rgba(150,190,230,0.33)'; chamRect(x, y, w, h);
       ctx.fillStyle = 'rgba(232,244,255,0.75)';
       ctx.fillRect(x + 2, y + 1, w - 4, 1);
@@ -6199,6 +6242,46 @@
       for (let gx = 4; gx < w - 4; gx += 2) {
         const hb = hash2(gx * 13 + 7, r.y * 5 + 1);
         if (hb > 0.9) { ctx.fillStyle = '#e8f4ff'; ctx.fillRect(x + gx, y + 3 + ((hb * 97) | 0) % (h - 6), 1, 1); }
+      }
+      if (cold > 0.02) {
+        ctx.globalAlpha = a0 * cold * 0.7;
+        ctx.fillStyle = '#a8c8e8';
+        ctx.fillRect(x + 2, y, w - 4, 1); ctx.fillRect(x + 2, y + h - 1, w - 4, 1);
+        ctx.fillRect(x, y + 2, 1, h - 4); ctx.fillRect(x + w - 1, y + 2, 1, h - 4);
+        const sw = ((now * 26) % (w + h + 24)) - h - 12;
+        ctx.globalAlpha = a0 * cold * 0.3;
+        ctx.fillStyle = '#ffffff';
+        for (let yy = 2; yy < h - 2; yy++) {
+          const gx = Math.round(sw + yy);
+          if (gx >= 2 && gx < w - 4) ctx.fillRect(x + gx, y + yy, 2, 1);
+        }
+        ctx.fillStyle = '#e8f4ff';
+        for (let k = 0; k < 6; k++) {
+          const ph = (now * (0.35 + hash2(k * 3, r.y) * 0.3) + hash2(k * 7 + 2, r.y)) % 1;
+          const bx = x + 6 + ((hash2(k * 13 + 5, r.y * 11) * (w - 12)) | 0);
+          ctx.globalAlpha = a0 * cold * (1 - ph) * 0.8;
+          ctx.fillRect(bx, y - 3 - Math.round(ph * 9), 1, 1);
+        }
+        ctx.globalAlpha = a0;
+      }
+      if (m.iceT > 0) {
+        // dark fissures with the odd white glint, so they read against the pale glaze
+        ctx.globalAlpha = a0 * Math.min(1, m.iceT / 0.45);
+        for (let c = 0; c < 5; c++) {
+          let px = m.iceX, py = m.iceY;
+          let ang = (c / 5) * Math.PI * 2 + hash2(c * 7 + m.iceSeed, m.iceSeed) * 1.3;
+          for (let s = 0; s < 12; s++) {
+            ang += (hash2(c * 11 + s, m.iceSeed * 5 + 1) - 0.5) * 0.9;
+            px += Math.cos(ang) * 1.5; py += Math.sin(ang) * 1.5;
+            if (px < 2 || px >= w - 2 || py < 1 || py >= h - 1) break;
+            ctx.fillStyle = hash2(c * 3 + s * 7, m.iceSeed) > 0.85 ? '#ffffff' : s % 2 ? '#1a2040' : '#0a0e23';
+            ctx.fillRect(x + Math.round(px), y + Math.round(py), 1, 1);
+          }
+        }
+        // the impact point itself: a bright chip out of the glaze
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x + Math.round(m.iceX), y + Math.round(m.iceY), 1, 1);
+        ctx.globalAlpha = a0;
       }
     }
   }
@@ -6718,6 +6801,8 @@
       if (a <= 0.005) continue;
       ctx.globalAlpha = a;
       const rr = { x: r.x - Math.round((1 - inT) * 60), y: r.y + Math.round(out * 25), w: r.w, h: r.h };
+      // the refusal shudder rattles the frozen plank in place (x only, so its hashed rime holds still)
+      if (i === MENU_FROZEN && m.iceT > 0) rr.x += Math.round(Math.sin(now * 85) * 2.2 * (m.iceT / 0.45));
       const hv = m.hover[i];
       const pressed = m.sel === i && (m.pressT > 0 || (mouse.down && menuHit() === i));
       if (r.seed) {
@@ -6730,6 +6815,14 @@
       }
       ctx.globalAlpha = 1;
     }
+
+    // ice chips knocked off the frozen plank, falling and fading
+    for (const s of m.shards) {
+      ctx.globalAlpha = Math.min(1, s.life * 3) * (1 - out) * (1 - pan);
+      ctx.fillStyle = s.c;
+      ctx.fillRect(Math.round(s.x), Math.round(s.y), s.w, s.w);
+    }
+    ctx.globalAlpha = 1;
 
     // footer hint
     const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);

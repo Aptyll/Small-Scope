@@ -351,9 +351,14 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `state.menu`:
 
 - **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / TUTORIAL / SETTINGS — MULTIPLAYER is
-  `MENU_FROZEN`: drawn sealed under an ice glaze by `drawMenuButton(..., frozen)` and inert to
-  hover, keyboard and clicks until multiplayer exists; arrow keys skip over it and the hand
-  cursor ignores it) plus the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
+  `MENU_FROZEN`: drawn sealed under an ice glaze by `drawMenuButton(..., frozen)`, never
+  selectable or activatable until multiplayer exists; arrow keys skip over it and the hand
+  cursor ignores it. Its `menu.hover` slot tracks the pointer instead of the selection and
+  drives a cold shimmer — pale rim, a sheen sweeping the glaze, frost breath — and clicking it
+  calls `iceRefuse()`: the plank rattles for `menu.iceT`, hairline cracks flash from the struck
+  point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it refreezes, and
+  `menu.shards` ice chips spray and fall, to `SFX.iceKnock`) plus the seed row (`SEED N` + an
+  11×11 die) as one more selectable, stacked
   `MENU_PITCH` apart from `MENU_Y0`; the slab and pillars size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
   (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
   when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.
