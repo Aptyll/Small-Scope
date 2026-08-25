@@ -16,6 +16,23 @@
     return c;
   }
 
+  // Per-row [firstX, lastX] of the painted pixels, taken straight off the grid.
+  // The game's snow cover needs to know how wide a prone body is on every row;
+  // reading that back off the baked canvas would mean a getImageData per pose,
+  // and the char grid already knows. Attached to the canvas as `.spans`.
+  function spansOf(rows, pal) {
+    return rows.map((r) => {
+      let lo = 99, hi = -1;
+      for (let x = 0; x < r.length; x++) if (pal[r[x]]) { if (x < lo) lo = x; hi = x; }
+      return hi < 0 ? null : [lo, hi];
+    });
+  }
+  function bakeSpan(rows, pal) {
+    const c = bake(rows, pal);
+    c.spans = spansOf(rows, pal);
+    return c;
+  }
+
   function flipH(src) {
     const c = document.createElement('canvas');
     c.width = src.width; c.height = src.height;
@@ -23,6 +40,8 @@
     g.translate(src.width, 0);
     g.scale(-1, 1);
     g.drawImage(src, 0, 0);
+    // a mirrored pose's spans mirror with it
+    if (src.spans) c.spans = src.spans.map((s) => (s ? [src.width - 1 - s[1], src.width - 1 - s[0]] : null));
     return c;
   }
 
@@ -196,6 +215,350 @@
   const skSideIdle = skSideBody.concat(['......bb.bb.....', '......SS.SS.....']);
   const skSideA = skSideBody.concat(['.....bb...bb....', '.....SS...SS....']);
   const skSideB = skSideBody.concat(['.......bb.......', '.......SS.......']);
+
+  // ---------------------------------------------------------------- prone
+  // Belly-down in the snow. The same 16x16 cell as every other pose, but the
+  // body lies ACROSS it rather than standing up through it, so a player's
+  // ground contact stays where the standing feet were and the y-sort never
+  // jumps when they drop. Foreshortened, not shrunk - head-on the figure is
+  // twelve rows to the standing sixteen - and the whole read comes from
+  // segmenting it: boots at the trailing end, a split pair of calves, thighs
+  // that widen into the coat hem, elbows out to the full width of the cell, and a
+  // small head at the front. Side-on the same body is eight rows deep and fifteen
+  // long, with the head propped up and looking where it is going.
+  //
+  // Three frames a direction - settled, and two of the crawl, which alternates
+  // the reaching arm AND the drawn-up knee, because a belly crawl hauls with
+  // one arm and pushes off the opposite leg. The 1px inch forward between
+  // frames is applied by the renderer, not baked into a second set of grids.
+  const pnSideIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtkeko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrroommmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnSideA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '...oppooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtkeko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrrommmmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnSideB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtkeko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrrooommo',
+    '...oppoooooooo..',
+    '................',
+  ];
+  const pnDownIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddo...',
+    'ommorrrrrrrrommo',
+    'ommorrrrrrrrommo',
+    '...orrrrrrrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....okekkeko....',
+  ];
+  const pnDownA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddommo',
+    '...orrrrrrrrommo',
+    'ommorrrrrrrro...',
+    'ommorrrrrrrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....okekkeko....',
+  ];
+  const pnDownB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    'ommoddddddddo...',
+    'ommorrrrrrrro...',
+    '...orrrrrrrrommo',
+    '...orrrrrrrrommo',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....okekkeko....',
+  ];
+  const pnUpIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...ommmmmmmmo...',
+    'ommorrrrrrrrommo',
+    'ommorrrrrrrrommo',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnUpA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    'ommommmmmmmmo...',
+    'ommorrrrrrrro...',
+    '...orrrrrrrrommo',
+    '...orrrrrrrrommo',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnUpB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...ommmmmmmmommo',
+    '...orrrrrrrrommo',
+    'ommorrrrrrrro...',
+    'ommorrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+
+  // The skater lies down the same way: hood instead of the pom hat, the goggle
+  // band where the eye is, the scarf flicked out behind her, and the blade
+  // showing as a bright plate under each boot.
+  const pnSkSideIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.....ommmo.oooo.',
+    '.....oooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtGgko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...SSSodrroommmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnSkSideA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.....ommmo.oooo.',
+    '...oppooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtGgko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...SSSodrrommmmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnSkSideB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.....ommmo.oooo.',
+    '.....oooooottTo.',
+    '..oooodrrrttTkKo',
+    '.oBbbprrrRrtGgko',
+    '.oBbbprrrRrtkKko',
+    '..obbpdrrrrokKo.',
+    '...SSSodrrooommo',
+    '...oppoooooooo..',
+    '................',
+  ];
+  const pnSkDownIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....oSSooSSo....',
+    '....obboobbo....',
+    '...oppppppppo...',
+    '...oddddddddo...',
+    'ommorrrrrrrrommo',
+    'ommorrrrrrrrommo',
+    '...orrrrrrrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnSkDownA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....oSSooSSo....',
+    '....obboobbo....',
+    '...oppppppppo...',
+    '...oddddddddommo',
+    '...orrrrrrrrommo',
+    'ommorrrrrrrro...',
+    'ommorrrrrrrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnSkDownB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....oSSooSSo....',
+    '....obboobbo....',
+    '...oppppppppo...',
+    'ommoddddddddo...',
+    'ommorrrrrrrro...',
+    '...orrrrrrrrommo',
+    '...orrrrrrrrommo',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnSkUpIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....otttttto....',
+    '..mmotTTTTto....',
+    '...ommmmmmmmo...',
+    'ommorrrrrrrrommo',
+    'ommorrrrrrrrommo',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....obboobbo....',
+    '....oSSooSSo....',
+  ];
+  const pnSkUpA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....otttttto....',
+    '..mmotTTTTto....',
+    'ommommmmmmmmo...',
+    'ommorrrrrrrro...',
+    '...orrrrrrrrommo',
+    '...orrrrrrrrommo',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....obboobbo....',
+    '....oSSooSSo....',
+  ];
+  const pnSkUpB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....otttttto....',
+    '..mmotTTTTto....',
+    '...ommmmmmmmommo',
+    '...orrrrrrrrommo',
+    'ommorrrrrrrro...',
+    'ommorrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....obboobbo....',
+    '....oSSooSSo....',
+  ];
 
   // ---------------------------------------------------------------- raider
   // Player-like night raider: same body grids, hostile palette.
@@ -1552,6 +1915,13 @@
     up: [bake(playerUpIdle, pal), bake(playerUpA, pal), bake(playerUpB, pal)],
     right: [bake(playerSideIdle, pal), bake(playerSideA, pal), bake(playerSideB, pal)],
     left: [flipH(bake(playerSideIdle, pal)), flipH(bake(playerSideA, pal)), flipH(bake(playerSideB, pal))],
+    // belly-down: a sibling of the four walking directions, same frame order
+    prone: {
+      down: [bakeSpan(pnDownIdle, pal), bakeSpan(pnDownA, pal), bakeSpan(pnDownB, pal)],
+      up: [bakeSpan(pnUpIdle, pal), bakeSpan(pnUpA, pal), bakeSpan(pnUpB, pal)],
+      right: [bakeSpan(pnSideIdle, pal), bakeSpan(pnSideA, pal), bakeSpan(pnSideB, pal)],
+      left: [flipH(bakeSpan(pnSideIdle, pal)), flipH(bakeSpan(pnSideA, pal)), flipH(bakeSpan(pnSideB, pal))],
+    },
   });
   const TIER_PALS = [WPAL, WPAL_STONE, WPAL_GOLD];
   const teamPlayers = TEAM_SKINS.map((t) => playerSet(teamPlayerPal(t)));
@@ -1562,6 +1932,12 @@
       up: [bake(skUpIdle, sp), bake(skUpA, sp), bake(skUpB, sp)],
       right: [bake(skSideIdle, sp), bake(skSideA, sp), bake(skSideB, sp)],
       left: [flipH(bake(skSideIdle, sp)), flipH(bake(skSideA, sp)), flipH(bake(skSideB, sp))],
+      prone: {
+        down: [bakeSpan(pnSkDownIdle, sp), bakeSpan(pnSkDownA, sp), bakeSpan(pnSkDownB, sp)],
+        up: [bakeSpan(pnSkUpIdle, sp), bakeSpan(pnSkUpA, sp), bakeSpan(pnSkUpB, sp)],
+        right: [bakeSpan(pnSkSideIdle, sp), bakeSpan(pnSkSideA, sp), bakeSpan(pnSkSideB, sp)],
+        left: [flipH(bakeSpan(pnSkSideIdle, sp)), flipH(bakeSpan(pnSkSideA, sp)), flipH(bakeSpan(pnSkSideB, sp))],
+      },
     };
   };
   // champ[c][team] - one full pose set per champion per team colour

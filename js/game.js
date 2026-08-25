@@ -55,6 +55,21 @@
   const DODGE_CHARGES = 2;
   const DODGE_CD = 3.5;     // seconds to refill one charge
 
+  // Prone: lie down in the snow, pull it over yourself, and be almost - not
+  // quite - invisible. Free, and paid for entirely in speed: the burrow only
+  // builds while you are lying perfectly still, and the crawl that carries you
+  // anywhere is under a third of a walk. `p.hide` (0..1) is the whole state,
+  // and every watcher in the game reads it through seenAt().
+  const PRONE_SPEED = 20;   // px/s belly crawl (a walk is PLAYER_SPEED, 72)
+  const PRONE_BURY = 1.5;   // s of lying still to go from flat on the snow to under it
+  const PRONE_RISE = 0.34;  // s of getting back up: 45% walk speed, and no cover left
+  const PRONE_ENTER = 14;   // px/s: above this you are still moving, and cannot drop
+  const PRONE_CUT = 0.86;   // fraction full cover takes off every sight range
+  const PRONE_MOVE = 0.5;   // ...of which a crawling mound keeps. Hold still to vanish
+  const PRONE_SNIFF = 22;   // px: nothing hides at arm's length, whatever it is under
+  const PRONE_MAP = 0.55;   // cover past this drops a rival off both maps (a crawler never reaches it)
+  const AMBUSH_MUL = 2.5;   // damage on the shot loosed out of full cover
+
   // Hero levels (League-style, max 9). XP is lifetime gold earned (gainGold), never spent
   // or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
   // the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
@@ -553,6 +568,9 @@
       work: false,         // E held
       slide: false,        // shift held
       dodge: false,        // edge-triggered, cleared once the sim reads it
+      prone: false,        // edge-triggered: toggles the burrow (Ctrl). NOT a held
+                           // level - holding a modifier while tapping W closes the
+                           // browser tab, and preventDefault cannot stop it
       eatBerry: false, eatFish: false, // edge-triggered
       cmd: null,           // one-shot order: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id} or {kind:'gear', piece}
     };
@@ -581,6 +599,7 @@
         tgt: null, avoid: null, avoidT: 0, thinkT: 0,
         huntTgt: null, huntT: 0, huntAvoid: null, huntAvoidT: 0,
         lootT: 0, spendT: 0, buildT: 0,
+        hideT: 0, hideCd: 0,
         wx: 0, wy: 0, roam: 0,
       };
       this.reset(true);
@@ -603,6 +622,10 @@
       this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
       this.stamGhost = 0; this.stamGhostT = 0;      // spent-stamina ghost
       this.sliding = false; this.slideT = 0; this.trailD = 0; this.slideDustT = 0;
+      // prone: lying down, how much snow is over you (0..1), the get-up window,
+      // the crawl's animation phase, and the two tells a buried body still gives
+      this.prone = false; this.hide = 0; this.riseT = 0;
+      this.crawlT = 0; this.puffT = 0; this.hideFlash = 0;
       this.swingT = 0; this.swingCd = 0; this.swingDir = 0; this.swingHitDone = false;
       this.tool = TOOL_BOW;                          // held TOOLS index (bow at rest)
       this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
@@ -638,6 +661,25 @@
   function enemyOf(p, q) { return q !== p && q.active && !q.dead && !inAir(q) && (!PVP || q.team !== p.team); }
   // riding the eagle or falling from it: not in the world yet, nothing can touch it
   function inAir(p) { return p.aboard || p.dropT > 0; }
+
+  // ---- being seen ---------------------------------------------------------
+  // How buried a slot reads to anything hunting for it. `p.hide` is the cover
+  // itself; a mound that is crawling is worth much less than one holding still,
+  // which is the whole reason to stop moving before you shoot.
+  function concealOf(p) { return p.hide > 0 ? p.hide * (p.moving ? PRONE_MOVE : 1) : 0; }
+  // How far p is noticed from by a watcher whose plain sight range is `range`.
+  // GHOSTSTEP always shortens it; lying under the snow shortens it hard - but
+  // never past PRONE_SNIFF, because at arm's length you are found whatever you
+  // are lying under. Every watcher in the game (the pack, the turrets, the bot
+  // brain) resolves through this one function so they cannot disagree about who
+  // is hidden.
+  function seenAt(p, range) {
+    const c = concealOf(p);
+    const r = range * kitOf(p).stealth * (1 - PRONE_CUT * c);
+    return c > 0 ? Math.max(r, Math.min(range, PRONE_SNIFF)) : r;
+  }
+  // the shot that was worth the wait: full cover, and dead still while it goes
+  function ambushReady(p) { return p.prone && p.hide >= 1 && !p.moving; }
 
   // ---- contested orders --------------------------------------------------
   // Several players can order the same tile, drop or fish inside one sim step,
@@ -699,6 +741,10 @@
     // edge-triggered intents go into the local player's input struct; the sim
     // reads and clears them, exactly as it does for an AI slot
     if (e.key === ' ') player.input.dodge = true;
+    // Ctrl TAPS the burrow on and off rather than being held: a held modifier
+    // plus W is Ctrl+W, which closes the tab and which no page can preventDefault
+    // its way out of. Modifiers auto-repeat while down, so the repeat is dropped.
+    if (e.key === 'Control' && !e.repeat) player.input.prone = true;
     if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
     if (e.key.toLowerCase() === 'f') player.input.eatFish = true;
     // 1-4 buy the next level of that gear piece, left to right like the HUD row
@@ -801,7 +847,7 @@
     if (state.mode !== 'play' || state.paused || state.mapOpen || state.settingsOpen) {
       inp.mx = inp.my = 0;
       inp.fire = inp.work = inp.slide = false;
-      inp.dodge = inp.eatBerry = inp.eatFish = false;
+      inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
       inp.cmd = null;
       if (p.charging) { p.charging = false; p.chargeT = 0; }
       p.firePrev = false;
@@ -1163,14 +1209,23 @@
   // combat damage numbers: gold for damage the player's side deals, red '-N'
   // for damage taken. Heavy hits (10+) render at 2x; a little random drift
   // keeps rapid repeat hits from stacking into one unreadable pile.
-  function addDmgFloater(x, y, amount, taken) {
+  function addDmgFloater(x, y, amount, taken, crit) {
     const n = Math.max(1, Math.round(amount));
     floaters.push({
       x: x + rand(-3, 3), y,
       txt: taken ? '-' + n : String(n),
-      color: taken ? '#ff6a5a' : '#ffd95c',
-      t: 0, vx: rand(-9, 9), scale: n >= 10 ? 2 : 1, rise: 20,
+      // a crit keeps the red-taken / gold-dealt language and runs hotter inside it
+      color: taken ? (crit ? '#ff9a6a' : '#ff6a5a') : (crit ? '#fff0b0' : '#ffd95c'),
+      t: 0, vx: rand(-9, 9), scale: crit || n >= 10 ? 2 : 1, rise: crit ? 27 : 20,
     });
+  }
+
+  // an ambush arrow landing, on whatever it lands on: a gold flare over the
+  // ordinary hit puff and a crack that never sounds like a normal shot
+  function ambushFx(x, y) {
+    burst(x, y, '#fff4d0', 10, 90, 0.4);
+    burst(x, y, '#ffd95c', 7, 55, 0.5);
+    if (nearPlayer(x, y)) SFX.ambush();
   }
 
   function burst(x, y, color, n, spd, life, grav) {
@@ -1573,6 +1628,7 @@
   // cooldown; the bow comes back on its own once the cooldown runs out.
   function tryWork(p) {
     if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0) return;
+    if (p.prone) { risePlayer(p); return; } // no swinging an axe on your belly: E stands you up
     const t = workTarget(p);
     if (!t || !t.near) return;
     if (p.charging) { p.charging = false; p.chargeT = 0; } // work drops the draw
@@ -1593,6 +1649,7 @@
   // falling back to the facing direction when no key is down
   function tryDodge(p) {
     if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead) return;
+    risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
     let dx = p.input.mx, dy = p.input.my;
     if (!dx && !dy) {
       dx = p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0;
@@ -1620,6 +1677,44 @@
     else if (dy !== 0) p.dir = dy > 0 ? 'down' : 'up';
     burst(p.x, p.y + 4, '#dfe8f4', 6, 40, 0.35, true);
     if (nearPlayer(p.x, p.y)) SFX.dodge();
+  }
+
+  // ---- prone ---------------------------------------------------------------
+  // Ctrl: go to ground, or get back up. Dropping needs both feet still and snow
+  // underfoot - you cannot dive at speed, and a river has nothing to dig into.
+  // Everything else about the state is one number, `p.hide`, which updatePlayer
+  // ramps and every watcher reads back through seenAt().
+  function tryProne(p) {
+    if (p.dead || p.fallT > 0 || inAir(p)) return;
+    if (p.prone) { risePlayer(p); return; }
+    const tx = Math.floor(p.x / TILE), ty = Math.floor((p.y + 4) / TILE);
+    if (p.dodgeT > 0 || p.sliding || Math.hypot(p.vx, p.vy) > PRONE_ENTER ||
+      !inWorld(tx, ty) || ground[idx(tx, ty)] !== 0) {
+      if (p === player) SFX.deny();
+      return;
+    }
+    p.prone = true;
+    p.hide = 0; p.riseT = 0; p.crawlT = 0; p.puffT = rand(0.7, 1.5);
+    p.vx = p.vy = 0;
+    p.sliding = false; p.slideT = 0;
+    burst(p.x, p.y + 4, '#eef4fb', 7, 34, 0.4, true);
+    if (nearPlayer(p.x, p.y)) SFX.bury();
+  }
+
+  // Back on your feet, whatever put you there - the ambush shot, a hit, an E
+  // swing, a roll, or Ctrl again. The cover goes with the body and is not
+  // allowed to linger: a slot that is visibly standing must be visibly findable,
+  // so `hide` is zeroed here and the snow it stood for is spent as particles.
+  function risePlayer(p) {
+    if (!p.prone) return;
+    const h = p.hide;
+    p.prone = false;
+    p.hide = 0;
+    p.riseT = PRONE_RISE;
+    if (h > 0.2) {
+      burst(p.x, p.y + 2, '#eef4fb', 4 + Math.round(h * 7), 44, 0.45, true);
+      if (nearPlayer(p.x, p.y)) SFX.rise();
+    }
   }
 
   // ---- the quiver ---------------------------------------------------------
@@ -1655,6 +1750,9 @@
   }
 
   function fireArrow(p) {
+    // read the cover before anything below can break it: this is the one shot
+    // that pays for the walk in at a crawl
+    const amb = ambushReady(p);
     // bow-fishing: standing on ice with a fish right underfoot spears it
     // through the sheet instead of loosing the arrow. Two players can reach the
     // same fish in one step, so the catch is contested, not first-come.
@@ -1697,16 +1795,22 @@
     const dy = p.input.aimY - (p.y - BOW_Y);
     const d = Math.hypot(dx, dy) || 1;
     const spd = 170 + 190 * pw;
+    let dmg = Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1);
+    if (amb) dmg = Math.round(dmg * AMBUSH_MUL);
     arrows.push({
       x: p.x, y: p.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
-      t: 0, life: 0.85, dmg: Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1), pow: pw,
+      t: 0, life: 0.85, dmg, pow: pw,
       owner: p.id, team: p.team, // whose shot it is - it never hits its own side
+      ambush: amb,               // loosed out of full cover: hits for AMBUSH_MUL and lands loud
       trailD: 0,                 // px of flight banked toward the next trail mote (see updatePlay)
     });
     if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
     else p.dir = dy > 0 ? 'down' : 'up';
     if (nearPlayer(p.x, p.y)) SFX.arrow();
+    // the loose is what breaks cover - one ambush per burrow, then you are a
+    // player lying in the open with a bow that still has to be renocked
+    risePlayer(p);
   }
 
   // the swing lands on the tile tryWork() locked, whatever is there by now
@@ -2282,8 +2386,9 @@
       for (const p of players) {
         if (!p.active || p.dead || inAir(p) || !leashed(p)) continue;
         const d = Math.hypot(p.x - a.x, p.y - a.y);
-        // GHOSTSTEP shortens how far this particular quarry is noticed from
-        if (d < bd && d < sight * kitOf(p).stealth) { bd = d; t = p; }
+        // GHOSTSTEP - and lying buried in the snow - shorten how far this
+        // particular quarry is noticed from
+        if (d < bd && d < seenAt(p, sight)) { bd = d; t = p; }
       }
       if (t) wakePack(a, t);
     }
@@ -2626,7 +2731,7 @@
   }
   function turretHolds(o, tg, range, pv) {
     return turretFoe(o, tg) &&
-      Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y) <= range * (tg instanceof Player ? kitOf(tg).stealth : 1) &&
+      Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y) <= (tg instanceof Player ? seenAt(tg, range) : range) &&
       turretSees(o, pv, tg.x, turretAimY(tg));
   }
   function turretMark(o, range, pv) {
@@ -2634,8 +2739,9 @@
     const test = (tg) => {
       if (!turretFoe(o, tg)) return;
       const d = Math.hypot(tg.x - pv.x, turretAimY(tg) - pv.y);
-      // GHOSTSTEP shrinks the ring this target is acquired (and held) inside
-      if (d > range * (tg instanceof Player ? kitOf(tg).stealth : 1)) return;
+      // GHOSTSTEP - and a body buried in the snow - shrink the ring this target
+      // is acquired (and held) inside
+      if (d > (tg instanceof Player ? seenAt(tg, range) : range)) return;
       if (d < bd && turretSees(o, pv, tg.x, turretAimY(tg))) { bd = d; best = tg; }
     };
     for (const p of players) test(p);
@@ -3055,15 +3161,16 @@
 
   // src: the player who dealt it (kill credit + the log line), null for the
   // world; cause: a DEATH_CAUSE key naming what the world did, when src is null
-  function damagePlayer(p, dmg, dx, dy, src, cause) {
+  function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
     if (p.dead || p.invuln > 0) return;
     dmg = Math.max(1, dmg - kitOf(p).dr); // IRONHIDE flattens every hit, but never to zero
     p.hp -= dmg;
     p.hurtT = 0.25;
     p.invuln = 0.7;
     p.kbx = dx * 110; p.kby = dy * 110;
-    if (p === player) state.shake = Math.max(state.shake, 3);
-    addDmgFloater(p.x, p.y - 18, dmg, p === player);
+    risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
+    if (p === player) state.shake = Math.max(state.shake, crit ? 6 : 3);
+    addDmgFloater(p.x, p.y - 18, dmg, p === player, crit);
     if (nearPlayer(p.x, p.y)) SFX.hurt();
     burst(p.x, p.y - 6, '#e04a54', 8, 50, 0.45);
     if (p.hp <= 0) die(p, src, cause);
@@ -3106,6 +3213,7 @@
     p.dodgeT = 0;
     p.vx = p.vy = 0;
     p.sliding = false;
+    p.prone = false; p.hide = 0; p.riseT = 0;
     p.fallT = 0;
     p.swingT = p.swingCd = 0;
     burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
@@ -3191,7 +3299,11 @@
     for (const q of players) {
       if (!enemyOf(p, q)) continue;
       const d = Math.hypot(q.x - p.x, q.y - p.y);
-      if (d < bd) { bd = d; best = q; }
+      // seenAt is per-quarry, not per-bot: a rival buried in the snow (or wearing
+      // GHOSTSTEP, which until now did nothing at all against a player) is picked
+      // up from much closer, and one lying still is not picked up until it is
+      // practically underfoot
+      if (d < bd && d < seenAt(q, AI_SIGHT)) { bd = d; best = q; }
     }
     return best;
   }
@@ -3257,20 +3369,61 @@
 
     ai.thinkT -= dt;
     if (ai.buildT > 0) ai.buildT -= dt;
+    if (ai.hideCd > 0) ai.hideCd -= dt;
 
     // 1. food, exactly as a human eats it (Q / F)
     if (p.hp < p.maxHp * 0.5 && p.inv.fish > 0) inp.eatFish = true;
     else if (p.hp < p.maxHp * 0.8 && p.inv.berry > 0) inp.eatBerry = true;
 
-    // 2. a rival in sight: circle at bow range and shoot
+    // 2. the burrow. Decided before the ladder because two rungs below read the
+    //    answer: a bot that has come off worse and has nobody looking at it goes
+    //    to ground and waits the fight out, and one that is already down shoots
+    //    from where it lies - which earns it the same ambush multiplier a human
+    //    gets, off the same ambushReady() check. It gets straight back up for a
+    //    wolf, for a rival close enough to find it anyway, or when the spell
+    //    runs out. It only ever tries where a player could: on snow, on its own
+    //    feet, which is also what keeps it from planting itself on a river and
+    //    standing there. `hideT` doubles as the give-up: a plant that will not
+    //    take burns it four times as fast and ends in the lockout.
     const foe = aiNearestEnemy(p);
+    const wolf = foe ? null : aiNearestWolf(p);
+    if (p.prone) ai.hideT -= dt;
+    const btx = Math.floor(p.x / TILE), bty = Math.floor((p.y + 4) / TILE);
+    const canBury = !p.sliding && p.dodgeT <= 0 && inWorld(btx, bty) && ground[idx(btx, bty)] === 0;
+    let down = p.prone;
+    if (wolf) down = false;
+    else if (foe) down = p.prone && Math.hypot(foe.x - p.x, foe.y - p.y) > 48;
+    else if (p.prone) down = ai.hideT > 0 && p.hp < p.maxHp * 0.9;
+    else if (p.hp < p.maxHp * 0.4 && ai.hideCd <= 0 && canBury) down = true;
+    if (down !== p.prone) {
+      inp.prone = true;                                 // the edge-triggered flag Ctrl sets
+      if (p.prone) ai.hideCd = 18;                      // back up: no re-burrowing for a while
+      else if (ai.hideT <= 0) ai.hideT = rand(7, 12);   // going down: how long it means to stay
+    }
+    if (down && !p.prone) {
+      // stop dead and let the momentum bleed off; tryProne refuses a body that
+      // is still moving. Somewhere that never takes gives up and locks out.
+      ai.hideT -= dt * 4;
+      if (ai.hideT > 0) { inp.fire = false; return; }
+      ai.hideCd = 12;
+    }
+
+    // 3. a rival in sight: circle at bow range and shoot
     if (foe) {
       const d = Math.hypot(foe.x - p.x, foe.y - p.y);
       aimAt(foe.x, foe.y - 6);
-      const side = p.id % 2 ? 1 : -1;
-      const a = Math.atan2(foe.y - p.y, foe.x - p.x);
       // hold ~70px: close in when far, back off when crowded, strafe in between
       const clear = aiLineClear(p, foe.x, foe.y - 6);
+      if (p.prone) {
+        // no strafing on your belly: concealOf discounts a mound that is moving,
+        // and ambushReady refuses a moving shot outright. Hold still, let them
+        // walk in, and spend the arrow at full draw.
+        inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.95;
+        ai.tgt = null;
+        return;
+      }
+      const side = p.id % 2 ? 1 : -1;
+      const a = Math.atan2(foe.y - p.y, foe.x - p.x);
       const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
       inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
       inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.95; // draw, then loose near full
@@ -3279,9 +3432,8 @@
       return;
     }
 
-    // 3. wolves hunt back: a bot that wanders into a den has to fight its way
+    // 4. wolves hunt back: a bot that wanders into a den has to fight its way
     //    out, so it shoots the nearest one and gives ground while it does
-    const wolf = aiNearestWolf(p);
     if (wolf) {
       const d = Math.hypot(wolf.x - p.x, wolf.y - p.y);
       const clear = aiLineClear(p, wolf.x, wolf.y - 4);
@@ -3294,7 +3446,12 @@
       return;
     }
 
-    // 4. meat is gold: chase and shoot the nearest animal, but give up on one
+    // 5. lying low with nothing in sight: hold still and let the snow finish.
+    //    Everything below this rung walks somewhere, and a bot crawling to a
+    //    berry bush at PRONE_SPEED is a bot that has stopped playing.
+    if (p.prone) { inp.fire = false; return; }
+
+    // 6. meat is gold: chase and shoot the nearest animal, but give up on one
     //    it cannot catch in 6 s (prey outruns a walk) or cannot route to at all
     if (ai.huntAvoidT > 0) { ai.huntAvoidT -= dt; if (ai.huntAvoidT <= 0) ai.huntAvoid = null; }
     const prey = aiNearestAnimal(p);
@@ -3316,7 +3473,7 @@
     }
     inp.fire = false;
 
-    // 5. loot on the ground is neutral and first-come: pick up what is close.
+    // 7. loot on the ground is neutral and first-come: pick up what is close.
     //    A bot short of arrows counts spent shafts as loot too, so the fields a
     //    firefight leaves behind get picked clean instead of lying there.
     let loot = null, ld = 72;
@@ -3337,7 +3494,7 @@
     }
     if (!loot) ai.lootT = 0;
 
-    // 6. spend the purse: gear first when the purse is fat enough to keep a
+    // 8. spend the purse: gear first when the purse is fat enough to keep a
     //    building float (buyGear re-validates, so a stale order is harmless),
     //    then a stump to build on, then its own work to upgrade
     if (!inp.cmd) {
@@ -3390,7 +3547,7 @@
       ai.buildT = 4; // nothing worth spending on nearby; look again shortly
     }
 
-    // 7. harvest: walk to a tree/rock/berry bush and hold E on it
+    // 9. harvest: walk to a tree/rock/berry bush and hold E on it
     // (a stripped bush stops being work, so drop it the moment it empties)
     if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
       (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
@@ -3419,7 +3576,7 @@
       return;
     }
 
-    // 8. nothing to do: roam between its camp and the middle of the map
+    // 10. nothing to do: roam between its camp and the middle of the map
     ai.roam -= dt;
     if (ai.roam <= 0) {
       ai.roam = rand(3, 7);
@@ -3600,8 +3757,9 @@
         for (const t of players) {
           if (a.team === t.team || !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
           if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
-            damagePlayer(t, a.dmg, nx, ny, players[a.owner]);
+            damagePlayer(t, a.dmg, nx, ny, players[a.owner], null, a.ambush);
             burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+            if (a.ambush) ambushFx(a.x, a.y);
             dead = true;
             break;
           }
@@ -3614,6 +3772,7 @@
           if (a.team === b.team || b.dead) continue;
           if (robotHit(b, a.x, a.y)) {
             hurtRobot(b, a.dmg, nx, ny, players[a.owner]);
+            if (a.ambush) ambushFx(a.x, a.y);
             dead = true;
             break;
           }
@@ -3629,10 +3788,11 @@
             if (an.kind === 'wolf') wakePack(an, players[a.owner]);
             else if (an.kind === 'bird') flushBirds(an.home, a);
             else an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
-            addDmgFloater(an.x, an.y - (an.alt || 0) - 12, a.dmg);
+            addDmgFloater(an.x, an.y - (an.alt || 0) - 12, a.dmg, false, a.ambush);
             const kb = 25 + 45 * a.pow;
             an.kbx = nx * kb; an.kby = ny * kb;
             burst(an.x, an.y - (an.alt || 0) - 4, HIT_PUFF[an.kind] || '#a5825a', 6, 40, 0.4);
+            if (a.ambush) ambushFx(an.x, an.y - (an.alt || 0) - 4);
             if (nearPlayer(an.x, an.y)) SFX.hit();
             dead = true;
             break;
@@ -3747,13 +3907,14 @@
     const inp = p.input;
 
     if (p.dead) { // out of the match: nothing it wants gets through
-      inp.dodge = inp.eatBerry = inp.eatFish = false;
+      inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
       inp.cmd = null;
       return;
     }
 
     // edge-triggered intents, consumed here so a controller only has to set them
     if (inp.dodge) { inp.dodge = false; tryDodge(p); }
+    if (inp.prone) { inp.prone = false; tryProne(p); }
     if (inp.eatBerry) { inp.eatBerry = false; eatBerry(p); }
     if (inp.eatFish) { inp.eatFish = false; eatFish(p); }
     if (inp.cmd) { const c = inp.cmd; inp.cmd = null; runCmd(p, c); }
@@ -3779,7 +3940,7 @@
     let sp = Math.hypot(p.vx, p.vy);
 
     // shift-slide: only engages above walking speed; keeps momentum, drops the tools
-    const wantSlide = inp.slide && p.dodgeT <= 0;
+    const wantSlide = inp.slide && p.dodgeT <= 0 && !p.prone; // nothing glides on its belly
     const kit = kitOf(p);
     if (!p.sliding && wantSlide && sp > kit.slideMin) {
       p.sliding = true;
@@ -3827,9 +3988,13 @@
       if (p.dodgeT <= 0) burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true);
     } else {
       const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
-      const walkMax = PLAYER_SPEED * kit.walkMul * chargeMul; // STRIDER lengthens the stride
+      // a belly crawl is a flat crawl on any surface - no ice cap, no draw
+      // penalty, nothing to stack. Getting back up costs a moment of it too.
+      const walkMax = p.prone ? PRONE_SPEED
+        : p.riseT > 0 ? PLAYER_SPEED * kit.walkMul * 0.45
+          : PLAYER_SPEED * kit.walkMul * chargeMul; // STRIDER lengthens the stride
 
-      if (!onIce && !p.sliding && sp <= walkMax + 6) {
+      if (p.prone || (!onIce && !p.sliding && sp <= walkMax + 6)) {
         // plain snow walking: near-instant vector approach, tuned so it feels
         // exactly like the old fixed-speed movement (settles in ~3 frames)
         const f = 1 - Math.exp(-25 * dt);
@@ -3887,6 +4052,7 @@
         p.vx = p.vy = 0;
         p.sliding = false;
         p.slideT = 0;
+        p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water
         if (p.charging) { p.charging = false; p.chargeT = 0; }
         p.fireArmed = false;
         if (nearPlayer(p.x, p.y)) SFX.splash();
@@ -3895,6 +4061,48 @@
         damagePlayer(p, HOLE_FALL_DMG, 0, 0, null, 'ice');
       }
     }
+
+    // ---- the cover -------------------------------------------------------
+    // `hide` is the whole stealth state. Lying still on snow pulls it over you
+    // over PRONE_BURY; crawling holds what you already have (concealOf discounts
+    // a moving mound rather than unpacking it); bare ice hides nothing at all,
+    // so the river strips a crawler without forcing them upright; and anything
+    // that puts you back on your feet sheds it over the rise window.
+    if (p.prone) {
+      const snow = inWorld(ftx, fty) && ground[idx(ftx, fty)] === 0;
+      if (!snow) p.hide = Math.max(0, p.hide - dt * 2.2);
+      else if (!p.moving && p.hide < 1) {
+        p.hide = Math.min(1, p.hide + dt / PRONE_BURY);
+        if (p.hide >= 1) { p.hideFlash = 0.4; if (p === player) SFX.hidden(); }
+      }
+      p.crawlT = p.moving ? p.crawlT + dt * 3.6 : 0;
+      // One timer, two jobs, and which one it is doing says what state the body
+      // is in. While the cover is still building it throws up the snow being
+      // pulled over; once it is finished it becomes breath in cold air - the
+      // fair tell that makes "almost invisible" true rather than a promise, and
+      // the one thing a mound holding perfectly still still does.
+      p.puffT -= dt;
+      if (p.puffT <= 0) {
+        if (p.hide < 1) {
+          p.puffT = rand(0.14, 0.26);
+          if (!p.moving) burst(p.x + rand(-6, 6), p.y + rand(0, 5), '#eef4fb', 1, 15, 0.34, true);
+        } else {
+          p.puffT = rand(1.8, 3.2);
+          const bx2 = p.dir === 'left' ? -5 : p.dir === 'right' ? 5 : 0;
+          const by2 = p.dir === 'up' ? -3 : 2;
+          for (let i = 0; i < 3; i++) {
+            particles.push({
+              x: p.x + bx2 + rand(-1, 1), y: p.y + by2, vx: rand(-4, 4), vy: rand(-12, -6),
+              life: rand(0.5, 0.9), maxLife: 0.7, color: '#dbe8f6', size: 1, grav: -8, alpha: 0.5,
+            });
+          }
+        }
+      }
+    } else if (p.hide > 0) {
+      p.hide = 0; // nothing but tryProne can put cover back on; never let it stick
+    }
+    if (p.riseT > 0) p.riseT = Math.max(0, p.riseT - dt);
+    p.hideFlash = Math.max(0, p.hideFlash - dt);
 
     // dodge charges refill one at a time
     if (p.dodgeCharges < DODGE_CHARGES) {
@@ -3914,7 +4122,29 @@
     }
 
     const spNow = Math.hypot(p.vx, p.vy);
-    if (spNow > 8 && p.dodgeT <= 0 && !p.sliding) {
+    // the crawl leaves a drag furrow instead of footprints: a broad flattened
+    // trough with an elbow dimple alternating either side of it. It is a real
+    // tell - a line like that leads anyone who reads it straight to the mound at
+    // the end - and that is the point. The cover is beatable by someone looking.
+    if (p.prone && spNow > 2) {
+      p.trailD -= spNow * dt;
+      const bx = p.vx / spNow, by = p.vy / spNow;
+      let emit = 0;
+      while (p.trailD <= 0 && emit++ < 4) {
+        const back = -p.trailD;
+        p.footSide = 1 - p.footSide;
+        footprints.push({
+          x: p.x - bx * back, y: p.y + 5 - by * back,
+          nx: -by, ny: bx, t: 0, k: 3,
+          // an elbow scuff off to one side of the trough on every other mark,
+          // swapping sides every few of them, the way a crawl actually alternates
+          s: p.footSide ? (Math.floor(p.crawlT) % 2 ? 1 : -1) : 0,
+        });
+        p.trailD += 2; // marks are two deep, so at this spacing they tile into one trough
+      }
+      while (footprints.length > 800) footprints.shift();
+    }
+    if (spNow > 8 && p.dodgeT <= 0 && !p.sliding && !p.prone) {
       p.animT += dt * 9;
       p.footT -= dt;
       if (p.footT <= 0) {
@@ -4196,6 +4426,30 @@
         const a = Math.max(0, 1 - f.t / 9);
         ctx.fillStyle = 'rgba(238,250,255,' + (a * 0.75).toFixed(3) + ')';
         ctx.fillRect(Math.round(f.x - ox), Math.round(f.y - oy), 1, 1);
+      } else if (f.k === 3) {
+        // belly-crawl furrow: a 5px trough laid ACROSS the path (f.nx/ny is the
+        // perpendicular the mark was pushed with, so it stays square to the
+        // crawl whichever way it went), pressed dark in the middle with the snow
+        // it shoved up pale at both lips, plus one elbow dimple to the side.
+        // Lives the full 9 s of a footprint - a trail worth following needs to
+        // outlast the crawl that made it.
+        const a = Math.max(0, 1 - f.t / 9);
+        const px = Math.round(f.x - ox), py = Math.round(f.y - oy);
+        const dark = 'rgba(118,144,186,' + (a * 0.45).toFixed(3) + ')';
+        const lip = 'rgba(200,216,238,' + (a * 0.4).toFixed(3) + ')';
+        // two deep along the direction of travel (f.ny, -f.nx), so consecutive
+        // marks butt up against each other into one trough instead of a ladder
+        for (let k = 0; k < 2; k++) {
+          const ox2 = Math.round(f.ny * k), oy2 = Math.round(-f.nx * k);
+          for (let t = -2; t <= 2; t++) {
+            ctx.fillStyle = t === -2 || t === 2 ? lip : dark;
+            ctx.fillRect(px + ox2 + Math.round(f.nx * t), py + oy2 + Math.round(f.ny * t), 1, 1);
+          }
+        }
+        if (f.s) {
+          ctx.fillStyle = dark;
+          ctx.fillRect(px + Math.round(f.nx * 3 * f.s), py + Math.round(f.ny * 3 * f.s), 1, 1);
+        }
       } else {
         // walking footprints
         const a = Math.max(0, 1 - f.t / 9);
@@ -4557,8 +4811,10 @@
     const nockK = kitOf(player);
     const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockK.nock) : 1;
     const dry = player.quiver <= 0;
+    // `amb` rides along the same way: buried, settled, and the next arrow off
+    // this string is the one worth AMBUSH_MUL
     const ret = (mode, dim, extra) =>
-      Object.assign({ kind: 'reticle', mode, dim, nock: nockF, dry }, extra);
+      Object.assign({ kind: 'reticle', mode, dim, nock: nockF, dry, amb: ambushReady(player) }, extra);
 
     const wx = mouse.x + camX, wy = mouse.y + camY;
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
@@ -4684,6 +4940,21 @@
         [mx - g, my + g, 2, 1], [mx - g, my + g - 1, 1, 2],
         [mx + g - 1, my + g, 2, 1], [mx + g, my + g - 1, 1, 2],
       ], info.dry ? '#8a97bd' : '#ffd95c', base * (0.35 + 0.55 * nock));
+    }
+    // Loosing from full cover: the crosshair grows a second segment out along
+    // each of its own axes and the centre pixel warms to gold. Deliberately on
+    // the cross, where the renock's marks are on the diagonals, so a bow that is
+    // both reloading and buried says two separate things at once.
+    if (info.amb && !info.dry) {
+      const g2 = gap + L + 2;
+      drawOutlinedRects([
+        [mx - g2 - 1, my, 2, 1], [mx + g2, my, 2, 1],
+        [mx, my - g2 - 1, 1, 2], [mx, my + g2, 1, 2],
+      ], '#ffd95c', base);
+      ctx.globalAlpha = base;
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(mx, my, 1, 1);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -5131,17 +5402,28 @@
 
   function drawPlayer(p, ex, ey, now) {
     const local = p === player;
-    const set = champSet(p)[p.dir];
+    const lying = p.prone;
+    const set = lying ? champSet(p).prone[p.dir] : champSet(p)[p.dir];
     let frame = 0;
-    if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
+    if (lying) frame = p.moving ? 1 + (Math.floor(p.crawlT) % 2) : 0;
+    else if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
     const spr = set[frame];
-    const px = Math.round(p.x - 8 - ex);
-    const py = Math.round(p.y - 12 - ey);
-    // shadow (not while swimming in a hole)
-    if (p.fallT <= 0) {
+    // the crawl inches: the second frame sits one pixel further along the facing
+    // than the first, so the body hauls itself forward instead of flapping in
+    // place. Baking two shifted copies of every grid would have said the same
+    // thing at eight times the art.
+    const ix = lying && frame === 2 ? (p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0) : 0;
+    const iy = lying && frame === 2 ? (p.dir === 'up' ? -1 : p.dir === 'down' ? 1 : 0) : 0;
+    const px = Math.round(p.x - 8 - ex) + ix;
+    const py = Math.round(p.y - 12 - ey) + iy;
+    // shadow (not while swimming in a hole, and not while lying down - a body
+    // flat on the snow has nothing to cast one over, and the cover's own dark
+    // lower rim is what grounds it instead)
+    if (p.fallT <= 0 && !lying) {
       ctx.fillStyle = 'rgba(110,130,170,0.4)';
       ctx.fillRect(px + 5, py + 15, 6, 2);
     }
+    if (lying && local) drawBuryRing(p, Math.round(p.x - ex), Math.round(p.y - ey) + 3);
 
     if (p.fallT > 0) {
       // plunged through the ice: quick sink, only the head above the waterline
@@ -5174,26 +5456,47 @@
       ctx.globalAlpha = 0.28; spin(sgn * (prog - 0.07) * Math.PI * 2, -nx * 6, -ny * 6);
       ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
     } else {
-      // held tool: behind the body when facing away, in the hand otherwise
-      const held = state.mode !== 'title';
+      // held tool: behind the body when facing away, in the hand otherwise. A
+      // lying player shows one only while the bow is actually drawn - a carried
+      // axe bobbing over a body on its belly reads as a floating axe.
+      const held = state.mode !== 'title' && (!lying || p.charging);
       const toolBehind = held && p.dir === 'up' && !p.charging && p.swingT <= 0;
       if (toolBehind) drawHeldTool(p, px, py);
       if (p.invuln > 0 && state.mode !== 'title' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
       drawSpriteFlash(spr, px, py, p.hurtT > 0.12 ? 1 : 0);
-      if (state.mode !== 'title') drawGearMarks(p, px, py); // on the body, under the held tool
+      // gear marks sit at fixed points on the standing body plan, so the prone
+      // poses skip them rather than stripe a shoulder across someone's hip
+      if (state.mode !== 'title' && !lying) drawGearMarks(p, px, py);
       ctx.globalAlpha = 1;
       if (held && !toolBehind) drawHeldTool(p, px, py);
+      // and the snow goes on last, over body and bow alike
+      if (lying && p.hide > 0) {
+        drawSnowCover(p, spr, px, py, local ? 0.66 : p.team === player.team ? 0.85 : 1);
+      }
     }
 
     if (state.mode === 'title') return;
 
-    drawHealthBar(p.x - ex, py - 7, p.hp, p.maxHp, 14);
+    // Everything above the head is a tell, and a buried player gives none of
+    // them away: name tag, both bars, the level badge and - the one that
+    // matters - the draw meter that says a shot is coming all fade with the
+    // cover. You keep a readable copy of your own, your side keeps most of
+    // theirs, and a rival keeps nothing, which is the whole point of the thing.
+    const cf = 1 - concealOf(p) * (local ? 0.55 : p.team === player.team ? 0.7 : 1);
+    if (cf < 0.03) { ctx.globalAlpha = 1; return; }
+    ctx.globalAlpha = cf;
+
+    // the whole stack hangs off one y so it can drop with the body: a prone
+    // pose starts ~6 rows lower in the same 16x16 cell, and bars floating where
+    // a head no longer is look broken
+    const hy = py + (lying ? 6 : 0);
+    drawHealthBar(p.x - ex, hy - 7, p.hp, p.maxHp, 14);
     // level badge: a 7x7 square sharing its right frame column with the bar
     // backing's left edge (one 1px frame everywhere, never a doubled wall), and
-    // spanning the health bar and the stamina bar stacked (py-8 .. py-2). Same
+    // spanning the health bar and the stamina bar stacked (hy-8 .. hy-2). Same
     // backing / track colours as the bars.
     {
-      const bx = Math.round(p.x - ex) - 14, by = py - 8;
+      const bx = Math.round(p.x - ex) - 14, by = hy - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx, by, 6, 7); // 6 wide: the 7th column is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
@@ -5203,7 +5506,7 @@
     // rivals carry a name tag in their team colour so a fight stays legible
     if (!local) {
       drawPixelTextOutline(ctx, p.name,
-        Math.round(p.x - ex - pixelTextWidth(p.name) / 2), py - 18, // clear of the draw meter's frame (top row py-11) with a gap row
+        Math.round(p.x - ex - pixelTextWidth(p.name) / 2), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
         TEAMS[p.team].mark, '#0f1632');
     }
     // dodge stamina: one clean unsegmented bar under the health bar - charges
@@ -5213,7 +5516,7 @@
     // The track is painted one row taller than the fill so the gap between the two
     // bars is track grey, not frame colour - one clean outline around both.
     {
-      const bx = Math.round(p.x - ex) - 7, by = py - 4;
+      const bx = Math.round(p.x - ex) - 7, by = hy - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
       ctx.fillStyle = '#3a3448';
@@ -5233,8 +5536,8 @@
     // draw is full. Drawn for everyone - it is the tell that says a shot is
     // coming. It sits inside the shared frame directly above the hp bar, the
     // mirror of the stamina bar below it: its backing adds the rows above the
-    // hp backing (frame top at py-11, fill py-10..-9) and the hp backing's top
-    // row py-8 becomes the track-grey gap row, so the frame stays one outline.
+    // hp backing (frame top at hy-11, fill hy-10..-9) and the hp backing's top
+    // row hy-8 becomes the track-grey gap row, so the frame stays one outline.
     // The same slot carries the renock cooldown when the bow is not drawn, so
     // one strip above a head answers the only question a fight asks about it:
     // gold filling = drawing (a shot is coming), slate filling = reloading (it
@@ -5245,7 +5548,7 @@
       const drawing = p.charging;
       const frac = drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
         : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, nockKit.nock);
-      const x = Math.round(p.x - ex) - 7, y = py - 10;
+      const x = Math.round(p.x - ex) - 7, y = hy - 10;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
       ctx.fillStyle = '#3a3448';
@@ -5254,6 +5557,128 @@
         : frac >= 1 ? '#ff9440' : '#ffd95c';
       ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
     }
+    ctx.globalAlpha = 1;
+  }
+
+  // The cover has to fit the pose it is covering, and the six prone poses are
+  // six different silhouettes - long and low side-on, wide-armed head-on - so
+  // the mound's row extents come from the sprite rather than from an ellipse
+  // that would leave a mitten sticking out of the snow. `spr.spans` is the
+  // per-row [firstX, lastX] that sprites.js takes off the char grid at bake time
+  // (see `bakeSpan`), so there is no canvas readback anywhere in this, and the
+  // cover stays correct on its own if the art is ever redrawn.
+  const poseSpans = new Map();
+  function poseBounds(spr) {
+    let b = poseSpans.get(spr);
+    if (b) return b;
+    const raw = spr.spans || [];
+    // dilate a row into its neighbours before storing: snow banked over a body
+    // is a drift, not a traced outline, and taking the union of three rows both
+    // rounds the jagged bits out and adds the row of piled snow above and below
+    // the sprite that makes it sit IN the ground rather than on it
+    b = [];
+    for (let y = 0; y < 16; y++) {
+      let lo = 99, hi = -1;
+      for (let k = -1; k <= 1; k++) {
+        const s = raw[y + k];
+        if (s) { if (s[0] < lo) lo = s[0]; if (s[1] > hi) hi = s[1]; }
+      }
+      b.push(hi < 0 ? null : [lo, hi]);
+    }
+    b.raw = raw; // the body itself: the cover is never allowed to be narrower than this
+    poseSpans.set(spr, b);
+    return b;
+  }
+
+  // The snow pulled over a body, one row per row of the pose it sits on, each
+  // row a pixel wider than the body underneath so nothing peeks out at the
+  // edges. Coverage closes from the OUTSIDE IN - boots and elbows go first, the
+  // middle of the back last - so most of the way through there is still a seam
+  // of coat showing down the spine, and only at the very end does the shape
+  // become a lump in the snow. Row widths are roughened by hash2 against the
+  // tile, so it is a drift rather than a traced outline and it holds still
+  // instead of shimmering. Lit like every other drift here: pale crest along the
+  // top, shade along the bottom, and a dark rim under it doing the grounding
+  // that a prone body's missing cast shadow would have done.
+  function drawSnowCover(p, spr, px, py, alpha) {
+    const h = Math.max(0, Math.min(1, p.hide));
+    if (h <= 0) return;
+    const rows = poseBounds(spr);
+    const seed = ((p.x / TILE) | 0) * 31 + ((p.y / TILE) | 0) * 17;
+    let first = -1, last = -1;
+    for (let r = 0; r < 16; r++) if (rows[r]) { if (first < 0) first = r; last = r; }
+    if (first < 0) return;
+    ctx.globalAlpha = alpha;
+    let botY = 0, botL = 0, botR = 0;
+    for (let r = first; r <= last; r++) {
+      const s = rows[r];
+      if (!s) continue;
+      // 1-2 px of piled snow past the body, pulled back in at the two ends so
+      // the drift rounds off instead of ending in a square corner
+      const edge = Math.min(r - first, last - r);
+      const grow = 1 + Math.round(hash2(seed + r * 5, 91)) - (edge === 0 ? 3 : edge === 1 ? 1 : 0);
+      // the taper must never pull the cover inside the body it is covering - a
+      // pose that runs to the bottom of the cell (both head-on ones do) has no
+      // spare row below it to round off into, and two boot pixels sticking out
+      // of an otherwise finished mound is exactly the tell that ruins it
+      const body = rows.raw[r];
+      const lo = Math.min(px + s[0] - grow, body ? px + body[0] : Infinity);
+      const hi = Math.max(px + s[1] + grow, body ? px + body[1] : -Infinity);
+      if (hi < lo) continue;
+      const hw = (hi - lo + 1) / 2, mid = (lo + hi + 1) / 2;
+      const gap = Math.round(hw * (1 - h));                        // the open seam, closing as it fills
+      if (gap >= hw) continue;
+      const bw = Math.round(hw - gap), y = py + r;
+      // a ramp down the mound, not three flat bands: the crest catches the light
+      // the same way every drift in this world does and the far side falls into
+      // shade, which is the only thing that makes a finished mound read as a
+      // lump rather than as a patch of ground the same colour as the ground
+      const u = (r - first) / Math.max(1, last - first);
+      ctx.fillStyle = u < 0.14 ? '#ffffff' : u < 0.32 ? '#f8fbff' : u < 0.56 ? '#edf3fc'
+        : u < 0.78 ? '#d8e4f2' : '#bfcee4';
+      ctx.fillRect(Math.round(mid - hw), y, bw, 1);
+      ctx.fillRect(Math.round(mid + gap), y, bw, 1);
+      botY = y; botL = Math.round(mid - hw); botR = Math.round(mid + hw);
+    }
+    if (botR > botL) {
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.fillStyle = '#6e86ab';
+      ctx.fillRect(botL + 1, botY + 1, botR - botL - 2, 1);
+    }
+    // two frost glints on the crest, fixed to the tile so they do not crawl
+    if (h > 0.75) {
+      ctx.globalAlpha = alpha * (0.5 + 0.5 * h);
+      ctx.fillStyle = '#ffffff';
+      for (let i = 0; i < 2; i++) {
+        const gr = first + 1 + Math.floor(hash2(seed + i * 13, 67) * Math.max(1, last - first - 2));
+        const s = rows[gr];
+        if (!s) continue;
+        ctx.fillRect(px + s[0] + 1 + Math.floor(hash2(seed + i * 13, 41) * Math.max(1, s[1] - s[0] - 1)), py + gr, 1, 1);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // The bury meter, local slot only: twelve marks on a ring in the snow that
+  // light one at a time as the cover builds, then flash white and go. A rival's
+  // bury needs no meter - they can literally watch you disappear - and this one
+  // exists only because you cannot see your own back.
+  function drawBuryRing(p, cxp, cyp) {
+    const done = p.hideFlash > 0;
+    if (p.hide >= 1 && !done) return;
+    const h = Math.min(1, p.hide);
+    ctx.globalAlpha = done ? Math.min(1, p.hideFlash / 0.4) : 1;
+    for (let i = 0; i < 12; i++) {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI * 2;
+      const x = Math.round(cxp + Math.cos(a) * 14), y = Math.round(cyp + Math.sin(a) * 9);
+      // a dark pixel under each mark, the same trick drawPixelTextOutline uses:
+      // white on snow is white on white without something behind it
+      ctx.fillStyle = 'rgba(14,22,50,0.55)';
+      ctx.fillRect(x, y + 1, 1, 1);
+      ctx.fillStyle = done || i / 12 < h ? '#ffffff' : '#68799f';
+      ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.globalAlpha = 1;
   }
 
   // an unfilled slot: a flat team-tinted silhouette standing at its camp, so
@@ -5977,9 +6402,12 @@
     mmViewCtx.globalCompositeOperation = 'destination-in';
     mmViewCtx.drawImage(mmMask(MM_R), 0, 0);
     ctx.drawImage(mmView, MM_CX - MM_R, MM_CY - MM_R);
-    // the other slots, in team colour, wherever they fall inside the view
+    // the other slots, in team colour, wherever they fall inside the view. A
+    // rival buried past PRONE_MAP drops off it entirely - a dot that survived
+    // the cover would make the whole thing pointless. Your own side never does.
     for (const p of players) {
       if (p === vp || !p.active || p.dead || inAir(p)) continue;
+      if (p.team !== vp.team && concealOf(p) >= PRONE_MAP) continue;
       const dx = (p.x / TILE - ptx) * s, dy = (p.y / TILE - pty) * s;
       if (Math.hypot(dx, dy) > MM_R - 1) continue;
       ctx.fillStyle = '#0f1632';
@@ -6640,6 +7068,7 @@
     // the other slots, inked in their team colour
     for (const p of players) {
       if (p === player || !p.active || p.dead || inAir(p)) continue;
+      if (p.team !== player.team && concealOf(p) >= PRONE_MAP) continue; // buried: off the map, same as the minimap
       const ox2 = MAP_X + Math.round((p.x / TILE) * MAP_S);
       const oy2 = MAP_Y + Math.round((p.y / TILE) * MAP_S);
       ctx.fillStyle = '#241a10';
@@ -6743,11 +7172,11 @@
     g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
     // hotkey listing, two columns
     const cols = [
-      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH']],
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH']],
       [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 140;
+      let y = 137; // seven rows a column now that CTRL is one: start a little higher so the last one still clears ESC CLOSE
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
@@ -6851,9 +7280,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.34'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.35'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.35', 'CTRL LIES YOU DOWN IN THE SNOW AND PULLS IT OVER YOU: ALMOST NOBODY CAN SEE YOU, YOU CAN ONLY BELLY-CRAWL, AND THE ARROW YOU LOOSE OUT OF COVER HITS FOR TWO AND A HALF TIMES.'],
     ['1.34', 'ARROWS ARE A QUIVER NOW: EVERY SHOT SPENDS ONE AND TAKES A MOMENT TO RENOCK, AND EVERY ARROW THAT LANDS STICKS IN THE SNOW TO BE PICKED BACK UP.'],
     ['1.33', 'WINNING NOW GETS A REAL VICTORY SCREEN - CROWN, BANNERS, AURORA AND THE NUMBERS FROM YOUR RUN - AND THE LAST TEAM STANDING WINS, NOT THE LAST PLAYER.'],
     ['1.32', 'HOUSEKEEPING: THE DEV NOTES LEARN THE GEAR SYSTEM AND FOUR STALE POINTERS NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],
@@ -7421,7 +7851,7 @@
     const g = helpPanelCv.getContext('2d');
     bakeFrostSlab(g, SET_W, SET_H, 'TUTORIAL');
     const cols = [
-      [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
+      [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CTRL', 'HIDE IN SNOW'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
       [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['TAB', 'SCOREBOARD'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
     ];
     for (let c = 0; c < 2; c++) {
@@ -9022,6 +9452,20 @@
     workTarget: (p) => workTarget(p || player),
     fireArrow: (p) => fireArrow(p || player),
     tryDodge: (p) => tryDodge(p || player),
+    // prone: the burrow toggle, how buried a slot reads to anything hunting it,
+    // and a way to stage a fully covered body without lying in the snow for 1.5s
+    tryProne: (p) => tryProne(p || player),
+    risePlayer: (p) => risePlayer(p || player),
+    concealOf: (p) => concealOf(p || player),
+    seenAt: (range, p) => seenAt(p || player, range),
+    ambushReady: (p) => ambushReady(p || player),
+    setHide: (h, p) => {
+      const q = p || player;
+      q.hide = Math.max(0, Math.min(1, h));
+      q.prone = q.hide > 0 || q.prone;
+      return q.hide;
+    },
+    PRONE_BURY, PRONE_SPEED, PRONE_SNIFF, PRONE_CUT, PRONE_MOVE, PRONE_MAP, AMBUSH_MUL,
     spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
     // debug staging: place a construction site directly, no cost or validation
     buildStruct: (tx, ty, type, tier) => {

@@ -111,6 +111,16 @@
     dryFire() { noise(0.05, 0.07, 260); tone(120, 0.09, 'triangle', 0.06, -40); },
     // pulling a spent shaft back out of the snow
     shaftPull() { noise(0.05, 0.1, 1400); tone(520, 0.06, 'triangle', 0.05, 240); },
+    // going to ground: a body dropping into deep snow, all low crunch and no pitch
+    bury() { noise(0.22, 0.2, 380); tone(96, 0.16, 'triangle', 0.06, -26); },
+    // the cover finishes settling. Barely there on purpose - it is the sound of
+    // NOT being heard, and it plays with a rival somewhere close by
+    hidden() { noise(0.14, 0.05, 260); tone(1320, 0.1, 'sine', 0.022, 180, 0.03); },
+    // getting back up: the snow sheds off in one shove
+    rise() { noise(0.16, 0.16, 1000, 0); tone(150, 0.11, 'triangle', 0.05, 70); },
+    // the shot out of the snow lands: deeper and harder than hit(), with a crack
+    // over the top, so an ambush never sounds like an ordinary arrow
+    ambush() { tone(720, 0.05, 'square', 0.1, -520); noise(0.12, 0.32, 1700); tone(104, 0.2, 'sawtooth', 0.13, -34, 0.02); },
     // turret: a hard electric crack with a low thump under it, so it never reads as a bow
     turretFire() { tone(880, 0.05, 'square', 0.07, -520); noise(0.07, 0.2, 2600); tone(230, 0.11, 'triangle', 0.09, -90, 0.02); },
     hit() { noise(0.06, 0.25, 800); tone(140, 0.08, 'sawtooth', 0.1, -50); },

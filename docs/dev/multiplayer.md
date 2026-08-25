@@ -44,6 +44,8 @@ fire          bow held: rising edge draws, falling edge looses
 work          E held
 slide         shift held
 dodge         edge-triggered, cleared by the sim when it reads it
+prone         edge-triggered (Ctrl): TOGGLES the burrow, never a held level -
+              holding a modifier while tapping W is Ctrl+W, which closes the tab
 eatBerry      edge-triggered (Q)
 eatFish       edge-triggered (F)
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
@@ -140,7 +142,14 @@ background, the tint is the ink — see the
 Arrows carry `owner`/`team` and test players first in `updatePlay`'s arrow loop, using the
 same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` for knockback, flash,
 floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
-shooter.
+shooter. `damagePlayer` takes a seventh argument, `crit`, which the arrow loop passes from
+`a.ambush`: it runs the damage floater hotter and at double scale and doubles the local shake. Any
+hit also calls `risePlayer` before anything else, so nobody stays buried through one.
+
+**Whether a rival can be seen at all is a separate question from whether they can be shot.**
+`enemyOf` answers the second; `seenAt(p, range)` answers the first, and every watcher in the
+game — the bot brain, the wolf pack, both turret checks — resolves through it. See
+[Prone](gameplay.md#prone-under-the-snow).
 
 **A rival's worker bots are targets too** — they are tested straight after the players, on the same
 team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one costs the owner
@@ -201,21 +210,35 @@ can pull one out, whoever shot it; see [the quiver](gameplay.md#the-quiver)).
 a human couldn't. It is a priority ladder re-picked a few times a second:
 
 1. **eat** — fish below 50% hp, berry below 80%.
-2. **fight** — a rival within `AI_SIGHT` (150 px): circle at ~70 px, draw and loose near full,
-   dodge when hurt. Only shoots when `aiLineClear()` says the flight path is open.
-3. **wolves** — a wolf within 92 px (or any wolf already hunting this bot): shoot it and give
+2. **burrow** — decided up front, because two rungs below read the answer. A bot that has come off
+   worse (under 40% hp) with no rival and no wolf in sight goes [prone](gameplay.md#prone-under-the-snow)
+   and waits the fight out for `ai.hideT` (7–12 s); it only ever tries where a player could, on
+   snow and on its own feet, which is also what stops it planting itself on a river. It gets
+   straight back up for a wolf, for a rival inside 48 px, or when the spell runs out, and rising
+   starts an 18 s lockout so no bot spends the match flopping up and down. `hideT` doubles as the
+   give-up: a spot that will not take burns it four times as fast and ends in the lockout.
+   The toggle goes through `inp.prone`, exactly the flag Ctrl sets.
+3. **fight** — a rival within `AI_SIGHT` (150 px, now filtered through `seenAt()` so a buried one
+   is simply not there): circle at ~70 px, draw and loose near full, dodge when hurt. Only shoots
+   when `aiLineClear()` says the flight path is open. **Already prone, it holds perfectly still
+   and shoots from where it lies** — which earns it the ambush multiplier off the same
+   `ambushReady()` check a human gets, since `concealOf` discounts a moving mound and
+   `ambushReady` refuses a moving shot outright.
+4. **wolves** — a wolf within 92 px (or any wolf already hunting this bot): shoot it and give
    ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
-4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
+5. **lie low** — prone with nothing in sight: hold still and let the snow finish. Everything below
+   this rung walks somewhere, and a bot crawling to a berry bush at 20 px/s has stopped playing.
+6. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
-5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come). A bot at or below
+7. **loot** — walk onto a drop within 72 px (drops are neutral and first-come). A bot at or below
    half a quiver counts spent [shafts](gameplay.md#the-quiver) in the same scan, so the arrows a
    firefight leaves lying around get picked back up.
-6. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
+8. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
    plus a 15-gold float; then, with gold in hand, build a generator (or, 30% of the time and only
    where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work; steps off the stump first, since a building is solid.
-7. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
-8. **roam** — wander between its landing site and the map centre.
+9. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
+10. **roam** — wander between its landing site and the map centre.
 
 Every walk goes through `steerTo(x, y, reach)`, which is `navTo` on the bot's own slot
 ([gameplay.md](gameplay.md#pathfinding)) — it routes around trees, rocks, buildings and water,

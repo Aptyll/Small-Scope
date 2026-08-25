@@ -70,7 +70,9 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 
 ## Render pass order
 
-`render()` runs: ground blit → under-ice fish → ice-crack decals → footprints → flat objects
+`render()` runs: ground blit → under-ice fish → ice-crack decals → footprints (walking prints,
+slide grooves, skate scratches and belly-crawl furrows all share the one `footprints` array,
+branching on `f.k`) → flat objects
 (stumps) → spent arrows (`drawShafts`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
@@ -103,6 +105,23 @@ a tree on the tile below hides it almost completely.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 64×64 `scratch`
 canvas with `source-in` — sprites larger than 64×64 will clip (the 48×38 bot bay is the biggest).
+
+### Snow over a body
+
+A [prone](gameplay.md#prone-under-the-snow) player draws inside the same `draws` slot as a
+standing one — prone pose set, then `drawSnowCover(p, spr, px, py, alpha)` over body and bow
+alike, and `drawBuryRing` under it for the local slot only. The cover closes **from the outside
+in** (each row's covered band grows from both edges toward a seam down the middle that shuts at
+`hide = 1`), so boots and elbows go first and the middle of the back last. Row extents are not
+guessed: `spr.spans` is the per-row `[firstX, lastX]` that [sprites.md](sprites.md) takes off the
+char grid at bake time, so there is **no `getImageData` anywhere in this** and the cover stays
+correct on its own if the poses are redrawn. `poseBounds` caches a dilated copy per sprite — the
+union of each row with its two neighbours, which rounds the jagged bits out and adds the row of
+piled snow above and below the body — and keeps the raw spans beside it, because the taper that
+rounds the drift's two ends must never pull the cover inside the body it is covering (both
+head-on poses run to the bottom of the cell and have no spare row to round into). No cast shadow
+is drawn while lying: a body flat on the snow has nothing to cast one over, and the mound's own
+dark lower rim does the grounding instead.
 
 ### Snow
 
@@ -164,6 +183,14 @@ the sprite: stamina plate at `py - 4` (every slot, since the level badge spans b
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
 the stamina bar), and a rival's name tag in team colour at `py - 18`, a clear row above the meter's
 frame. The backings are translucent, so each plate paints only its own rows - no overlap.
+
+**The whole stack hangs off one `hy`**, not off `py` directly, for two reasons. It drops 6 rows
+for a [prone](gameplay.md#prone-under-the-snow) pose, which starts that much lower in the same
+16×16 cell — bars floating where a head no longer is look broken. And its alpha fades with
+`concealOf(p)`: name tag, both bars, the level badge and the draw meter that says a shot is coming
+all go with the cover, weighted so you keep a readable copy of your own (×0.55), your side keeps
+most of theirs (×0.7) and a rival keeps none (×1, skipped entirely below 3%). A buried rival whose
+draw meter still showed would make the whole thing pointless.
 
 ## Text over the world
 
@@ -350,7 +377,7 @@ the very last thing in `render()` (above every overlay and the info stack), so i
 game's pixel grid at every zoom level. `cursorInfo()` resolves the pointer state once per
 frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the pointer, and
 both the pixel cursor and the browser-cursor fallback read from it. It returns
-`{ kind, mode, dim, frac, nock, dry }`:
+`{ kind, mode, dim, frac, nock, dry, amb }`:
 
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
@@ -367,9 +394,12 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 - Every reticle in play also carries the **bow's own state**, whatever the pointer is over, since
   the crosshair is where the eye already is: `nock` (0→1 as the renock cooldown elapses) draws
   four gold corner marks falling inward onto the ring, and `dry` (empty quiver) drops the centre
-  pixel and greys the ticks — a hollow crosshair. Both come from the one `ret()` helper inside
-  `cursorInfo`, so no return site can forget them. See
-  [the quiver](gameplay.md#the-quiver).
+  pixel and greys the ticks — a hollow crosshair. `amb` (buried, settled: the next arrow is worth
+  `AMBUSH_MUL`) grows a second segment out along each of the crosshair's **own axes** and warms the
+  centre pixel to gold — deliberately on the cross, where the renock's marks are on the diagonals,
+  so a bow that is both reloading and buried says two separate things at once. All three come from
+  the one `ret()` helper inside `cursorInfo`, so no return site can forget them. See
+  [the quiver](gameplay.md#the-quiver) and [Prone](gameplay.md#prone-under-the-snow).
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),

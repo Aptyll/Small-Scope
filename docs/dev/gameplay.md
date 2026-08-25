@@ -47,6 +47,9 @@ underfoot sets friction and speed caps. All the tuning constants live in the con
   their own short hold-then-fade life (`SNOW_TRAIL_LIFE` 3.5 s, fading only over the last
   `SNOW_TRAIL_FADE` 1.4 s), so a trail stays crisp and then wipes away tail-first behind the
   player; ice scratches and walking footprints keep the original 9 s linear fade.
+- **Prone** short-circuits all of it: a belly crawl takes the plain direct-approach branch on any
+  surface at a flat `PRONE_SPEED`, and sliding is refused outright. See
+  [Prone](#prone-under-the-snow).
 - **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
   normal movement, so you never grind along a treeline at full speed.
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
@@ -161,7 +164,8 @@ The bow is **hold-to-charge**: holding the button arms the shot (`p.fireArmed`),
 as soon as the bow is actually ready and runs `p.charging`/`p.chargeT` (movement targets scale to
 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter renders above the
 player's health bar), and the release edge fires via `fireArrow(p)` — power scales speed
-(170–360 px/s) and damage (4–13). Arrows carry their shooter's `owner`/`team`, live in the
+(170–360 px/s) and damage (4–13), and a shot loosed out of full snow cover multiplies the lot by
+`AMBUSH_MUL` (see [Prone](#prone-under-the-snow)). Arrows carry their shooter's `owner`/`team`, live in the
 `arrows` array, and are updated in `updatePlay()`: they die on solid tiles, on a **rival player**
 (tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker bot**
 (`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or after
@@ -280,7 +284,106 @@ the bar shows the pooled total (full charges + regen progress). Spending a charg
 pale ghost of the lost chunk (`player.stamGhost`/`stamGhostT`): it holds ~0.3 s, then drains
 into the live fill souls-style. Death cancels the roll, respawn refills
 charges; overlays (map/settings/wheel/pause) block the local player's input. The bar is drawn for
-the local slot only — a rival's tells are their draw meter and their position.
+the local slot only — a rival's tells are their draw meter and their position. A roll out of
+[prone](#prone-under-the-snow) is legal and is the fast way out of the snow: `tryDodge` stands the
+player up first, so the escape costs a charge.
+
+## Prone: under the snow
+
+**Ctrl** lies a player face-down in the snow and pulls it over them. It is the game's only
+stealth, and it is paid for entirely in speed.
+
+**Ctrl is a tap, not a hold** (`input.prone` is edge-triggered, like `dodge`). This is not a
+style choice: holding a modifier and tapping W is Ctrl+W, which closes the browser tab, and
+`preventDefault()` cannot stop it — the shortcut is reserved above the page, fullscreen included.
+The keydown handler also drops `e.repeat`, since a held modifier auto-repeats and would otherwise
+flip the burrow several times a second.
+
+`tryProne(p)`/`risePlayer(p)` (the `actions` banner) are the only two ways in and out. Going down
+needs **both feet still** (`hypot(vx, vy) <= PRONE_ENTER`, 14 px/s — you cannot dive at a run),
+not sliding, not mid-roll, and **snow underfoot**: a river has nothing to dig into, and Ctrl there
+just plays `SFX.deny`. Getting up happens on Ctrl again, on the ambush shot, on a `tryWork` E
+press, on `tryDodge` (a roll is the fast way out and costs a charge), on any hit
+(`damagePlayer` calls `risePlayer` before anything else), on falling through the ice, and on death.
+
+### The one number
+
+`p.hide` (0..1) is the whole state. It climbs at `1 / PRONE_BURY` (1.5 s) while lying **still on
+snow**, holds while crawling, decays fast off snow — a body dragged onto bare ice keeps the pose
+but loses the cover, because the cover is the snow, not the posture — and is zeroed the instant
+`risePlayer` runs. Two derived reads sit on top of it and **everything else in the game uses
+those, never `p.hide` directly**:
+
+- `concealOf(p)` = `hide`, discounted to `PRONE_MOVE` (×0.5) while `p.moving`. A crawling mound is
+  worth half a still one, which is what makes "stop before you shoot" a real decision.
+- `seenAt(p, range)` = the distance a watcher with plain sight `range` actually notices p from:
+  `range × kit.stealth × (1 − PRONE_CUT × conceal)`, floored at `PRONE_SNIFF` (22 px) whenever
+  there is any cover at all — **nothing hides at arm's length**. Full cover takes a bot's 150 px
+  down to 22, a wolf's 96 down to 22, and a tier-3 turret's 92 down to 22.
+
+Four watchers resolve through `seenAt` and there must never be a fifth that doesn't:
+`aiNearestEnemy` (which **ignored `kit.stealth` entirely** before this — GHOSTSTEP did nothing
+against another player until now), `updateWolf`'s target pick, and `turretMark`/`turretHolds`.
+Both maps gate separately on `concealOf(p) >= PRONE_MAP` (0.55): a rival buried and still drops off
+the minimap and the M map, and a rival *crawling* tops out at 0.5 and stays on both — moving puts
+you back on their map before it puts you back in their sights.
+
+### Crawling
+
+`updatePlayer`'s movement block forces the plain direct-approach branch with
+`walkMax = PRONE_SPEED` (20 px/s against a 72 px/s walk) on **any** surface — no ice cap, no
+`chargeMul`, nothing to stack, and `inp.slide` is ignored (`wantSlide` requires `!p.prone`).
+Rising costs `PRONE_RISE` (0.34 s) at 45% walk speed. Instead of footprints a crawl lays a **drag
+furrow**: `k: 3` entries in the shared `footprints` array every 2 px, each storing the
+perpendicular it was pushed with so the trough draws square to the path whichever way it went, two
+deep so consecutive marks tile into one continuous line, with an elbow dimple to one side on every
+other mark. It keeps the full 9 s footprint life — a trail worth following has to outlast the crawl
+that made it — and it is the counterplay: a line like that leads straight to the mound at the end.
+
+### The ambush shot
+
+`ambushReady(p)` is `prone && hide >= 1 && !moving`: **full** cover, and dead still while it goes.
+`fireArrow` reads it before anything else can break the cover, multiplies the whole damage roll
+(champion + power + speed + level) by `AMBUSH_MUL` (2.5), tags the arrow `ambush: true`, and calls
+`risePlayer` after the loose — one ambush per burrow, then you are a player lying in the open with
+a bow that still has to be renocked. A WREN's full draw goes 12 → 30. Bow-fishing is the exception
+that proves the rule: it never leaves the bow, so it costs no arrow and breaks no cover.
+
+Wherever the tagged arrow lands — player, worker bot or animal — `ambushFx()` puts a gold flare
+over the ordinary hit puff and plays `SFX.ambush()`; `damagePlayer`'s `crit` argument runs the
+damage floater hotter and at double scale, and doubles the local shake.
+
+### The tells
+
+None of them is a word:
+
+- **The body disappears.** `drawSnowCover` closes over the prone sprite **from the outside in** —
+  boots and elbows first, the middle of the back last — so at 85% there is still a seam of coat
+  showing down the spine. Row extents come from `spr.spans`, the per-row `[firstX, lastX]`
+  [sprites.md](sprites.md) takes off the char grid at bake time, dilated a row into its neighbours
+  so it is a drift rather than a traced outline; the finished mound is lit like every other drift
+  here (white crest, shaded far side, dark rim under it doing the grounding a prone body's missing
+  cast shadow would have done). Alpha is 1 for a rival, 0.85 for an ally and 0.66 for yourself, so
+  **you can always see yourself under the snow** and nobody else can.
+- **The overhead furniture fades with the cover** (`drawPlayer`) — name tag, health bar, stamina
+  bar, level badge, and the draw meter that says a shot is coming. A rival keeps none of it. The
+  whole stack also drops 6 rows with the pose, since a prone body starts that much lower in the
+  same 16×16 cell.
+- **The bury ring** (`drawBuryRing`, local slot only) — twelve marks on a ring in the snow that
+  light one at a time as the cover builds, then flash white and go. Each gets a dark pixel under
+  it, because white on snow is white on white. A rival needs no meter: they can watch you vanish.
+- **The reticle arms.** `cursorInfo` puts `amb` on every reticle it builds; `drawCursor` grows a
+  second segment out along each of the crosshair's own axes and warms the centre pixel to gold —
+  deliberately on the cross, where the renock's marks are on the diagonals.
+- **Breath.** One timer on the player does two jobs, and which one says what state the body is in:
+  while the cover is still building it throws up the snow being pulled over, and once it is
+  finished it becomes a plume of breath every ~2 s. That, the mound itself and the furrow are the
+  three things that keep "almost invisible" honest.
+
+### Bots
+
+Bots use it through the same edge-triggered flag Ctrl sets — rung 2 of the
+[ladder](multiplayer.md#ai-slots), decided before the rest because two later rungs read the answer.
 
 ## Wildlife
 
@@ -419,9 +522,10 @@ returns that cache, so every existing kit read site (movement, `fireArrow`, dodg
 the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
 Sites that read the gear-only fields: `damagePlayer` (`dr`), `eatBerry`/`eatFish` and the daylight
 regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvest`), `animalDies`
-(`huntMul`, paid to `a.lastHit` — stamped by the arrow loop — as one extra coin), the wolf
-target pick and `turretMark`/`turretHolds` (`stealth`), and the three dodge-refill sites
-(`dodgeCd`).
+(`huntMul`, paid to `a.lastHit` — stamped by the arrow loop — as one extra coin), **`seenAt()`**
+(`stealth` — see [Prone](#prone-under-the-snow); the wolf pack, both turret checks *and*
+`aiNearestEnemy` all go through it now, so GHOSTSTEP finally does something against another
+player instead of only against wolves and turrets), and the three dodge-refill sites (`dodgeCd`).
 
 **Buying** goes through `input.cmd = {kind:'gear', piece}` → `runCmd` → `buyGear(p, i)` — the one
 entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
@@ -636,6 +740,11 @@ itself against. (Old saves may still carry `res`, `fps` or `seed` keys from remo
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
 still refits the canvas when the browser toggles it.
 
+Below the six rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
+(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one, and the rows start at y 137 rather than
+140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
+as `CTRL HIDE IN SNOW`.
+
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows
 the **info stack** — `drawTags()`, a vertical list on the left edge at the top quarter of the
@@ -661,6 +770,12 @@ The bow's rhythm has three of its own: `SFX.nock()` (a dry wooden tick when the 
 deliberately near-silent, since it fires after every shot), `SFX.dryFire()` (a slack string on an
 empty quiver) and `SFX.shaftPull()` (retrieving a spent arrow). See
 [the quiver](#the-quiver).
+
+[Prone](#prone-under-the-snow) has four: `SFX.bury()` (a body dropping into deep snow — low crunch,
+no pitch), `SFX.hidden()` (the cover finishing, barely there on purpose: it is the sound of *not*
+being heard, and it plays with a rival somewhere close by), `SFX.rise()` (the snow shed in one
+shove) and `SFX.ambush()` (the shot out of the snow landing — deeper and harder than `hit()`, with
+a crack over the top, so an ambush never sounds like an ordinary arrow).
 
 `SFX.victory()` (a four-note fanfare over a held low fifth) is the one cue longer than a second;
 `endMatch` fires it the moment the match is won. `SFX.tally()` is the dry blip a climbing number

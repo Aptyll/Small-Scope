@@ -14,8 +14,14 @@ declare victory. The three affordances:
   deterministic (it halts `render()` too, so the canvas holds the last frame — set the value you
   want *before* freezing), `hideUI = true` drops the HUD/info stack/cursor for captures, `buildStruct` stages
   a construction site with no cost or validation, `warp(tx, ty, p?)` drops a slot on a tile, and
-  `setControl(slot, mode)` hands a slot to an AI, a human or nobody. **Stage the scene** (place
+  `setControl(slot, mode)` hands a slot to an AI, a human or nobody. `setHide(h, p?)` stages a
+  buried body without lying in the snow for `PRONE_BURY`, and `concealOf` / `seenAt(range, p?)` /
+  `ambushReady` read back what the world makes of it. **Stage the scene** (place
   structures, warp to a landmark, jump `state.day`/`state.time`) instead of playing to reach it.
+  Two things a staged scene walks into: `warp` moves a slot but **not the camera**, which lerps
+  after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
+  cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
+  player will quietly shoot it dead mid-capture, so empty its quiver with `setQuiver(0, p)` first.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
@@ -61,7 +67,18 @@ behavior in `hitObject()`'s gating.
 field to `makeInput()`, fill it for the human in `sampleHumanInput()` (edge-triggered flags are
 set by the event handlers and cleared by the sim), consume it in `updatePlayer(p, dt)`, and give
 bots a way to use it in `updateAI()`. If only one player can have the result, queue it through
-`contest()`. See [multiplayer.md](multiplayer.md).
+`contest()`. See [multiplayer.md](multiplayer.md). **A modifier key is a trap**: Ctrl+W, Ctrl+T
+and Ctrl+N are reserved above the page and `preventDefault()` cannot stop them, so a modifier
+bound as a *held* state that the player uses alongside WASD will close their tab. Bind it as a
+tap that toggles, and drop `e.repeat` — a held modifier auto-repeats.
+
+**Adding something that hunts a player** — a new enemy, a new building, anything that decides it
+can see a slot — asks `seenAt(p, range)`, never a bare distance against a bare range. That one
+function is where GHOSTSTEP and lying buried in the snow both live, and a hunter that skips it
+stares straight through the cover with nothing in the code to say why. If it also *marks* the
+player somewhere the player can read (a map dot, an icon), gate that on
+`concealOf(p) >= PRONE_MAP` the way both maps do. See
+[gameplay.md](gameplay.md#prone-under-the-snow).
 
 **Adding a way to hurt a player** — pass the attacker as `damagePlayer`'s `src` (or, when the
 world did it, a `DEATH_CAUSE` key as `cause`). Miss it and the kill is uncredited on the TAB

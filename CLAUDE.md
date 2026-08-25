@@ -6,6 +6,9 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
   (`kit.nock`), slow fletching, and every spent arrow sticks in the snow as a `shafts` entry
   anyone can walk over. **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
 - Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
+- **Ctrl goes prone** (a tap, never a hold — Ctrl+W closes the tab): lie still on snow and it covers
+  you. You crawl at `PRONE_SPEED`, and the arrow loosed out of *full* cover hits for `AMBUSH_MUL`
+  and breaks it.
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
 - **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere
   (keys 1–4 / the HUD plates); the sim reads champions *and* gear only through `kitOf(p)`.
@@ -64,7 +67,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~9050-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~9500-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
@@ -110,6 +113,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is
   also the XP source; a direct `+=` earns no levels.
+- **Anything that decides it can see a player asks `seenAt(p, range)`**, never a bare range — that
+  one function is where GHOSTSTEP and lying buried in the snow live, and both maps gate on
+  `concealOf(p)`. A new hunter that skips it stares straight through the cover.
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).

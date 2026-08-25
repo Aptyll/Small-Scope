@@ -23,6 +23,26 @@ notches). The body chars `L`/`T`/`t` are the team paint (`teamRobotPal` → `coa
 so `robotTeam[team]` is the whole bot in that colour; `drawRobot()` bobs the entire sprite while
 driving and adds the tool swing and the carried nugget in code.
 
+**Prone is a fifth pose direction**, a `prone` key sitting beside `down`/`up`/`right`/`left` in
+each champion's set (`champ[c][team].prone[dir][frame]`, three frames a direction: settled and two
+of the crawl). The body lies **across** the 16×16 cell rather than standing up through it, so a
+player's ground contact stays where the standing feet were and the y-sort never jumps when they
+drop — foreshortened, not shrunk: twelve rows head-on to the standing sixteen, eight deep and
+fifteen long side-on. Everything about the read is segmentation (boots, split calves, thighs
+widening into the coat hem, elbows out past the shoulders to the full width of the cell, a small
+head at the front), because pants sit a shade off the outline colour and an unsegmented lower body
+just reads as a dark brick. The crawl frames alternate the reaching arm **and** the drawn-up knee,
+since a belly crawl hauls with one arm and pushes off the opposite leg; the 1 px inch forward
+between them is applied by `drawPlayer`, not baked into a second set of grids. The skater's set
+swaps the pom hat for her hood, the eye for the goggle band, adds the trailing scarf and shows the
+blade as a plate under each boot.
+
+These are the one place `bakeSpan()` is used instead of `bake()`: it attaches `spans`, the per-row
+`[firstX, lastX]` of painted pixels computed straight off the char grid, and `flipH` mirrors that
+array with the canvas. The game's snow cover reads it to size the mound to the pose
+([rendering.md](rendering.md#snow-over-a-body)) — which means editing a prone grid updates the
+cover for free, and there is no canvas readback anywhere in the feature.
+
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (four presets, also exported
 as `SPRITES.teams` so game.js can read the names and marker colours) drives three baked sets:
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
