@@ -29,11 +29,12 @@ file and reloading the page is the whole dev loop (`Cache-Control: no-store` is 
 refresh always picks up changes). `PORT` overrides the port; `.claude/launch.json` sets
 `autoPort`, so a second session can preview alongside an already-running server.
 
-**Verify changes in the browser, not by re-reading code.** Three affordances drive it from
+**Verify changes in the browser, not by re-reading code.** Four affordances drive it from
 outside: `window.DBG` (end of [js/game.js](js/game.js)) exposes the live singletons and stages a
 scene without playing to it, `?seed=N` pins the world so two screenshots are comparable, and
 `POST /shot` ([serve.js](serve.js#L14)) sinks `canvas.toDataURL()` to `shot.png` for a headless
-driver — never commit that file. How to use all three:
+driver — never commit that file, and in the game itself **`.`** draws the hitboxes the sim
+actually tests over the sprites that hide them. How to use all four:
 [checklists](docs/dev/checklists.md#verifying-a-change).
 
 ## Deep docs
@@ -67,7 +68,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~9700-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~9800-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).

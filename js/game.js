@@ -467,7 +467,7 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true };
+  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0 };
   // Minimap zoom ladder, px per world tile: index settings.mmZoom (5 = the 1:1
   // baseline). Twice the rungs and twice the reach of the old six, and like the
   // camera it eases between them rather than snapping - mmCur is what anything
@@ -830,6 +830,10 @@
     // F3 flips the info stack in any mode, minecraft-style (the browser's own
     // F3 find bar is suppressed above)
     if (e.key === 'F3') { settings.info = !settings.info; saveSettings(); return; }
+    // '.' cycles the hitbox overlay (off / bodies / bodies + ranges) in any mode,
+    // beside F3 and for the same reason: what it draws is as true of the title
+    // screen's living world and of a spectated match as it is of your own feet
+    if (e.key === '.') { settings.hitbox = (settings.hitbox + 1) % 3; saveSettings(); return; }
     if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
     if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
@@ -4834,6 +4838,7 @@
 
     drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
     renderLighting(ox, oy, ex, ey, now);
+    drawHitboxes(ox, oy, ex, ey); // the '.' overlay - above the lighting on purpose, see its banner
 
     // Back to the screen, and the only place the two pixel spaces meet. The
     // blit is done in DEVICE pixels (identity transform) at k = zoom * devScale
@@ -4927,6 +4932,139 @@
       line('POS', Math.floor(vp.x / TILE) + ', ' + Math.floor(vp.y / TILE));
       line('SEED', String(SEED));
     }
+  }
+
+  // ------------------------------------------------------------ hitbox overlay
+  // What the sim actually tests, drawn on top of what the art shows. The '.'
+  // key cycles `settings.hitbox`: 0 off, 1 bodies, 2 bodies + ranges - one key,
+  // and the extra rings are their own step because a wolf's sight ring is 96px
+  // wide and would bury the 7px circle that decides whether an arrow lands.
+  // Every shape here is read from the same expression the sim uses, never a
+  // repeat of the number: an overlay that disagrees with the sim is worse than
+  // none, because it is believed. Colour carries the kind, so there is nothing
+  // to label:
+  //   cyan   a wall to everyone (isSolidTile)
+  //   blue   open water: a wall to animals and robots, a hole a player falls in
+  //   green  the body circle separateUnits/moveEntity push apart
+  //   red    the circle an arrow is tested against - offset UP from the feet
+  //   violet a walk-over pickup, or a click target
+  //   gold   a projectile, which is a point and not a circle
+  //   orange (mode 2) a reach or a sight range, stippled so it stays behind
+  // This is the one world pass that draws ABOVE renderLighting: a hitbox has to
+  // be as readable at midnight as at noon, and the lighting would eat it.
+  const HB_SOLID = '#5ad0ff', HB_WATER = '#3f76ff', HB_BODY = '#4dff7d';
+  const HB_HURT = '#ff4d5e', HB_PICK = '#c07dff', HB_SHOT = '#ffd95c', HB_RANGE = '#ff9a3a';
+  const HB_STIP = 3; // a range plots one ring pixel in three
+
+  // One ring, plotted as 1px world pixels. Not an arc() stroke: that is
+  // anti-aliased, and the world blit magnifies a soft edge into mush. Rows give
+  // the left/right extremes and columns the top/bottom ones, so the ring closes
+  // at every radius and a fractional one (PLAYER_R is 4.5) is not rounded away.
+  function hbRing(cx, cy, r, col, step) {
+    if (r < 0.5) return;
+    cx = Math.round(cx); cy = Math.round(cy);
+    if (cx + r < 0 || cy + r < 0 || cx - r > WV_W || cy - r > WV_H) return;
+    ctx.fillStyle = col;
+    let n = 0;
+    const put = (px, py) => { if (!step || n++ % step === 0) ctx.fillRect(px, py, 1, 1); };
+    const R = Math.floor(r);
+    for (let d = -R; d <= R; d++) {
+      const o = Math.round(Math.sqrt(r * r - d * d));
+      put(cx - o, cy + d); put(cx + o, cy + d);
+      put(cx + d, cy - o); put(cx + d, cy + o);
+    }
+  }
+  function hbBox(x, y, w, h, col) {
+    if (x + w < 0 || y + h < 0 || x > WV_W || y > WV_H) return;
+    ctx.fillStyle = col;
+    ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1);
+    ctx.fillRect(x, y + 1, 1, h - 2); ctx.fillRect(x + w - 1, y + 1, 1, h - 2);
+  }
+  // the anchor point itself: a circle drawn around the wrong origin looks right
+  // until you see where its centre is
+  function hbDot(cx, cy, col) {
+    const x = Math.round(cx), y = Math.round(cy);
+    ctx.fillStyle = col;
+    ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3);
+  }
+
+  function drawHitboxes(ox, oy, ex, ey) {
+    if (!settings.hitbox) return;
+    const ranges = settings.hitbox > 1;
+    const vp = viewPlayer(); // sight ranges are per-target: they answer "how far
+                             // can this thing see the slot the camera frames"
+
+    // tiles - the AABB moveEntity() sweeps, straight off isSolidTile. Statics
+    // subtract the rounded camera, movers below subtract the exact one.
+    const tx0 = Math.floor(ox / TILE), ty0 = Math.floor(oy / TILE);
+    const tx1 = Math.floor((ox + WV_W) / TILE), ty1 = Math.floor((oy + WV_H) / TILE);
+    for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) {
+      const px = tx * TILE - ox, py = ty * TILE - oy;
+      if (isSolidTile(tx, ty)) hbBox(px, py, TILE, TILE, HB_SOLID);
+      else if (inWorld(tx, ty) && ground[idx(tx, ty)] === 2) hbBox(px, py, TILE, TILE, HB_WATER);
+    }
+
+    // players: the body circle everything is pushed out of, and the hurt circle
+    // an arrow is tested against - which sits 6px UP, at the chest, so a shot
+    // that looks like it went over the head is a hit and this is where you see it
+    for (const p of players) {
+      if (!p.active || p.dead || inAir(p)) continue;
+      hbRing(p.x - ex, p.y - ey, PLAYER_R, HB_BODY);
+      hbRing(p.x - ex, p.y - 6 - ey, 7, HB_HURT);
+      hbDot(p.x - ex, p.y - ey, HB_BODY);
+      if (!ranges) continue;
+      // E works a ring of TILES, not a radius - so it is drawn as one
+      const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE), span = 2 * WORK_REACH + 1;
+      hbBox((ptx - WORK_REACH) * TILE - ox, (pty - WORK_REACH) * TILE - oy, span * TILE, span * TILE, HB_RANGE);
+      hbRing(p.x - ex, p.y - ey, FISH_CATCH_R, HB_RANGE, HB_STIP);
+    }
+
+    // animals: birds are the one unit nothing collides with, so they get no
+    // body circle - only the (smaller) circle an arrow tests
+    for (const a of animals) {
+      if (a.dead) continue;
+      const hy = a.y - (a.alt || 0) - 3;
+      if (a.kind !== 'bird') hbRing(a.x - ex, a.y - ey, unitRadius(a), HB_BODY);
+      hbRing(a.x - ex, hy - ey, a.kind === 'bird' ? 5 : 8, HB_HURT);
+      hbDot(a.x - ex, a.y - ey, HB_BODY);
+      if (!ranges) continue;
+      if (a.kind === 'wolf') {
+        hbRing(a.x - ex, a.y - ey, WOLF_BITE_R, HB_RANGE, HB_STIP);
+        hbRing(a.x - ex, a.y - ey, seenAt(vp, WOLF_SIGHT * (1 + state.darkness * 0.75)), HB_RANGE, HB_STIP);
+        if (a.home) hbRing((a.home.tx + 0.5) * TILE - ox, (a.home.ty + 0.5) * TILE - oy, WOLF_LEASH, HB_RANGE, HB_STIP * 3);
+      } else if (a.kind === 'bird' && a.flyT <= 0) {
+        hbRing(a.x - ex, a.y - (a.alt || 0) - ey, BIRD_FLUSH, HB_RANGE, HB_STIP);
+      }
+    }
+
+    for (const b of robots) {
+      if (b.dead) continue;
+      hbRing(b.x - ex, b.y - ey, unitRadius(b), HB_BODY);
+      hbRing(b.x - ex, b.y - 1 - ey, 7, HB_HURT); // robotHit
+      hbDot(b.x - ex, b.y - ey, HB_BODY);
+    }
+
+    // a turret acquires inside its tier's range, measured from the PIVOT (which
+    // is above the tile, not in it) and shrunk by whatever cover the mark has
+    if (ranges) for (const o of structures) {
+      if (o.type !== 'turret' || o.building) continue;
+      const pv = turretPivot(o);
+      hbRing(pv.x - ox, pv.y - oy, seenAt(vp, STRUCTS.turret.tiers[o.tier].range), HB_RANGE, HB_STIP);
+      hbDot(pv.x - ox, pv.y - oy, HB_RANGE);
+    }
+
+    // an arrow is a point: it is the tile under that point that stops it, and
+    // that point that is tested against every circle above
+    for (const a of arrows) hbDot(a.x - ex, a.y - ey, HB_SHOT);
+
+    // walk-over and click targets. A drop is claimed from its own centre, a
+    // shaft from 2px below its own - both are what the sim measures to.
+    for (const d of drops) {
+      hbRing(d.x - ex, d.y - ey, 7, HB_PICK);
+      if (ranges) hbRing(d.x - ex, d.y - ey, 28, HB_RANGE, HB_STIP); // the drift-toward-you magnet
+    }
+    for (const s of shafts) hbRing(s.x - ex, s.y + 2 - ey, SHAFT_R, HB_PICK);
+    for (const f of fish) hbRing(f.x - ex, f.y - ey, 7, HB_PICK); // hoverFish
   }
 
   // ------------------------------------------------------------ cursor & aim line
@@ -7333,7 +7471,7 @@
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH']],
-      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO']],
+      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
     ];
     for (let c = 0; c < 2; c++) {
       let y = 137; // seven rows a column now that CTRL is one: start a little higher so the last one still clears ESC CLOSE
@@ -7440,9 +7578,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.37'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.38'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.38', 'THE . KEY DRAWS EVERY HITBOX IN THE WORLD - THE CIRCLES AND BOXES THE GAME ACTUALLY TESTS - AND A SECOND PRESS ADDS EVERY REACH AND SIGHT RANGE ON TOP.'],
     ['1.37', 'THE CAMERA ZOOMS FURTHER IN AND OUT IN FINER STEPS AND GLIDES BETWEEN THEM, ALWAYS SETTLING WHERE THE PIXELS LAND EXACTLY, AND ZOOMING NO LONGER RESIZES THE HUD - ONLY THE WORLD.'],
     ['1.36', 'OPENING THE MAP NO LONGER STOPS THE WORLD - THE MATCH RUNS ON WHILE YOU READ IT, AND YOU CAN KEEP WALKING WITH IT UP.'],
     ['1.35', 'CTRL LIES YOU DOWN IN THE SNOW AND PULLS IT OVER YOU: ALMOST NOBODY CAN SEE YOU, YOU CAN ONLY BELLY-CRAWL, AND THE ARROW YOU LOOSE OUT OF COVER HITS FOR TWO AND A HALF TIMES.'],

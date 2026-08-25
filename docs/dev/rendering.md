@@ -149,6 +149,8 @@ fish brackets + click prompt (`drawFishHint`) → construction progress bars →
 arrows (bolts branch to `drawBolt`) → `drawTurretFx` (each turret's charging aim line and its
 muzzle flash) → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
 eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` →
+`drawHitboxes` (the `.` overlay — deliberately **above** the lighting, see
+[Hitboxes](#hitboxes-the--overlay)) →
 **the world blit** (`worldCv` scaled onto the canvas — everything above it drew in world space,
 everything below draws in screen space; see [World zoom](#world-zoom-and-the-two-pixel-spaces))
 → `renderWeather` (snow, see below) →
@@ -297,6 +299,44 @@ Floater entries carry optional `vx`/`scale`/`rise` fields honored by the floater
 plain `addFloater` entries default to the old look. Units also flash white on hit via
 `drawSpriteFlash` (0.8-alpha overlay). Hits on **structures** intentionally get no numbers;
 structures show flash, shake, and damage cracks instead.
+
+## Hitboxes: the `.` overlay
+
+What the sim tests, drawn over what the art shows — the two are deliberately different (a tree's
+canopy overhangs the tile above it; an arrow is tested against a circle at the *chest*, 6 px above
+the feet), and every collision question is faster to answer by looking than by reading. `.`
+cycles `settings.hitbox` in **any** mode, beside F3 and for the same reason — the title screen's
+world is live and a spectated match is someone else's feet:
+
+| `settings.hitbox` | draws |
+| --- | --- |
+| `0` | nothing (default; persists to `localStorage` like every other setting) |
+| `1` | bodies: tile boxes, unit circles, projectile points, pickup radii |
+| `2` | ...plus reaches and sight ranges, stippled |
+
+Two steps because a wolf's 96 px sight ring would bury the 7 px circle that decides whether an
+arrow lands. Colour carries the kind, so there is nothing to label: **cyan** a wall to everyone
+(`isSolidTile`, so a multi-tile building boxes each of its footprint tiles), **blue** open water —
+a wall to animals and robots, a hole a player falls into — **green** the body circle
+`moveEntity`/`separateUnits` push apart, plus a dot on the anchor point itself, **red** the circle
+an arrow is tested against, **violet** a walk-over pickup or a click target, **gold** a projectile
+(a point, never a circle), **orange** a reach or a sight range.
+
+Every shape is read from the expression the sim uses, never a copy of the number — an overlay that
+disagrees with the sim is worse than none, because it is believed. Two consequences worth knowing:
+
+- **Sight rings are per-target.** A wolf's ring and a turret's are drawn at `seenAt(viewPlayer(),
+  …)`, so they answer *how far can this thing see the slot the camera frames* — they widen at
+  night (`state.darkness`) and collapse to `PRONE_SNIFF` as you bury yourself. Watching a turret's
+  ring shrink off you is the clearest picture of [prone](gameplay.md#prone-under-the-snow) there is.
+- **E works a ring of tiles, not a radius**, so `WORK_REACH` is drawn as a box.
+
+`drawHitboxes` is the one world pass that draws **above `renderLighting`** — a hitbox has to be as
+readable at midnight as at noon. Rings are rasterised by `hbRing` as 1 px world pixels rather than
+stroked with `arc()`: a stroke is anti-aliased, and the world blit magnifies a soft edge into
+mush. It plots the left/right extremes by row and the top/bottom by column, so the ring closes at
+every radius and a fractional one (`PLAYER_R` is 4.5) is not rounded away; `step` plots one pixel
+in N, which is the stipple ranges use to stay behind the bodies.
 
 ## Landmarks on the maps
 

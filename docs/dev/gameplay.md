@@ -751,7 +751,7 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`) persists to
+`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry `res`, `fps` or `seed` keys from removed settings;
@@ -761,8 +761,8 @@ There is no fullscreen control in the ESC menu (players use F11); a `fullscreenc
 still refits the canvas when the browser toggles it.
 
 Below the six rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
-(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one, and the rows start at y 137 rather than
-140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
+(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one and `. HITBOX` the right one, and the
+rows start at y 137 rather than 140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
 as `CTRL HIDE IN SNOW`.
 
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
@@ -776,7 +776,14 @@ the watched slot), and **SEED**, the run seed (see
 shared x, so the numbers line up in a column; that dim-label / bright-value pairing is the same
 one the berry and fish counters use. **Red on the fps value (below 45) is the only colour in the
 stack that means anything** — nothing else is tinted, which is what lets the warning read. In
-title only the fps line shows. Beneath the minimap
+title only the fps line shows.
+
+`settings.hitbox` is the same idea one key over: **`.`** cycles it 0 → 1 → 2 (off / bodies /
+bodies + ranges) in any mode, and draws the circles and boxes the sim actually tests over the
+sprites that hide them — see [Hitboxes](rendering.md#hitboxes-the--overlay). It has no ESC-menu
+row (the panel is full), only the `. HITBOX` line in the CONTROLS block.
+
+Beneath the minimap
 `renderMinimap()` prints one centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with
 `aliveCount()` — slots active and not dead, riders included — then the elapsed clock.
 

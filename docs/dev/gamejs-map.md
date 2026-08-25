@@ -1,6 +1,6 @@
 # Where things live in game.js
 
-`game.js` is one ~9700-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~9800-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -26,6 +26,7 @@ don't cite line numbers here, they go stale within a session.
 | picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the F3 readout: fps, coords, seed | `drawTags` | `render` |
+| the `.` hitbox overlay and its 1px ring/box rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `HB_*` | `hitbox overlay` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |
