@@ -283,7 +283,8 @@ bar on a plate directly beneath the overhead health bar — charges stay discret
 the bar shows the pooled total (full charges + regen progress). Spending a charge leaves a
 pale ghost of the lost chunk (`player.stamGhost`/`stamGhostT`): it holds ~0.3 s, then drains
 into the live fill souls-style. Death cancels the roll, respawn refills
-charges; overlays (map/settings/wheel/pause) block the local player's input. The bar is drawn for
+charges; pause, the settings panel and the wheel block the local player's roll (the
+[map](#the-m-map-does-not-pause) does not). The bar is drawn for
 the local slot only — a rival's tells are their draw meter and their position. A roll out of
 [prone](#prone-under-the-snow) is legal and is the fast way out of the snow: `tryDodge` stands the
 player up first, so the escape costs a charge.
@@ -725,9 +726,27 @@ the page on the same seed, which boots into the title screen. **TAB still opens 
 while you are out**, which is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
 `drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on
-without you. Only the local overlays (paused, map, settings) stop the sim;
+without you. Only **pause (P) and the settings panel (ESC)** stop the sim;
 `update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
 runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-menu-title).
+
+## The M map does not pause
+
+**M** opens the world chart with the sim still stepping, the same deal the
+[build wheel](#base-building) takes: night still falls, arrows still fly, bots still hunt you.
+`sampleHumanInput` handles it in its own branch, and the rule is *the map keeps your feet and
+nothing else*: `mx`/`my` and `slide` are read as usual, the edge-triggered `dodge`/`prone` pass
+straight through, and `fire`/`work`/`eatBerry`/`eatFish`/`cmd` are dropped along with any held
+draw (the pointer is over the parchment, so there is nothing to aim or work at, and a gear plate
+bought blind under the dim would be bought by accident). So you walk with the chart up and watch
+your own marker cross it. Consequences worth knowing:
+
+- The replay ring keeps recording (`replayLive`) — the capture point is above the map's dim, so
+  the banked frames are clean world frames. `replayShowing` still hides the *window* under the panel.
+- Dying with the map open is now possible; `endMatch` already clears `state.mapOpen`, and M only
+  toggles in `play` mode, so the chart cannot survive into the death overlay.
+- `applyView()` still drops to base zoom while the map is up (the panel is a fixed 308×226 and has
+  to fit), so opening it zooms the world out under the parchment and closing it zooms back.
 
 ## Settings
 

@@ -53,7 +53,10 @@ cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, 
 ```
 
 `sampleHumanInput(player)` (input banner) folds `keys`/`mouse` into slot 0's struct once per step,
-and zeroes it — dropping any draw — while an overlay, the wheel or pause is up. The keydown
+and zeroes it — dropping any draw — while pause or the settings panel is up. The wheel and the
+[map](gameplay.md#the-m-map-does-not-pause) don't stop the sim and so don't zero the whole struct:
+each drops only the intents it swallows (the map keeps movement, the wheel keeps movement minus
+the roll). The keydown
 handlers and `resolveWheel()` no longer act directly: they set `input.dodge` / `input.eatFish` /
 `input.cmd` and let the next `updatePlayer` perform it. **A new ability must be a field here**, or
 bots and future network peers can't use it.
@@ -165,7 +168,7 @@ living rival through `viewPlayer()`/`specNext()`, or `toLobby()` back to the tit
 death runs `checkLastStanding()`, which ends the match as a win once no **rival** is left —
 `rivalCount()` reads the same other-team rule `enemyOf` does, so the last *team* standing wins and
 a surviving teammate does not keep the match open. **The match keeps simulating while you are out** — `update()` runs `updatePlay` in both
-`play` and `dead` mode; only the local overlays (pause, map, settings) stop the world. Full
+`play` and `dead` mode; only pause and the settings panel stop the world (the map does not). Full
 detail: [Death is final](gameplay.md#death-is-final).
 
 ### Kills and the event feed

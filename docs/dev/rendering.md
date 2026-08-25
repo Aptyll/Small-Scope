@@ -154,6 +154,11 @@ expressed the same way.
 The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so
 `renderWorldMap()` blits `mapCv` scaled by `MAP_S = MAP_W / WORLD` and every tile-space
 position drawn on top (grid lines, camera rect, player marker) must be multiplied by `MAP_S`.
+The sim keeps stepping under it and the local slot keeps walking
+([the M map does not pause](gameplay.md#the-m-map-does-not-pause)), so every one of those live
+parts — the camera rect, the slot markers, the player's own diamond — moves while the chart is
+open, and `buildWorldMapImg()` re-inks the terrain each frame so a wall built or a tree felled
+behind the parchment shows up on it.
 The minimap is a scrolling viewport, not a whole-world view: `renderMinimap()` blits a
 `MM_R / s`-tile square of `mmCv` around `viewPlayer()` into the disc, where `s = mmScale()` is
 px per tile — `MM_ZOOMS[settings.mmZoom]` (0.5 … 3, index 2 = the 1:1 baseline), stepped by the

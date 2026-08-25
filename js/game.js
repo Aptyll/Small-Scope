@@ -838,13 +838,36 @@
   }, { passive: false });
 
   // The local human's controller: keyboard + mouse folded into the same input
-  // struct an AI writes, once per sim step. Overlays, the wheel and pause zero
-  // it (and drop any draw) so nothing leaks through a stopped sim.
+  // struct an AI writes, once per sim step. Pause and the settings panel zero it
+  // (and drop any draw) so nothing leaks through a stopped sim; the map, which
+  // does not stop the sim, keeps the feet and drops everything else.
   function sampleHumanInput(p) {
     const inp = p.input;
     inp.aimX = mouse.x + camX;
     inp.aimY = mouse.y + camY;
-    if (state.mode !== 'play' || state.paused || state.mapOpen || state.settingsOpen) {
+    // read the walk keys once - each branch below decides who gets them
+    let mx = 0, my = 0;
+    if (keys['w'] || keys['arrowup']) my -= 1;
+    if (keys['s'] || keys['arrowdown']) my += 1;
+    if (keys['a'] || keys['arrowleft']) mx -= 1;
+    if (keys['d'] || keys['arrowright']) mx += 1;
+    // The chart does not stop the world, so it does not stop the player: you
+    // keep walking, sliding, rolling and burrowing with it up, and watch your
+    // own marker move across it. Everything that acts on the world is dropped -
+    // the pointer is over the parchment, so there is nothing to aim or work at,
+    // and a gear plate bought blind under the dim would be bought by accident.
+    if (state.mode === 'play' && state.mapOpen && !state.paused && !state.settingsOpen) {
+      inp.mx = mx; inp.my = my;
+      inp.slide = !!keys['shift'];
+      inp.fire = inp.work = false;
+      inp.eatBerry = inp.eatFish = false;
+      inp.cmd = null;
+      if (p.charging) { p.charging = false; p.chargeT = 0; }
+      p.firePrev = false;
+      p.fireArmed = false;
+      return;
+    }
+    if (state.mode !== 'play' || state.paused || state.settingsOpen) {
       inp.mx = inp.my = 0;
       inp.fire = inp.work = inp.slide = false;
       inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
@@ -853,19 +876,9 @@
       p.firePrev = false;
       p.fireArmed = false;
       // the one thing that works mid-air: WASD drifts the fall (updateDrop reads it)
-      if (state.mode === 'drop' && !state.paused) {
-        if (keys['w'] || keys['arrowup']) inp.my -= 1;
-        if (keys['s'] || keys['arrowdown']) inp.my += 1;
-        if (keys['a'] || keys['arrowleft']) inp.mx -= 1;
-        if (keys['d'] || keys['arrowright']) inp.mx += 1;
-      }
+      if (state.mode === 'drop' && !state.paused) { inp.mx = mx; inp.my = my; }
       return;
     }
-    let mx = 0, my = 0;
-    if (keys['w'] || keys['arrowup']) my -= 1;
-    if (keys['s'] || keys['arrowdown']) my += 1;
-    if (keys['a'] || keys['arrowleft']) mx -= 1;
-    if (keys['d'] || keys['arrowright']) mx += 1;
     inp.mx = mx; inp.my = my;
     inp.slide = !!keys['shift'];
     inp.work = !!keys['e'] && !state.wheel;
@@ -3642,9 +3655,10 @@
     }
 
     // the match runs on while the local player is down - other slots are still
-    // playing. Only the local overlays (pause, map, settings) stop the sim.
+    // playing. Only pause and the settings panel stop the sim: the map is read
+    // with the world still moving, the same deal the build wheel takes.
     if ((state.mode === 'play' || state.mode === 'dead' || state.mode === 'drop') &&
-      !state.paused && !state.mapOpen && !state.settingsOpen) {
+      !state.paused && !state.settingsOpen) {
       sampleHumanInput(player);
       updatePlay(dt);
     } else if (state.mode === 'play' || state.mode === 'dead' || state.mode === 'drop') {
@@ -6212,9 +6226,11 @@
   // Recording runs exactly while the local slot is alive and the sim is
   // stepping - the same condition update() plays on. The overlays that freeze
   // the sim would otherwise pack the ring with copies of one still frame, and
-  // death freezes the strip on the four seconds that led to it.
+  // death freezes the strip on the four seconds that led to it. The map does
+  // not freeze anything, and the capture point is above its dim, so the ring
+  // keeps banking clean world frames while the chart is up.
   function replayLive() {
-    return state.mode === 'play' && !state.paused && !state.mapOpen && !state.settingsOpen &&
+    return state.mode === 'play' && !state.paused && !state.settingsOpen &&
       player.active && !player.dead;
   }
 
@@ -7280,9 +7296,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.35'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.36'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.36', 'OPENING THE MAP NO LONGER STOPS THE WORLD - THE MATCH RUNS ON WHILE YOU READ IT, AND YOU CAN KEEP WALKING WITH IT UP.'],
     ['1.35', 'CTRL LIES YOU DOWN IN THE SNOW AND PULLS IT OVER YOU: ALMOST NOBODY CAN SEE YOU, YOU CAN ONLY BELLY-CRAWL, AND THE ARROW YOU LOOSE OUT OF COVER HITS FOR TWO AND A HALF TIMES.'],
     ['1.34', 'ARROWS ARE A QUIVER NOW: EVERY SHOT SPENDS ONE AND TAKES A MOMENT TO RENOCK, AND EVERY ARROW THAT LANDS STICKS IN THE SNOW TO BE PICKED BACK UP.'],
     ['1.33', 'WINNING NOW GETS A REAL VICTORY SCREEN - CROWN, BANNERS, AURORA AND THE NUMBERS FROM YOUR RUN - AND THE LAST TEAM STANDING WINS, NOT THE LAST PLAYER.'],
