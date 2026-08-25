@@ -261,12 +261,12 @@ pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush o
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the event feed | `renderEventLog` |
-| bottom centre | four ability slots over the xp bar, flush to the bottom; a square above each well spends a skill point | `drawHudStrip` |
+| bottom centre | four ability slots over the xp bar, flush to the bottom; a plus-square perches on the frame to spend a skill point | `drawHudStrip` |
 | bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom: four ability wells on top, a gold xp bar along the bottom (lifetime gold, left-to-right, no level number — that lives on the overhead badge). A square the same size language as the wells sits directly above each one. While `p.skillPts` is free and that ability is below `AB_RANK_MAX` (3) the square wears a gold plus and is a button (`abHit` / `buySkill` through `input.cmd {kind:'skill'}`); otherwise it shows three rank pips. The plate swallows clicks so the bow never fires through it. A point lands at level 1 and on every `levelUp`.
+`drawHudStrip` is one plate, flush to the bottom: four ability wells on top, a gold xp bar along the bottom (lifetime gold, left-to-right, no level number — that lives on the overhead badge). The bar has a dark silhouette and a frost rim so it reads against the plate. While `p.skillPts` is free and that ability is below `AB_RANK_MAX` (3) a plus-square perches on the plate's top rim — drawn after the frame, so the border does not wrap it — and is a button (`abHit` / `buySkill` through `input.cmd {kind:'skill'}`). It is gone the moment a point cannot land there. Rank is three pips on the well itself. The plate swallows clicks so the bow never fires through it. A point lands at level 1 and on every `levelUp`.
 
 ### The backpack and gear widget
 

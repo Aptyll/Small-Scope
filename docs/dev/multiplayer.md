@@ -112,7 +112,7 @@ Each level also grants **one skill point** (`p.skillPts`, starting with one at l
 hud abilities — loose, dodge, ambush, fletch — take ranks 0–`AB_RANK_MAX` (3) on `p.skill`. Rank 0
 is the baseline everything already does; `buySkill(p, i)` spends a point, bumps that rank, and
 `refreshKit` folds `AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`,
-`fletch`). The hud strip's squares are the ask; bots dump a free point onto the lowest rank at
+`fletch`). The hud strip's plus-squares (perched on the plate, gone once spent) are the ask; bots dump a free point onto the lowest rank at
 the top of `updateAI`. Nine points by level 9 fill three abilities to rank 3.
 
 The level shows as a 7×7 badge in `drawPlayer`, flush against the left edge of the overhead

@@ -7211,17 +7211,18 @@
 
   // ---- hud strip: four ability slots over the xp bar, bottom-centre --------
   // One opaque plate. Four ability wells on top - LOOSE, DODGE, AMBUSH, FLETCH
-  // - and a gold xp bar flush along the bottom (xp IS lifetime gold). A small
-  // square sits directly above each well, same plate/rim/well language as the
-  // slots: a gold plus while a skill point can land there, otherwise three
-  // rank pips. A cooldown wipes top-down in whole pixels under a 1px sweep
-  // line; a finished one flashes its well white for a beat. Icons are 16x16
-  // char grids with the outline IN the art - an extra rim pass blobs the
-  // leather and the fletching into a smear. Team fletching is injected at bake.
+  // - and a gold xp bar flush along the bottom (xp IS lifetime gold). While a
+  // skill point can land on an ability, a plus-square perches on the plate's
+  // top rim (drawn after the frame, so the border does not wrap it) and is
+  // gone the moment a point cannot land there. Rank is three pips on the well.
+  // A cooldown wipes top-down in whole pixels under a 1px sweep line; a
+  // finished one flashes its well white for a beat. Icons are 16x16 char
+  // grids with the outline IN the art - an extra rim pass blobs the leather
+  // and the fletching into a smear. Team fletching is injected at bake.
   const AB_CELL = 20, AB_GAP = 3, AB_N = 4;
   const AB_W = AB_N * AB_CELL + (AB_N - 1) * AB_GAP; // 89: odd, so the centre is a real column
   const AB_PAD = 2, AB_UP = 8, AB_XP = 5;
-  const AB_H = AB_PAD + AB_UP + AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
+  const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
   const AB_BG = '#0d1229';
   const AB_COVER = 'rgba(8,12,30,0.82)';
   function hudStripRect() {
@@ -7231,24 +7232,28 @@
     const R = hudStripRect();
     return {
       x: R.x + i * (AB_CELL + AB_GAP),
-      y: R.y + AB_PAD + AB_UP + AB_PAD,
+      y: R.y + AB_PAD,
       w: AB_CELL, h: AB_CELL,
     };
   }
   function abUpRect(i) {
     const s = abSlotRect(i);
-    return { x: s.x + ((AB_CELL - AB_UP) >> 1), y: s.y - AB_PAD - AB_UP, w: AB_UP, h: AB_UP };
+    // bottom of the square sits on the cell's top, covering the plate's rim
+    return { x: s.x + ((AB_CELL - AB_UP) >> 1), y: s.y - AB_UP, w: AB_UP, h: AB_UP };
   }
   // { kind:'up'|'slot', i } | { kind:'frame' } | null. Shared by the click
   // handler, the cursor and the strip's own hover so they cannot disagree.
   function abHit(mx, my) {
     if (state.mode !== 'play' || player.dead || state.paused ||
         state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
+    for (let i = 0; i < AB_N; i++) {
+      if (!abCanBuy(player, i)) continue;
+      const u = abUpRect(i);
+      if (mx >= u.x && mx < u.x + u.w && my >= u.y - 1 && my < u.y + u.h) return { kind: 'up', i };
+    }
     const R = hudStripRect();
     if (mx < R.x - 3 || mx >= R.x + R.w + 3 || my < R.y || my >= R.y + R.h) return null;
     for (let i = 0; i < AB_N; i++) {
-      const u = abUpRect(i);
-      if (mx >= u.x && mx < u.x + u.w && my >= u.y - 1 && my < u.y + u.h) return { kind: 'up', i };
       const s = abSlotRect(i);
       if (mx >= s.x && mx < s.x + s.w && my >= s.y && my < s.y + s.h) return { kind: 'slot', i };
     }
@@ -7374,51 +7379,51 @@
       : (p.xp - LEVEL_XP[p.level - 1]) / (LEVEL_XP[p.level] - LEVEL_XP[p.level - 1]);
     const inner = AB_W - 2;
     const fw = Math.round(Math.max(0, Math.min(1, frac)) * inner);
-    ctx.fillStyle = '#0f1632';
-    ctx.fillRect(x, y, AB_W, AB_XP);
-    ctx.fillStyle = '#1a2142';
+    // dark silhouette + frost rim: the plate is nearly the old track colour,
+    // so without this the bar is a gold smudge with no readable shape
+    ctx.fillStyle = '#05070f';
+    ctx.fillRect(x - 1, y - 1, AB_W + 2, AB_XP + 2);
+    ctx.fillStyle = '#5a6a9a';
+    ctx.fillRect(x, y, AB_W, 1);
+    ctx.fillStyle = '#1c2448';
+    ctx.fillRect(x, y + AB_XP - 1, AB_W, 1);
+    ctx.fillStyle = '#35426e';
+    ctx.fillRect(x, y, 1, AB_XP);
+    ctx.fillRect(x + AB_W - 1, y, 1, AB_XP);
+    ctx.fillStyle = '#05070f';
     ctx.fillRect(x + 1, y + 1, inner, AB_XP - 2);
-    ctx.fillStyle = '#151a38';
-    ctx.fillRect(x + 1, y + AB_XP - 2, inner, 1);
     if (fw <= 0) return;
-    ctx.fillStyle = hot ? '#f4f7ff' : '#f2cc6a';
-    ctx.fillRect(x + 1, y + 1, fw, AB_XP - 2);
-    ctx.fillStyle = hot ? '#ffffff' : '#f8e29a';
-    ctx.fillRect(x + 1, y + 1, fw, 1);
-    ctx.fillStyle = hot ? '#cfd8e8' : '#b98a2e';
-    ctx.fillRect(x + 1, y + AB_XP - 2, fw, 1);
+    const gx = x + 1, gy = y + 1, gh = AB_XP - 2;
+    // 1px dark leading edge so the fill's end reads as a silhouette
+    const cap = fw < inner ? 1 : 0;
+    ctx.fillStyle = '#0a0e1c';
+    ctx.fillRect(gx, gy, fw, gh);
+    ctx.fillStyle = hot ? '#f4f7ff' : '#f5c542';
+    ctx.fillRect(gx, gy, Math.max(1, fw - cap), gh);
+    ctx.fillStyle = hot ? '#ffffff' : '#ffe08a';
+    ctx.fillRect(gx, gy, Math.max(1, fw - cap), 1);
+    ctx.fillStyle = hot ? '#cfd8e8' : '#b07a1c';
+    ctx.fillRect(gx, gy + gh - 1, Math.max(1, fw - cap), 1);
   }
   function drawAbUp(i, now, hov) {
     const r = abUpRect(i);
-    const can = abCanBuy(player, i);
-    const rank = player.skill[i];
-    const y = r.y - (hov && can ? 1 : 0);
-    const rim = hov && can ? '#f4f7ff'
-      : can ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
-      : rank >= AB_RANK_MAX ? '#8a7a3a' : '#35426e';
+    const y = r.y - (hov ? 1 : 0);
+    const rim = hov ? '#f4f7ff'
+      : (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227');
+    // dark box so the square silhouettes against snow above the plate
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(r.x - 1, y - 1, r.w + 2, r.h + 2);
     ctx.fillStyle = rim;
     ctx.fillRect(r.x, y, r.w, r.h);
-    if (rim === '#35426e') {
-      ctx.fillStyle = '#46548a';
-      ctx.fillRect(r.x, y, r.w, 1);
-      ctx.fillStyle = '#283258';
-      ctx.fillRect(r.x, y + r.h - 1, r.w, 1);
-    }
     ctx.fillStyle = BAG_WELL;
     ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
-    if (can) {
-      const cx = r.x + (r.w >> 1), cy = y + 3;
-      ctx.fillStyle = '#0f1632';
-      ctx.fillRect(cx - 2, cy + 1, 5, 1);
-      ctx.fillRect(cx + 1, cy - 1, 1, 3);
-      ctx.fillStyle = '#f2cc6a';
-      ctx.fillRect(cx - 2, cy, 5, 1);
-      ctx.fillRect(cx, cy - 1, 1, 3);
-    }
-    for (let k = 0; k < AB_RANK_MAX; k++) {
-      ctx.fillStyle = k < rank ? '#f2cc6a' : '#2c3560';
-      ctx.fillRect(r.x + 1 + k * 2, y + 5, 2, 2);
-    }
+    // 2px-thick 4x4 plus, equal arms, centred in the 6x6 well
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(r.x + 2, y + 1, 4, 6);
+    ctx.fillRect(r.x + 1, y + 2, 6, 4);
+    ctx.fillStyle = '#f2cc6a';
+    ctx.fillRect(r.x + 3, y + 2, 2, 4);
+    ctx.fillRect(r.x + 2, y + 3, 4, 2);
   }
   function drawHudStrip(now) {
     const p = player, kit = kitOf(p);
@@ -7449,7 +7454,6 @@
       { frac: flF, wipe: p.quiver < QUIVER_MAX, flash: p.quiverFlash > 0 },
     ];
     for (let i = 0; i < AB_N; i++) {
-      drawAbUp(i, now, hov && (hov.kind === 'up' || hov.kind === 'slot') && hov.i === i);
       const s = slots[i];
       const cell = abSlotRect(i);
       const x = cell.x + (i === 0 && p.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0);
@@ -7515,8 +7519,18 @@
         }
       }
       drawPixelTextOutline(ctx, String(i + 1), x + AB_CELL - 6, y + AB_CELL - 8, '#8fa0c8', '#0f1632');
+      // rank lives on the well, not on the plus-square (that one vanishes)
+      for (let k = 0; k < AB_RANK_MAX; k++) {
+        ctx.fillStyle = k < p.skill[i] ? '#f2cc6a' : '#2c3560';
+        ctx.fillRect(x + 4 + k * 4, y + 1, 3, 1);
+      }
     }
-    drawXpBar(now, R.x, R.y + AB_PAD + AB_UP + AB_PAD + AB_CELL + AB_PAD);
+    drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD);
+    // plus-squares on TOP of the frame, only while a point can land there
+    for (let i = 0; i < AB_N; i++) {
+      if (!abCanBuy(p, i)) continue;
+      drawAbUp(i, now, hov && (hov.kind === 'up' || hov.kind === 'slot') && hov.i === i);
+    }
   }
 
   function renderUI(now) {
@@ -8138,9 +8152,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.43'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.44'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.44', 'THE XP BAR HAS A DARK SILHOUETTE NOW, AND LEVEL-UP SQUARES SIT ON THE FRAME RATHER THAN INSIDE IT.'],
     ['1.43', 'EACH LEVEL GIVES A SKILL POINT YOU SPEND BY CLICKING THE SQUARE ABOVE AN ABILITY.'],
     ['1.42', 'THE QUIVER STRIP IS NOW A SEGMENTED XP BAR OVER FOUR ABILITY SLOTS, BOTTOM CENTRE.'],
     ['1.41', 'YOU CARRY A BACKPACK NOW - TEN SLOTS OPENED WITH B, WITH YOUR GEAR AND YOUR GOLD IN THE SAME FRAME BOTTOM RIGHT.'],

@@ -202,8 +202,9 @@ quiver as shafts around the body, the same way `spillInventory` spills the walle
 Four indicators carry it, and none of them is a word:
 
 - **The hud strip** (`drawHudStrip`, bottom-centre). Four ability wells sit above a gold xp bar
-  (lifetime gold, filling left to right). A small square above each well is the rank-up button —
-  a gold plus while a skill point can land there, three pips otherwise. Lit pip counts and a 1px
+  (lifetime gold, filling left to right, dark-outlined so it silhouettes against the plate). A
+  plus-square perches on the plate's top rim while a skill point can land there, and is gone the
+  moment one cannot; three pips on the well itself count the rank. Lit pip counts and a 1px
   cooldown wipe are the combat readout; keys 1–4 sit in the corner of each well (those keys buy
   gear, not ranks). A gained arrow (`quiverFlash`) and a completed renock (`readyFlash`) flash
   the bow well; a press on an empty bow (`dryT`, set by `dryFire`) shakes that well and reddens
