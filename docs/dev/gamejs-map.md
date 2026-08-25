@@ -1,6 +1,6 @@
 # Where things live in game.js
 
-`game.js` is one ~8700-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~9050-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -29,6 +29,9 @@ don't cite line numbers here, they go stale within a session.
 | tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` |
 | routes around obstacles: A*, the per-unit route follower, the stall/give-up signal | `findPath`, `walkable`, `navTo`, `navStep`, `navLineClear` | `pathfinding` |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` |
+| the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` |
+| spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
+| the quiver strip (bottom-centre) and its pip glyph | `QUIVER_PIP`, `quiverRect`, `drawQuiverPip`, `drawQuiver` | `UI` › `quiver strip` |
 | build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
 | wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |

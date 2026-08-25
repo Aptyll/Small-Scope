@@ -115,8 +115,8 @@ comes out at ~60 px/s with a sideways kick and the deer shoved ~14 px.
 
 There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
 `TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `p.tool` is that player's *held*
-index, which is the bow at rest. The bottom strip of the HUD is deliberately empty — it is reserved
-for combat abilities. Two verbs, two inputs:
+index, which is the bow at rest. The bottom-centre strip of the HUD carries the quiver
+([below](#the-quiver)) and nothing else. Two verbs, two inputs:
 
 - **Left click = bow**, always. The press only records intent (`clickAction` sets `input.fire`);
   `updatePlayer` starts the draw on the rising edge and looses on the falling one.
@@ -157,15 +157,71 @@ the swing to the anchor. Your own buildings stay wheel-only, so E is never ambig
 [Base building](#base-building) for the damage numbers. There is still no melee against animals:
 the bow is the only weapon aimed at a living thing.
 
-The bow is **hold-to-charge**: the press edge starts `p.charging`/`p.chargeT` (movement
-targets scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter
-renders above the player's health bar),
-and the release edge fires via `fireArrow(p)` — power scales speed (170–360 px/s) and damage
-(4–13). Arrows carry their shooter's `owner`/`team`, live in the `arrows` array, and are updated
-in `updatePlay()`: they die on solid tiles, on a **rival player** (tested first — see
-[PvP](multiplayer.md#pvp)), on an **enemy worker bot** (`robotHit`/`hurtRobot`, tested next), on
-any animal hit (knockback scales with power), or after 0.85 s. They never hit structures — a
-building is broken by hand with E, not shot.
+The bow is **hold-to-charge**: holding the button arms the shot (`p.fireArmed`), the draw starts
+as soon as the bow is actually ready and runs `p.charging`/`p.chargeT` (movement targets scale to
+55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter renders above the
+player's health bar), and the release edge fires via `fireArrow(p)` — power scales speed
+(170–360 px/s) and damage (4–13). Arrows carry their shooter's `owner`/`team`, live in the
+`arrows` array, and are updated in `updatePlay()`: they die on solid tiles, on a **rival player**
+(tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker bot**
+(`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or after
+0.85 s. They never hit structures — a building is broken by hand with E, not shot. **Wherever a
+shot ends it leaves a shaft behind** (`stickArrow`) — see [The quiver](#the-quiver).
+
+`p.fireArmed` is what makes the draw survive a bow that isn't ready. It is set on the press edge,
+cleared on release and at every point that cancels a draw (`tryWork`, falling in a hole, an
+overlay opening in `sampleHumanInput`, `die`), and the draw begins on the first step where it is
+set *and* `nockT <= 0` *and* `quiver > 0`. Requiring a fresh press instead would deadlock every
+controller that simply holds the button down — which is every AI slot: `updateAI` sets
+`inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight back to true and no second
+edge ever arrives.
+
+### The quiver
+
+Arrows are a resource. `p.quiver` starts at `QUIVER_MAX` (6); `fireArrow` spends one and sets
+`p.nockT = kit.nock` (WREN 0.45 s, SKADI 0.3 s, both scaled by QUICKDRAW), and no draw can begin
+while that runs. Below the ceiling, `p.fletchT` accumulates and hands back one arrow every
+`QUIVER_REGEN` (2.4 s) through `gainArrow` — the floor that keeps a player who never picks
+anything up throttled rather than disarmed. Bow-fishing is the one shot that costs nothing: it
+never leaves the bow, so it takes the renock but not the arrow.
+
+Spent arrows land in **`shafts`** (`{x, y, nx, ny, team, t}`), one per arrow that ends its flight,
+however it ends — miss, wall, body, or expiry. `stickArrow` places it 3 px back along the flight
+(so it is never inside the tile that stopped it), drops it entirely if the tile is open water, and
+trims the oldest past `SHAFT_MAX` (90). A shaft lives `SHAFT_LIFE` (30 s), is inert for
+`SHAFT_ARM` (0.3 s), and is then **neutral**: any player inside `SHAFT_R` (10 px) whose quiver
+isn't full claims it through `contest('shaft:' + i, …)`, exactly like a drop — so shooting at
+someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s loot step counts
+shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
+quiver as shafts around the body, the same way `spillInventory` spills the wallet.
+
+Four indicators carry it, and none of them is a word:
+
+- **The quiver strip** (`drawQuiver`, bottom-centre — the strip `renderUI` had reserved for combat
+  abilities). One pip per arrow, drawn from the `QUIVER_PIP` char grid: lit = held, dark plate =
+  spent, and the pip on the boundary fills **from the nock up** as `fletchT` runs, so an arrow
+  visibly re-forms. The glyph is diagonal on purpose — an upright arrow 5 px wide reads as a
+  dagger or an anchor whatever you do to the head and feathers. Fletching is the local team's
+  colour, the same colour on every shaft in the snow. A gained arrow (`quiverFlash`) and a
+  completed renock (`readyFlash`) flash the strip white; a press on an empty bow (`dryT`, set by
+  `dryFire`) shakes it and reddens the empty *plates* (reddening the glyphs reads as six red
+  arrows, which is the opposite of what happened). Under the pips, one gold rule sweeps the strip
+  while `nockT` runs and lands white when it clears.
+- **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
+  *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
+  geometry either way, so it never jumps.
+- **The reticle** (`cursorInfo` → `drawCursor`). Every reticle in play carries `nock` (elapsed
+  fraction, 1 = ready) and `dry` (empty quiver), whatever the pointer is over. While the renock
+  runs, four gold corner marks fall inward and land on the ring; an empty quiver drops the centre
+  pixel and greys the ticks — the crosshair goes hollow.
+- **The shafts themselves** (`drawShafts`, in the flat pass just before drops). Body at the
+  bearing it flew in on, head buried, fletching in the shooter's colour, rimmed like a flying
+  arrow. Inside `SHAFT_NEAR` (34 px) of a local player with room for it, the whole thing turns
+  gold — this HUD's "you can take this" colour — and grows a bobbing arrowhead. It blinks over its
+  last 1.6 s so nobody walks toward one that is about to go.
+
+Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot),
+`SFX.dryFire()` on an empty press, `SFX.shaftPull()` on a retrieval.
 
 An arrow in flight is drawn in its own pass (using `ex`/`ey`) and **rasterised pixel by pixel**
 rather than stroked, so it stays opaque and crisp at any angle: an 8 px shaft, two barbs 2 px back
@@ -183,8 +239,8 @@ fade from `ARROW_TRAIL_A` (0.7) over `ARROW_TRAIL_LIFE` (0.22 s), leaving a tail
 behind the shot. The particle draw pass is what makes that possible: a particle's
 `maxLife` is the seconds it spends fading (`burst` uses 0.4) and its optional `alpha` caps how
 opaque it ever gets. Particles draw before the arrows, so a trail always sits under its own shaft.
-Switching tools, opening an overlay, or dying drops the draw without firing; `BOW_CHARGE`
-(0.9 s) is a full draw.
+Switching tools, opening an overlay, or dying drops the draw without firing (and clears
+`fireArmed` with it); `BOW_CHARGE` (0.9 s) is a full draw.
 
 While the bow is drawn, `drawAimLine()` (called from `render()` right before the arrows pass,
 using `ex`/`ey`) shows the shot: a static line of 2×2 drop-shadowed dots from the arrow's spawn
@@ -336,7 +392,7 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 
 | Slot | Variants (per piece level) |
 | --- | --- |
-| helmet | LONGSIGHT +1 arrow dmg · QUICKDRAW −8% draw time · HUNTSMAN +15% animal-kill gold |
+| helmet | LONGSIGHT +1 arrow dmg · QUICKDRAW −8% draw *and* renock time · HUNTSMAN +15% animal-kill gold |
 | chest | BULWARK +8 max hp · IRONHIDE −1 dmg from every hit (min 1) · HEARTHWEAVE +25% food heal, passive heal runs at night |
 | legs | STRIDER +4% walk speed · SLIDEWORN −12% fatigue, slide engages 5 sooner · PACKMULE +1 gold on fells/breaks |
 | boots | SKATES +8% ice cap, +0.15 steer · DANCER −0.4 s dodge refill · GHOSTSTEP wolves/turrets acquire at −10% range |
@@ -600,6 +656,11 @@ title only the fps line shows. Beneath the minimap
 `SFX` creates its `AudioContext` lazily inside `ensure()`. Browsers require a user gesture, so
 `SFX.unlock()` is called from click handlers — any new entry point that plays sound before the
 first click needs to call it too.
+
+The bow's rhythm has three of its own: `SFX.nock()` (a dry wooden tick when the renock clears —
+deliberately near-silent, since it fires after every shot), `SFX.dryFire()` (a slack string on an
+empty quiver) and `SFX.shaftPull()` (retrieving a spent arrow). See
+[the quiver](#the-quiver).
 
 `SFX.victory()` (a four-note fanfare over a held low fifth) is the one cue longer than a second;
 `endMatch` fires it the moment the match is won. `SFX.tally()` is the dry blip a climbing number

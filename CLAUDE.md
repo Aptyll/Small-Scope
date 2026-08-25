@@ -2,7 +2,9 @@
 
 Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map.
 
-- Always-in-hand bow; **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
+- Always-in-hand bow, but **arrows are finite**: a `QUIVER_MAX` quiver, a per-shot renock cooldown
+  (`kit.nock`), slow fletching, and every spent arrow sticks in the snow as a `shafts` entry
+  anyone can walk over. **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
 - Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
 - **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere
@@ -62,7 +64,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~8700-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~9050-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).

@@ -104,6 +104,13 @@
     bowDraw() { noise(0.14, 0.06, 350); tone(160, 0.12, 'triangle', 0.04, 60); },
     dodge() { noise(0.16, 0.14, 550); tone(340, 0.12, 'triangle', 0.06, -220); },
     arrow() { noise(0.09, 0.18, 1800); tone(720, 0.06, 'triangle', 0.07, -260); },
+    // the shot rhythm: a dry wooden tick the moment the next arrow is nocked and
+    // the bow can be drawn again. Quiet on purpose - it plays after every shot.
+    nock() { tone(880, 0.03, 'square', 0.035); tone(1240, 0.03, 'square', 0.025, 0, 0.03); },
+    // pressing the bow with an empty quiver: a slack string and nothing behind it
+    dryFire() { noise(0.05, 0.07, 260); tone(120, 0.09, 'triangle', 0.06, -40); },
+    // pulling a spent shaft back out of the snow
+    shaftPull() { noise(0.05, 0.1, 1400); tone(520, 0.06, 'triangle', 0.05, 240); },
     // turret: a hard electric crack with a low thump under it, so it never reads as a bow
     turretFire() { tone(880, 0.05, 'square', 0.07, -520); noise(0.07, 0.2, 2600); tone(230, 0.11, 'triangle', 0.09, -90, 0.02); },
     hit() { noise(0.06, 0.25, 800); tone(140, 0.08, 'sawtooth', 0.1, -50); },

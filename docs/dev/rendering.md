@@ -71,7 +71,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 ## Render pass order
 
 `render()` runs: ground blit → under-ice fish → ice-crack decals → footprints → flat objects
-(stumps) → item drops → **y-sorted
+(stumps) → spent arrows (`drawShafts`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
@@ -350,7 +350,7 @@ the very last thing in `render()` (above every overlay and the info stack), so i
 game's pixel grid at every zoom level. `cursorInfo()` resolves the pointer state once per
 frame from `mouse`, `state`, `player` (draw/flounder/roll), and what's under the pointer, and
 both the pixel cursor and the browser-cursor fallback read from it. It returns
-`{ kind, mode, dim, frac }`:
+`{ kind, mode, dim, frac, nock, dry }`:
 
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
@@ -364,6 +364,12 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
   the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
   are blocked right now: floundering in a hole, or mid-roll.
+- Every reticle in play also carries the **bow's own state**, whatever the pointer is over, since
+  the crosshair is where the eye already is: `nock` (0→1 as the renock cooldown elapses) draws
+  four gold corner marks falling inward onto the ring, and `dry` (empty quiver) drops the centre
+  pixel and greys the ticks — a hollow crosshair. Both come from the one `ret()` helper inside
+  `cursorInfo`, so no return site can forget them. See
+  [the quiver](gameplay.md#the-quiver).
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),
@@ -457,7 +463,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   into `play` with the player already standing in the world.
 - **Landing intro**: the human's `landPlayer` sets `state.intro = state.introLen = HUD_IN_T` (0.7 s)
   with `introFrom` at the touchdown framing, so `renderUI` slides the HUD in (the left stack from
-  the left, the gold/minimap stack from the top) while the camera settles onto the play framing.
+  the left, the gold/minimap stack from the top, the gear row from the right and the quiver strip
+  up from the bottom) while the camera settles onto the play framing.
   The first-run hint message fires when that intro ends.
 
 `DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and

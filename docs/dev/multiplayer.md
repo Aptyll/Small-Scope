@@ -67,6 +67,7 @@ instead of the bare constants. **`kitOf(p)` returns the *effective* kit**: the c
 with the slot's [gear](gameplay.md#gear) folded in by `refreshKit(p)` (cached on `p.kit`, rebuilt
 on champion or gear change — never per frame). The champion fields: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
 (snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
+`nock` (seconds between a shot and the next draw — see [the quiver](gameplay.md#the-quiver)),
 `dmgBase`/`dmgPow` (arrow damage = base + pow × draw), `spdDmg` (extra damage scaled by the
 shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
 `updatePlayer`'s movement block, `fireArrow`, `tryDodge`, the AI's draw timing, the cursor,
@@ -190,7 +191,9 @@ resolution, so a loser keeps its gold.
 
 Currently contested: work swings (`swingHit`, keyed by tile), build orders (`placeStruct`, keyed by
 tile), fish spears (`fireArrow`, keyed by fish index), drop pickups (keyed by drop index — every
-player standing on a drop claims it; the magnet still pulls it toward the nearest).
+player standing on a drop claims it; the magnet still pulls it toward the nearest), and spent-arrow
+pickups (keyed by `shafts` index — a shaft is neutral like a drop, so anyone short of a full quiver
+can pull one out, whoever shot it; see [the quiver](gameplay.md#the-quiver)).
 
 ## AI slots
 
@@ -204,7 +207,9 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
 4. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
-5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
+5. **loot** — walk onto a drop within 72 px (drops are neutral and first-come). A bot at or below
+   half a quiver counts spent [shafts](gameplay.md#the-quiver) in the same scan, so the arrows a
+   firefight leaves lying around get picked back up.
 6. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
    plus a 15-gold float; then, with gold in hand, build a generator (or, 30% of the time and only
    where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own

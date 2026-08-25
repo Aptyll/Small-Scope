@@ -23,6 +23,19 @@
   const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
   const BOW_CHARGE = 0.9;   // seconds to a full draw
   const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
+  // The quiver: arrows are a resource, not an infinite stream. A shot spends one
+  // and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
+  // sets its own rhythm); an empty quiver fletches one back every QUIVER_REGEN,
+  // and every arrow that ends its flight sticks in the snow to be pulled out
+  // again. Fletching alone is the floor - retrieval is how a good shot stays armed.
+  const QUIVER_MAX = 6;     // arrows carried
+  const QUIVER_REGEN = 2.4; // seconds to fletch one arrow back (only ticks below max)
+  const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
+  const SHAFT_LIFE = 30;    // seconds a spent arrow stays stuck in the snow
+  const SHAFT_R = 10;       // px: walk this close to pull one out
+  const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
+  const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
+  const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
   const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
   const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
   const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
@@ -425,14 +438,14 @@
       blurb: ['STEADY DRAW, HARD HITS. THE ALL-ROUNDER.', 'AXE AND PICK COME OUT ON THEIR OWN.', 'ROLLS CHAIN INTO SPEED ON THE RIVERS.'],
       stats: { ice: 2, draw: 3, power: 4, tough: 3 },
       kit: { iceMax: 1, iceSteer: 2.6, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.55,
-        bowCharge: BOW_CHARGE, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 100 },
+        bowCharge: BOW_CHARGE, nock: BOW_NOCK, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 100 },
     },
     {
       name: 'SKADI', role: 'THE SKATER',
       blurb: ['BLADES ON THE ICE: FASTER CAP, SHARPER CARVES.', 'QUICK DRAW THAT BARELY SLOWS HER DOWN.', 'ARROWS HIT HARDER THE FASTER SHE FLIES.'],
       stats: { ice: 5, draw: 5, power: 2, tough: 2 },
       kit: { iceMax: 1.35, iceSteer: 3.8, slideMin: 60, fatigue: 0.5, chargeMul: 0.85,
-        bowCharge: 0.6, dmgBase: 3, dmgPow: 6, spdDmg: 7, dodgeSpeed: 245, maxHp: 85 },
+        bowCharge: 0.6, nock: 0.3, dmgBase: 3, dmgPow: 6, spdDmg: 7, dodgeSpeed: 245, maxHp: 85 },
     },
   ];
   // the kit every sim site reads: the champion's numbers with the slot's gear
@@ -482,7 +495,7 @@
   const GEAR = [
     [ // helmet: how you kill
       { name: 'LONGSIGHT', blurb: 'ARROWS HIT HARDER', mod: (k, L) => { k.dmgBase += L; } },
-      { name: 'QUICKDRAW', blurb: 'FASTER FULL DRAW', mod: (k, L) => { k.bowCharge *= 1 - 0.08 * L; } },
+      { name: 'QUICKDRAW', blurb: 'FASTER DRAW AND RENOCK', mod: (k, L) => { k.bowCharge *= 1 - 0.08 * L; k.nock *= 1 - 0.08 * L; } },
       { name: 'HUNTSMAN', blurb: 'ANIMALS PAY MORE', mod: (k, L) => { k.huntMul += 0.15 * L; } },
     ],
     [ // chest: how you last
@@ -582,6 +595,10 @@
       this.hp = this.maxHp;
       this.dead = false;
       this.charging = false; this.chargeT = 0;      // bow draw state
+      // the quiver: what is left, the renock cooldown, and the fletching timer
+      this.quiver = QUIVER_MAX; this.nockT = 0; this.fletchT = 0;
+      this.fireArmed = false;                        // the bow button has been pressed since the last loose
+      this.quiverFlash = 0; this.readyFlash = 0; this.dryT = 0; // HUD tells: gained / renocked / pressed empty
       this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
       this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
       this.stamGhost = 0; this.stamGhostT = 0;      // spent-stamina ghost
@@ -651,6 +668,7 @@
   const robots = []; // spawner-owned worker bots
   const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
   const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
+  const shafts = []; // spent arrows stuck in the snow, free for anyone: {x,y,nx,ny,team,t}
   const ARROW_PX = []; // scratch x,y pairs for one arrow's rasterised body (render only)
   const drops = [];
   const particles = []; // {x,y,vx,vy,life,color,size,grav} + optional `alpha` fade ceiling
@@ -787,6 +805,7 @@
       inp.cmd = null;
       if (p.charging) { p.charging = false; p.chargeT = 0; }
       p.firePrev = false;
+      p.fireArmed = false;
       // the one thing that works mid-air: WASD drifts the fall (updateDrop reads it)
       if (state.mode === 'drop' && !state.paused) {
         if (keys['w'] || keys['arrowup']) inp.my -= 1;
@@ -1557,6 +1576,7 @@
     const t = workTarget(p);
     if (!t || !t.near) return;
     if (p.charging) { p.charging = false; p.chargeT = 0; } // work drops the draw
+    p.fireArmed = false;                                     // ...and the held button has to be pressed again
     p.tool = t.tool;
     p.workTx = t.tx; p.workTy = t.ty;
     const dx = t.tx * TILE + 8 - p.x, dy = t.ty * TILE + 8 - p.y;
@@ -1602,6 +1622,38 @@
     if (nearPlayer(p.x, p.y)) SFX.dodge();
   }
 
+  // ---- the quiver ---------------------------------------------------------
+  // Three ways an arrow moves: out of the quiver when a shot is loosed, into
+  // the snow where that shot ended (stickArrow), and back into a quiver when
+  // anyone walks over it. Fletching is the slow floor under all of it, so a
+  // player who never retrieves anything is throttled rather than disarmed.
+  function gainArrow(p, n) {
+    if (p.quiver >= QUIVER_MAX) return false;
+    p.quiver = Math.min(QUIVER_MAX, p.quiver + (n || 1));
+    p.quiverFlash = 0.35;
+    return true;
+  }
+  // a spent arrow, left where its flight ended. Open water swallows it; a
+  // solid tile keeps it on the near side so it never sits inside a wall.
+  function stickArrow(a, nx, ny) {
+    const x = a.x - nx * 3, y = a.y - ny * 3;
+    const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+    if (!inWorld(tx, ty)) return;
+    if (ground[idx(tx, ty)] === 2) { // straight into the water: gone
+      burst(x, y, '#9fc4dd', 4, 30, 0.35, true);
+      if (nearPlayer(x, y)) SFX.splash();
+      return;
+    }
+    shafts.push({ x, y, nx, ny, team: a.team, t: 0 });
+    while (shafts.length > SHAFT_MAX) shafts.shift();
+  }
+  // pressing the bow on an empty quiver: the tell, rate-limited to the press
+  function dryFire(p) {
+    p.dryT = 0.45;
+    burst(p.x, p.y - BOW_Y, '#8a97bd', 3, 22, 0.3, true);
+    if (p === player) SFX.dryFire();
+  }
+
   function fireArrow(p) {
     // bow-fishing: standing on ice with a fish right underfoot spears it
     // through the sheet instead of loosing the arrow. Two players can reach the
@@ -1625,10 +1677,17 @@
           burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
           if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.pickup(); }
         });
+        // the shaft is speared through the ice, not loosed: it costs no arrow,
+        // but it is the same hand motion, so the bow still has to be renocked
+        p.nockT = kitOf(p).nock;
         return;
       }
     }
     const kit = kitOf(p);
+    // the arrow leaves the quiver here, and the bow cannot be drawn again until
+    // the next one is nocked - the one gate every shot goes through
+    p.quiver = Math.max(0, p.quiver - 1);
+    p.nockT = kit.nock;
     const pw = Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
     // momentum shot: a kit with spdDmg pays extra for speed at the moment of release
     const spdBonus = kit.spdDmg * Math.min(1, Math.hypot(p.vx, p.vy) / 200);
@@ -3043,6 +3102,7 @@
     p.dead = true;
     p.charging = false;
     p.chargeT = 0;
+    p.fireArmed = false;
     p.dodgeT = 0;
     p.vx = p.vy = 0;
     p.sliding = false;
@@ -3053,6 +3113,14 @@
     // otherwise the victim's, since the victim is who the line is about
     const killer = src && src !== p ? src : null;
     spillInventory(p, killer);
+    // the quiver spills where the body fell, same as the wallet: whatever was
+    // still in it sticks in the snow for whoever cleans up the fight
+    const left = p.quiver; p.quiver = 0;
+    for (let i = 0; i < left; i++) {
+      const a = rng() * Math.PI * 2, r = rand(4, 14);
+      stickArrow({ x: p.x + Math.cos(a) * r, y: p.y - 2 + Math.sin(a) * r, team: p.team },
+        Math.cos(a), Math.sin(a));
+    }
     if (killer) killer.kills++;
     logEvent(killer ? killer.name + ' SHOT ' + p.name
       : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
@@ -3248,12 +3316,19 @@
     }
     inp.fire = false;
 
-    // 5. loot on the ground is neutral and first-come: pick up what is close
+    // 5. loot on the ground is neutral and first-come: pick up what is close.
+    //    A bot short of arrows counts spent shafts as loot too, so the fields a
+    //    firefight leaves behind get picked clean instead of lying there.
     let loot = null, ld = 72;
     for (const d of drops) {
       if (d.t < 0.35) continue;
       const dd = Math.hypot(d.x - p.x, d.y - p.y);
       if (dd < ld) { ld = dd; loot = d; }
+    }
+    if (p.quiver <= QUIVER_MAX / 2) for (const s of shafts) {
+      if (s.t < SHAFT_ARM) continue;
+      const dd = Math.hypot(s.x - p.x, s.y - p.y);
+      if (dd < ld) { ld = dd; loot = s; }
     }
     if (loot && ai.lootT < 4) {
       ai.lootT += dt; aimAt(loot.x, loot.y);
@@ -3564,7 +3639,14 @@
           }
         }
       }
-      if (dead) arrows.splice(i, 1);
+      if (dead) {
+        // every bow shot that ends - a miss, a wall, a body, or the end of its
+        // life - leaves the shaft where it stopped. One rule, no exceptions, so
+        // "arrows come back" is learnable from the first miss. Turret bolts ride
+        // this same array and are not arrows: they leave nothing.
+        if (!a.kind) stickArrow(a, nx, ny);
+        arrows.splice(i, 1);
+      }
     }
 
     // wildlife
@@ -3589,6 +3671,27 @@
 
     // everyone has stepped: push overlapping units apart (players, animals, robots)
     separateUnits();
+
+    // spent arrows in the snow. Neutral like drops - the fletching says whose
+    // shot it was, but anyone short of a full quiver can pull it out, so losing
+    // a firefight on someone else's ground also means shooting them their ammo.
+    for (let i = shafts.length - 1; i >= 0; i--) {
+      const s = shafts[i];
+      s.t += dt;
+      if (s.t > SHAFT_LIFE) { shafts.splice(i, 1); continue; }
+      if (s.t < SHAFT_ARM) continue;
+      for (const p of players) {
+        if (!p.active || p.dead || inAir(p) || p.quiver >= QUIVER_MAX) continue;
+        if (Math.hypot(s.x - p.x, s.y - p.y + 2) >= SHAFT_R) continue;
+        contest('shaft:' + i, p, () => {
+          const j = shafts.indexOf(s);
+          if (j < 0 || !gainArrow(p, 1)) return; // someone else got there, or the quiver filled
+          shafts.splice(j, 1);
+          burst(s.x, s.y, TEAMS[s.team].mark, 4, 30, 0.3, true);
+          if (p === player) SFX.shaftPull();
+        });
+      }
+    }
 
     // drops
     for (let i = drops.length - 1; i >= 0; i--) {
@@ -3785,6 +3888,7 @@
         p.sliding = false;
         p.slideT = 0;
         if (p.charging) { p.charging = false; p.chargeT = 0; }
+        p.fireArmed = false;
         if (nearPlayer(p.x, p.y)) SFX.splash();
         burst(p.x, p.y + 4, '#3a6080', 10, 55, 0.5, true);
         burst(p.x, p.y + 2, '#ddf1f8', 8, 60, 0.5, true);
@@ -3865,8 +3969,32 @@
     if (p.swingT <= 0 && p.swingCd <= 0) p.tool = TOOL_BOW;
     if (inp.work) tryWork(p);
 
-    // bow: pressing draws, releasing looses - one edge, whoever is holding it
-    if (inp.fire && !p.firePrev && !p.charging && p.fallT <= 0 && p.swingT <= 0) {
+    // the quiver: the renock cooldown counts down, and a short quiver fletches
+    // one arrow back at a time. Both run for every slot, dead or alive is
+    // already filtered above, so a bot recovers on exactly the human's clock.
+    if (p.nockT > 0) {
+      p.nockT = Math.max(0, p.nockT - dt);
+      if (p.nockT === 0) { p.readyFlash = 0.16; if (p === player) SFX.nock(); }
+    }
+    if (p.quiver < QUIVER_MAX) {
+      p.fletchT += dt;
+      if (p.fletchT >= QUIVER_REGEN) { p.fletchT = 0; gainArrow(p, 1); }
+    } else p.fletchT = 0;
+    p.quiverFlash = Math.max(0, p.quiverFlash - dt);
+    p.readyFlash = Math.max(0, p.readyFlash - dt);
+    p.dryT = Math.max(0, p.dryT - dt);
+
+    // bow: pressing arms the shot, releasing looses. The press does not have to
+    // land on a ready bow - it stays armed, so holding through the renock (or
+    // through an empty quiver) draws the moment the next arrow is there. Without
+    // that, a controller that holds fire down - every AI slot does - would fire
+    // once and then wait forever for an edge it already spent.
+    if (inp.fire && !p.firePrev) {
+      p.fireArmed = true;
+      if (p.quiver <= 0 && p.dryT <= 0) dryFire(p);
+    }
+    if (!inp.fire) p.fireArmed = false;
+    if (p.fireArmed && !p.charging && p.nockT <= 0 && p.quiver > 0 && p.fallT <= 0 && p.swingT <= 0) {
       p.charging = true;
       p.chargeT = 0;
       if (nearPlayer(p.x, p.y)) SFX.bowDraw();
@@ -4093,7 +4221,8 @@
       }
     }
 
-    // drops (under entities)
+    // spent arrows, then drops (both under entities)
+    drawShafts(ex, ey, now);
     for (const d of drops) {
       const spr = d.type === 'gold' ? SPRITES.itemGold : d.type === 'fish' ? SPRITES.itemFish : SPRITES.itemBerry;
       // shadow
@@ -4421,6 +4550,16 @@
     if (state.wheel) return { kind: wheelLayout().seg >= 0 ? 'hand' : 'arrow' };
     if (gearHit(mouse.x, mouse.y) >= 0) return { kind: 'hand' }; // the gear row is clickable HUD
 
+    // Every reticle in play carries the bow's state, whatever it is hovering:
+    // `nock` is how much of the renock has elapsed (1 = ready) and `dry` says
+    // the quiver is empty. drawCursor turns them into the ring's own behaviour,
+    // so the crosshair the eye is already on is where the cooldown is read.
+    const nockK = kitOf(player);
+    const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockK.nock) : 1;
+    const dry = player.quiver <= 0;
+    const ret = (mode, dim, extra) =>
+      Object.assign({ kind: 'reticle', mode, dim, nock: nockF, dry }, extra);
+
     const wx = mouse.x + camX, wy = mouse.y + camY;
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
     const o = structOf(objAt(tx, ty));
@@ -4431,19 +4570,19 @@
       return { kind: 'hammer', dim: far };
     }
     if (player.charging) {
-      return { kind: 'reticle', mode: 'bow', frac: Math.min(1, player.chargeT / kitOf(player).bowCharge) };
+      return ret('bow', false, { frac: Math.min(1, player.chargeT / nockK.bowCharge) });
     }
     // a living thing under the pointer: hunting reticle
     for (const q of players) {
       if (!enemyOf(player, q)) continue;
       if (Math.abs(wx - q.x) <= 8 && wy >= q.y - 14 && wy <= q.y + 4) {
-        return { kind: 'reticle', mode: 'hunt', dim: busy };
+        return ret('hunt', busy);
       }
     }
     for (const b of robots) {
       if (b.dead || b.team === player.team) continue;
       if (Math.abs(wx - b.x) <= 7 && wy >= b.y - 7 && wy <= b.y + 4) {
-        return { kind: 'reticle', mode: 'hunt', dim: busy };
+        return ret('hunt', busy);
       }
     }
     for (const a of animals) {
@@ -4451,15 +4590,15 @@
       const h = a.kind === 'rabbit' ? 11 : a.kind === 'bird' ? 7 : a.kind === 'wolf' ? 14 : 22;
       const by = a.y + 4 - (a.alt || 0); // birds ride their alt
       if (Math.abs(wx - a.x) <= hw && wy >= by - h && wy <= by) {
-        return { kind: 'reticle', mode: 'hunt', dim: busy };
+        return ret('hunt', busy);
       }
     }
     // a fish under the ice: water-blue ring (the bow spears it from point-blank)
-    if (hoverFish()) return { kind: 'reticle', mode: 'fish', dim: busy };
+    if (hoverFish()) return ret('fish', busy);
     // something E can work: lock ring (ice-blue over bare ice), dim out of reach
     const wt = workTarget(player);
-    if (wt) return { kind: 'reticle', mode: wt.o ? 'lock' : 'ice', dim: busy || !wt.near };
-    return { kind: 'reticle', mode: 'idle', dim: busy };
+    if (wt) return ret(wt.o ? 'lock' : 'ice', busy || !wt.near);
+    return ret('idle', busy);
   }
 
   // sprite hotspots (the pixel that sits under the true mouse position)
@@ -4528,8 +4667,24 @@
       const g = gap + 1;
       rects.push([mx - g, my - g, 1, 1], [mx + g, my - g, 1, 1], [mx - g, my + g, 1, 1], [mx + g, my + g, 1, 1]);
     }
-    rects.push([mx, my, 1, 1]);
+    // The bow's own state, on top of whatever the pointer is over. An empty
+    // quiver hollows the reticle out - the centre pixel, the one thing that says
+    // "this shot happens here", is simply gone, and the ticks go slate. While the
+    // renock runs, four corner marks fall inward from far out and land on the
+    // ring at the moment the bow is ready; there is nothing left of them at rest,
+    // so a ready bow is still the clean crosshair it has always been.
+    const nock = info.nock === undefined ? 1 : info.nock;
+    if (info.dry) col = '#8a97bd'; else rects.push([mx, my, 1, 1]);
     drawOutlinedRects(rects, col, base);
+    if (nock < 1) {
+      const g = gap + 2 + Math.round((1 - nock) * 6);
+      drawOutlinedRects([
+        [mx - g, my - g, 2, 1], [mx - g, my - g, 1, 2],
+        [mx + g - 1, my - g, 2, 1], [mx + g, my - g, 1, 2],
+        [mx - g, my + g, 2, 1], [mx - g, my + g - 1, 1, 2],
+        [mx + g - 1, my + g, 2, 1], [mx + g, my + g - 1, 1, 2],
+      ], info.dry ? '#8a97bd' : '#ffd95c', base * (0.35 + 0.55 * nock));
+    }
   }
 
   // dotted flight line while the bow is drawn: a static dotted line from the
@@ -4599,6 +4754,65 @@
   }
 
   // ------------------------------------------------------------ entity draw
+  // Spent arrows in the snow, drawn flat under everything that walks: a stub of
+  // shaft on the bearing it came in on (the head is buried, so it starts at the
+  // entry point and runs backwards), fletching in the shooter's team colour, a
+  // smear of shadow along it. The head is missing on purpose - the same body the
+  // flying arrow draws, minus the part that is in the ground.
+  // Inside SHAFT_NEAR of a local player who has room for it, the whole thing
+  // goes gold and grows a bobbing arrowhead: that, and nothing written down, is
+  // how "walk over it to take it back" gets taught. It blinks over its last
+  // second and a half so nobody plans a route to one that is about to go.
+  const SHAFT_PX = [];
+  function drawShafts(ex, ey, now) {
+    const want = state.mode === 'play' && !player.dead && !inAir(player) && player.quiver < QUIVER_MAX;
+    for (const s of shafts) {
+      const sx = Math.round(s.x - ex), sy = Math.round(s.y - ey);
+      if (sx < -12 || sy < -12 || sx > VIEW_W + 12 || sy > VIEW_H + 12) continue;
+      const left = SHAFT_LIFE - s.t;
+      if (left < 1.6 && ((now * 7) | 0) % 2) continue;
+      const fade = Math.min(1, left / 4);
+      const near = want && Math.hypot(s.x - player.x, s.y - player.y) < SHAFT_NEAR;
+      ctx.globalAlpha = fade;
+      // the shadow sits under the middle of the body, not under the buried head
+      ctx.fillStyle = 'rgba(120,140,175,0.32)';
+      ctx.fillRect(Math.round(sx - s.nx * 3) - 2, Math.round(sy - s.ny * 3) + 2, 5, 1);
+      const qx = -s.ny, qy = s.nx;
+      SHAFT_PX.length = 0;
+      const at = (i, j) => SHAFT_PX.push(
+        Math.round(sx - s.nx * i + qx * j), Math.round(sy - s.ny * i + qy * j));
+      for (let i = 0; i < 6; i++) at(i, 0);
+      const shaftEnd = SHAFT_PX.length;
+      at(4, -1); at(4, 1); at(5, -1); at(5, 1);
+      ctx.fillStyle = ARROW_RIM; // the same plus-shaped dilation the flying arrow uses
+      for (let k = 0; k < SHAFT_PX.length; k += 2) {
+        const px = SHAFT_PX[k], py = SHAFT_PX[k + 1];
+        ctx.fillRect(px - 1, py, 1, 1); ctx.fillRect(px + 1, py, 1, 1);
+        ctx.fillRect(px, py - 1, 1, 1); ctx.fillRect(px, py + 1, 1, 1);
+      }
+      // in range the whole thing goes gold - the colour this HUD already uses for
+      // "you can take this" (the gear row's buy chevron, every hover). White was
+      // tried and vanished into the snow.
+      ctx.fillStyle = near ? '#ffd95c' : '#cbbf99';
+      for (let k = 0; k < shaftEnd; k += 2) ctx.fillRect(SHAFT_PX[k], SHAFT_PX[k + 1], 1, 1);
+      ctx.fillStyle = near ? '#fff3c4' : TEAMS[s.team].mark;
+      for (let k = shaftEnd; k < SHAFT_PX.length; k += 2) ctx.fillRect(SHAFT_PX[k], SHAFT_PX[k + 1], 1, 1);
+      if (near) {
+        // a small arrowhead bobbing over it - the same wedge the quiver pip wears
+        const by = sy - 11 - Math.round(Math.abs(Math.sin(now * 4)) * 2);
+        for (let r = 0; r < 3; r++) {
+          const w = r * 2 + 1;
+          ctx.fillStyle = '#0a0e23';
+          ctx.fillRect(sx - r + 1, by + r + 1, w, 1);
+          ctx.fillStyle = '#ffd95c';
+          ctx.fillRect(sx - r, by + r, w, 1);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = 1;
+  }
+
   // small overhead bar shared by every living unit; color shifts as hp drains
   function drawHealthBar(cxp, topY, hp, maxHp, w) {
     const x = Math.round(cxp - w / 2), y = Math.round(topY);
@@ -5021,14 +5235,23 @@
     // mirror of the stamina bar below it: its backing adds the rows above the
     // hp backing (frame top at py-11, fill py-10..-9) and the hp backing's top
     // row py-8 becomes the track-grey gap row, so the frame stays one outline.
-    if (p.charging) {
-      const frac = Math.min(1, p.chargeT / kitOf(p).bowCharge);
+    // The same slot carries the renock cooldown when the bow is not drawn, so
+    // one strip above a head answers the only question a fight asks about it:
+    // gold filling = drawing (a shot is coming), slate filling = reloading (it
+    // is not), white = the instant it came back. Both use the identical
+    // geometry, so the bar never jumps when one hands over to the other.
+    const nockKit = kitOf(p);
+    if (p.charging || p.nockT > 0 || p.readyFlash > 0) {
+      const drawing = p.charging;
+      const frac = drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
+        : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, nockKit.nock);
       const x = Math.round(p.x - ex) - 7, y = py - 10;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(x, y, 14, 3);         // fill rows + the gap row
-      ctx.fillStyle = frac >= 1 ? '#ff9440' : '#ffd95c';
+      ctx.fillStyle = !drawing ? (p.readyFlash > 0 ? '#f4f7ff' : '#6f7ca8')
+        : frac >= 1 ? '#ff9440' : '#ffd95c';
       ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
     }
   }
@@ -5909,6 +6132,83 @@
     }
   }
 
+  // ---- quiver strip: the ammo readout, bottom-centre ----------------------
+  // The bow's whole economy in one control, built out of the same arrow the
+  // world is full of: a lit pip is an arrow you have, a dark one is an arrow you
+  // spent, and the pip on the boundary re-forms from the nock upward as it is
+  // fletched - so the fact that arrows come back is something you watch happen,
+  // not something you are told. Under it, one gold rule sweeps the strip while
+  // the renock runs and lands white the instant the bow is ready: the cooldown,
+  // drawn where the count already is. Pressing an empty bow shakes it red.
+  // The fletching is the local team's colour, the same colour that is on every
+  // shaft in the snow, which is what ties the two halves of the system together.
+  // The pip is drawn on the DIAGONAL, and that is the whole reason it reads. An
+  // upright arrow this small is a vertical stroke with a bar across it - i.e. a
+  // dagger - however the head and feathers are shaped; every upright variant
+  // tried came out as a cross or an anchor. On the slant the shaft is a solid
+  // staircase with a wedge head and a fletched tail, which is what an arrow
+  // looks like in this game anyway: the ones in the snow are never upright
+  // either. `#` is shaft, `=` is fletching (the local team's colour).
+  const QUIVER_PIP = [
+    '##.....',
+    '###....',
+    '.###...',
+    '..###..',
+    '...###.',
+    '....##.',
+    '...=.##',
+    '..==.==',
+    '...=...',
+  ];
+  const QP_W = 7, QP_H = 9, QP_GAP = 3;
+  function quiverRect() {
+    const w = QUIVER_MAX * (QP_W + QP_GAP) - QP_GAP;
+    return { x: Math.round((VIEW_W - w) / 2), y: VIEW_H - 25, w, h: QP_H };
+  }
+  // one pip. `fill` (0..1) draws it from the nock up, so a fletching arrow grows
+  // into its slot instead of blinking into existence.
+  function drawQuiverPip(x, y, fill, shaft, fletch, dim) {
+    const cut = Math.ceil((1 - fill) * QP_H);
+    for (let r = 0; r < QP_H; r++) {
+      const row = QUIVER_PIP[r];
+      for (let q = 0; q < QP_W; q++) {
+        const ch = row[q];
+        if (ch === '.') continue;
+        ctx.fillStyle = r < cut ? dim : ch === '=' ? fletch : shaft;
+        ctx.fillRect(x + q, y + r, 1, 1);
+      }
+    }
+  }
+  function drawQuiver(now) {
+    const R = quiverRect();
+    const x0 = R.x + (player.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0); // the empty-press shake
+    const hot = player.quiverFlash > 0 || player.readyFlash > 0;
+    const shaft = hot ? '#ffffff' : '#e8dcb4';
+    const fletch = hot ? '#ffffff' : TEAMS[player.team].mark;
+    // an empty press reddens the SLOTS, not the arrows: painting the glyphs red
+    // reads as six red arrows, which is the opposite of what happened
+    const dim = player.dryT > 0 ? '#5d2a34' : '#2a3358';
+    const plate = player.dryT > 0 ? 'rgba(74,18,28,0.85)' : 'rgba(12,18,42,0.78)';
+    for (let i = 0; i < QUIVER_MAX; i++) {
+      const x = x0 + i * (QP_W + QP_GAP);
+      ctx.fillStyle = plate;
+      ctx.fillRect(x - 1, R.y - 1, QP_W + 2, QP_H + 2);
+      const fill = i < player.quiver ? 1
+        : i === player.quiver ? player.fletchT / QUIVER_REGEN : 0;
+      drawQuiverPip(x, R.y, fill, shaft, fletch, dim);
+    }
+    if (player.nockT > 0 || player.readyFlash > 0) {
+      const frac = player.readyFlash > 0 ? 1 : 1 - player.nockT / Math.max(0.01, kitOf(player).nock);
+      const by = R.y + QP_H + 3;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(x0 - 1, by - 1, R.w + 2, 4);
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(x0, by, R.w, 2);
+      ctx.fillStyle = player.readyFlash > 0 ? '#f4f7ff' : '#ffd95c';
+      ctx.fillRect(x0, by, Math.max(1, Math.round(R.w * frac)), 2);
+    }
+  }
+
   function renderUI(now) {
     if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
     if (state.mode === 'dead' && state.over === 'won') return; // the victory screen owns the frame
@@ -5967,7 +6267,13 @@
     drawGearRow(now);
     ctx.restore();
 
-    // (the bottom-centre strip is deliberately empty: reserved for combat abilities)
+    // quiver strip, bottom-centre; it rides the intro slide up from below
+    if (!out) {
+      ctx.save();
+      ctx.translate(0, Math.round(slide * 40));
+      drawQuiver(now);
+      ctx.restore();
+    }
 
     // arriving at a named place announces it, top centre: the name big, its
     // personality under it. Fades on the plate, so it uses the shadow font.
@@ -6545,9 +6851,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.33'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.34'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.34', 'ARROWS ARE A QUIVER NOW: EVERY SHOT SPENDS ONE AND TAKES A MOMENT TO RENOCK, AND EVERY ARROW THAT LANDS STICKS IN THE SNOW TO BE PICKED BACK UP.'],
     ['1.33', 'WINNING NOW GETS A REAL VICTORY SCREEN - CROWN, BANNERS, AURORA AND THE NUMBERS FROM YOUR RUN - AND THE LAST TEAM STANDING WINS, NOT THE LAST PLAYER.'],
     ['1.32', 'HOUSEKEEPING: THE DEV NOTES LEARN THE GEAR SYSTEM AND FOUR STALE POINTERS NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],
     ['1.31', 'THE F3 READOUT IS NOW A TIDY LABELLED COLUMN IN THE HUD\'S OWN COLOURS, WITH RED SAVED FOR A BAD FRAME RATE.'],
@@ -8675,6 +8982,11 @@
     // geometry the hover test and the pixels both use
     wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
+    // the quiver: the shafts lying in the world, the ceiling, and a way to set
+    // a slot's ammo / renock without playing to it
+    shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, quiverRect, stickArrow,
+    setQuiver: (n, p) => { const q = p || player; q.quiver = Math.max(0, Math.min(QUIVER_MAX, n)); q.fletchT = 0; return q.quiver; },
+    setNock: (t, p) => { (p || player).nockT = t; },
     // multiplayer slots: every slot, the local one, and the teams table
     players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
     // the eagle drop: the live flight record, force a jump, or fly the route from scratch
