@@ -149,8 +149,8 @@ fish brackets + click prompt (`drawFishHint`) → construction progress bars →
 arrows (bolts branch to `drawBolt`) → `drawTurretFx` (each turret's charging aim line and its
 muzzle flash) → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
 eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` →
-`drawNavPaths` + `drawHitboxes` (the `,` and `.` debug overlays — deliberately **above** the
-lighting, see [Debug overlays](#debug-overlays-hitboxes-and-routes)) →
+`drawNavPaths` + `drawHitboxes` (the `.` debug overlay — deliberately **above** the lighting,
+see [Debug overlays](#debug-overlays-hitboxes-and-routes)) →
 **the world blit** (`worldCv` scaled onto the canvas — everything above it drew in world space,
 everything below draws in screen space; see [World zoom](#world-zoom-and-the-two-pixel-spaces))
 → `renderWeather` (snow, see below) →
@@ -304,55 +304,52 @@ structures show flash, shake, and damage cracks instead.
 
 What the sim tests, drawn over what the art shows — the two are deliberately different (a tree's
 canopy overhangs the tile above it; an arrow is tested against a circle at the *chest*, 6 px above
-the feet), and every collision question is faster to answer by looking than by reading. `.`
-cycles `settings.hitbox` in **any** mode, beside F3 and for the same reason — the title screen's
-world is live and a spectated match is someone else's feet:
+the feet), and every collision question is faster to answer by looking than by reading. One key:
+`.` cycles `settings.hitbox` in **any** mode, beside F3 and for the same reason — the title
+screen's world is live and a spectated match is someone else's feet:
 
 | `settings.hitbox` | draws |
 | --- | --- |
 | `0` | nothing (default; persists to `localStorage` like every other setting) |
 | `1` | bodies: tile boxes, unit circles, projectile points, pickup radii |
-| `2` | ...plus reaches and sight ranges, stippled |
+| `2` | ...plus the route every walker is following |
 
-Two steps because a wolf's 96 px sight ring would bury the 7 px circle that decides whether an
-arrow lands. Colour carries the kind, so there is nothing to label: **cyan** a wall to everyone
-(`isSolidTile`, so a multi-tile building boxes each of its footprint tiles), **blue** open water —
-a wall to animals and robots, a hole a player falls into — **green** the body circle
+Colour carries the kind, so there is nothing to label: **cyan** a wall to everyone (`isSolidTile`,
+so a multi-tile building boxes each of its footprint tiles), **blue** open water — a wall to
+animals and robots, a hole a player falls into — **green** the body circle
 `moveEntity`/`separateUnits` push apart, plus a dot on the anchor point itself, **red** the circle
 an arrow is tested against, **violet** a walk-over pickup or a click target, **gold** a projectile
-(a point, never a circle), **orange** a reach or a sight range.
+(a point, never a circle).
 
 Every shape is read from the expression the sim uses, never a copy of the number — an overlay that
-disagrees with the sim is worse than none, because it is believed. Two consequences worth knowing:
+disagrees with the sim is worse than none, because it is believed.
 
-- **Sight rings are per-target.** A wolf's ring and a turret's are drawn at `seenAt(viewPlayer(),
-  …)`, so they answer *how far can this thing see the slot the camera frames* — they widen at
-  night (`state.darkness`) and collapse to `PRONE_SNIFF` as you bury yourself. Watching a turret's
-  ring shrink off you is the clearest picture of [prone](gameplay.md#prone-under-the-snow) there is.
-- **E works a ring of tiles, not a radius**, so `WORK_REACH` is drawn as a box.
+**Reaches and sight ranges are deliberately not drawn.** `WORK_REACH`, a wolf's bite and sight, a
+turret's acquisition ring, the bird flush, the fish catch: they were in an earlier version of the
+pass and are out again, because they are wide enough to bury the 7 px circle the overlay exists to
+show, and because a sight range is per-target (`seenAt`) and so needs a design of its own rather
+than a ring. They come back on their own terms later.
 
-These two are the only world passes that draw **above `renderLighting`** — a debug view has to be
-as readable at midnight as at noon, and the lighting would eat it. Rings are rasterised by `hbRing` as 1 px world pixels rather than
-stroked with `arc()`: a stroke is anti-aliased, and the world blit magnifies a soft edge into
-mush. It plots the left/right extremes by row and the top/bottom by column, so the ring closes at
-every radius and a fractional one (`PLAYER_R` is 4.5) is not rounded away; `step` plots one pixel
-in N, which is the stipple ranges use to stay behind the bodies. `hbLine` is the same idiom for
-a straight run, and `drawNavPaths` below is its only caller.
+Both passes draw **above `renderLighting`** — the only world passes that do — because a debug view
+has to be as readable at midnight as at noon. Rings are rasterised by `hbRing` as 1 px world
+pixels rather than stroked with `arc()`: a stroke is anti-aliased, and the world blit magnifies a
+soft edge into mush. It plots the left/right extremes by row and the top/bottom by column, so the
+ring closes at every radius and a fractional one (`PLAYER_R` is 4.5) is not rounded away. `hbLine`
+is the same idiom for a straight run, and its `step` is what dots a planned route leg.
 
-### Routes (`,`)
+### Routes (the second press)
 
-`,` toggles `settings.paths`, and it is the neighbour of `.` in the render as well as on the
-keyboard: `drawNavPaths` runs from the same place, one layer under the hitboxes, because a route
-is on the ground and a body stands on it. It draws the **plan, not the walk** — the line leaves
-the unit, runs through the waypoints it has left (`nav.i` onward), and ends in a box on
-`nav.gtx`/`nav.gty`, the tile the unit decided to go to, which is the answer to *why is it walking
-over there*. The leg it is on now is solid and the legs behind it are dotted, so a route being
-followed reads differently from one being replanned. One colour per kind of walker, as on the
-minimap: slots gold, a wolf red, the rest of the wildlife green, a worker bot blue.
+`drawNavPaths` runs from the same place, one layer under the hitboxes, because a route is on the
+ground and a body stands on it. It draws the **plan, not the walk** — the line leaves the unit,
+runs through the waypoints it has left (`nav.i` onward), and ends in a box on `nav.gtx`/`nav.gty`,
+the tile the unit decided to go to, which is the answer to *why is it walking over there*. The leg
+it is on now is solid and the legs beyond it are dotted, so a route being followed reads
+differently from one being replanned. One colour per kind of walker, as on the minimap: slots
+gold, a wolf red, the rest of the wildlife green, a worker bot blue.
 
 Most routes are one leg: `navTo` takes the straight line whenever `navLineClear` allows it and
 `navSmooth` collapses the rest, so a chain of waypoints means the unit is genuinely going around
-something. `DBG.showPaths` still forces the same pass on without the key.
+something. `DBG.showPaths` still forces the same pass on by itself, whatever `settings.hitbox` is.
 
 ## Landmarks on the maps
 

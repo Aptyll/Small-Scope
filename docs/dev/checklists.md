@@ -27,13 +27,11 @@ declare victory. The three affordances:
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
   left edge — but only while `settings.info` is on, and it defaults **off**: flip it on (the ESC
   menu's INFO row, or F3) before capturing anything you intend to compare later.
-- **`.`** cycles the [hitbox overlay](rendering.md#debug-overlays-hitboxes-and-routes) — the boxes and circles
-  the sim tests, over the sprites that hide them. Reach for it before reasoning about a collision,
-  a reach or a sight range from the code alone: press 1 for bodies, 2 for ranges as well. It draws
-  in every mode, and `settings.hitbox` sets it from `DBG` without the keypress.
-- **`,`** toggles the [route overlay](rendering.md#debug-overlays-hitboxes-and-routes) — every
-  walker's live path and the tile it is heading for. `settings.paths`, or the older
-  `DBG.showPaths`, which still forces it on by itself.
+- **`.`** cycles the [debug overlay](rendering.md#debug-overlays-hitboxes-and-routes): one press
+  for the boxes and circles the sim tests, a second for the route every walker is following and
+  the tile it is heading for. Reach for it before reasoning about a collision from the code alone.
+  It draws in every mode, `settings.hitbox` sets it from `DBG` without the keypress, and
+  `DBG.showPaths` still forces the routes on by itself.
 - **`POST /shot`** in [serve.js](../../serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it, and `shot.png` is not gitignored — don't commit it.
