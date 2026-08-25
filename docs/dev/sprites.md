@@ -56,7 +56,9 @@ twelve 12×12 grids, **one per variant** (`gearLongsight` … `gearGhoststep`), 
 **material** — `GEAR_MAT_PALS`, leather → iron → steel → gold, plus the shared accent chars `w`
 (ice-white) and `r` (hearth-red) — into `SPRITES.gearIcons[slot][variant][material]`: the glyph
 says which piece, the material says its level. Drawn by the HUD's gear plates, the champ-select
-loadout strip and the gear page's cards (see [gameplay.md](gameplay.md#gear)).
+loadout strip and the gear page's cards (see [gameplay.md](gameplay.md#gear)). `itemBag` is
+12×12 for the same reason — it sits in the same 18 px HUD well — but shares `ITPAL` with the
+8×8 item icons rather than taking a material palette: it is one object, not four levels of one.
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not

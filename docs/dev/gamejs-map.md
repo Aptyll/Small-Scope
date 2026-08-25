@@ -1,6 +1,6 @@
 # Where things live in game.js
 
-`game.js` is one ~9800-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~10000-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -20,9 +20,11 @@ don't cite line numbers here, they go stale within a session.
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
 | slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
+| the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` |
 | the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
 | how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` |
-| the gear HUD plates (bottom-right) and their hit test | `gearRects`, `gearHit`, `drawGearRow` | `UI` › `gear row` |
+| the backpack + gear widget (bottom-right): its frame, the icon row, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag` | `UI` › `backpack and gear` |
+| the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
 | picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the F3 readout: fps, coords, seed | `drawTags` | `render` |

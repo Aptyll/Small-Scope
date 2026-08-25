@@ -247,6 +247,87 @@ backing, rims and the day/night band one pixel at a time (pixel-centre distance 
 clockwise angle span), and the map view is clipped by `mmMask(r)` — a cached pixel disc
 composited with `destination-in` on the `mmView` scratch canvas — instead of `clip()`.
 
+## The HUD corners
+
+`renderUI()` owns three corners and one strip, and every one of them is positioned off
+`VIEW_W`/`VIEW_H` (never a literal), so a resize needs nothing from them. **The top left is
+deliberately empty** — the berry/fish counts that used to stack there, and the gold that sat left
+of the minimap, are all on the backpack's bottom strip now, which is why nothing slides in from
+the left during the landing intro any more.
+
+| Where | What | Function |
+| --- | --- | --- |
+| top left | **nothing** — see the strip below | — |
+| top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
+| bottom left | the event feed | `renderEventLog` |
+| bottom centre | the quiver strip | `drawQuiver` |
+| bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip | `drawBag` |
+
+### The backpack and gear widget
+
+Everything a slot owns is **one frame in one corner** — the gear row is not a separate widget any
+more, it is the top row of the bag. `bagFrameRect()` is the whole thing, and top to bottom it is:
+
+1. an **icon row** of five identical cells — the pack, then helmet / chest / legs / boots;
+2. the **inventory grid**, only when `state.bagOpen`, continuing straight down the row's own
+   five columns on the same `BAG_GAP` — no wider seam between them, because they are cells of
+   the same size holding the same kind of thing;
+3. a single 1 px rule, the only line inside the widget;
+4. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim.
+
+**The row is on top and the grid hangs below it, and that is load-bearing rather than taste.** An
+affordable gear piece bobs a gold chevron *above* its cell and the hover price sits higher still,
+so whatever is over the row has to be empty screen — put the grid up there and every chevron draws
+into it. (The carets start 14 px up rather than 10 so the bottom of their bob clears the frame's
+own lit edge, `BAG_PAD` being only 3.) The frame is pinned by its **bottom** at `VIEW_H - 8` and
+grows upward, so opening the bag lifts the row instead of pushing the gold off the screen.
+
+- **Nothing in it is a different size from anything else.** `BAG_CELL` (18) is a grid slot, a gear
+  plate and the pack button alike, and all three are painted by `bagCellPlate()` — one function,
+  so a button can never drift out of style with a slot. `BAG_PAD` (3) from the frame to the first
+  cell and `BAG_GAP` (2) between neighbours are the only two gaps in the widget; `BAG_W` is 104,
+  and `bagRowRect(i)` and `bagCellRect(i)` share the same column arithmetic, so the five columns
+  line up from the row straight down through the grid.
+- **One background, one border, one internal line.** Every part of the frame — behind the cells,
+  behind the grid, behind the gold — is the same opaque `BAG_BG`, so nothing inside reads as a
+  separate panel stacked on another. The border is a single 1 px rim: no lit inner edge, no rule
+  under the icon row, no wider gap there either. The **one** line that stays is the rule over the
+  gold row, because money is a different *kind* of thing from the slots above it, and that is the
+  only break the widget makes.
+- **Depth comes from the cells, not from panels.** Three tones say it without a line: a filled
+  cell recesses to `BAG_WELL` *below* the frame's ground, an empty one sits *above* it at
+  `#171f45`, and the ground itself is between — occupied / free / frame.
+- **The strip is every number the widget has**, League-style: berries and fish from the left, each
+  an icon and a count and nothing else, then the gold hard against the **right** edge with its
+  coin ahead of it, inked `#f5c542` so the one number that is money does not read as a count of
+  something carried. The food totals the *whole bag* across its stacks, so the strip answers "can
+  I heal" without opening the grid, and a meal you have none of takes no room at all — which is
+  why the gold is right-aligned and the food left-aligned: neither moves the other.
+- **The eat keys are not printed on it.** Q and F are looked up in the ESC panel's CONTROLS
+  block, which is what that block is for; a letter beside every count is a caption the strip
+  would carry forever for the two minutes it is useful.
+- **No cast shadow.** The frame is hard against two edges of the screen, where a shadow has
+  nothing to fall on, and the cells already carry the depth — a drop shadow only smeared the
+  outline that reads the whole thing as one box.
+- **An empty cell is the *lighter* one**: it has no icon to show off, and free space is what the
+  grid is being read for, while a full cell goes dark behind its item. A stack draws its icon
+  high in the cell so the count can have the bottom-right corner without its outline eating the
+  cell's rim, and a stack of one prints no number — an empty corner says it.
+- **Two things are said in colour rather than in words**: the pack's rim goes amber when no cell
+  is free, and the whole frame reddens and shakes for `bagFlash` seconds when something could not
+  be carried (`bagDenied()`, aged in `updateFx` on wall time like the rest of the chrome).
+- **The frame swallows every click over itself.** `bagHit` reports `btn` (the pack), `cell` (a
+  grid slot) or `frame` (anywhere else inside, inert but eaten), so nothing is ever fired at the
+  world through the panel; `gearHit` owns the four gear cells and is asked *first* by the click
+  handler, `cursorInfo` and the row's own hover, so the three can never disagree. The cursor is a
+  **hand** only over something that does something — the gold strip reads as a plain arrow.
+- **The grid does not stop the sim.** It is HUD, not an overlay — the same deal the
+  [M map](gameplay.md#the-m-map-does-not-pause) takes, only smaller: nothing dims, nothing is
+  zeroed in `sampleHumanInput`, and the only input it takes is the clicks over its own frame.
+
+The model behind the grid is in [gameplay.md](gameplay.md#inventory-and-the-backpack); the gear
+table and what a buy does are in [gameplay.md](gameplay.md#gear).
+
 ## Overhead health bars
 
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
@@ -280,9 +361,10 @@ the world goes through `drawPixelTextOutline(ctx, text, x, y, color, outline, sc
 colour, then once in the text colour — a solid rim on every side, exactly 1 game px at any text
 scale, no blur. The outline colour is the opaque `#0f1632` (the eight passes overlap, so a
 translucent colour would stack unevenly). Sites: floaters (damage numbers, gold, `LEVEL n`),
-rival name tags, the E and fish prompts, the radial-wheel labels, the HUD counters (berry/fish,
-gold, the alive count and clock under the minimap — the alive icon is stamped with the same
-eight-offset rim by `drawAliveIcon`), `state.msg`, the info stack, and the drop-UI text.
+rival name tags, the E and fish prompts, the radial-wheel labels, every number on the backpack
+widget (the strip's food counts and gold, each bag cell's stack count, a gear cell's hover price),
+the alive count and clock under the minimap — the alive icon is stamped with the same eight-offset
+rim by `drawAliveIcon` — `state.msg`, the info stack, and the drop-UI text.
 `drawPixelTextShadow` (a single bottom-right 1 px shadow) remains for text sitting on a panel,
 plank or overlay — the settings/map panels, the main menu, the death overlay, the scoreboard and
 the event feed's plates — where a full outline reads heavy. Checked at noon on open snow and at
@@ -478,8 +560,9 @@ them — and both duck under the map/settings panels. The feed also stands down 
 [the victory screen](#the-victory-screen); the scoreboard does not.
 
 **The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
-newest along the bottom. It shares that corner with the
-[replay window](#replay-the-last-four-seconds) and steps up by `replayLift()` px for as long as
+newest along the bottom. It has that corner to itself now the gear row lives in the
+[backpack](#the-backpack-and-gear-widget), and shares it only with the
+[replay window](#replay-the-last-four-seconds), stepping up by `replayLift()` px for as long as
 that window is open. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
 supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate
 on snow leaves the text nothing to sit on), a 1 px edge in the team's bright `mark`, and the ink
@@ -513,8 +596,9 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
-  so hover and click can never disagree), a live wheel segment, or a gear plate (`gearHit()`, the
-  one left-clickable HUD widget in play — see [gameplay.md](gameplay.md#gear)); **grab** — dragging a
+  so hover and click can never disagree), a live wheel segment, or a control inside the backpack
+  widget (`gearHit()` / `bagHit()`, the one left-clickable HUD panel in play — its gold strip
+  stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work
@@ -625,8 +709,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   into `play` with the player already standing in the world.
 - **Landing intro**: the human's `landPlayer` sets `state.intro = state.introLen = HUD_IN_T` (0.7 s)
   with `introFrom` at the touchdown framing, so `renderUI` slides the HUD in (the left stack from
-  the left, the gold/minimap stack from the top, the gear row from the right and the quiver strip
-  up from the bottom) while the camera settles onto the play framing.
+  the left, the minimap from the top, the backpack-and-gear widget from the right and the quiver
+  strip up from the bottom) while the camera settles onto the play framing.
   The first-run hint message fires when that intro ends.
 
 `DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and

@@ -223,7 +223,7 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   pressed/charging — so nothing hints at right-click) reading
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
-  the berry's Q/+20), with a count indicator under the berry indicator top-left
+  the berry's Q/+20), counted beside the berries on the backpack strip
   (`SPRITES.itemFish`, 8×8, own `FIPAL`). The shoal tops back up to `FISH_COUNT` each dawn,
   never within 120 px of any player. `SFX.splash()` was added for the water sounds. `DBG`
   exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`.

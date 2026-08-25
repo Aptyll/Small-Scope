@@ -1528,6 +1528,23 @@
     '........',
   ];
 
+  // The backpack's own glyph: 12x12 like a gear icon, because it sits in the
+  // same 18px HUD well. Dark flap over a lighter body with a gold buckle.
+  const itemBag = [
+    '....oooo....',
+    '...ovvvvo...',
+    '..ovvvvvvo..',
+    '.ovvvvvvvvo.',
+    '.oovvvvvvoo.',
+    '.oUUonnoUUo.',
+    '.oUUoNNoUUo.',
+    '.oUUUUUUUUo.',
+    '.ouUUUUUUuo.',
+    '.ouuuuuuuuo.',
+    '..ouuuuuuo..',
+    '...oooooo...',
+  ];
+
   // ---------------------------------------------------------------- gear icons
   // One 12x12 glyph PER VARIANT (12 total), baked once per material - leather /
   // iron / steel / gold - into SPRITES.gearIcons[slot][variant][material], so
@@ -2344,6 +2361,7 @@
     itemBerry: bake(itemBerry, ITPAL),
     itemGold: bake(itemGold, ITPAL),
     itemFish: bake(itemFish, FIPAL),
+    itemBag: bake(itemBag, ITPAL),
     // gearIcons[slot][variant][material]: 12 distinct variant glyphs, each in
     // leather / iron / steel / gold
     gearIcons: [

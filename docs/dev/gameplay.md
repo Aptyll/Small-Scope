@@ -457,8 +457,10 @@ A **rookery** keeps 9 birds perched in its dead trees. `updateBird()`:
 
 ## Economy (one currency)
 
-Every player owns a wallet: `p.inv` is `{ gold, berry, fish }` (and `inv` is an alias for the
-local slot's, which is what the HUD draws). **Gold is the only resource** — there is no wood or stone —
+Every player owns a wallet **and** a bag. `p.inv` is `{ gold }` — currency only, no ceiling —
+while everything you *carry* lives in `p.bag`, the slot array described in
+[Inventory and the backpack](#inventory-and-the-backpack). (`inv` is an alias for the local
+slot's wallet.) **Gold is the only resource** — there is no wood or stone —
 and berries/fish are consumables (Q/F heals), never spent on anything. The whole economy is the
 `YIELD` table in the constants banner, which gives every source a different **yield profile**
 rather than a different resource (the League model: one number, many ways to earn it):
@@ -476,18 +478,54 @@ rather than a different resource (the League model: one number, many ways to ear
 | generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, capped at 6 uncollected |
 
 Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
-(`d.n`, default 1) so a single coin can carry several gold — the pickup adds `d.n` (gold through
-`gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-levels)) and floats
-`+n` in `RES_COLORS[type]`. A drop's `type` is an `inv` key — the pickup and the AI's loot step
-are generic over them; sources pay `gold` and `berry` (a caught fish goes straight to `inv`), and
-death spills can carry `fish` too (`SPRITES.itemFish` in the drop draw pass).
-The HUD shows the local wallet's gold counter (`itemGold`) left of the minimap; the berry/fish
-indicators sit top-left as before. Death empties the wallet — see
-[Death is final](#death-is-final). Robots carry a single gold
+(`d.n`, default 1) so a single coin can carry several gold — the pickup adds what it can (gold
+through `gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-levels); anything
+else through `bagAdd`) and floats that number in `RES_COLORS[type]`. **Whatever was taken comes
+off `d.n`, and the drop is only removed when `d.n` hits zero** — that is what lets a stack of 5
+berries half-fill a bag and leave 3 lying in the snow. A drop's `type` is `gold` or an `ITEMS`
+key; sources pay `gold` and `berry`, a caught fish goes straight into the bag, and death spills
+carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
+the **strip along the bottom of the backpack frame** (bottom right) — food from the left as icon
++ count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
+wallet and bag both —
+see [Death is final](#death-is-final). Robots carry a single gold
 number (`b.carry`) and deposit at 8+ into their **owner's** wallet (via `gainGold`, so robot
 income levels the owner too). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
-(`canAfford`/`pay` also take the player whose wallet is meant).
+(`canAfford`/`pay` also take the player whose wallet is meant) — except that a player with **no
+room** for a drop is neither magnetised by it nor a claimant, so a full bag hands the pickup to
+whoever else is standing there instead of sitting on it, and standing alone on something you
+cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than eating it.
+
+## Inventory and the backpack
+
+Everything a slot carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
+or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 10**
+(`BAG_CAP`); a second bag is a bigger `bagCap` and a longer array, nothing else. The table is two
+entries today:
+
+| Item | Icon | Stack | Eaten by |
+| --- | --- | --- | --- |
+| `berry` | `itemBerry` | 3 | Q, or clicking its cell |
+| `fish` | `itemFish` | 2 | F, or clicking its cell |
+
+**The slot is the unit of capacity**, which is the whole reason this is an array and not a pair of
+counters: two half stacks cost two cells, so a bag genuinely fills and the pickup path can
+genuinely refuse. Five helpers in the `players` banner are the entire API — `bagCount(p, type)`,
+`bagUsed(p)`, `bagRoom(p, type)` (room in partial stacks + a full stack per empty cell),
+`bagAdd(p, type, n)` (tops up partial stacks before opening a cell, returns how many went in) and
+`bagTake(p, type, n)` (spends from the **last** stack backwards, so partials empty and free their
+cell). Nothing outside them touches `p.bag` — `eatBerry`/`eatFish`, the fish catch, the drop
+pickup, the AI's food check and `spillInventory` all go through the five.
+
+**Refusing is a real outcome**, and every path that cannot store something says so the same way:
+`bagDenied()` reddens and shakes the whole backpack frame for 0.6 s with one `SFX.deny()`, and re-firing while
+it is already up does nothing, so standing on a drop you cannot carry is one flash and not sixty a
+second. A bow-fishing swing with a full bag denies **and returns** (the bow still renocks) rather
+than falling through to loose the arrow at the floor.
+
+The HUD is in the `UI` › `backpack` banner — see
+[the backpack](rendering.md#the-gear-row-and-the-backpack).
 
 ## Gear
 
@@ -532,14 +570,22 @@ player instead of only against wolves and turrets), and the three dodge-refill s
 entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
 bump on the spot like a hero level. No tile, no reach, no contest — it only touches the buyer's
 own wallet. The human sends it from keys **1–4** or by clicking the **gear row**: four 18 px
-plates bottom-right (`gearRects`/`gearHit`/`drawGearRow`, UI banner), one per piece head-to-toe.
+cells — **cells 1–4 of the backpack's icon row**, bottom right (`gearRects`/`gearHit`/
+`drawGearCells`, UI banner), one per piece head-to-toe after the pack button.
 A plate shows **your variant's own icon** in the **material of its level** (leather → iron →
-steel → gold), pips under the icon count the buys, a 1 px meter under the plate fills as the purse
-approaches the next cost, an affordable piece grows a bobbing gold chevron, hover lifts the plate
-and shows the cost (coin + number, nothing else), and a maxed piece goes quiet behind a gold rim.
+steel → gold), pips **above** the icon count the buys, an affordable piece grows a bobbing gold
+chevron over the plate, hover lifts the plate and shows the cost (coin + number, nothing else),
+and a maxed piece goes quiet behind a gold rim. The pips sit on top because that is the edge the
+chevron points at — the ask and the progress it asks about read as one column. There is **no
+saving meter**: the 1 px bar that used to creep along under each plate was four bars all filling
+off the same purse, so it said "you have gold" four times and never said which buy mattered; the
+chevron already answers that, on the piece it applies to, only when the answer is yes.
 `gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
-can never disagree; the click is swallowed **before** `clickAction`, the one left-clickable HUD
-widget in play. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
+can never disagree, and it is asked **before** `bagHit` everywhere because `bagHit` deliberately
+does not report the four gear cells. The click is swallowed **before** `clickAction` — the
+backpack widget is the one left-clickable HUD panel in play. Living in that widget is also what
+keeps the chevrons legible: see
+[the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
 float so they still build.
 
 ## Base building
@@ -696,10 +742,11 @@ respawn — a dead slot stays out for the rest of the match. **Death empties the
 (`spillInventory(p, killer)`, right beside `die`): a credited killer pockets the victim's gold
 outright through `gainGold` — so a kill levels the killer, which is the bounty that makes taking
 the fight worth it — while an uncredited death (ice, wolves, or the killer already dead) spills it
-as up to 5 coins at the corpse. Every **other** `inv` key always spills as pickups, split into up
-to 3 drops like a downed worker's carry — food today, and any future resource key (wood, stone,
-hide) will spill through the same loop without touching death code; the drop draw pass and pickup
-handler are already generic per type (`itemFish` included). The standings are unaffected because
+as up to 5 coins at the corpse. Any other `inv` key would spill as pickups split into up to 3
+drops, the way a downed worker's carry does. **The backpack empties too**, one drop per stack —
+a stack is already the unit the bag counts in, so a killer whose own bag is full simply leaves
+them lying. Both loops are generic per type, so a future resource spills without touching death
+code (`itemFish` is already in the drop draw pass). The standings are unaffected because
 `scoreOf` ranks lifetime `xp`, not the purse, so a looted slot keeps the place it earned. `die`
 also credits the kill and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — and then
@@ -743,8 +790,9 @@ your own marker cross it. Consequences worth knowing:
 
 - The replay ring keeps recording (`replayLive`) — the capture point is above the map's dim, so
   the banked frames are clean world frames. `replayShowing` still hides the *window* under the panel.
-- Dying with the map open is now possible; `endMatch` already clears `state.mapOpen`, and M only
-  toggles in `play` mode, so the chart cannot survive into the death overlay.
+- Dying with the map open is now possible; `endMatch` clears `state.mapOpen` (and
+  `state.bagOpen`), and M only toggles in `play` mode, so the chart cannot survive into the death
+  overlay.
 - The world keeps the zoom you were playing at. The panel is a fixed 308×226 and the canvas no
   longer shrinks when you zoom ([World zoom](rendering.md#world-zoom-and-the-two-pixel-spaces)),
   so it fits regardless and the map no longer yanks the camera back to base.
@@ -753,8 +801,8 @@ your own marker cross it. Consequences worth knowing:
 
 `settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
-it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
-itself against. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;
+it recomputes `MM_R`/`MM_CX`/`MM_CY`. The **backpack**'s open/closed state is `state.bagOpen`,
+not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;
 `Object.assign` in `loadSettings` copies them harmlessly and nothing reads them.)
 
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
@@ -768,7 +816,7 @@ as `CTRL HIDE IN SNOW`.
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows
 the **info stack** — `drawTags()`, a vertical list on the left edge at the top quarter of the
-view, clear of the berry/fish counters, drawn above every overlay. Three lines — **FPS** (`loop()`
+view, drawn above every overlay. Three lines — **FPS** (`loop()`
 accumulates raw unclamped frame deltas into `perf` and refreshes `perf.fps` every half second),
 **POS**, the tile coordinates of the slot the camera frames (`viewPlayer()`, so spectators read
 the watched slot), and **SEED**, the run seed (see

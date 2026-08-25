@@ -51,14 +51,12 @@ CLAUDE.md states the rule with no exceptions:
 > **Communicate through visuals and visual indicators wherever possible; avoid text labels and
 > explanatory text.** … If you catch yourself writing a hint string, build the affordance instead.
 
-The codebase carries at least seven live hint strings:
+The codebase carries at least five live hint strings:
 
 | Location | String |
 | --- | --- |
 | [js/game.js:1648](../../js/game.js) | `showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5)` |
 | [js/game.js:3248](../../js/game.js) | `showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6)` |
-| [js/game.js:5570](../../js/game.js) | `'(Q)'` keycap beside the berry counter |
-| [js/game.js:5576](../../js/game.js) | `'(F)'` keycap beside the fish counter |
 | [js/game.js:5874](../../js/game.js) | `'M CLOSE'` |
 | [js/game.js:6089](../../js/game.js) | `'ESC CLOSE'` |
 | [js/game.js:6769](../../js/game.js), [:6787](../../js/game.js) | `'ESC BACK'` |

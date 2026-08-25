@@ -63,6 +63,15 @@ pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
 should work it (that one line also gives it the cursor's lock ring). The two map colour
 tables are the easy ones to forget — a missing entry silently draws as a stump.
 
+**Adding a carried item** — one `ITEMS` entry (`icon`, `stack`) is the storage half: the bag,
+the drop pickup, the death spill and the refusal tell are all generic over that table. What is
+*not* generic and must be written per item: an 8×8 icon sprite beside `itemBerry`, a colour in
+`RES_COLORS` for the pickup floater, the sprite branch in the drop draw pass, whatever *makes*
+the item, and what using it does — `bagClick` maps a cell click onto an input flag, so a new
+item needs its own branch there or clicking its cell will just deny. Gold is **not** an `ITEMS`
+entry and must not become one: it is a wallet number with no ceiling.
+See [gameplay.md](gameplay.md#inventory-and-the-backpack).
+
 **Adding a tool** — append to `TOOLS` with a `TOOL_*` index constant, add an 8×8 icon sprite
 and name it in the entry's `icon` field, map the object types it works in `workTarget()`
 (that is the only selection logic — there are no keys or bar slots), and give its `key`
@@ -151,7 +160,8 @@ the arrow speed/damage formulas in `fireArrow()`,
   raider/mine removal — kept in case a threat returns; the raider set shares the player grids
   (as do the four `playerTeam` sets, which are the live ones).
 - `SPRITES.goldOre`, `SPRITES.itemWood`, and `SPRITES.itemStone` are baked but unreferenced since
-  the single-currency change (no ore object, no wood/stone drops or HUD counters).
+  the single-currency change (no ore object, no wood/stone drops or HUD counters). They are now
+  one `ITEMS` entry each away from being carryable, should a resource ever return.
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
 - The spawner's guard mode (loiters) and the `tracers` pass are kept working but have no trigger —

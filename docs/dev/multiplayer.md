@@ -23,7 +23,8 @@ fewer bots, a frozen target dummy, or a ghost.
 **A `Player` owns everything the old singleton did** — position, velocity, facing, hp, bow draw,
 dodge charges, slide state, swing state, held tool, i-frames, footprint cadence — plus `id`,
 `team`, `control`, `name`, `spawn` (the tile it landed on from the eagle), `aboard`/`dropT`/`dropU`
-(the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet,
+(the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet and
+`bag` (see [the backpack](gameplay.md#inventory-and-the-backpack)),
 `level`/`xp` (see [Hero levels](#hero-levels)), `kills`, an `input` struct and an `ai` brain.
 `reset(first)` places it at `spawn` and clears every transient; it is the single definition of
 "a fresh player". Only boot calls it now (death is final — see below); the `first` flag still
@@ -159,8 +160,9 @@ team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one 
 its income and spills the gold it was carrying, so a base's economy can be raided without ever
 touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
-`die(p, src, cause)` marks the slot dead for good — no respawn, and the wallet is emptied: the
-killer pockets the gold via `gainGold`, an uncredited death spills it, and food always spills
+`die(p, src, cause)` marks the slot dead for good — no respawn, and the wallet **and the bag** are
+emptied: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every
+carried stack always spills, one drop each
 (see [Death is final](gameplay.md#death-is-final); the standings rank lifetime `xp`, so they
 still show what the slot earned); `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
 the screen with it (`endMatch('lost')` → `state.mode = 'dead'` and the death overlay: spectate a
@@ -202,8 +204,10 @@ contest('work:' + idx(tx, ty), p, () => { /* runs only if p wins */ });
 resolution, so a loser keeps its gold.
 
 Currently contested: work swings (`swingHit`, keyed by tile), build orders (`placeStruct`, keyed by
-tile), fish spears (`fireArrow`, keyed by fish index), drop pickups (keyed by drop index — every
-player standing on a drop claims it; the magnet still pulls it toward the nearest), and spent-arrow
+tile), fish spears (`fireArrow`, keyed by fish index — a full bag refuses the catch before the
+contest is even entered), drop pickups (keyed by drop index — every player standing on a drop
+claims it *if they have room for it*, and the magnet pulls it toward the nearest such player,
+so a full bag hands the pickup on rather than sitting on it), and spent-arrow
 pickups (keyed by `shafts` index — a shaft is neutral like a drop, so anyone short of a full quiver
 can pull one out, whoever shot it; see [the quiver](gameplay.md#the-quiver)).
 

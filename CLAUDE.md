@@ -10,8 +10,11 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
   you. You crawl at `PRONE_SPEED`, and the arrow loosed out of *full* cover hits for `AMBUSH_MUL`
   and breaks it.
 - **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
+- **What you carry is in slots**: one **backpack** (`p.bag`, 10 cells, a stack each), **B** to open.
+  A full bag *refuses* a pickup; only `bagAdd`/`bagTake`/`bagRoom` touch it.
 - **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere
-  (keys 1–4 / the HUD plates); the sim reads champions *and* gear only through `kitOf(p)`.
+  (keys 1–4 / the HUD cells); the sim reads champions *and* gear only through `kitOf(p)`. Pack,
+  gear and gold are **one frame** bottom-right — see [rendering](docs/dev/rendering.md).
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
 - Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to
   the lobby. The **last team standing** wins (`rivalCount`, not a head count) and gets the victory screen.
@@ -64,11 +67,11 @@ globals. Order matters: each file's globals must exist before the next runs.
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
 
 All game state lives in module-scope singletons — `state`, `settings`, `players` (with `player` /
-`inv` pointing at the local slot and its wallet) — plus the
+`inv` pointing at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~9800-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~10000-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
