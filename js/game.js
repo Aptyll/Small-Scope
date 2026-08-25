@@ -156,8 +156,21 @@
     spawner: { name: 'BOT BAY', w: 3, h: 2, tiers: [
       { cost: { gold: 45 }, hp: 220, buildT: 16, bots: 3, botHp: 24 },
     ]},
+    // the team's Keep: a 2x2 singleton (see teamHasLivingKeep) that a downed
+    // teammate respawns at (see updateRespawns) and that crafts roguelike
+    // cards (see startCraft/updateStructures' keep branch) - "queue card" pays
+    // craftCost and runs craftT, independent of the buildT/upgrade timer.
+    // odds is the rarity table a completed craft rolls against (see CARDS).
+    keep: { name: 'KEEP', w: 2, h: 2, tiers: [
+      { cost: { gold: 60 },  hp: 260, buildT: 22, craftCost: 40, craftT: 20,
+        odds: { white: .55, green: .28, blue: .13, purple: .035, gold: .005 } },
+      { cost: { gold: 130 }, hp: 400, buildT: 13, craftCost: 40, craftT: 20,
+        odds: { white: .35, green: .32, blue: .22, purple: .09,  gold: .02  } },
+      { cost: { gold: 220 }, hp: 560, buildT: 13, craftCost: 40, craftT: 20,
+        odds: { white: .18, green: .27, blue: .30, purple: .18,  gold: .07  } },
+    ]},
   };
-  const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner']; // wheel: up, right, down, left
+  const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner', 'keep']; // wheel: 5 even wedges
 
   // ------------------------------------------------------------ canvas
   const canvas = document.getElementById('game');
@@ -447,6 +460,7 @@
     paused: false,
     mapOpen: false,
     bagOpen: false,      // the backpack grid (B, or the bag bar): HUD, it does NOT stop the sim
+    draft: null,         // the pick-1-of-3 card draft: { rarity, options: [id,id,id] } - HUD, does NOT stop the sim
     settingsOpen: false,
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
@@ -605,7 +619,21 @@
   const ITEMS = {
     berry: { icon: 'itemBerry', stack: 3 },
     fish: { icon: 'itemFish', stack: 2 },
+    // unopened roguelike cards - one ITEMS entry per rarity, so bag storage,
+    // the drop pickup, the refusal flash and death-spill are all free (see
+    // checklists.md "adding a carried item"). Opening one (bagClick) starts
+    // the pick-1-of-3 draft instead of eating; see CARDS below and state.draft.
+    cardWhite:  { icon: 'itemCardWhite',  stack: 5 },
+    cardGreen:  { icon: 'itemCardGreen',  stack: 5 },
+    cardBlue:   { icon: 'itemCardBlue',   stack: 5 },
+    cardPurple: { icon: 'itemCardPurple', stack: 5 },
+    cardGold:   { icon: 'itemCardGold',   stack: 5 },
   };
+  const CARD_RARITIES = ['white', 'green', 'blue', 'purple', 'gold'];
+  // 'white' <-> the 'cardWhite' ITEMS/RES_COLORS key every rarity is stored under
+  function cardKey(rarity) { return 'card' + rarity[0].toUpperCase() + rarity.slice(1); }
+  const CARD_TYPE_RARITY = {}; // 'cardWhite' -> 'white', the inverse of cardKey
+  for (const r of CARD_RARITIES) CARD_TYPE_RARITY[cardKey(r)] = r;
   const BAG_CAP = 10; // the one bag everyone starts with; a second one raises p.bagCap
   function bagCount(p, type) {
     let n = 0;
@@ -698,6 +726,61 @@
       { name: 'GHOSTSTEP', blurb: 'FOES SPOT YOU FROM CLOSER', mod: (k, L) => { k.stealth -= 0.10 * L; } },
     ],
   ];
+  // ---- roguelike cards ------------------------------------------------------
+  // Picked from the Keep's craft drops (see STRUCTS.keep, updateStructures'
+  // keep branch) via a pick-1-of-3 draft (state.draft, opened from bagClick).
+  // Same shape as a GEAR variant's mod(k, L) minus the level - a card is a
+  // one-shot pick, not a leveled buy - folded into the kit cumulatively by
+  // refreshKit below, so every kit-reading site in the sim picks them up for
+  // free the same way it already does for gear. killHeal is the one field no
+  // champion/gear kit carries; die()'s kill-credit line reads it.
+  const CARDS = {
+    white: [
+      { name: 'QUICK HANDS', blurb: 'FASTER RENOCK', mod: (k) => { k.nock *= 0.92; } },
+      { name: 'THICK SOLES', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.03; } },
+      { name: 'SOFT LANDING', blurb: 'DODGES COME BACK SOONER', mod: (k) => { k.dodgeCd -= 0.25; } },
+      { name: 'FORAGER', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k) => { k.harvest += 1; } },
+      { name: 'STEADY HAND', blurb: 'FASTER FULL DRAW', mod: (k) => { k.bowCharge *= 0.96; } },
+    ],
+    green: [
+      { name: 'SHARP POINT', blurb: 'ARROWS HIT HARDER', mod: (k) => { k.dmgBase += 1; } },
+      { name: 'PADDED VEST', blurb: 'MORE HEALTH', mod: (k) => { k.maxHp += 12; } },
+      { name: 'LIGHT FEET', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.06; } },
+      { name: 'CAMOUFLAGE', blurb: 'FOES SPOT YOU FROM CLOSER', mod: (k) => { k.stealth -= 0.08; } },
+      { name: "FLETCHER'S TOUCH", blurb: 'ARROWS REGROW FASTER', mod: (k) => { k.fletch *= 0.85; } },
+    ],
+    blue: [
+      { name: 'HEAVY DRAW', blurb: 'HITS HARDER, SLOWER DRAW', mod: (k) => { k.dmgBase += 2; k.bowCharge *= 1.05; } },
+      { name: 'IRON WILL', blurb: 'LESS DAMAGE, MORE HEALTH', mod: (k) => { k.dr += 1.5; k.maxHp += 10; } },
+      { name: 'SPRINTER', blurb: 'WALK FASTER, DODGES SOONER', mod: (k) => { k.walkMul += 0.09; k.dodgeCd -= 0.3; } },
+      { name: "AMBUSHER'S EDGE", blurb: 'AMBUSH SHOTS HIT HARDER', mod: (k) => { k.ambushMul += 0.4; } },
+      { name: 'ICE RUNNER', blurb: 'FASTER, SHARPER ON ICE', mod: (k) => { k.iceMax *= 1.15; k.iceSteer += 0.2; } },
+    ],
+    purple: [
+      { name: 'EXECUTIONER', blurb: 'ARROWS HIT MUCH HARDER', mod: (k) => { k.dmgBase += 3; k.dmgPow += 1.5; } },
+      { name: 'STONE SKIN', blurb: 'MUCH LESS DAMAGE TAKEN', mod: (k) => { k.dr += 3; } },
+      { name: 'GHOST', blurb: 'SEEN FROM MUCH CLOSER', mod: (k) => { k.stealth -= 0.18; } },
+      { name: 'BLOODLUST', blurb: 'HEAL ON A KILL', mod: (k) => { k.killHeal = (k.killHeal || 0) + 12; } },
+      { name: 'RELENTLESS', blurb: 'FASTER DODGES AND ARROWS', mod: (k) => { k.dodgeCd -= 0.7; k.fletch *= 0.75; } },
+    ],
+    gold: [
+      { name: "BERSERKER'S HEART", blurb: 'HITS HARDER, LESS HEALTH', mod: (k) => { k.dmgBase += 5; k.maxHp -= 15; } },
+      { name: 'FORTRESS', blurb: 'MUCH LESS DAMAGE, MORE HP', mod: (k) => { k.dr += 5; k.maxHp += 25; } },
+      { name: 'PHANTOM', blurb: 'SEEN CLOSER, HARDER AMBUSH', mod: (k) => { k.stealth -= 0.3; k.ambushMul += 0.5; } },
+      { name: 'VAMPIRE', blurb: 'HEAL ON KILL, HITS HARDER', mod: (k) => { k.killHeal = (k.killHeal || 0) + 25; k.dmgBase += 1; } },
+      { name: "WINTER'S CHILD", blurb: 'MUCH FASTER, SHARPER ON ICE', mod: (k) => { k.iceMax *= 1.3; k.iceSteer += 0.35; k.walkMul += 0.05; } },
+    ],
+  };
+  // 3 distinct entries from CARDS[rarity], the draft's pick-1-of-3 options
+  function pick3Distinct(rarity) {
+    const pool = CARDS[rarity].map((c, id) => id);
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    return pool.slice(0, Math.min(3, pool.length));
+  }
+
   // rebuild p.kit from champion + gear. The gear-free defaults added here are
   // the fields no champion kit carries; a variant's mod() edits them in place.
   function refreshKit(p) {
@@ -705,9 +788,11 @@
       huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
       harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
       ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
+      killHeal: 0,
     });
     for (let i = 0; i < GEAR.length; i++) GEAR[i][p.gear[i]].mod(k, p.gearLv[i]);
     for (let i = 0; i < AB_SKILL.length; i++) AB_SKILL[i].mod(k, p.skill[i]);
+    for (const c of p.cards) CARDS[c.rarity][c.id].mod(k);
     p.kit = k;
     p.maxHp = levelMaxHp(p);
     if (p.hp === undefined || p.hp > p.maxHp) p.hp = p.maxHp;
@@ -772,6 +857,9 @@
       this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
       this.skill = [0, 0, 0, 0];          // ranks on the four hud abilities, 0..AB_RANK_MAX
       this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one
+      this.cards = [];                    // picked roguelike cards, {rarity,id} - like gear, survives a respawn
+      this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns
+      this.respawnT = 0;                  // seconds left on an active respawn countdown
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
       this.kills = 0;                     // rivals downed; scoreboard only, survives death
       refreshKit(this);                   // builds this.kit and this.maxHp from champ + gear + skill
@@ -790,7 +878,8 @@
       this.reset(true);
     }
     get active() { return this.control !== 'none'; }
-    // camp placement + every transient cleared; used at boot (death is final, so nothing else calls it)
+    // spawn placement + every transient cleared; boot calls it with first=true,
+    // respawnPlayer() (a team's Keep bringing a slot back) with first=false
     reset(first) {
       this.x = (this.spawn.tx + 0.5) * TILE;
       this.y = (this.spawn.ty + 0.5) * TILE;
@@ -942,9 +1031,10 @@
     // 1-4 buy the next level of that gear piece, left to right like the HUD row
     // (sampleHumanInput zeroes cmd while an overlay is up, so no guard needed)
     if (e.key >= '1' && e.key <= '4') player.input.cmd = { kind: 'gear', piece: e.key.charCodeAt(0) - 49 };
-    if (e.key.toLowerCase() === 'm' && !state.settingsOpen) { state.wheel = null; state.mapOpen = !state.mapOpen; }
+    if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
       if (state.wheel) state.wheel = null;
+      else if (state.draft) state.draft = null; // closes without picking
       else if (state.mapOpen) state.mapOpen = false;
       else { state.settingsOpen = !state.settingsOpen; dragSlider = null; state.wheel = null; }
     }
@@ -974,7 +1064,7 @@
     mouse.y = (e.clientY - r.top) / scale;
     mouse.inside = true;
     if (e.button === 2) {
-      if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
+      if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel || state.draft) return;
       if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0 || abHit(mouse.x, mouse.y)) return; // no build wheel through the HUD
       SFX.unlock();
       const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
@@ -993,6 +1083,7 @@
     if (state.mode === 'dead') { SFX.unlock(); deadClick(); return; }
     if (state.mode !== 'play') return;
     if (state.wheel) { state.wheel = null; return; } // left-click while it is open: cancel
+    if (state.draft) { SFX.unlock(); draftClick(); return; } // a card, or anywhere else: closes either way
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
     // the backpack widget and the hud strip swallow every click over themselves
@@ -1103,9 +1194,11 @@
     if (!inWorld(tx, ty)) return true;
     const o = objects[idx(tx, ty)];
     if (!o) return false;
-    return o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock' ||
-      o.type === 'den' || o.type === 'wall' ||
-      o.type === 'turret' || o.type === 'generator' || o.type === 'spawner' || o.type === 'part';
+    // any STRUCTS entry (wall/turret/generator/spawner/keep/...) is solid for
+    // free, plus scenery and a multi-tile building's non-anchor filler tiles -
+    // a future structure type never needs this list touched again
+    return !!STRUCTS[o.type] || o.type === 'tree' || o.type === 'deadTree' ||
+      o.type === 'rock' || o.type === 'den' || o.type === 'part';
   }
 
   // Multi-tile buildings. STRUCTS[type].w/h > 1 means the anchor tile (top-left)
@@ -2208,6 +2301,10 @@
       for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
     }
     rebuildLights();
+    // a Keep falling can itself be the elimination blow for a team that
+    // already has zero living players waiting on its respawn timer - only
+    // die() calls checkLastStanding() otherwise, and nothing else would notice
+    if (o.type === 'keep') checkLastStanding();
   }
 
   // ------------------------------------------------------------ stump structures
@@ -2237,6 +2334,7 @@
       deny('STEP OFF THE STUMP FIRST', 1.6);
       return;
     }
+    if (type === 'keep' && teamHasLivingKeep(p.team)) { deny('ALREADY HAVE A KEEP', 1.6); return; }
     const t0 = STRUCTS[type].tiers[0];
     if (!canAfford(t0.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
     let anchor = { tx, ty };
@@ -2247,6 +2345,12 @@
     contest('site:' + idx(tx, ty), p, () => {
       const s = objAt(tx, ty);
       if (!s || s.type !== 'stump' || !canAfford(t0.cost, p)) return;
+      // re-checked inside the contest callback (not just at the pre-contest
+      // deny above): two teammates ordering a keep on two different stumps in
+      // the same tick each pass the early check, but resolveContests() runs
+      // every winning callback synchronously, so whichever key resolves first
+      // creates the keep and the second sees it here and backs off
+      if (type === 'keep' && teamHasLivingKeep(p.team)) return;
       if (big) { anchor = findSite(type, tx, ty); if (!anchor) return; }
       pay(t0.cost, p);
       createStruct(anchor.tx, anchor.ty, type, 0, p, true);
@@ -2272,6 +2376,7 @@
     if (type === 'turret') { o.cd = 0; o.ang = -Math.PI / 2; o.tgt = null; o.chg = 0; o.rec = 0; o.mz = 0; o.scan = 0; }
     if (type === 'generator') o.payT = 0;
     if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
+    if (type === 'keep') { o.craftT = 0; o.craftTotal = 0; }
     o.sparkT = 0;
     structures.push(o);
     return o;
@@ -2279,6 +2384,46 @@
 
   // only the owning side may upgrade or demolish
   function ownsStruct(o, p) { return o.team === undefined || o.team === p.team; }
+
+  // a team may have at most one Keep at a time - a Keep still under
+  // construction doesn't count (same reason updateStructures refuses to run a
+  // generator's payout or a spawner's roll-out on an unfinished building: a
+  // team shouldn't dodge permadeath the instant the stump is claimed). Used to
+  // gate a second build order, and as the "does this team still have a way
+  // back" read for respawns and the win condition.
+  function teamHasLivingKeep(team) {
+    return structures.some((o) => o.type === 'keep' && o.team === team && !o.building);
+  }
+
+  // one gold-paid card craft at a time per Keep. o.craftT/craftTotal live on
+  // the structure object; ticked in updateStructures' keep branch, exactly
+  // like a generator's payT countdown. Starting an upgrade freezes it for
+  // free (the whole per-type branch is skipped while o.building), and
+  // destroying the Keep mid-craft forfeits the gold and the card in progress -
+  // no refund path, same as a turret's charge or a spawner's mid-roll bot.
+  function startCraft(o, p) {
+    p = p || player;
+    const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
+    if (o.building || !ownsStruct(o, p)) { deny(); return; }
+    if (o.craftT > 0) { deny('ALREADY CRAFTING', 1.4); return; }
+    const t = STRUCTS.keep.tiers[o.tier];
+    const cost = { gold: t.craftCost };
+    if (!canAfford(cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
+    pay(cost, p);
+    o.craftT = o.craftTotal = t.craftT;
+    if (nearPlayer(o.tx * TILE + 16, o.ty * TILE + 16)) SFX.place();
+  }
+
+  // rolls a rarity against tier.odds using the shared runtime rng() - never
+  // called from genWorld, so this never perturbs a seed's terrain
+  function rollCardRarity(odds) {
+    let r = rng(), acc = 0;
+    for (const rarity of CARD_RARITIES) {
+      acc += odds[rarity] || 0;
+      if (r < acc) return rarity;
+    }
+    return CARD_RARITIES[0];
+  }
 
   function startUpgrade(o, p) {
     p = p || player;
@@ -2924,7 +3069,12 @@
   }
 
   // ------------------------------------------------------------ structures & robots
-  const RES_COLORS = { gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8' };
+  const RES_COLORS = {
+    gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8',
+    // card rarities - kept out of the amber family so a "gold" card drop never
+    // reads as a currency floater; must match CARD_PALS in sprites.js
+    cardWhite: '#d9dfe8', cardGreen: '#5fd18a', cardBlue: '#4a90e2', cardPurple: '#a259e6', cardGold: '#e8a33d',
+  };
   // audio/screen gating: is this happening near the local listener?
   function nearPlayer(x, y, r) { return !!player && Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
@@ -3111,6 +3261,20 @@
         // the shutter: open to gather, shut on guard, and always open for a roll-out
         const want = (o.mode === 'gather' || (due && o.respawnT < 1.4)) ? 1 : 0;
         o.door += Math.sign(want - o.door) * Math.min(Math.abs(want - o.door), dt * 2.2);
+      } else if (o.type === 'keep' && o.craftT > 0) {
+        // mirrors the generator's payT countdown; freezes for free while
+        // o.building (an upgrade), since this whole branch is skipped above
+        o.craftT -= dt;
+        if (o.craftT <= 0) {
+          o.craftT = 0;
+          const rarity = rollCardRarity(t.odds);
+          const key = cardKey(rarity);
+          const m = structMouth(o);
+          spawnDrop(m.x, m.y, key, 1);
+          addFloater(m.x, m.y - 12, rarity.toUpperCase() + ' CARD', RES_COLORS[key]);
+          burst(m.x, m.y - 4, RES_COLORS[key], 10, 50, 0.5, true);
+          if (nearPlayer(m.x, m.y)) SFX.place();
+        }
       }
     }
   }
@@ -3325,6 +3489,7 @@
     // so the bay's extra option lands between them instead of displacing either
     const opts = [{ id: 'upgrade' }];
     if (o && o.type === 'spawner') opts.push({ id: 'mode' });
+    if (o && o.type === 'keep' && !o.building) opts.push({ id: 'craft' });
     opts.push({ id: 'demolish' });
     return opts;
   }
@@ -3381,6 +3546,7 @@
     if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
     if (c.kind === 'upgrade') startUpgrade(o, p);
     else if (c.kind === 'demolish') demolishStruct(o, p);
+    else if (c.kind === 'craft') startCraft(o, p);
     else if (c.kind === 'mode') {
       o.mode = o.mode === 'gather' ? 'guard' : 'gather';
       const c0 = structCenter(o);
@@ -3439,8 +3605,16 @@
     }
   }
 
-  // any slot can go down, and going down is final - the slot is out of the
-  // match. Only the local one takes the screen with it (the death overlay).
+  const RESPAWN_TIME = 8; // flat, gold-free - "the respawn from a keep is timer-only"
+
+  // A slot can go down two ways now. With a living team Keep it is temporary:
+  // p.dead is set (out of the world right now, same as always) but
+  // p.eliminated stays false and a flat respawnT counts down to a return at
+  // the Keep (see updateRespawns/respawnPlayer). With no Keep it is exactly
+  // today's permanent death: p.eliminated = true, no way back. Only the local
+  // slot's ELIMINATION takes the screen with it (the death overlay); a
+  // respawn-pending local death gets the lighter 'respawning' overlay instead
+  // (see endMatch/DEAD_ITEMS/renderDead).
   function die(p, src, cause) {
     p.dead = true;
     p.charging = false;
@@ -3465,36 +3639,103 @@
       stickArrow({ x: p.x + Math.cos(a) * r, y: p.y - 2 + Math.sin(a) * r, team: p.team },
         Math.cos(a), Math.sin(a));
     }
-    if (killer) killer.kills++;
+    if (killer) {
+      killer.kills++;
+      // BLOODLUST/VAMPIRE: a flat heal on a confirmed kill, the one card
+      // effect that isn't a plain kitOf() field - mirrors eatBerry's heal
+      if (killer.kit.killHeal > 0 && killer.hp < killer.maxHp) {
+        const heal = Math.min(killer.kit.killHeal, killer.maxHp - killer.hp);
+        killer.hp += heal;
+        addFloater(killer.x, killer.y - 14, '+' + heal, '#8fe08a');
+        if (nearPlayer(killer.x, killer.y)) SFX.heal();
+      }
+    }
     logEvent(killer ? killer.name + ' SHOT ' + p.name
       : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
-    if (p === player) endMatch('lost');
+    if (teamHasLivingKeep(p.team)) p.respawnT = RESPAWN_TIME;
+    else p.eliminated = true;
+    if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
     else {
-      addFloater(p.x, p.y - 20, p.name + ' OUT', TEAMS[p.team].mark);
+      addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[p.team].mark);
       if (state.spec === p.id) specNext(1); // the slot being watched went down: follow another
     }
     checkLastStanding();
   }
 
+  // ticks every dead-but-not-eliminated slot's respawn timer; called from
+  // updatePlay alongside updateStructures, so it keeps running under the
+  // 'respawning' overlay exactly like the rest of the sim does under 'dead'
+  function updateRespawns(dt) {
+    for (const p of players) {
+      if (!p.active || !p.dead || p.eliminated) continue;
+      p.respawnT -= dt;
+      if (p.respawnT > 0) continue;
+      // the Keep may have fallen mid-timer - re-check rather than cutting the
+      // wait short the instant it dies, so a rival can't get credit for
+      // eliminating a team faster than the timer promises
+      if (teamHasLivingKeep(p.team)) respawnPlayer(p);
+      else {
+        p.eliminated = true;
+        if (p === player) endMatch('lost');
+        checkLastStanding(); // this fallback can itself be the match-ending blow
+      }
+    }
+  }
+
+  // brings a downed slot back at its team's Keep: p.reset(false) is the exact
+  // full-clear a fresh eagle landing gets (same 3s i-frames), just anchored on
+  // the Keep's mouth instead of a landing tile.
+  function respawnPlayer(p) {
+    const kp = structures.find((o) => o.type === 'keep' && o.team === p.team && !o.building);
+    if (kp) { const m = structMouth(kp); p.spawn = nearestDryTile(m.x, m.y, p); }
+    p.eliminated = false;
+    p.respawnT = 0;
+    p.reset(false);
+    burst(p.x, p.y - 2, '#f4f7ff', 16, 70, 0.5, true);
+    if (nearPlayer(p.x, p.y)) SFX.place();
+    if (p === player) {
+      state.over = null;
+      state.mode = 'play';
+      state.spec = -1; // the camera returns to the local slot, not whoever it was watching
+      camX = Math.max(0, Math.min(WORLD * TILE - WV_W, p.x - WV_W / 2));
+      camY = Math.max(0, Math.min(WORLD * TILE - WV_H, p.y - WV_H / 2));
+      state.introFrom = { x: camX, y: camY };
+      state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, like a fresh landing
+    }
+  }
+
   // slots still in the match (riding the eagle counts: it is about to land)
   function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
 
-  // slots on the other side of p, by the same rule enemyOf() states, minus its
-  // inAir() skip - a rival still on the eagle has not lost, it is about to land.
-  // all = every rival the match ever fielded, the dead ones included.
-  function rivalCount(p, all) {
+  // a team is still "in the match" if it has any active, non-eliminated slot -
+  // note !eliminated, not !dead: a teammate mid-respawn-timer hasn't left -
+  // OR a living Keep (see teamHasLivingKeep): a wiped team a Keep is still
+  // waiting to respawn into hasn't lost either.
+  function teamInMatch(team) {
+    if (teamHasLivingKeep(team)) return true;
+    return players.some((q) => q.active && q.team === team && !q.eliminated);
+  }
+
+  // rival TEAMS still in the match, by the same rule enemyOf()/PVP state -
+  // p's own team is never counted, and each rival team counts once however
+  // many slots it has.
+  function rivalTeamsInMatch(p) {
+    const seen = new Set();
     let n = 0;
-    for (const q of players) if (q !== p && q.active && (all || !q.dead) && (!PVP || q.team !== p.team)) n++;
+    for (const q of players) {
+      if (!q.active || seen.has(q.team) || !(!PVP || q.team !== p.team)) continue;
+      seen.add(q.team);
+      if (teamInMatch(q.team)) n++;
+    }
     return n;
   }
 
-  // the local slot alive and every RIVAL gone: the match is won (only once, and
-  // only when there was another side to beat). Teams win together - a living
-  // teammate is not something left to beat - so this is the last TEAM standing,
-  // not the last player.
+  // the local slot not eliminated and every RIVAL team gone: the match is won
+  // (only once, and only when there was another side to beat). Teams win
+  // together - a Keep still standing, or a teammate mid-respawn-timer, keeps
+  // a team in it - so this is the last TEAM standing, not the last player.
   function checkLastStanding() {
-    if (state.over || player.dead || rivalCount(player, false) > 0) return;
-    if (!rivalCount(player, true)) return;
+    if (state.over || player.eliminated || rivalTeamsInMatch(player) > 0) return;
     endMatch('won');
   }
 
@@ -3510,6 +3751,7 @@
     state.bagOpen = false;
     state.settingsOpen = false;
     state.wheel = null;
+    state.draft = null;
     state.deadTimer = 0;
     // a win freezes its numbers here, not in the render pass: the match runs on
     // underneath (a generator can still pay out) and a total that climbs behind
@@ -3588,10 +3830,25 @@
     return n;
   }
 
+  // bots skip the pick-1-of-3 draft UI entirely (bagClick is a mouse-only
+  // entry point) - the instant one is carried, resolve it server-side with a
+  // single random pick, since "choosing among 3" is specifically the human
+  // decision point and inventing an AI heuristic for it isn't worth it
+  function resolveCardForBot(p) {
+    for (const rarity of CARD_RARITIES) {
+      if (bagCount(p, cardKey(rarity)) <= 0) continue;
+      bagTake(p, cardKey(rarity), 1);
+      p.cards.push({ rarity, id: Math.floor(rng() * CARDS[rarity].length) });
+      refreshKit(p);
+      return;
+    }
+  }
+
   function updateAI(p, dt) {
     const inp = p.input, ai = p.ai;
     inp.mx = 0; inp.my = 0; inp.work = false; inp.slide = false;
     if (p.dead || p.fallT > 0) { inp.fire = false; return; }
+    resolveCardForBot(p);
 
     // walk the route to (x, y) - reach 1 stops beside a tile it cannot stand
     // on, which is exactly WORK_REACH - and return the straight-line distance,
@@ -3750,7 +4007,14 @@
       }
       if (gi >= 0 && p.inv.gold >= gc + 15) inp.cmd = { kind: 'gear', piece: gi };
     }
-    if (ai.buildT <= 0 && p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold) {
+    // a team with no living or rising Keep is one bad fight from permanent
+    // elimination with no way back - a bot saves for and builds one before
+    // anything else it would otherwise spend on
+    const needKeep = !teamHasLivingKeep(p.team) &&
+      !structures.some((o) => o.type === 'keep' && o.team === p.team && o.building);
+    const wantType = needKeep ? (p.inv.gold >= STRUCTS.keep.tiers[0].cost.gold ? 'keep' : null)
+      : p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold ? (rng() < 0.3 ? 'spawner' : 'generator') : null;
+    if (ai.buildT <= 0 && wantType) {
       const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
       if (st) {
         const sx = st.tx * TILE + 8, sy = st.ty * TILE + 8;
@@ -3762,8 +4026,7 @@
         }
         if (d > 16) { // clear of the site: order it
           ai.spendT = 0;
-          const bay = rng() < 0.3 && !!findSite('spawner', st.tx, st.ty); // same rng draw as before
-          inp.cmd = { kind: 'build', tx: st.tx, ty: st.ty, id: bay ? 'spawner' : 'generator' };
+          inp.cmd = { kind: 'build', tx: st.tx, ty: st.ty, id: wantType };
           ai.buildT = 12;
           return;
         }
@@ -3782,11 +4045,21 @@
         if (ai.spendT > 3) { ai.buildT = 15; ai.spendT = 0; } // wedged: go do something else
         return;
       }
+      if (needKeep) ai.buildT = 4; // no stump nearby yet; keep saving, look again shortly
+    }
+    if (ai.buildT <= 0 && !needKeep) {
       const up = nearestObj(p.x, p.y, 3, (o) => STRUCTS[o.type] && !o.building &&
         o.team === p.team && o.tier < STRUCTS[o.type].tiers.length - 1 && canAfford(STRUCTS[o.type].tiers[o.tier + 1].cost, p));
       if (up) {
         inp.cmd = { kind: 'upgrade', tx: up.tx, ty: up.ty, id: 'upgrade' };
         ai.buildT = 10;
+        return;
+      }
+      const kp = nearestObj(p.x, p.y, 3, (o) => o.type === 'keep' && !o.building && o.team === p.team &&
+        o.craftT <= 0 && canAfford({ gold: STRUCTS.keep.tiers[o.tier].craftCost }, p));
+      if (kp) {
+        inp.cmd = { kind: 'craft', tx: kp.tx, ty: kp.ty, id: 'craft' };
+        ai.buildT = 14;
         return;
       }
       ai.buildT = 4; // nothing worth spending on nearby; look again shortly
@@ -4089,6 +4362,7 @@
 
     // stump-built structures + their robots
     updateStructures(dt);
+    updateRespawns(dt);
     for (const b of robots) updateRobot(b, dt);
     for (let i = robots.length - 1; i >= 0; i--) if (robots[i].dead) robots.splice(i, 1);
 
@@ -4764,7 +5038,7 @@
     // spent arrows, then drops (both under entities)
     drawShafts(ex, ey, now);
     for (const d of drops) {
-      const spr = d.type === 'gold' ? SPRITES.itemGold : d.type === 'fish' ? SPRITES.itemFish : SPRITES.itemBerry;
+      const spr = SPRITES[ITEMS[d.type] ? ITEMS[d.type].icon : 'itemGold'];
       // shadow
       ctx.fillStyle = 'rgba(120,140,175,0.35)';
       ctx.fillRect(Math.round(d.x - ex) - 2, Math.round(d.y - ey) + 2, 4, 2);
@@ -4878,18 +5152,22 @@
     drawWorkHint(ox, oy);
     drawFishHint(ex, ey, now);
 
-    // construction progress bars
+    // construction AND card-crafting progress bars - same bar, same "over the
+    // roof" placement for a big building; a craft in flight (a finished Keep,
+    // o.craftT > 0) draws in an icy blue instead of construction's gold so
+    // the two read as different things at a glance
     for (const o of structures) {
-      if (!o.building) continue;
+      const crafting = !o.building && o.type === 'keep' && o.craftT > 0;
+      if (!o.building && !crafting) continue;
       const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
       if (px < -20 || px > WV_W + 4 || py < -20 || py > WV_H + 4) continue;
-      const p = Math.min(1, o.buildT / o.buildTotal);
+      const p = crafting ? Math.min(1, 1 - o.craftT / o.craftTotal) : Math.min(1, o.buildT / o.buildTotal);
       const big = structW(o.type) > 1;
       const bw = big ? 24 : 12, bx = big ? px + structW(o.type) * 8 - 12 : px + 2;
       const by = big ? (o.ty + structH(o.type)) * TILE - oy - structSprite(o).height - 12 : py - 7;
       ctx.fillStyle = 'rgba(15,22,50,0.8)';
       ctx.fillRect(bx, by, bw, 4);
-      ctx.fillStyle = '#ffd95c';
+      ctx.fillStyle = crafting ? '#8fd8ff' : '#ffd95c';
       ctx.fillRect(bx + 1, by + 1, Math.round((bw - 2) * p), 2);
     }
 
@@ -5012,6 +5290,7 @@
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
     if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
+    if (state.mode === 'play' && state.draft) renderDraft(now);
     if (state.mode === 'title' || state.intro > 0) renderTitle(now);
     if (state.mode === 'dead') renderDead(now);
     renderReplay(); // the last four seconds, looping in the bottom-left corner
@@ -6395,7 +6674,8 @@
         }
         ctx.globalAlpha = 1;
       } else {
-        const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'MODE';
+        const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' :
+          opt.id === 'craft' ? 'CARD' : 'MODE';
         drawPixelTextOutline(ctx, label,
           Math.round(ix - pixelTextWidth(label) / 2), Math.round(iy - 2),
           hovered ? '#ffd95c' : '#9fb6d8', '#0f1632');
@@ -6423,6 +6703,13 @@
         }
       } else if (opt.id === 'demolish') {
         label = 'DEMOLISH'; color = '#ff8a7a';
+      } else if (opt.id === 'craft') {
+        if (o && o.craftT > 0) { label = 'CRAFTING...'; color = '#9fb6d8'; }
+        else {
+          const t = STRUCTS.keep.tiers[o ? o.tier : 0];
+          label = 'QUEUE CARD : ' + costText({ gold: t.craftCost });
+          color = canAfford({ gold: t.craftCost }) ? '#ffd95c' : '#ff8a7a';
+        }
       } else {
         label = 'MODE: ' + (o && o.mode === 'gather' ? 'GUARD' : 'GATHER');
         color = '#ffd95c';
@@ -6775,7 +7062,7 @@
     const d = mmImg.data;
     for (let i = 0; i < WORLD * WORLD; i++) {
       let r, g, b;
-      const o = objects[i];
+      const o = structOf(objects[i]); // resolves a multi-tile building's 'part' fillers to the anchor
       if (o) {
         if (o.type === 'tree') { r = 52; g = 100; b = 82; }
         else if (o.type === 'deadTree') { r = 138; g = 128; b = 116; }
@@ -6785,7 +7072,8 @@
         else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
-        else if (o.type === 'spawner' || o.type === 'part') { r = 170; g = 140; b = 220; }
+        else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
+        else if (o.type === 'keep') { r = 224; g = 96; b = 96; }
         else { r = 188; g = 200; b = 218; } // stump
       } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
       else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
@@ -7052,8 +7340,75 @@
     if (!s) { SFX.deny(); return true; }
     if (s.type === 'berry') player.input.eatBerry = true;
     else if (s.type === 'fish') player.input.eatFish = true;
+    else if (CARD_TYPE_RARITY[s.type]) openDraft(CARD_TYPE_RARITY[s.type]);
     else SFX.deny();
     return true;
+  }
+  // opens the pick-1-of-3 draft for a rarity - a pure local UI state change,
+  // like the pack toggle above, not a contest (only the local human ever
+  // touches their own bag). Does NOT pause the sim: bag/map/wheel don't either.
+  function openDraft(rarity) {
+    state.draft = { rarity, options: pick3Distinct(rarity) };
+    SFX.pickup();
+  }
+  const DRAFT_CW = 130, DRAFT_CH = 96, DRAFT_GAP = 10;
+  function draftLayout() {
+    const w = DRAFT_CW * 3 + DRAFT_GAP * 2;
+    const x0 = Math.round((VIEW_W - w) / 2), y = Math.round((VIEW_H - DRAFT_CH) / 2);
+    const cards = [];
+    for (let i = 0; i < 3; i++) cards.push({ x: x0 + i * (DRAFT_CW + DRAFT_GAP), y, w: DRAFT_CW, h: DRAFT_CH });
+    return cards;
+  }
+  function draftHit(mx, my) {
+    if (!state.draft) return -1;
+    const cards = draftLayout();
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i];
+      if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return i;
+    }
+    return -1;
+  }
+  // a card picks it - bagTake, push onto p.cards, refreshKit, exactly the
+  // storage/kit halves the plan calls for; anywhere else just closes the
+  // draft. Either way the click never reaches the world (see mousedown).
+  function draftClick() {
+    const d = state.draft;
+    const i = draftHit(mouse.x, mouse.y);
+    if (i >= 0) {
+      const id = d.options[i];
+      bagTake(player, cardKey(d.rarity), 1);
+      player.cards.push({ rarity: d.rarity, id });
+      refreshKit(player);
+      addFloater(player.x, player.y - 18, CARDS[d.rarity][id].name, RES_COLORS[cardKey(d.rarity)]);
+      SFX.levelUp();
+    }
+    state.draft = null;
+  }
+  // bots skip this UI entirely - see resolveCardForBot in the ai banner
+  function renderDraft() {
+    const d = state.draft;
+    ctx.fillStyle = 'rgba(6,10,24,0.72)';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    const cards = draftLayout();
+    const col = RES_COLORS[cardKey(d.rarity)];
+    const hit = draftHit(mouse.x, mouse.y);
+    const title = d.rarity.toUpperCase() + ' CARD - CHOOSE ONE';
+    drawPixelTextShadow(ctx, title, Math.round((VIEW_W - pixelTextWidth(title, 2)) / 2), cards[0].y - 16, col, '#0a0e23', 2);
+    for (let i = 0; i < cards.length; i++) {
+      const r = cards[i], hot = hit === i;
+      const lift = hot ? 2 : 0;
+      const x = r.x, y = r.y - lift, w = r.w, h = r.h;
+      ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(x + 2, r.y + 2, w, h);
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = hot ? '#1f2b5c' : '#141c3c'; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.fillStyle = col;
+      ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
+      ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
+      const card = CARDS[d.rarity][d.options[i]];
+      ctx.drawImage(SPRITES[ITEMS[cardKey(d.rarity)].icon], x + Math.round(w / 2) - 4, y + 10);
+      drawPixelTextShadow(ctx, card.name, x + Math.round((w - pixelTextWidth(card.name)) / 2), y + 26, hot ? '#ffd95c' : '#f4f7ff', '#0a0e23');
+      drawPixelTextShadow(ctx, card.blurb, x + Math.round((w - pixelTextWidth(card.blurb)) / 2), y + 40, '#9fb6d8', '#0a0e23');
+    }
   }
   // One cell, and the reason nothing in here is bigger than anything else:
   // grid slots, gear plates and the pack button all come out of this. Returns
@@ -7739,7 +8094,10 @@
         if (p === player) drawPixelTextShadow(ctx, '>', x + 9, ry + 1, '#ffd95c', shadow);
         drawPixelTextShadow(ctx, p.name, x + 14, ry + 1, playerTint(p), shadow);
         if (p.dead) {
-          drawPixelTextShadow(ctx, 'OUT', x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
+          // eliminated reads OUT; a respawn-pending slot shows the countdown
+          // instead, since "OUT" on someone back in 3s is actively wrong
+          const tag = p.eliminated ? 'OUT' : Math.ceil(p.respawnT) + 's';
+          drawPixelTextShadow(ctx, tag, x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
         }
         const vals = [String(p.level), String(p.inv.gold), String(p.kills)];
         const cols = ['#cfe0ff', '#f2cc6a', '#ff9a8a'];
@@ -7850,7 +8208,7 @@
     for (let ty = 0; ty < WORLD; ty++) {
       for (let tx = 0; tx < WORLD; tx++) {
         const i = ty * WORLD + tx;
-        const o = objects[i];
+        const o = structOf(objects[i]); // resolves a multi-tile building's 'part' fillers to the anchor
         const h = hash2(tx * 7 + 13, ty * 11 + 5);
         let r, g, b;
         if (o && o.type === 'tree') {
@@ -7870,7 +8228,8 @@
         else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
-        else if (o && (o.type === 'spawner' || o.type === 'part')) { r = 128; g = 104; b = 160; }
+        else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
+        else if (o && o.type === 'keep') { r = 196; g = 70; b = 70; }
         else if (ground[i] === 2) { r = 44; g = 74; b = 104; } // carved water hole
         else if (ground[i] === 1) {
           // inked pond with darker shoreline
@@ -8152,9 +8511,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.44'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.45'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.45', 'BUILD YOUR TEAM A KEEP AND DEATH IS A RESPAWN TIMER INSTEAD OF THE END - LOSE IT AND IT IS PERMANENT AGAIN - AND A FINISHED KEEP CRAFTS RARITY-ROLLED CARDS FOR A PERMANENT PICK-ONE-OF-THREE UPGRADE.'],
     ['1.44', 'THE XP BAR HAS A DARK SILHOUETTE NOW, AND LEVEL-UP SQUARES SIT ON THE FRAME RATHER THAN INSIDE IT.'],
     ['1.43', 'EACH LEVEL GIVES A SKILL POINT YOU SPEND BY CLICKING THE SQUARE ABOVE AN ABILITY.'],
     ['1.42', 'THE QUIVER STRIP IS NOW A SEGMENTED XP BAR OVER FOUR ABILITY SLOTS, BOTTOM CENTRE.'],
@@ -9292,17 +9652,21 @@
   }
 
   // ------------------------------------------------------------ death & spectate
-  // Death is final: the local slot's death - or its win, once every RIVAL is
-  // gone (teams win together, see checkLastStanding) - puts the game in mode
-  // 'dead' with the match running on underneath. A loss dims the screen and
-  // offers two planks; a win hands the whole frame to the victory banner below
-  // and offers two of its own. SPECTATE follows a living slot through a
+  // The local slot's ELIMINATION ('lost') - or a respawn-pending death
+  // ('respawning', see die()/updateRespawns) - or its win, once every RIVAL
+  // TEAM is gone (teams win together, see checkLastStanding) - puts the game
+  // in mode 'dead' with the match running on underneath. 'lost'/'respawning'
+  // dim the screen and offer two planks each (a respawning wait reads a live
+  // countdown instead of "OUT OF THE MATCH", see renderDead, and snaps back to
+  // 'play' on its own once the timer clears - no plank needed for that); a win
+  // hands the whole frame to the victory banner below and offers two of its
+  // own. SPECTATE follows a living slot through a
   // top-centre control: two pixel arrows around the name, clickable, the arrow
   // keys do the same, ESC comes back (no hint text: the arrows are the
   // explanation). LOBBY fades out and reloads into the title screen on the same seed. viewPlayer() is who the camera and minimap
   // frame, and the only thing the rest of the file needs to know about any of it.
   const DEAD_BW = 112, DEAD_BH = 20, DEAD_GAP = 12; // the title menu plank, side by side
-  const DEAD_ITEMS = { lost: ['SPECTATE', 'LOBBY'], won: ['KEEP PLAYING', 'LOBBY'] };
+  const DEAD_ITEMS = { lost: ['SPECTATE', 'LOBBY'], won: ['KEEP PLAYING', 'LOBBY'], respawning: ['SPECTATE', 'LOBBY'] };
 
   function viewPlayer() {
     const q = state.spec >= 0 ? players[state.spec] : null;
@@ -9454,7 +9818,11 @@
     if (state.deadTimer < 0.5) return;
     const t = 'YOU COLLAPSED IN THE SNOW';
     drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 24, '#a8c4ff', '#0a0e23', 2);
-    const t2 = 'YOU ARE OUT OF THE MATCH';
+    // a respawn-pending death is not permanent - the second line says so,
+    // with a live countdown, instead of claiming the match is over
+    const t2 = state.over === 'respawning'
+      ? 'RESPAWNING IN ' + Math.max(0, Math.ceil(player.respawnT)) + 's'
+      : 'YOU ARE OUT OF THE MATCH';
     drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, VIEW_H / 2 - 6, '#8f9cc4', '#0a0e23');
     drawEndPlanks(now, 0);
   }

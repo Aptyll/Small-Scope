@@ -16,8 +16,14 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
   (keys 1–4 / the HUD cells); the sim reads champions *and* gear only through `kitOf(p)`. Pack,
   gear and gold are **one frame** bottom-right — see [rendering](docs/dev/rendering.md).
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
-- Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to
-  the lobby. The **last team standing** wins (`rivalCount`, not a head count) and gets the victory screen.
+- Everyone rides in on a white eagle and jumps (Space) to land. **A team's Keep is its way back**:
+  build one (5th wheel option, one per team) and a downed teammate respawns there on a flat,
+  gold-free timer instead of staying out; **no living Keep = permadeath**, same as before a team
+  had one. A team is eliminated only once it has no living players *and* no Keep
+  (`teamInMatch`/`checkLastStanding`) — the **last team standing** wins and gets the victory
+  screen. A finished Keep also crafts rarity-rolled **Roguelike Cards** for gold (`STRUCTS.keep`,
+  `startCraft`); opening one from the bag drafts a permanent pick-1-of-3 buff (`CARDS`,
+  `state.draft`) folded into `kitOf(p)` like gear.
 - The world has named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY (birds).
 - Night is mostly visual, but not inert: wolves see ×1.75 further at full dark and the only passive heal stops (`darkness < 0.3`).
 

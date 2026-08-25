@@ -168,18 +168,46 @@ team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one 
 its income and spills the gold it was carrying, so a base's economy can be raided without ever
 touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
-`die(p, src, cause)` marks the slot dead for good — no respawn, and the wallet **and the bag** are
-emptied: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every
-carried stack always spills, one drop each
-(see [Death is final](gameplay.md#death-is-final); the standings rank lifetime `xp`, so they
-still show what the slot earned); `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
-the screen with it (`endMatch('lost')` → `state.mode = 'dead'` and the death overlay: spectate a
-living rival through `viewPlayer()`/`specNext()`, or `toLobby()` back to the title), and every
-death runs `checkLastStanding()`, which ends the match as a win once no **rival** is left —
-`rivalCount()` reads the same other-team rule `enemyOf` does, so the last *team* standing wins and
-a surviving teammate does not keep the match open. **The match keeps simulating while you are out** — `update()` runs `updatePlay` in both
-`play` and `dead` mode; only pause and the settings panel stop the world (the map does not). Full
-detail: [Death is final](gameplay.md#death-is-final).
+`die(p, src, cause)` empties the wallet **and the bag** the same way regardless of what happens
+next: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every carried
+stack always spills, one drop each (the standings rank lifetime `xp`, so they still show what the
+slot earned). What happens next depends on `teamHasLivingKeep(p.team)` — see
+[The Keep](#the-keep) — either a flat, gold-free respawn timer (`p.respawnT`, ticked by
+`updateRespawns`) or, with no Keep, `p.eliminated = true`, today's exact permanent path;
+`updatePlayer` just zeroes a dead slot's intents either way. Only the local slot's **elimination**
+takes the full death overlay with it (`endMatch('lost')`); a respawn-pending local death gets the
+lighter `endMatch('respawning')` overlay instead — same `state.mode = 'dead'` machinery (so the
+4-second replay window, the TAB scoreboard and the dim all still work), just a countdown string
+and no permanent loss. Either way `state.mode = 'dead'` offers spectating a living rival through
+`viewPlayer()`/`specNext()`, or `toLobby()` back to the title. Every death (and every Keep's
+destruction) runs `checkLastStanding()`, which ends the match as a win once no **rival team** is
+left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf` does, so the
+last *team* standing wins: a surviving teammate, or a Keep still waiting to respawn someone into,
+keeps a team in the match even at zero living players. **The match keeps simulating while you are
+out** — `update()` runs `updatePlay` in both `play` and `dead` mode; only pause and the settings
+panel stop the world (the map does not). Full detail: [Death is final](gameplay.md#death-is-final).
+
+### The Keep
+
+A team's Keep (`STRUCTS.keep`, a 2×2 singleton — `teamHasLivingKeep(team)` is the one-per-team
+gate, checked both before and inside the build's `contest()` callback since two teammates could
+otherwise both pass the pre-check in one tick) is what makes a death temporary: `die()` reads it
+to decide between a respawn timer and permanent elimination, and `checkLastStanding()` reads it to
+decide whether a team with zero living players is actually out. It's built and managed through the
+same [radial wheel](gameplay.md#base-building) every other structure uses — see
+[gameplay.md](gameplay.md#base-building) for the build, the craft queue, and the card drops; see
+[gameplay.md](gameplay.md#roguelike-cards) for what a drafted card actually does to `kitOf(p)`.
+
+`updateRespawns(dt)` (called from `updatePlay` beside `updateStructures`) counts down every
+`p.dead && !p.eliminated` slot's `p.respawnT`; at zero it re-checks the Keep is still standing (it
+may have fallen mid-timer — the wait is never cut short, so a rival can't get credit for
+eliminating a team faster than the timer promises) and either calls `respawnPlayer(p)` — which
+finds a clear tile near the Keep's `structMouth()` (`nearestDryTile`, the same spiral search
+`landPlayer` uses for an eagle landing) and calls `p.reset(false)`, the exact full-clear a fresh
+landing gets, i-frames included — or falls back to `p.eliminated = true` and calls
+`checkLastStanding()` itself, since a Keep dying mid-timer can be the actual elimination blow.
+`p.cards` (picked roguelike cards) is never touched by `reset()`, so a build survives every
+respawn within a match, the same way gear and skill ranks already do.
 
 ### Kills and the event feed
 
@@ -212,10 +240,13 @@ contest('work:' + idx(tx, ty), p, () => { /* runs only if p wins */ });
 resolution, so a loser keeps its gold.
 
 Currently contested: work swings (`swingHit`, keyed by tile), build orders (`placeStruct`, keyed by
-tile), fish spears (`fireArrow`, keyed by fish index — a full bag refuses the catch before the
+tile — a Keep order adds a second check, `teamHasLivingKeep`, re-run *inside* the winning
+callback so two teammates ordering one on two different stumps in the same tick can't both land
+one), fish spears (`fireArrow`, keyed by fish index — a full bag refuses the catch before the
 contest is even entered), drop pickups (keyed by drop index — every player standing on a drop
 claims it *if they have room for it*, and the magnet pulls it toward the nearest such player,
-so a full bag hands the pickup on rather than sitting on it), and spent-arrow
+so a full bag hands the pickup on rather than sitting on it — a dropped card is a neutral pickup
+the same way, first-come whichever team gets there), and spent-arrow
 pickups (keyed by `shafts` index — a shaft is neutral like a drop, so anyone short of a full quiver
 can pull one out, whoever shot it; see [the quiver](gameplay.md#the-quiver)).
 
@@ -249,9 +280,16 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    half a quiver counts spent [shafts](gameplay.md#the-quiver) in the same scan, so the arrows a
    firefight leaves lying around get picked back up.
 8. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
-   plus a 15-gold float; then, with gold in hand, build a generator (or, 30% of the time and only
-   where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
-   work; steps off the stump first, since a building is solid.
+   plus a 15-gold float. Then: with no living or rising team [Keep](gameplay.md#base-building), a
+   bot saves for and builds one before anything else (`needKeep` short-circuits the rest of this
+   rung until it can afford tier 0 — a team with no Keep is one wipe from permanent elimination
+   with no way back) — otherwise, with gold in hand, build a generator (or, 30% of the time and
+   only where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
+   work, else queue a card craft on an owned finished Keep; steps off a build site first, since a
+   building is solid. Picking up a dropped card off the ground already falls out of rung 7 below
+   (drops are type-agnostic loot); a bot never opens the pick-1-of-3 draft itself
+   (`bagClick` is mouse-only) — the instant one is carried, `resolveCardForBot` resolves it with a
+   single random pick, since choosing among three is specifically the human decision point.
 9. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
 10. **roam** — wander between its landing site and the map centre.
 

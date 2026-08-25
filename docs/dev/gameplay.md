@@ -502,13 +502,18 @@ cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than e
 
 Everything a slot carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
 or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 10**
-(`BAG_CAP`); a second bag is a bigger `bagCap` and a longer array, nothing else. The table is two
-entries today:
+(`BAG_CAP`); a second bag is a bigger `bagCap` and a longer array, nothing else. The table:
 
-| Item | Icon | Stack | Eaten by |
+| Item | Icon | Stack | Used by |
 | --- | --- | --- | --- |
-| `berry` | `itemBerry` | 3 | Q, or clicking its cell |
-| `fish` | `itemFish` | 2 | F, or clicking its cell |
+| `berry` | `itemBerry` | 3 | Q, or clicking its cell — eats it |
+| `fish` | `itemFish` | 2 | F, or clicking its cell — eats it |
+| `cardWhite`/`cardGreen`/`cardBlue`/`cardPurple`/`cardGold` | `itemCard<Rarity>` | 5 each | clicking its cell — opens the pick-1-of-3 draft (see [Roguelike cards](#roguelike-cards)) instead of eating |
+
+An unopened card is a completely ordinary `ITEMS` entry — one per rarity, since a stack has to be
+homogeneous and a white card and a gold card are not interchangeable — which is what makes bag
+storage, the drop pickup, the refusal flash and death-spill (see
+[Death is final](#death-is-final)) all free for it, same as any other carried item.
 
 **The slot is the unit of capacity**, which is the whole reason this is an array and not a pair of
 counters: two half stacks cost two cells, so a bag genuinely fills and the pickup path can
@@ -589,18 +594,56 @@ keeps the chevrons legible: see
 [the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
 float so they still build.
 
+## Roguelike cards
+
+A permanent buff picked from a team's [Keep](#base-building), one at a time, one draft at a time.
+`CARDS` is `{ white: [...], green: [...], blue: [...], purple: [...], gold: [...] }`
+(`CARD_RARITIES`, White → Gold rising in rarity and magnitude), each entry `{ name, blurb, mod(k) }` —
+the exact shape a `GEAR` variant's `mod(k, L)` is, minus the level argument, since a card is a
+one-shot pick rather than a leveled buy. Every effect stays inside `kitOf`'s existing field
+vocabulary (`dmgBase`, `dr`, `maxHp`, `walkMul`, `stealth`, `ambushMul`, `iceMax`, …) except one
+genuinely new field, `killHeal` — a flat heal on a confirmed kill, hooked at `die()`'s existing
+kill-credit line the same way `eatBerry` applies its heal.
+
+**The draft**: clicking an unopened card's bag cell (`bagClick`, instead of the eat branch berry/fish
+take) calls `openDraft(rarity)`, which sets `state.draft = { rarity, options }` — three distinct
+entries drawn at random from `CARDS[rarity]` (`pick3Distinct`). `renderDraft`/`draftLayout`/
+`draftHit` draw and hit-test three cards centred on screen, in the same idiom the pre-match
+[gear page](rendering.md#main-menu-title) draws its variant cards, but as an in-match overlay like
+the bag or the map — **it does not pause the sim**, same as every other HUD overlay here, so a
+draft is read at real risk, not in a safe pause. `draftClick()` (the mousedown handler routes to it
+first, ahead of the wheel/settings/map/bag, whenever `state.draft` is set) either applies the
+clicked card — `bagTake` the one card, push `{ rarity, id }` onto `p.cards`, `refreshKit(p)` — or,
+for a click anywhere else (or ESC), just closes the draft; either way the click never reaches the
+world underneath. `refreshKit` folds every entry in `p.cards` in after gear and skill, cumulatively
+(`for (const c of p.cards) CARDS[c.rarity][c.id].mod(k);`), so picking the same effect twice stacks
+it, and every existing kit-reading site in the sim — movement, `fireArrow`, dodge timing, the AI,
+`seenAt`'s stealth — picks a card up for free, the same way it already does for gear. `p.cards` is
+set once in the `Player` constructor and never touched by `reset()`, so a build survives every
+respawn within a match.
+
+**Bots never see the draft** — `bagClick` is a mouse-only entry point `updateAI` never calls.
+Instead, the instant a bot is carrying any unopened card, `resolveCardForBot(p)` resolves it
+server-side with one random pick from that rarity's pool — no 3-option UI, since choosing among
+three is specifically the human decision point.
+
 ## Base building
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
-screen position (clamped to stay on-screen): up = wall, right = turret, down = generator, left =
-bot bay (`STRUCT_ORDER`, type `spawner`); push out of the hub and release over a wedge to build,
+screen position (clamped to stay on-screen), five even wedges now: wall, turret, generator, bot
+bay (`STRUCT_ORDER`, type `spawner`), Keep (`STRUCT_ORDER`, type `keep`) — `wheelSpan(n)`/
+`wheelAng(i, n)` re-derive n even wedges from `STRUCT_ORDER.length` alone, so a 5th entry needed no
+layout code, only the option itself; push out of the hub and release over a wedge to build,
 release inside the hub to cancel. Right-clicking a **finished** structure (any tile of it) opens a
-**manage wheel**: upgrade straight up, demolish last, and a bay's mode toggle between them. This wheel is the **only** way to build —
-there are no free-placed buildables. All the data lives in the `STRUCTS` table: three tiers for
-wall/turret/generator (the wood → stone → gold *look* is just the sprite palette) and **one for the
-bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats. `tiers[0]` is what the wheel
-builds; upgrading pays the next tier's cost and re-runs a shorter construction, and the last tier
-(`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear) are the two gold sinks.
+**manage wheel**: upgrade straight up, demolish last, and — unlike the build wheel — this list
+*isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it): a bay gets a mode toggle, a
+Keep gets `craft` (QUEUE CARD, see below), between the two. This wheel is the **only** way to
+build — there are no free-placed buildables. All the data lives in the `STRUCTS` table: three
+tiers for wall/turret/generator/**keep** (the wood → stone → gold *look* is just the sprite
+palette) and **one for the bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats.
+`tiers[0]` is what the wheel builds; upgrading pays the next tier's cost and re-runs a shorter
+construction, and the last tier (`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear)
+are the two gold sinks (a Keep's card craft is a third, gated behind building one first).
 
 Mechanics, all in `game.js`:
 
@@ -697,13 +740,33 @@ Mechanics, all in `game.js`:
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), spawned as
   that many separate 1-gold drops — 23 of them for a fully-upgraded wall. `demolishStruct()` →
   `destroyStructure(o, true)` is the live path for that, reached from `runCmd` for the wheel's
-  demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key.
+  demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key. Demolishing (or
+  losing) a Keep is **not** specially guarded beyond that — no confirmation dialog exists anywhere
+  in this game — so stripping a team's only way back is a real, deliberate stake, not a bug.
 - **Every damaged building wears an hp bar** (`drawHealthBar`, centred on the sprite, `sy - 5`),
   drawn only once `hp < maxHp` so an untouched base stays clean — and never while `building`, when
   hp is climbing rather than falling. The bot bay is excluded: `drawBayOverlay` draws its own at
   `sy - 11`. Below 60% hp a building also picks up four crack marks placed as fractions of its
   sprite, so damage reads without the bar.
-- None of the four structures emits light (see [Lighting](rendering.md#lighting)).
+- **The Keep** (`STRUCTS.keep`, 2×2, the `bigBuildReveal` construction path): `teamHasLivingKeep(team)`
+  is the one-per-team gate (a Keep still `building` doesn't count — same reason an unfinished
+  generator doesn't pay out yet), checked both at the build order and again inside its
+  [contested](multiplayer.md#contested-orders) callback so two teammates ordering one on different
+  stumps in the same tick can't both land one. A finished Keep's manage-wheel `craft` order
+  (`startCraft`) pays `tiers[tier].craftCost` and starts `o.craftT`/`o.craftTotal`, ticked in
+  `updateStructures`'s per-type dispatch exactly like a generator's `payT` countdown — it freezes
+  for free while the Keep is mid-upgrade (the whole per-type branch is skipped then) and forfeits
+  outright if the Keep is destroyed mid-craft, no refund, the same as a turret's charge or a
+  spawner's mid-roll bot. On completion it rolls a rarity against `tiers[tier].odds`
+  (`rollCardRarity`, the shared runtime `rng()` — never `genWorld`'s stream) and `spawnDrop`s the
+  matching card at `structMouth()`, a neutral pickup like a generator's coin. Odds shift toward the
+  rare end at each tier (roughly White-heavy at tier 0 to a real shot at Gold by tier 2) — see the
+  `STRUCTS.keep` table for the exact weights. The same over-the-roof progress bar construction
+  already draws also covers a finished Keep's `craftT` countdown, in an icy blue instead of
+  construction's gold so the two read as different things. What the Keep does for **respawns and
+  the win condition** lives in [multiplayer.md](multiplayer.md#the-keep); what a dropped card
+  *does* once picked up lives in [Roguelike cards](#roguelike-cards).
+- None of the five structures emits light (see [Lighting](rendering.md#lighting)).
 
 ## Robots
 
@@ -738,29 +801,37 @@ finally dies; nothing else — a swing, wildlife, the AI's target picker — goe
 
 ## Death is final
 
-`die(p, src, cause)` marks that slot dead, drops its bow draw and clears its momentum; there is no
-respawn — a dead slot stays out for the rest of the match. **Death empties the wallet**
-(`spillInventory(p, killer)`, right beside `die`): a credited killer pockets the victim's gold
-outright through `gainGold` — so a kill levels the killer, which is the bounty that makes taking
-the fight worth it — while an uncredited death (ice, wolves, or the killer already dead) spills it
-as up to 5 coins at the corpse. Any other `inv` key would spill as pickups split into up to 3
-drops, the way a downed worker's carry does. **The backpack empties too**, one drop per stack —
-a stack is already the unit the bag counts in, so a killer whose own bag is full simply leaves
-them lying. Both loops are generic per type, so a future resource spills without touching death
-code (`itemFish` is already in the drop draw pass). The standings are unaffected because
-`scoreOf` ranks lifetime `xp`, not the purse, so a looted slot keeps the place it earned. `die`
-also credits the kill and writes the feed line — see
-[Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — and then
-`checkLastStanding()` asks whether every **rival** is now gone, which ends the match as a win.
-Rivals, not players: `rivalCount(p, all)` counts live slots on another team by the same rule
-`enemyOf` states, minus its `inAir()` skip (a rival on the eagle has not lost, it is about to
-land), so **teams win together** — a surviving teammate is not something left to beat. `all` asks
-the same question of the whole roster, dead included, and a match that never fielded a rival
-cannot be won. Either way the local slot leaves through
-`endMatch('lost' | 'won')` (the `death & spectate` banner): `state.mode = 'dead'`, every local
-overlay closed, and the screen goes to the loss overlay — two planks, **SPECTATE** and
-**LOBBY** — or to [the victory screen](rendering.md#the-victory-screen), whose planks are
-**KEEP PLAYING** and **LOBBY**. A win also freezes what it will print (`winSnapshot()` on
+...unless your team's [Keep](multiplayer.md#the-keep) is still standing, in which case it's a flat
+respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
+momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
+`die`): a credited killer pockets the victim's gold outright through `gainGold` — so a kill levels
+the killer, which is the bounty that makes taking the fight worth it — while an uncredited death
+(ice, wolves, or the killer already dead) spills it as up to 5 coins at the corpse. Any other `inv`
+key would spill as pickups split into up to 3 drops, the way a downed worker's carry does. **The
+backpack empties too**, one drop per stack — a stack is already the unit the bag counts in, so a
+killer whose own bag is full simply leaves them lying; this is also, for free, how an **unopened
+roguelike card drops on death** (see [Roguelike cards](#roguelike-cards)) — a picked card is
+already baked into the kit, not an item, so only what's still sitting unopened in the bag spills.
+Both loops are generic per type, so a future resource spills without touching death code (`itemFish`
+is already in the drop draw pass). The standings are unaffected because `scoreOf` ranks lifetime
+`xp`, not the purse, so a looted slot keeps the place it earned. `die` also credits the kill (and
+heals the killer if their kit carries `killHeal`, off a card) and writes the feed line — see
+[Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then checks
+`teamHasLivingKeep(p.team)`: with one, `p.respawnT` starts counting down (`updateRespawns`, see
+[The Keep](multiplayer.md#the-keep) for the whole respawn path); with none, `p.eliminated = true`,
+today's original permanent path. Either way `checkLastStanding()` asks whether every **rival team**
+is now gone, which ends the match as a win — full detail in
+[The Keep](multiplayer.md#the-keep), since that's now a team-level, not a per-player, question.
+
+Either way the local slot's overlay goes up through `endMatch('lost' | 'won' | 'respawning')` (the
+`death & spectate` banner): `state.mode = 'dead'`, every local overlay closed, and the screen goes
+to a dim with two planks — **SPECTATE** and **LOBBY** for `'lost'` (permanent) and `'respawning'`
+(temporary — the second plank line reads a live countdown instead of "OUT OF THE MATCH", see
+`renderDead`) alike — or to [the victory screen](rendering.md#the-victory-screen), whose planks are
+**KEEP PLAYING** and **LOBBY**, for `'won'`. `'respawning'` needs no state of its own beyond that:
+once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same one-line
+way `'KEEP PLAYING'` already does, lands the local slot near its Keep, and replays the HUD
+slide-in a fresh eagle landing gets. A win also freezes what it will print (`winSnapshot()` on
 `state.win`: gold, kills, level, clock, team, champion and the kit) because the match keeps
 running underneath and a total that climbs behind a tally which already counted it reads as a
 bug. Spectating sets `state.spec` to a living rival's id and
@@ -774,7 +845,8 @@ the page on the same seed, which boots into the title screen. **TAB still opens 
 while you are out**, which is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
 `drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on
-without you. Only **pause (P) and the settings panel (ESC)** stop the sim;
+without you, and `updateRespawns` ticks a respawn timer down under the `'respawning'` overlay the
+same way. Only **pause (P) and the settings panel (ESC)** stop the sim;
 `update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
 runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-menu-title).
 

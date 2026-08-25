@@ -100,12 +100,24 @@ scoreboard and the event feed reports the death as an accident. See
 [multiplayer.md](multiplayer.md#kills-and-the-event-feed).
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
-`STRUCT_ORDER` (the build wheel draws the local team's `SPRITES.teamBuild[team][type][0]`, and
-sizes itself: a fifth entry is five even wedges, no layout to touch), a
-16×16 grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), entries in
-`isSolidTile()`, both map colour tables, and a functional tick branch in
-`updateStructures()`. `hitObject()`, the draws pass (via `structSprite`), construction, ownership
-and refunds already dispatch on `STRUCTS[o.type]` — no per-type work there.
+`STRUCT_ORDER` (the **build** wheel draws the local team's `SPRITES.teamBuild[team][type][0]` or,
+for a sprite too big to be its own 16×16 icon — see the Keep, the bay, the turret — a dedicated
+entry in `teamBuild[team].icon`, and sizes itself: a sixth entry is six even wedges, no layout to
+touch), a grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), and both
+map colour tables (`updateMinimap`/`buildWorldMapImg` — both resolve a multi-tile footprint's
+`part` fillers through `structOf()` first, so one branch on the real type colours the whole
+building, but the branch itself is still hand-written per type; skip it and a new type silently
+draws as a bare stump). `isSolidTile()` is now generic (`!!STRUCTS[o.type] || ...`) — a new
+`STRUCTS` entry is automatically solid for free, and only a genuinely new *non-`STRUCTS`* scenery
+type needs a line there. `hitObject()`, the draws pass (via `structSprite`), construction,
+ownership and refunds already dispatch on `STRUCTS[o.type]` too — no per-type work there, and
+nothing to add unless the type does something once built (a functional tick branch in
+`updateStructures()`, e.g. the generator's payout timer or the Keep's craft queue).
+**The manage wheel is a separate, hand-built list, not generic over `STRUCT_ORDER`** — this bit
+the Keep's "queue card" order and is worth remembering for the next one: `wheelOptions()` only
+ever returns `[upgrade, (a spawner's mode / a keep's craft), demolish]`, so a structure with its
+own extra manage-wheel order needs a line there (and a matching `runCmd()` branch), regardless of
+how automatic the *build* wheel's sizing is.
 
 **Adding a landmark** — a `LANDMARKS` entry plus its `gen`, and its key in `LANDMARK_ORDER`; that
 is the whole feature (see [world.md](world.md#landmarks) for the fields). The entry's shape:
@@ -131,8 +143,11 @@ the template), and remember `genWorld()`'s `free()` helper treats "ground must b
 placement rule.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint; the roll-out
-cadence is inline in `updateStructures()`'s spawner branch), the `YIELD` table (every gold
+range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint, the Keep's
+`craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
+cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
+timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
+draw-3 rule, the `YIELD` table (every gold
 payout), `WORK_REACH`, `BOW_CHARGE`, and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
 the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,

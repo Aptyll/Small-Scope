@@ -23,8 +23,11 @@ don't cite line numbers here, they go stale within a session.
 | the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` |
 | the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
 | ability ranks and skill points | `AB_RANK_MAX`, `AB_SKILL`, `abCanBuy`, `buySkill` | `players` › `gear` |
+| roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` |
+| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding` | `players` |
 | how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` |
 | the backpack + gear widget (bottom-right): its frame, the icon row, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag` | `UI` › `backpack and gear` |
+| the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
 | picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
@@ -44,7 +47,7 @@ don't cite line numbers here, they go stale within a session.
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
 | the snow over a buried body, its row spans, and the bury meter | `drawSnowCover`, `poseBounds`, `poseSpans`, `drawBuryRing` | `entity draw` |
 | the hud strip (bottom-centre): four ability slots over the xp bar, upgrade squares | `AB_CELL`/`hudStripRect`/`abHit`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
-| build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
+| build, upgrade, demolish, refunds, the one-Keep-per-team gate, the card craft queue | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost`, `teamHasLivingKeep`, `startCraft`, `rollCardRarity` | `stump structures` |
 | wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
@@ -68,7 +71,7 @@ don't cite line numbers here, they go stale within a session.
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
-| the death overlay, spectating, back to the lobby, who the camera frames, the planks both endings share | `endMatch`, `viewPlayer`, `specNext`, `toLobby`, `renderDead`, `deadLayout`, `deadReady`, `drawEndPlanks` | `death & spectate` |
+| the death/respawn overlay, spectating, back to the lobby, who the camera frames, the planks all three endings share | `endMatch`, `DEAD_ITEMS`, `viewPlayer`, `specNext`, `toLobby`, `renderDead`, `deadLayout`, `deadReady`, `drawEndPlanks` | `death & spectate` |
 | the victory screen: its timeline, its frozen numbers, its sound cues, its art | `WIN_T`, `winLayout`, `winSnapshot`, `winCues`, `winSkip`, `renderVictory`, `stampGrid`, `drawWinAurora`, `drawWinRays`, `drawWinMotes`, `drawWinBanner`, `drawWinBrazier`, `drawWinDais`, `drawWinStatPlate` | `victory` |
 | the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |

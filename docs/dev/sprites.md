@@ -7,9 +7,13 @@ Sprites are literal ASCII grids paired with a palette object mapping character �
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the raider set (`SPRITES.raider`, `RDPAL`) is baked from the exact
 same grids as the player, so a player pose edit changes both. The tiered structures use the same
-trick: one 16×16 grid each (`wall`, `turret`, `generator`) baked with `WPAL` /
+trick: one grid each (`wall`, `turret`, `generator` at 16×16, the **Keep** at 32×28 for its 2×2
+footprint) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
-tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars. The
+tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars, which is also
+what a building's team paint rides on (see below). The Keep's sprite is too big for a 16×16 wheel
+wedge, so it gets the same escape hatch as the turret and the bay: a dedicated `keepIcon` grid,
+baked into `teamBuild[team].icon.keep`. The
 **bot bay** (`spawner`) is the one big sprite: a single-tier 48×38 grid (`bay`, `BAYPAL`) on a 3×2
 tile footprint — steel plates under a flat two-row snow cap, a team-painted lintel band (`L`/`T`/`t`
 via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols
@@ -59,6 +63,11 @@ says which piece, the material says its level. Drawn by the HUD's gear plates, t
 loadout strip and the gear page's cards (see [gameplay.md](gameplay.md#gear)). `itemBag` is
 12×12 for the same reason — it sits in the same 18 px HUD well — but shares `ITPAL` with the
 8×8 item icons rather than taking a material palette: it is one object, not four levels of one.
+The five **roguelike card** icons take the gear icons' trick the other way round: one shared 8×8
+`itemCard` silhouette (a card face with a sparkle pip), baked five times through `CARD_PALS` —
+White/Green/Blue/Purple/Gold — where the rarity itself is the only colour that changes (`C`), so
+`itemCardWhite`…`itemCardGold` are five palette swaps of one grid, the same relationship `GEAR_MATS`
+has to a single gear icon.
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not

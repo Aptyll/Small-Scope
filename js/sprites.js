@@ -1270,6 +1270,60 @@
     '................',
   ];
 
+  // The keep: a 2x2 fortified tower (see STRUCTS.keep w/h), one grid rebaked
+  // per tier material like wall/turret/generator (WPAL/WPAL_STONE/WPAL_GOLD)
+  // and team-painted through the same k/K/e override teamBuildPal already
+  // gives those three - crenellated top, a team banner band, a dark doorway.
+  // keepIcon is the 16x16 wheel glyph (the live sprite is too tall for a wedge).
+  const keep = [
+    'oUUo....oUUo....oUUo....oUUo....',
+    'oUUo....oUUo....oUUo....oUUo....',
+    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
+    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
+    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
+    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
+    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
+    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
+    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
+    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
+    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
+    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
+    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
+    'ouuuuuuuuuuuvvvvvvvvuuuuuuuuuuuo',
+    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
+    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
+    'ssssssssssssssssssssssssssssssss',
+  ];
+  const keepIcon = [
+    '................',
+    '....oUUUUUUo....',
+    '....oUUUUUUo....',
+    '...oUUUUUUUUo...',
+    '...ouuuuuuuuo...',
+    '...ouuKKKKuuo...',
+    '...ouuKKKKuuo...',
+    '...ouuuuuuuuo...',
+    '...ouuuuuuuuo...',
+    '...ouuuuuuuuo...',
+    '...ouuuuuuuuo...',
+    '...ouuvvvvuuo...',
+    '...ouuvvvvuuo...',
+    '...ouuvvvvuuo...',
+    '...oooooooooo...',
+    '...ssssssssss...',
+  ];
+
   // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
   // arms at the sides, no face. One 12x10 grid, two frames (the tread notches
   // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
@@ -1527,6 +1581,26 @@
     '..ooo...',
     '........',
   ];
+
+  // Roguelike cards: one shared silhouette (a card face with a sparkle pip),
+  // five palettes - the rarity IS the card's colour, the way GEAR_MATS tints
+  // one gear icon across levels instead of drawing four. 'C' carries the
+  // rarity hex, 'G' is a shared white sparkle, 'o' a shared dark rim.
+  const itemCard = [
+    '........',
+    '.oooooo.',
+    '.oCCCCo.',
+    '.oCCCCo.',
+    '.oCGGCo.',
+    '.oCGGCo.',
+    '.oCCCCo.',
+    '.oooooo.',
+  ];
+  const CARD_PAL = (hex) => ({ '.': null, 'o': '#141c30', 'C': hex, 'G': '#ffffff' });
+  const CARD_PALS = {
+    white: CARD_PAL('#d9dfe8'), green: CARD_PAL('#5fd18a'), blue: CARD_PAL('#4a90e2'),
+    purple: CARD_PAL('#a259e6'), gold: CARD_PAL('#e8a33d'),
+  };
 
   // The backpack's own glyph: 12x12 like a gear icon, because it sits in the
   // same 18px HUD well. Dark flap over a lighter body with a gold buckle.
@@ -1964,8 +2038,12 @@
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: [bake(bay, bayTeamPal(t))],
+    keep: TIER_PALS.map((b) => bake(keep, teamBuildPal(b, t))),
     // wheel glyphs for sprites too big to be their own icon
-    icon: { spawner: bake(bayIcon, bayTeamPal(t)), turret: bake(turretIcon, teamBuildPal(WPAL, t)) },
+    icon: {
+      spawner: bake(bayIcon, bayTeamPal(t)), turret: bake(turretIcon, teamBuildPal(WPAL, t)),
+      keep: bake(keepIcon, teamBuildPal(WPAL, t)),
+    },
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
 
@@ -2362,6 +2440,11 @@
     itemGold: bake(itemGold, ITPAL),
     itemFish: bake(itemFish, FIPAL),
     itemBag: bake(itemBag, ITPAL),
+    itemCardWhite: bake(itemCard, CARD_PALS.white),
+    itemCardGreen: bake(itemCard, CARD_PALS.green),
+    itemCardBlue: bake(itemCard, CARD_PALS.blue),
+    itemCardPurple: bake(itemCard, CARD_PALS.purple),
+    itemCardGold: bake(itemCard, CARD_PALS.gold),
     // gearIcons[slot][variant][material]: 12 distinct variant glyphs, each in
     // leather / iron / steel / gold
     gearIcons: [
