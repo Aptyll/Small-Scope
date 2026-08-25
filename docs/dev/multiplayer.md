@@ -51,6 +51,7 @@ eatBerry      edge-triggered (Q)
 eatFish       edge-triggered (F)
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
               or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
+              or {kind:'skill', i} - a hud-ability rank: same, free (a skill point)
 ```
 
 `sampleHumanInput(player)` (input banner) folds `keys`/`mouse` into slot 0's struct once per step,
@@ -106,6 +107,13 @@ Growth is flat and identical for both champions: each level past 1 adds `LVL_HP`
 (`fireArrow` adds it after the kit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
 damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
 plays `SFX.levelUp()` for the local slot.
+
+Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1). The four
+hud abilities — loose, dodge, ambush, fletch — take ranks 0–`AB_RANK_MAX` (3) on `p.skill`. Rank 0
+is the baseline everything already does; `buySkill(p, i)` spends a point, bumps that rank, and
+`refreshKit` folds `AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`,
+`fletch`). The hud strip's squares are the ask; bots dump a free point onto the lowest rank at
+the top of `updateAI`. Nine points by level 9 fill three abilities to rank 3.
 
 The level shows as a 7×7 badge in `drawPlayer`, flush against the left edge of the overhead
 bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every

@@ -9,7 +9,7 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - **Ctrl goes prone** (a tap, never a hold — Ctrl+W closes the tab): lie still on snow and it covers
   you. You crawl at `PRONE_SPEED`, and the arrow loosed out of *full* cover hits for `AMBUSH_MUL`
   and breaks it.
-- **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`). Berries and fish are food.
+- **Gold is the only currency. Gold = XP** (levels 1→9 via `gainGold`; a skill point each level, spent on the four abilities). Berries and fish are food.
 - **What you carry is in slots**: one **backpack** (`p.bag`, 10 cells, a stack each), **B** to open.
   A full bag *refuses* a pickup; only `bagAdd`/`bagTake`/`bagRoom` touch it.
 - **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere

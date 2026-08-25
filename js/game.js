@@ -576,6 +576,7 @@
   }
   function levelUp(p) {
     p.level++;
+    p.skillPts++;
     p.maxHp = levelMaxHp(p);
     p.hp = Math.min(p.maxHp, p.hp + LVL_HP);
     // the early levels come too fast to be news; the late ones say who is ahead
@@ -664,6 +665,16 @@
   const GEAR_SLOTS = ['HELMET', 'CHEST', 'LEGS', 'BOOTS'];
   const GEAR_COSTS = [10, 20, 35]; // gold to reach piece level 2 / 3 / 4
   const GEAR_LV_MAX = 4;
+  // four hud abilities (loose, dodge, ambush, fletch), ranks 0..AB_RANK_MAX.
+  // Rank 0 is the baseline every slot starts with; a skill point from each
+  // hero level buys the next rank. The sim reads the result through kitOf.
+  const AB_RANK_MAX = 3;
+  const AB_SKILL = [
+    { mod: (k, L) => { k.nock *= 1 - 0.12 * L; } },
+    { mod: (k, L) => { k.dodgeCd *= 1 - 0.12 * L; } },
+    { mod: (k, L) => { k.ambushMul += 0.25 * L; k.bury *= 1 - 0.12 * L; } },
+    { mod: (k, L) => { k.fletch *= 1 - 0.15 * L; } },
+  ];
   const GEAR_MATS = ['#8a6a4a', '#9aa3ad', '#9fc4dd', '#f2cc6a']; // leather/iron/steel/gold, by piece level
   const GEAR = [
     [ // helmet: how you kill
@@ -693,8 +704,10 @@
     const k = Object.assign({}, CHAMPS[p.champ].kit, {
       huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
       harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
+      ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
     });
     for (let i = 0; i < GEAR.length; i++) GEAR[i][p.gear[i]].mod(k, p.gearLv[i]);
+    for (let i = 0; i < AB_SKILL.length; i++) AB_SKILL[i].mod(k, p.skill[i]);
     p.kit = k;
     p.maxHp = levelMaxHp(p);
     if (p.hp === undefined || p.hp > p.maxHp) p.hp = p.maxHp;
@@ -716,6 +729,16 @@
     if (p === player) SFX.levelUp();
     else if (nearPlayer(p.x, p.y)) SFX.pickup();
   }
+  function abCanBuy(p, i) { return p.skillPts > 0 && p.skill[i] < AB_RANK_MAX; }
+  // one rank on ability i, reached through runCmd so HUD click and bots share it
+  function buySkill(p, i) {
+    if (!abCanBuy(p, i)) { if (p === player) SFX.deny(); return; }
+    p.skillPts--;
+    p.skill[i]++;
+    refreshKit(p);
+    if (p === player) SFX.levelUp();
+    else if (nearPlayer(p.x, p.y)) SFX.pickup();
+  }
 
   // one frame of intent - the whole interface between a controller and the sim
   function makeInput() {
@@ -730,7 +753,7 @@
                            // level - holding a modifier while tapping W closes the
                            // browser tab, and preventDefault cannot stop it
       eatBerry: false, eatFish: false, // edge-triggered
-      cmd: null,           // one-shot order: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id} or {kind:'gear', piece}
+      cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
     };
   }
 
@@ -747,9 +770,11 @@
       this.champ = 0;                     // CHAMPS index; the select screen sets the local one
       this.gear = [0, 0, 0, 0];           // chosen GEAR variant per slot (helmet/chest/legs/boots)
       this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
+      this.skill = [0, 0, 0, 0];          // ranks on the four hud abilities, 0..AB_RANK_MAX
+      this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
       this.kills = 0;                     // rivals downed; scoreboard only, survives death
-      refreshKit(this);                   // builds this.kit and this.maxHp from champ + gear
+      refreshKit(this);                   // builds this.kit and this.maxHp from champ + gear + skill
       this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
       this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
       this.dropU = 1;                     // route fraction at which an AI slot jumps
@@ -950,7 +975,7 @@
     mouse.inside = true;
     if (e.button === 2) {
       if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
-      if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0) return; // no build wheel through the backpack
+      if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0 || abHit(mouse.x, mouse.y)) return; // no build wheel through the HUD
       SFX.unlock();
       const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
       const o = structOf(objAt(tx, ty));
@@ -970,14 +995,22 @@
     if (state.wheel) { state.wheel = null; return; } // left-click while it is open: cancel
     if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
     if (state.mapOpen) return;
-    // the backpack widget swallows every click over its frame before the bow
-    // ever sees them - the one left-clickable HUD panel in play. Gear is asked
-    // first because gearHit owns those four cells and bagHit does not report
-    // them; a piece that can't sell just denies.
+    // the backpack widget and the hud strip swallow every click over themselves
+    // before the bow ever sees them. Gear is asked first because gearHit owns
+    // those four cells and bagHit does not report them; a piece that can't sell
+    // just denies. The strip's upgrade squares (and their wells, while a point
+    // is free) spend a skill point the same way.
     const gi = gearHit(mouse.x, mouse.y);
     if (gi >= 0) { SFX.unlock(); player.input.cmd = { kind: 'gear', piece: gi }; return; }
     const bh = bagHit(mouse.x, mouse.y);
     if (bh) { SFX.unlock(); bagClick(bh); return; }
+    const ah = abHit(mouse.x, mouse.y);
+    if (ah) {
+      SFX.unlock();
+      if ((ah.kind === 'up' || ah.kind === 'slot') && abCanBuy(player, ah.i))
+        player.input.cmd = { kind: 'skill', i: ah.i };
+      return;
+    }
     mouse.down = true;
     clickAction(player);
   });
@@ -1990,7 +2023,7 @@
     const d = Math.hypot(dx, dy) || 1;
     const spd = 170 + 190 * pw;
     let dmg = Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1);
-    if (amb) dmg = Math.round(dmg * AMBUSH_MUL);
+    if (amb) dmg = Math.round(dmg * kit.ambushMul);
     arrows.push({
       x: p.x, y: p.y - BOW_Y,
       vx: dx / d * spd, vy: dy / d * spd,
@@ -3341,6 +3374,7 @@
   // run a queued build/manage/gear order for any player
   function runCmd(p, c) {
     if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
+    if (c.kind === 'skill') { buySkill(p, c.i); return; }
     if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
     const o = structOf(objAt(c.tx, c.ty));
     if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
@@ -3573,6 +3607,14 @@
     ai.thinkT -= dt;
     if (ai.buildT > 0) ai.buildT -= dt;
     if (ai.hideCd > 0) ai.hideCd -= dt;
+
+    // 0. spend a free skill point before the ladder - it costs nothing and
+    //    waiting on it is leaving a rank on the table. Lowest rank first.
+    if (p.skillPts > 0 && !inp.cmd) {
+      let best = -1, br = AB_RANK_MAX;
+      for (let i = 0; i < AB_SKILL.length; i++) if (p.skill[i] < br) { br = p.skill[i]; best = i; }
+      if (best >= 0) inp.cmd = { kind: 'skill', i: best };
+    }
 
     // 1. food, exactly as a human eats it (Q / F)
     if (p.hp < p.maxHp * 0.5 && bagCount(p, 'fish') > 0) inp.eatFish = true;
@@ -4308,7 +4350,7 @@
       const snow = inWorld(ftx, fty) && ground[idx(ftx, fty)] === 0;
       if (!snow) p.hide = Math.max(0, p.hide - dt * 2.2);
       else if (!p.moving && p.hide < 1) {
-        p.hide = Math.min(1, p.hide + dt / PRONE_BURY);
+        p.hide = Math.min(1, p.hide + dt / kit.bury);
         if (p.hide >= 1) { p.hideFlash = 0.4; if (p === player) SFX.hidden(); }
       }
       p.crawlT = p.moving ? p.crawlT + dt * 3.6 : 0;
@@ -4444,7 +4486,7 @@
     }
     if (p.quiver < QUIVER_MAX) {
       p.fletchT += dt;
-      if (p.fletchT >= QUIVER_REGEN) { p.fletchT = 0; gainArrow(p, 1); }
+      if (p.fletchT >= kit.fletch) { p.fletchT = 0; gainArrow(p, 1); }
     } else p.fletchT = 0;
     p.quiverFlash = Math.max(0, p.quiverFlash - dt);
     p.readyFlash = Math.max(0, p.readyFlash - dt);
@@ -5196,10 +5238,15 @@
     if (state.mapOpen || state.paused) return { kind: 'arrow' };
     if (state.wheel) return { kind: wheelLayout().seg >= 0 ? 'hand' : 'arrow' };
     // the backpack widget: a hand over anything in it that does something, a
-    // plain arrow over the rest of its frame (which still swallows the click)
+    // plain arrow over the rest of its frame (which still swallows the click).
+    // The hud strip's upgrade squares (and their wells, while a point is free)
+    // are the other left-clickable HUD in play.
     const bh = bagHit(mouse.x, mouse.y);
     if (gearHit(mouse.x, mouse.y) >= 0 || (bh && bh.kind !== 'frame')) return { kind: 'hand' };
     if (bh) return { kind: 'arrow' };
+    const ah = abHit(mouse.x, mouse.y);
+    if (ah && (ah.kind === 'up' || ah.kind === 'slot') && abCanBuy(player, ah.i)) return { kind: 'hand' };
+    if (ah) return { kind: 'arrow' };
 
     // Every reticle in play carries the bow's state, whatever it is hovering:
     // `nock` is how much of the renock has elapsed (1 = ready) and `dry` says
@@ -6915,8 +6962,8 @@
   // piece bobs a gold chevron ABOVE its cell, and the hover price sits higher
   // still, so whatever is over the row has to be empty screen. Put the grid up
   // there and every chevron draws into it. The frame is pinned by its BOTTOM
-  // and grows upward, so opening the bag lifts the row rather than pushing the
-  // gold off the bottom of the screen.
+  // RIGHT to the view edge and grows upward, so opening the bag lifts the row
+  // rather than pushing the gold off the bottom of the screen.
   //
   // Clicking the pack (or B) toggles the grid; clicking a food cell eats from
   // that stack through the same input flags Q/F use, so the sim path is
@@ -6950,11 +6997,12 @@
     const rows = Math.ceil(player.bagCap / BAG_COLS);
     return rows * BAG_CELL + (rows - 1) * BAG_GAP;
   }
-  // the whole widget; its bottom is fixed, so the grid opens by growing upward
+  // the whole widget; its bottom-right is the view's last pixel, so the grid
+  // opens by growing upward rather than off the screen
   function bagFrameRect() {
     const h = BAG_PAD + BAG_CELL + (state.bagOpen ? BAG_GAP + bagGridH() : 0) +
       BAG_GAP + 1 + BAG_STRIP + 1; // gap, the gold rule, the gold row, the rim
-    return { x: VIEW_W - 8 - BAG_W, y: VIEW_H - 8 - h, w: BAG_W, h };
+    return { x: VIEW_W - BAG_W, y: VIEW_H - h, w: BAG_W, h };
   }
   // cell i of the top row: 0 is the pack, 1-4 are the gear pieces
   function bagRowRect(i) {
@@ -7075,7 +7123,7 @@
       if (hov === i && cost) { // hover: the price, coin + number, nothing else
         const txt = String(cost.gold);
         const tw = 10 + pixelTextWidth(txt);
-        const tx0 = Math.max(4, Math.min(r.x + (r.w >> 1) - (tw >> 1), VIEW_W - 4 - tw));
+        const tx0 = Math.max(2, Math.min(r.x + (r.w >> 1) - (tw >> 1), VIEW_W - 2 - tw));
         ctx.drawImage(SPRITES.itemGold, tx0, y - 26);
         drawPixelTextOutline(ctx, txt, tx0 + 10, y - 24, afford ? '#f5c542' : '#9fb6d8', '#0f1632');
       }
@@ -7088,7 +7136,8 @@
     const ghov = mouse.inside ? gearHit(mouse.x, mouse.y) : -1;
     const red = bagFlash > 0;
     ctx.save();
-    ctx.translate(red ? (((now * 40) | 0) % 2 ? 1 : -1) : 0, 0); // the refusal shake
+    // inward only: a ±1 shake on a flush right edge would clip a column of rim
+    ctx.translate(red ? (((now * 40) | 0) % 2 ? -1 : 0) : 0, 0);
     // The frame. No cast shadow: it is hard against two edges of the screen,
     // where a shadow has nothing to fall on, and the cells already carry the
     // depth - a drop shadow only smeared the outline that reads it as one box.
@@ -7160,23 +7209,50 @@
     ctx.restore();
   }
 
-  // ---- hud strip: xp bar over four ability slots, bottom-centre -----------
-  // One opaque plate. A segmented xp bar - gold, since xp IS lifetime gold -
-  // fills OUTWARD from a central level diamond, both halves in step, so the
-  // strip is mirror-true at every fill. Under it sit four ability slots, keys
-  // 1-4 in the corner: LOOSE (the nocked bow, arrow count), DODGE (a winter
-  // boot, two charge pips), AMBUSH (a buried hood, bury ticks) and FLETCH
-  // (an arrow on the knife). A cooldown wipes top-down in whole pixels under
-  // a 1px sweep line; a finished one flashes its well white for a beat.
-  // Icons are 16x16 char grids with the outline IN the art (the same language
-  // as the bag's gear glyphs) - an extra rim pass blobs the leather and the
-  // fletching into a smear. Team fletching is injected at bake time.
+  // ---- hud strip: four ability slots over the xp bar, bottom-centre --------
+  // One opaque plate. Four ability wells on top - LOOSE, DODGE, AMBUSH, FLETCH
+  // - and a gold xp bar flush along the bottom (xp IS lifetime gold). A small
+  // square sits directly above each well, same plate/rim/well language as the
+  // slots: a gold plus while a skill point can land there, otherwise three
+  // rank pips. A cooldown wipes top-down in whole pixels under a 1px sweep
+  // line; a finished one flashes its well white for a beat. Icons are 16x16
+  // char grids with the outline IN the art - an extra rim pass blobs the
+  // leather and the fletching into a smear. Team fletching is injected at bake.
   const AB_CELL = 20, AB_GAP = 3, AB_N = 4;
   const AB_W = AB_N * AB_CELL + (AB_N - 1) * AB_GAP; // 89: odd, so the centre is a real column
+  const AB_PAD = 2, AB_UP = 8, AB_XP = 5;
+  const AB_H = AB_PAD + AB_UP + AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
   const AB_BG = '#0d1229';
   const AB_COVER = 'rgba(8,12,30,0.82)';
   function hudStripRect() {
-    return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - 39, w: AB_W, h: 31 };
+    return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
+  }
+  function abSlotRect(i) {
+    const R = hudStripRect();
+    return {
+      x: R.x + i * (AB_CELL + AB_GAP),
+      y: R.y + AB_PAD + AB_UP + AB_PAD,
+      w: AB_CELL, h: AB_CELL,
+    };
+  }
+  function abUpRect(i) {
+    const s = abSlotRect(i);
+    return { x: s.x + ((AB_CELL - AB_UP) >> 1), y: s.y - AB_PAD - AB_UP, w: AB_UP, h: AB_UP };
+  }
+  // { kind:'up'|'slot', i } | { kind:'frame' } | null. Shared by the click
+  // handler, the cursor and the strip's own hover so they cannot disagree.
+  function abHit(mx, my) {
+    if (state.mode !== 'play' || player.dead || state.paused ||
+        state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
+    const R = hudStripRect();
+    if (mx < R.x - 3 || mx >= R.x + R.w + 3 || my < R.y || my >= R.y + R.h) return null;
+    for (let i = 0; i < AB_N; i++) {
+      const u = abUpRect(i);
+      if (mx >= u.x && mx < u.x + u.w && my >= u.y - 1 && my < u.y + u.h) return { kind: 'up', i };
+      const s = abSlotRect(i);
+      if (mx >= s.x && mx < s.x + s.w && my >= s.y && my < s.y + s.h) return { kind: 'slot', i };
+    }
+    return { kind: 'frame' };
   }
   // o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
   const AB_PAL = {
@@ -7289,65 +7365,65 @@
   // to the HUD, so the strip watches for them itself and pops white
   let abLvSeen = 0, abLvFlash = 0, abChSeen = -1, abChFlash = 0;
   function drawXpBar(now, x, y) {
-    const p = player, cx = x + (AB_W >> 1);
+    const p = player;
     if (p.level > abLvSeen && abLvSeen > 0) abLvFlash = now + 0.5;
     abLvSeen = p.level;
     const hot = now < abLvFlash;
     const max = p.level >= LEVEL_MAX;
     const frac = max ? 1
       : (p.xp - LEVEL_XP[p.level - 1]) / (LEVEL_XP[p.level] - LEVEL_XP[p.level - 1]);
-    // finials: a steel point either end, gold once there is nothing left to earn
-    ctx.fillStyle = max || hot ? '#f2cc6a' : '#6d7ea6';
-    ctx.fillRect(x - 2, y + 1, 1, 3); ctx.fillRect(x - 3, y + 2, 1, 1);
-    ctx.fillRect(x + AB_W + 1, y + 1, 1, 3); ctx.fillRect(x + AB_W + 2, y + 2, 1, 1);
-    // eight wells, four a side, filling from the diamond out
-    const nSeg = 4, segW = 9, inner = segW - 2;
-    const segF = frac * nSeg;
-    const fillCol = hot ? '#f4f7ff' : '#f2cc6a';
-    const hiCol = hot ? '#ffffff' : '#f8e29a';
-    const loCol = hot ? '#cfd8e8' : '#b98a2e';
-    const paintSeg = (sx, t, fromRight) => {
+    const inner = AB_W - 2;
+    const fw = Math.round(Math.max(0, Math.min(1, frac)) * inner);
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(x, y, AB_W, AB_XP);
+    ctx.fillStyle = '#1a2142';
+    ctx.fillRect(x + 1, y + 1, inner, AB_XP - 2);
+    ctx.fillStyle = '#151a38';
+    ctx.fillRect(x + 1, y + AB_XP - 2, inner, 1);
+    if (fw <= 0) return;
+    ctx.fillStyle = hot ? '#f4f7ff' : '#f2cc6a';
+    ctx.fillRect(x + 1, y + 1, fw, AB_XP - 2);
+    ctx.fillStyle = hot ? '#ffffff' : '#f8e29a';
+    ctx.fillRect(x + 1, y + 1, fw, 1);
+    ctx.fillStyle = hot ? '#cfd8e8' : '#b98a2e';
+    ctx.fillRect(x + 1, y + AB_XP - 2, fw, 1);
+  }
+  function drawAbUp(i, now, hov) {
+    const r = abUpRect(i);
+    const can = abCanBuy(player, i);
+    const rank = player.skill[i];
+    const y = r.y - (hov && can ? 1 : 0);
+    const rim = hov && can ? '#f4f7ff'
+      : can ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
+      : rank >= AB_RANK_MAX ? '#8a7a3a' : '#35426e';
+    ctx.fillStyle = rim;
+    ctx.fillRect(r.x, y, r.w, r.h);
+    if (rim === '#35426e') {
+      ctx.fillStyle = '#46548a';
+      ctx.fillRect(r.x, y, r.w, 1);
+      ctx.fillStyle = '#283258';
+      ctx.fillRect(r.x, y + r.h - 1, r.w, 1);
+    }
+    ctx.fillStyle = BAG_WELL;
+    ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+    if (can) {
+      const cx = r.x + (r.w >> 1), cy = y + 3;
       ctx.fillStyle = '#0f1632';
-      ctx.fillRect(sx, y, segW, 5);
-      ctx.fillStyle = '#1a2142';
-      ctx.fillRect(sx + 1, y + 1, inner, 3);
-      ctx.fillStyle = '#151a38';
-      ctx.fillRect(sx + 1, y + 3, inner, 1);
-      const fw = t >= 1 ? inner : t <= 0 ? 0 : Math.round(t * inner);
-      if (fw <= 0) return;
-      const fx = fromRight ? sx + 1 + inner - fw : sx + 1;
-      ctx.fillStyle = fillCol;
-      ctx.fillRect(fx, y + 1, fw, 3);
-      ctx.fillStyle = hiCol;
-      ctx.fillRect(fx, y + 1, fw, 1);
-      ctx.fillStyle = loCol;
-      ctx.fillRect(fx, y + 3, fw, 1);
-    };
-    for (let i = 0; i < nSeg; i++) {
-      const t = Math.max(0, Math.min(1, segF - i));
-      paintSeg(cx - 14 - i * (segW + 1), t, true);
-      paintSeg(cx + 6 + i * (segW + 1), t, false);
+      ctx.fillRect(cx - 2, cy + 1, 5, 1);
+      ctx.fillRect(cx + 1, cy - 1, 1, 3);
+      ctx.fillStyle = '#f2cc6a';
+      ctx.fillRect(cx - 2, cy, 5, 1);
+      ctx.fillRect(cx, cy - 1, 1, 3);
     }
-    // the level diamond, dead centre, the number inside it
-    const cy = y + 2;
-    const rim = hot ? '#f4f7ff' : max ? '#f2cc6a' : '#6d7ea6';
-    for (let dr = -5; dr <= 5; dr++) {
-      ctx.fillStyle = '#0f1632';
-      ctx.fillRect(cx - (5 - Math.abs(dr)), cy + dr, (5 - Math.abs(dr)) * 2 + 1, 1);
+    for (let k = 0; k < AB_RANK_MAX; k++) {
+      ctx.fillStyle = k < rank ? '#f2cc6a' : '#2c3560';
+      ctx.fillRect(r.x + 1 + k * 2, y + 5, 2, 2);
     }
-    for (let dr = -4; dr <= 4; dr++) {
-      ctx.fillStyle = rim;
-      ctx.fillRect(cx - (4 - Math.abs(dr)), cy + dr, (4 - Math.abs(dr)) * 2 + 1, 1);
-    }
-    for (let dr = -3; dr <= 3; dr++) {
-      ctx.fillStyle = hot ? '#35426e' : '#182350';
-      ctx.fillRect(cx - (3 - Math.abs(dr)), cy + dr, (3 - Math.abs(dr)) * 2 + 1, 1);
-    }
-    drawPixelText(ctx, String(p.level), cx - 1, cy - 2, hot ? '#f4f7ff' : '#f2cc6a');
   }
   function drawHudStrip(now) {
     const p = player, kit = kitOf(p);
     const R = hudStripRect();
+    const hov = mouse.inside ? abHit(mouse.x, mouse.y) : null;
     // one chamfered plate behind bar and slots - the bag's ground, so the two
     // HUD pieces sit in the same family
     ctx.fillStyle = AB_BG;
@@ -7357,7 +7433,6 @@
     ctx.fillRect(R.x - 2, R.y + R.h - 1, R.w + 4, 1);
     ctx.fillRect(R.x - 3, R.y + 1, 1, R.h - 2);
     ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
-    drawXpBar(now, R.x, R.y + 3);
     if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
     abChSeen = p.dodgeCharges;
     const dry = p.quiver <= 0;
@@ -7366,7 +7441,7 @@
     const nockF = p.nockT > 0 ? clamp01(1 - p.nockT / Math.max(0.01, kit.nock)) : 1;
     const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
       : clamp01(1 - p.dodgeRegenT / Math.max(0.01, kit.dodgeCd));
-    const flF = p.quiver >= QUIVER_MAX ? 1 : clamp01(p.fletchT / QUIVER_REGEN);
+    const flF = p.quiver >= QUIVER_MAX ? 1 : clamp01(p.fletchT / Math.max(0.01, kit.fletch));
     const slots = [
       { frac: nockF, wipe: p.nockT > 0, flash: p.readyFlash > 0 },
       { frac: chF, wipe: p.dodgeCharges <= 0, flash: now < abChFlash },
@@ -7374,10 +7449,11 @@
       { frac: flF, wipe: p.quiver < QUIVER_MAX, flash: p.quiverFlash > 0 },
     ];
     for (let i = 0; i < AB_N; i++) {
+      drawAbUp(i, now, hov && (hov.kind === 'up' || hov.kind === 'slot') && hov.i === i);
       const s = slots[i];
-      const x = R.x + i * (AB_CELL + AB_GAP) +
-        (i === 0 && p.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0);
-      const y = R.y + 11;
+      const cell = abSlotRect(i);
+      const x = cell.x + (i === 0 && p.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0);
+      const y = cell.y;
       const rim = s.flash ? '#f4f7ff'
         : i === 2 && amb ? '#f2cc6a'
         : i === 0 && dry ? '#7e3346' : '#35426e';
@@ -7440,6 +7516,7 @@
       }
       drawPixelTextOutline(ctx, String(i + 1), x + AB_CELL - 6, y + AB_CELL - 8, '#8fa0c8', '#0f1632');
     }
+    drawXpBar(now, R.x, R.y + AB_PAD + AB_UP + AB_PAD + AB_CELL + AB_PAD);
   }
 
   function renderUI(now) {
@@ -8061,9 +8138,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.42'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.43'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.43', 'EACH LEVEL GIVES A SKILL POINT YOU SPEND BY CLICKING THE SQUARE ABOVE AN ABILITY.'],
     ['1.42', 'THE QUIVER STRIP IS NOW A SEGMENTED XP BAR OVER FOUR ABILITY SLOTS, BOTTOM CENTRE.'],
     ['1.41', 'YOU CARRY A BACKPACK NOW - TEN SLOTS OPENED WITH B, WITH YOUR GEAR AND YOUR GOLD IN THE SAME FRAME BOTTOM RIGHT.'],
     ['1.40', 'ONE KEY FOR BOTH DEBUG VIEWS NOW: . DRAWS THE HITBOXES, AND A SECOND PRESS ADDS THE ROUTE EVERY WALKER IS FOLLOWING.'],
@@ -10204,7 +10282,8 @@
     // the quiver: the shafts lying in the world, the ceiling, and a way to set
     // a slot's ammo / renock without playing to it. hudStripRect is the xp bar
     // + ability row that reads all of it back, bottom-centre.
-    shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow,
+    shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, abHit, buySkill,
+    AB_RANK_MAX,
     setQuiver: (n, p) => { const q = p || player; q.quiver = Math.max(0, Math.min(QUIVER_MAX, n)); q.fletchT = 0; return q.quiver; },
     setNock: (t, p) => { (p || player).nockT = t; },
     // multiplayer slots: every slot, the local one, and the teams table
@@ -10229,6 +10308,7 @@
     findPath, walkable, navTo, showPaths: false,
     // hero levels: pay a slot gold (and XP) the way a pickup would
     gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
+    buySkill: (i, p) => buySkill(p || player, i),
     // gear: the table, a slot's effective kit, and buy/pick without the HUD
     GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearRects, gearHit, BAG_CELL,
     gearCost: (i, p) => gearCost(p || player, i),

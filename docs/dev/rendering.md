@@ -253,15 +253,20 @@ composited with `destination-in` on the `mmView` scratch canvas — instead of `
 `VIEW_W`/`VIEW_H` (never a literal), so a resize needs nothing from them. **The top left is
 deliberately empty** — the berry/fish counts that used to stack there, and the gold that sat left
 of the minimap, are all on the backpack's bottom strip now, which is why nothing slides in from
-the left during the landing intro any more.
+the left during the landing intro any more. The strip and the backpack sit on the view's last
+pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush on every size.
 
 | Where | What | Function |
 | --- | --- | --- |
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the event feed | `renderEventLog` |
-| bottom centre | xp bar + four ability slots | `drawHudStrip` |
-| bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip | `drawBag` |
+| bottom centre | four ability slots over the xp bar, flush to the bottom; a square above each well spends a skill point | `drawHudStrip` |
+| bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
+
+### The hud strip
+
+`drawHudStrip` is one plate, flush to the bottom: four ability wells on top, a gold xp bar along the bottom (lifetime gold, left-to-right, no level number — that lives on the overhead badge). A square the same size language as the wells sits directly above each one. While `p.skillPts` is free and that ability is below `AB_RANK_MAX` (3) the square wears a gold plus and is a button (`abHit` / `buySkill` through `input.cmd {kind:'skill'}`); otherwise it shows three rank pips. The plate swallows clicks so the bow never fires through it. A point lands at level 1 and on every `levelUp`.
 
 ### The backpack and gear widget
 
@@ -279,7 +284,8 @@ more, it is the top row of the bag. `bagFrameRect()` is the whole thing, and top
 affordable gear piece bobs a gold chevron *above* its cell and the hover price sits higher still,
 so whatever is over the row has to be empty screen — put the grid up there and every chevron draws
 into it. (The carets start 14 px up rather than 10 so the bottom of their bob clears the frame's
-own lit edge, `BAG_PAD` being only 3.) The frame is pinned by its **bottom** at `VIEW_H - 8` and
+own lit edge, `BAG_PAD` being only 3.) The frame is pinned by its **bottom-right** to the view edge (`VIEW_W` / `VIEW_H`,
+the 1 px rim is the last pixel) and
 grows upward, so opening the bag lifts the row instead of pushing the gold off the screen.
 
 - **Nothing in it is a different size from anything else.** `BAG_CELL` (18) is a grid slot, a gear
@@ -597,8 +603,8 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree), a live wheel segment, or a control inside the backpack
-  widget (`gearHit()` / `bagHit()`, the one left-clickable HUD panel in play — its gold strip
-  stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
+  widget (`gearHit()` / `bagHit()`), or a free skill-point square on the hud strip
+  (`abHit()` — the gold strip of the bag stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
   slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
   60 px reach); **reticle** — everywhere else in play.
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work

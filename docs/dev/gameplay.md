@@ -183,9 +183,9 @@ edge ever arrives.
 ### The quiver
 
 Arrows are a resource. `p.quiver` starts at `QUIVER_MAX` (6); `fireArrow` spends one and sets
-`p.nockT = kit.nock` (WREN 0.45 s, SKADI 0.3 s, both scaled by QUICKDRAW), and no draw can begin
+`p.nockT = kit.nock` (WREN 0.45 s, SKADI 0.3 s, both scaled by QUICKDRAW and loose ranks), and no draw can begin
 while that runs. Below the ceiling, `p.fletchT` accumulates and hands back one arrow every
-`QUIVER_REGEN` (2.4 s) through `gainArrow` — the floor that keeps a player who never picks
+`kit.fletch` (starts at `QUIVER_REGEN` 2.4 s, shortened by fletch ranks) through `gainArrow` — the floor that keeps a player who never picks
 anything up throttled rather than disarmed. Bow-fishing is the one shot that costs nothing: it
 never leaves the bow, so it takes the renock but not the arrow.
 
@@ -201,14 +201,14 @@ quiver as shafts around the body, the same way `spillInventory` spills the walle
 
 Four indicators carry it, and none of them is a word:
 
-- **The hud strip** (`drawHudStrip`, bottom-centre). A segmented xp bar fills outward from a
-  central level diamond (gold, because xp is lifetime gold), and under it four ability wells —
-  a nocked bow, a winter boot, a buried hood, a fletching knife — carry the combat timers the
-  old quiver pips used to. Lit pip counts and a 1px cooldown wipe are the whole readout; keys
-  1–4 sit in the corner of each well. A gained arrow (`quiverFlash`) and a completed renock
-  (`readyFlash`) flash the bow well; a press on an empty bow (`dryT`, set by `dryFire`) shakes
-  that well and reddens its rim. The fletching on the bow and knife icons is the local team's
-  colour, the same colour on every shaft in the snow.
+- **The hud strip** (`drawHudStrip`, bottom-centre). Four ability wells sit above a gold xp bar
+  (lifetime gold, filling left to right). A small square above each well is the rank-up button —
+  a gold plus while a skill point can land there, three pips otherwise. Lit pip counts and a 1px
+  cooldown wipe are the combat readout; keys 1–4 sit in the corner of each well (those keys buy
+  gear, not ranks). A gained arrow (`quiverFlash`) and a completed renock (`readyFlash`) flash
+  the bow well; a press on an empty bow (`dryT`, set by `dryFire`) shakes that well and reddens
+  its rim. The fletching on the bow and knife icons is the local team's colour, the same colour
+  on every shaft in the snow.
 - **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
   *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
   geometry either way, so it never jumps.
@@ -307,7 +307,8 @@ press, on `tryDodge` (a roll is the fast way out and costs a charge), on any hit
 
 ### The one number
 
-`p.hide` (0..1) is the whole state. It climbs at `1 / PRONE_BURY` (1.5 s) while lying **still on
+`p.hide` (0..1) is the whole state. It climbs at `1 / kit.bury` (starts at `PRONE_BURY` 1.5 s,
+shortened by ambush ranks) while lying **still on
 snow**, holds while crawling, decays fast off snow — a body dragged onto bare ice keeps the pose
 but loses the cover, because the cover is the snow, not the posture — and is zeroed the instant
 `risePlayer` runs. Two derived reads sit on top of it and **everything else in the game uses
@@ -343,7 +344,8 @@ that made it — and it is the counterplay: a line like that leads straight to t
 
 `ambushReady(p)` is `prone && hide >= 1 && !moving`: **full** cover, and dead still while it goes.
 `fireArrow` reads it before anything else can break the cover, multiplies the whole damage roll
-(champion + power + speed + level) by `AMBUSH_MUL` (2.5), tags the arrow `ambush: true`, and calls
+(champion + power + speed + level) by `kit.ambushMul` (starts at `AMBUSH_MUL` 2.5, grown by ambush
+ranks), tags the arrow `ambush: true`, and calls
 `risePlayer` after the loose — one ambush per burrow, then you are a player lying in the open with
 a bow that still has to be renocked. A WREN's full draw goes 12 → 30. Bow-fishing is the exception
 that proves the rule: it never leaves the bow, so it costs no arrow and breaks no cover.
@@ -581,7 +583,7 @@ chevron already answers that, on the piece it applies to, only when the answer i
 `gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
 can never disagree, and it is asked **before** `bagHit` everywhere because `bagHit` deliberately
 does not report the four gear cells. The click is swallowed **before** `clickAction` — the
-backpack widget is the one left-clickable HUD panel in play. Living in that widget is also what
+backpack widget and the hud strip are the left-clickable HUD in play. Living in that widget is also what
 keeps the chevrons legible: see
 [the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
 float so they still build.
