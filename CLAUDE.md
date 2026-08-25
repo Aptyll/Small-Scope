@@ -67,7 +67,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~9500-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~9700-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
@@ -93,9 +93,17 @@ string, build the affordance instead.
 
 Cross-file invariants — breaking one produces a bug that looks unrelated to its cause.
 
-- **Canvas size changed?** Call `fitCanvas()` **then** `relayout()` — every path (window resize,
-  `fullscreenchange`, camera zoom, the eagle drop's `DROP_ROWS` view via `applyView()`) goes through both. Never write layout code against a literal
+- **Canvas size changed?** Call `fitCanvas()` **then** `relayout()` — both paths (window resize,
+  `fullscreenchange`) go through both. Never write layout code against a literal
   480/270; the view is `VIEW_W`×`VIEW_H`.
+- **Zoom scales the world, never the UI.** `render()` draws the world into `worldCv` at
+  `WV_W`×`WV_H`, blits it in device px, then draws the UI in `VIEW_W`×`VIEW_H` space under a
+  `devScale` transform — so the HUD is the same size at every zoom. A **world** pass bounds
+  itself against `WV_*`; a pointer becomes a world point only through `mouseWX()`/`mouseWY()`,
+  and a world point becomes a UI point only through `wToSX()`/`wToSY()`.
+- **The zoom the player rests at is a whole number of device px per world px** (`kWant`; the
+  wheel steps it by 1). Anything that sets the zoom goes through that rung, or the pixel grid
+  stops being uniform and sprites look stretched.
 - **Screen position is `round(world − camera)`, rounded exactly once.** Statics subtract the
   rounded `ox`/`oy`; moving entities subtract the exact `ex`/`ey` and round at the end. Rounding
   camera and entity separately makes sprites vibrate ±1 px against the background while walking.

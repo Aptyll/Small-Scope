@@ -161,10 +161,29 @@
 
   // ------------------------------------------------------------ canvas
   const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+  // `ctx` is NOT a fixed binding: render() points it at the world buffer for
+  // the world layer and back at the screen for the UI layer (see the world
+  // buffer note below). Every draw call in the file writes through it, which is
+  // what lets one pass order span two different pixel spaces untouched.
+  const uictx = canvas.getContext('2d');
+  let ctx = uictx;
   ctx.imageSmoothingEnabled = false;
 
-  // offscreen light canvas (sized by fitCanvas alongside the main canvas)
+  // The world buffer. Everything up to and including lighting draws into this
+  // at 1:1 world pixels, and render() then blits the WV_W x WV_H corner of it
+  // over the whole canvas in one nearest-neighbour step. Two things fall out of
+  // that, and both are the point:
+  //   - the canvas never resizes when you zoom, so the HUD, the panels and the
+  //     cursor are the same size on screen at every zoom level;
+  //   - the world is composed at one scale and resampled ONCE as a single
+  //     image, so the pixel grid stays coherent across ground, sprites and
+  //     particles instead of each sprite rounding its own way.
+  // It is allocated at the most zoomed-OUT size once per canvas size, never
+  // per frame - resizing a canvas reallocates it and resets its context state.
+  const worldCv = document.createElement('canvas');
+  const wctx = worldCv.getContext('2d');
+
+  // offscreen light canvas (sized by fitCanvas alongside the world buffer)
   const lightCv = document.createElement('canvas');
   const lctx = lightCv.getContext('2d');
 
@@ -172,25 +191,69 @@
   const barsCv = document.getElementById('bars');
   const bctx = barsCv.getContext('2d');
 
-  // One camera for every player (the SC2/LoL model): the view always shows
-  // ~TARGET_ROWS rows of world — monitor resolution buys sharpness, never zoom.
+  // One camera for every player (the SC2/LoL model): the CANVAS always shows
+  // ~TARGET_ROWS rows — monitor resolution buys sharpness, never zoom.
   // Heights that don't divide cleanly "breathe" a few percent rather than
   // letterbox or blur (the Terraria/Stardew trade), and width is capped at
   // 16:9 so ultrawides get slim pillarbox bars instead of extra vision.
   const TARGET_ROWS = 270;
-  // the eagle drop renders at DROP_ROWS (see the eagle drop banner) so the
-  // rider sees enough of the world to pick a landing; applyView() swaps it
-  let viewRows = TARGET_ROWS;
 
-  // Scroll-wheel camera zoom: each step raises the integer device-pixel scale
-  // by one, so every zoom level stays pixel-perfect. Zoom OUT is capped at the
-  // TARGET_ROWS baseline (the fairness ceiling — nobody buys vision), zoom IN
-  // at ~MIN_ROWS rows. Overlays and non-play modes render at base zoom so the
-  // fixed-size UI panels always fit; update() applies changes via zoomEff.
-  const MIN_ROWS = 150;
-  let zoomStep = 0;  // player-requested steps above base scale
-  let zoomEff = 0;   // currently applied steps
-  let zoomMax = 0;   // available steps on this window (set by fitCanvas)
+  // ---- world zoom ----
+  // Zoom scales the WORLD LAYER ONLY. The canvas keeps its VIEW_W x VIEW_H
+  // layout at every zoom, so the HUD, the baked panels and the cursor are the
+  // same size on screen whatever the camera is doing: zooming in moves the
+  // camera closer, it does not magnify the interface.
+  //
+  // THE RESTING ZOOM IS ALWAYS PIXEL-EXACT, and that is an arithmetic fact, not
+  // a preference. A world pixel ends up covering `zoom * devScale` DEVICE
+  // pixels; unless that is a whole number some world pixels get an extra row of
+  // device pixels and their neighbours do not, which is what "stretched" looks
+  // like on a 16x16 sprite. So the zoom the player actually plays at is stored
+  // as that whole number - kWant, device px per world px - and the float scale
+  // is derived from it. The canvas backing store is therefore sized in DEVICE
+  // pixels (VIEW * devScale) and the UI draws through a devScale transform:
+  // that is what buys the fine steps, because k only has to be whole in device
+  // pixels, not in canvas pixels. At devScale 4 the rungs are quarter-scale
+  // (0.75, 1, 1.25, 1.5 ...); a smaller devScale has fewer, coarser rungs,
+  // which is the honest answer on a display that has fewer pixels to spend.
+  //
+  // zoomCur eases toward kWant/devScale, so a notch is a glide rather than a
+  // jump. In motion the blit is briefly fractional (nobody reads pixel edges
+  // mid-zoom); it lands exact. ZOOM_EASE is deliberately steep - with steps
+  // this fine a slow ease reads as lag, and a spun wheel must keep up.
+  const ZOOM_MIN = 0.5;     // ~540 rows: the whole clearing and then some
+  const ZOOM_MAX = 3.6;     // ~75 rows: close enough to read a face
+  const ZOOM_EASE = 16;     // per second, frame-rate independent
+  const DROP_ZOOM = 0.5;    // the eagle ride's fixed framing (see the eagle drop banner)
+  const ZOOM_FLOOR = Math.min(ZOOM_MIN, DROP_ZOOM); // widest world buffer we ever need
+  let kWant = 4;            // device px per world px - a WHOLE number, the wheel steps it by 1
+  let zoomCur = 1;          // applied scale, eased toward kWant / devScale every update
+  let WV_W = 480, WV_H = 270; // the world view in world px
+
+  // the rungs kWant may sit on, clamped so the ends of the range are reachable
+  // on any display (a devScale of 1 or 2 has very few whole numbers to offer)
+  function kMin() { return Math.max(1, Math.round(ZOOM_MIN * devScale)); }
+  function kMax() { return Math.max(kMin() + 1, Math.round(ZOOM_MAX * devScale)); }
+  function zoomWantOf() { return kWant / devScale; }
+
+  // WV from the current scale, in world px. CEIL, never round: WV * k must
+  // COVER the canvas or a sliver of stale pixels survives down the right edge.
+  // Width and height ceil independently, so the effective scale can differ
+  // between the axes by a fraction of a device pixel while the ease is running;
+  // at rest both land on exactly k device px per world px.
+  function sizeWorldView() {
+    const k = Math.max(0.05, zoomCur * devScale);
+    WV_W = Math.max(16, Math.ceil(VIEW_W * devScale / k));
+    WV_H = Math.max(16, Math.ceil(VIEW_H * devScale / k));
+  }
+  // world point -> canvas point, for the few UI-layer things anchored to a tile
+  function wToSX(wx) { return (wx - camX) * zoomCur; }
+  function wToSY(wy) { return (wy - camY) * zoomCur; }
+  // ...and back: the ONLY way a pointer position becomes a world position.
+  // Every aim, hover and right-click target goes through these two, so the
+  // zoom can never be applied in one place and forgotten in another.
+  function mouseWX() { return mouse.x / zoomCur + camX; }
+  function mouseWY() { return mouse.y / zoomCur + camY; }
 
   let scale = 2;    // CSS px per game px
   let devScale = 2; // DEVICE px per game px (the integer fitCanvas picks)
@@ -201,11 +264,9 @@
     const dpr = window.devicePixelRatio || 1;
     const devW = Math.max(1, Math.round(window.innerWidth * dpr));
     const devH = Math.max(1, Math.round(window.innerHeight * dpr));
-    let dev = Math.max(1, Math.round(devH / viewRows));
+    let dev = Math.max(1, Math.round(devH / TARGET_ROWS));
     // never shrink the view below the UI panels' footprint
     while (dev > 1 && (devW / dev < 320 || devH / dev < 240)) dev--;
-    zoomMax = Math.max(0, Math.floor(devH / MIN_ROWS) - dev);
-    dev += Math.min(zoomEff, zoomMax);
     scale = dev / dpr; // CSS px per game px; mouse mapping divides by this
     devScale = dev;    // the replay window captures at this resolution
     // cover the window exactly: ceil leaves at most one game px of overflow,
@@ -213,9 +274,27 @@
     VIEW_H = Math.ceil(devH / dev);
     FULL_W = Math.ceil(devW / dev);
     VIEW_W = Math.min(FULL_W, Math.ceil(VIEW_H * 16 / 9));
-    canvas.width = VIEW_W; canvas.height = VIEW_H;
-    ctx.imageSmoothingEnabled = false; // resizing the canvas resets ctx state
-    lightCv.width = VIEW_W; lightCv.height = VIEW_H;
+    // The backing store is in DEVICE pixels, not game pixels: the world blit
+    // needs that resolution to land a whole number of device pixels on every
+    // world pixel at the in-between zoom rungs (see the world zoom block). The
+    // UI still draws in VIEW space - render() puts a devScale transform under
+    // it - so no layout code changes, and text and 1px rects scale by a whole
+    // number too and stay crisp.
+    canvas.width = VIEW_W * dev; canvas.height = VIEW_H * dev;
+    uictx.imageSmoothingEnabled = false; // resizing the canvas resets ctx state
+    // devScale may have just changed (resize, fullscreen, a different monitor):
+    // re-rung the zoom onto the new ladder at the nearest scale to what it was
+    kWant = Math.max(kMin(), Math.min(kMax(), Math.round(zoomCur * dev)));
+    // world buffer + light canvas at the most zoomed-out size we can ever ask
+    // for, so neither is ever reallocated mid-play; each frame uses the
+    // WV_W x WV_H corner. imageSmoothing off on both: the scale-up must be
+    // nearest-neighbour or the pixel art turns to soup.
+    const wMax = Math.ceil(VIEW_W / ZOOM_FLOOR), hMax = Math.ceil(VIEW_H / ZOOM_FLOOR);
+    worldCv.width = wMax; worldCv.height = hMax;
+    wctx.imageSmoothingEnabled = false;
+    lightCv.width = wMax; lightCv.height = hMax;
+    lctx.imageSmoothingEnabled = false;
+    sizeWorldView();
     canvas.style.width = (VIEW_W * scale) + 'px';
     canvas.style.height = (VIEW_H * scale) + 'px';
     // bars canvas spans the whole window at the same pixel scale; painted by
@@ -388,10 +467,19 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { volume: 0.5, mmR: 24, mmZoom: 2, shake: true, muted: false, info: false, pixelCursor: true };
-  // minimap zoom steps, px per world tile: index settings.mmZoom (2 = the 1:1 baseline)
-  const MM_ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3];
-  function mmScale() { return MM_ZOOMS[Math.max(0, Math.min(MM_ZOOMS.length - 1, settings.mmZoom | 0))]; }
+  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true };
+  // Minimap zoom ladder, px per world tile: index settings.mmZoom (5 = the 1:1
+  // baseline). Twice the rungs and twice the reach of the old six, and like the
+  // camera it eases between them rather than snapping - mmCur is what anything
+  // drawing the disc reads.
+  const MM_ZOOMS = [0.25, 0.35, 0.5, 0.65, 0.8, 1, 1.25, 1.6, 2, 2.5, 3.2, 4];
+  // saves written before settings.v existed hold an index into the old
+  // [0.5, 0.75, 1, 1.5, 2, 3]; land each one on its nearest new rung
+  const MM_MIGRATE = [2, 3, 5, 7, 8, 10];
+  let mmCur = -1; // eased px per tile; negative = not yet snapped to the setting
+  function mmStep() { return Math.max(0, Math.min(MM_ZOOMS.length - 1, settings.mmZoom | 0)); }
+  function mmWant() { return MM_ZOOMS[mmStep()]; }
+  function mmScale() { return mmCur < 0 ? mmWant() : mmCur; }
   // pointer over the minimap disc (its ring included)
   function overMinimap() { return mouse.inside && Math.hypot(mouse.x - MM_CX, mouse.y - MM_CY) <= MM_R + 7; }
 
@@ -406,7 +494,15 @@
     try {
       const s = JSON.parse(localStorage.getItem('softfall.settings'));
       if (s) Object.assign(settings, s);
+      // a save from before the minimap ladder grew: its mmZoom indexes the old
+      // six-rung array, so carry it across instead of silently rescaling the
+      // disc under someone who had already set it where they wanted it
+      if (s && s.v !== 2) {
+        settings.mmZoom = MM_MIGRATE[Math.max(0, Math.min(MM_MIGRATE.length - 1, s.mmZoom | 0))];
+        settings.v = 2;
+      }
     } catch (e) { }
+    mmCur = mmWant();
   }
   function applyMinimapSize() {
     MM_R = settings.mmR;
@@ -784,7 +880,7 @@
     if (e.button === 2) {
       if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel) return;
       SFX.unlock();
-      const tx = Math.floor((mouse.x + camX) / TILE), ty = Math.floor((mouse.y + camY) / TILE);
+      const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
       const o = structOf(objAt(tx, ty));
       if (!o) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
@@ -833,8 +929,9 @@
       saveSettings();
       return;
     }
-    // scroll up = zoom in, scroll down = back out toward the 270-row baseline
-    zoomStep = Math.max(0, Math.min(zoomMax, zoomStep + (e.deltaY > 0 ? -1 : 1)));
+    // scroll up = closer. One notch = one device pixel per world pixel, which
+    // is the finest step that still lands on a pixel-exact zoom.
+    kWant = Math.max(kMin(), Math.min(kMax(), kWant + (e.deltaY > 0 ? -1 : 1)));
   }, { passive: false });
 
   // The local human's controller: keyboard + mouse folded into the same input
@@ -843,8 +940,8 @@
   // does not stop the sim, keeps the feet and drops everything else.
   function sampleHumanInput(p) {
     const inp = p.input;
-    inp.aimX = mouse.x + camX;
-    inp.aimY = mouse.y + camY;
+    inp.aimX = mouseWX();
+    inp.aimY = mouseWY();
     // read the walk keys once - each branch below decides who gets them
     let mx = 0, my = 0;
     if (keys['w'] || keys['arrowup']) my -= 1;
@@ -1625,7 +1722,7 @@
 
   // the fish under the cursor, if any (their bodies are ~10x5, so a 7px disc)
   function hoverFish() {
-    const wx = mouse.x + camX, wy = mouse.y + camY;
+    const wx = mouseWX(), wy = mouseWY();
     for (const f of fish) if (Math.hypot(f.x - wx, f.y - wy) < 7) return f;
     return null;
   }
@@ -3125,8 +3222,10 @@
   function wheelLayout() {
     const w = state.wheel;
     const edge = WHEEL_R + WHEEL_PAD;
-    let cx = w.tx * TILE + 8 - Math.round(camX);
-    let cy = w.ty * TILE + 8 - Math.round(camY);
+    // the wheel is UI, not world: it sits over its tile but keeps its own pixel
+    // size at every zoom, so the anchor comes through wToS and the radii don't
+    let cx = Math.round(wToSX(w.tx * TILE + 8));
+    let cy = Math.round(wToSY(w.ty * TILE + 8));
     cx = Math.max(edge + 2, Math.min(VIEW_W - edge - 2, cx));
     cy = Math.max(edge + 2, Math.min(VIEW_H - edge - 14, cy)); // bottom margin fits the label
     const opts = wheelOptions();
@@ -3606,18 +3705,33 @@
   // ------------------------------------------------------------ update
   let camX = 0, camY = 0;
 
-  // apply pending camera zoom (overlays and non-play modes drop to base zoom so
-  // the fixed-size panels fit; zoomMax can shrink on a window resize) and the
-  // eagle drop's zoomed-out row target. Refits only when something changed.
-  function applyView() {
-    const ze = (state.mode !== 'play' || state.mapOpen || state.settingsOpen)
-      ? 0 : Math.min(zoomStep, zoomMax);
-    const rows = state.mode === 'drop' ? DROP_ROWS : TARGET_ROWS;
-    if (ze !== zoomEff || rows !== viewRows) { zoomEff = ze; viewRows = rows; fitCanvas(); relayout(); }
+  // Ease the world scale toward what is wanted and resize the world view to
+  // match. Nothing here touches the canvas, so unlike the old applyView() it
+  // never calls fitCanvas()/relayout() and the overlays no longer have to force
+  // the zoom back to base to make their fixed-size panels fit. `snap` lands on
+  // the target immediately, for the two mode changes that must not be seen
+  // easing (boot, and the eagle's fixed framing).
+  function applyZoom(dt, snap) {
+    const want = state.mode === 'drop' ? DROP_ZOOM : zoomWantOf();
+    const k = 1 - Math.exp(-ZOOM_EASE * dt);
+    if (snap) zoomCur = want;
+    else {
+      zoomCur += (want - zoomCur) * k;
+      if (Math.abs(want - zoomCur) < 0.0008) zoomCur = want; // park it, or WV jitters by a px forever
+    }
+    sizeWorldView();
+    // the minimap rides the same ease off the same constant, so both zooms
+    // under one hand feel like one control
+    const mw = mmWant();
+    if (snap || mmCur < 0) mmCur = mw;
+    else {
+      mmCur += (mw - mmCur) * k;
+      if (Math.abs(mw - mmCur) < 0.0008) mmCur = mw;
+    }
   }
 
   function update(dt) {
-    applyView();
+    applyZoom(dt);
 
     // time (the clock starts with the eagle - the match is live while you ride)
     if (state.mode === 'play' || state.mode === 'drop') {
@@ -3674,7 +3788,7 @@
     } else if (state.mode === 'drop') {
       // riding: track the eagle (the rider sits on it); falling: hold over the
       // landing point. The first INTRO_T eases in from where the drift left off.
-      const tx = player.x - VIEW_W / 2, ty = player.y - VIEW_H / 2;
+      const tx = player.x - WV_W / 2, ty = player.y - WV_H / 2;
       if (state.intro > 0) {
         state.intro = Math.max(0, state.intro - dt);
         const q = easeInOut(1 - state.intro / state.introLen);
@@ -3687,10 +3801,12 @@
     } else {
       const vp = viewPlayer();
       const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre
-      const lookX = (mouse.x - VIEW_W / 2) * look;
-      const lookY = (mouse.y - VIEW_H / 2) * look;
-      const tx = vp.x - VIEW_W / 2 + lookX;
-      const ty = vp.y - VIEW_H / 2 + lookY;
+      // the lean is a FRACTION of the view, so it divides by the zoom: the same
+      // pointer offset leans the same share of the screen however close you are
+      const lookX = (mouse.x - VIEW_W / 2) / zoomCur * look;
+      const lookY = (mouse.y - VIEW_H / 2) / zoomCur * look;
+      const tx = vp.x - WV_W / 2 + lookX;
+      const ty = vp.y - WV_H / 2 + lookY;
       if (state.intro > 0) {
         // landing -> play: glide from the touchdown framing onto the play
         // camera with an ease, instead of the play lerp's snap
@@ -3704,8 +3820,8 @@
         camY += (ty - camY) * Math.min(1, dt * 7);
       }
     }
-    camX = Math.max(0, Math.min(WORLD * TILE - VIEW_W, camX));
-    camY = Math.max(0, Math.min(WORLD * TILE - VIEW_H, camY));
+    camX = Math.max(0, Math.min(WORLD * TILE - WV_W, camX));
+    camY = Math.max(0, Math.min(WORLD * TILE - WV_H, camY));
 
     // screen fades (the reroll whiteout)
     if (state.fade) {
@@ -4370,13 +4486,20 @@
     const ex = camX + shx;
     const ey = camY + shy;
 
+    // Into the world buffer: from here to renderLighting() every pass draws at
+    // 1:1 world pixels into a WV_W x WV_H frame, and the screen never sees any
+    // of it until the blit below. Everything in this stretch bounds itself
+    // against WV_W/WV_H, never VIEW_W/VIEW_H - at zoom < 1 the world view is
+    // WIDER than the canvas, and culling to the canvas would eat the edges.
+    ctx = wctx;
+
     // ground
-    ctx.drawImage(groundCv, ox, oy, VIEW_W, VIEW_H, 0, 0, VIEW_W, VIEW_H);
+    ctx.drawImage(groundCv, ox, oy, WV_W, WV_H, 0, 0, WV_W, WV_H);
 
     // fish: silhouettes drifting under the thin ice, crisp in open holes
     for (const f of fish) {
       const sx = f.x - ex, sy = f.y - ey;
-      if (sx < -12 || sy < -12 || sx > VIEW_W + 12 || sy > VIEW_H + 12) continue;
+      if (sx < -12 || sy < -12 || sx > WV_W + 12 || sy > WV_H + 12) continue;
       const surfaced = ground[idx(Math.floor(f.x / TILE), Math.floor(f.y / TILE))] === 2;
       const wig = Math.round(Math.sin(f.t * 7) * 1.2);
       ctx.save();
@@ -4406,7 +4529,7 @@
     for (const [ci, hits] of iceCracks) {
       const ctx2 = ci % WORLD, cty2 = (ci / WORLD) | 0;
       const px = ctx2 * TILE - ox, py = cty2 * TILE - oy;
-      if (px < -TILE || py < -TILE || px > VIEW_W || py > VIEW_H) continue;
+      if (px < -TILE || py < -TILE || px > WV_W || py > WV_H) continue;
       const n = 3 + hits * 3;
       for (let j = 0; j < n; j++) {
         const h = hash2(ci * 7 + j * 13, j * 31 + hits);
@@ -4475,8 +4598,8 @@
     // visible tile range
     const tx0 = Math.max(0, Math.floor(ox / TILE) - 1);
     const ty0 = Math.max(0, Math.floor(oy / TILE) - 1);
-    const tx1 = Math.min(WORLD - 1, Math.ceil((ox + VIEW_W) / TILE) + 1);
-    const ty1 = Math.min(WORLD - 1, Math.ceil((oy + VIEW_H) / TILE) + 2);
+    const tx1 = Math.min(WORLD - 1, Math.ceil((ox + WV_W) / TILE) + 1);
+    const ty1 = Math.min(WORLD - 1, Math.ceil((oy + WV_H) / TILE) + 2);
 
     // flat objects first (stumps)
     for (let ty = ty0; ty <= ty1; ty++) {
@@ -4611,7 +4734,7 @@
     for (const o of structures) {
       if (!o.building) continue;
       const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
-      if (px < -20 || px > VIEW_W + 4 || py < -20 || py > VIEW_H + 4) continue;
+      if (px < -20 || px > WV_W + 4 || py < -20 || py > WV_H + 4) continue;
       const p = Math.min(1, o.buildT / o.buildTotal);
       const big = structW(o.type) > 1;
       const bw = big ? 24 : 12, bx = big ? px + structW(o.type) * 8 - 12 : px + 2;
@@ -4644,7 +4767,7 @@
       const vd = Math.hypot(a.vx, a.vy) || 1;
       const nx = a.vx / vd, ny = a.vy / vd;
       const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
-      if (hx < -16 || hx > VIEW_W + 16 || hy < -16 || hy > VIEW_H + 16) continue;
+      if (hx < -16 || hx > WV_W + 16 || hy < -16 || hy > WV_H + 16) continue;
       const qx = -ny, qy = nx;
       ARROW_PX.length = 0;
       const at = (i, j) => ARROW_PX.push(
@@ -4711,6 +4834,24 @@
 
     drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
     renderLighting(ox, oy, ex, ey, now);
+
+    // Back to the screen, and the only place the two pixel spaces meet. The
+    // blit is done in DEVICE pixels (identity transform) at k = zoom * devScale
+    // px per world px: whole at rest, so every world pixel gets exactly the
+    // same k x k block and the grid is uniform; briefly fractional while the
+    // ease runs, which is the one moment nobody is reading pixel edges. It is
+    // one nearest-neighbour resample of an ALREADY COMPOSED frame, so ground,
+    // sprites and particles share one grid instead of each rounding its own.
+    // The destination overhangs the canvas by less than k px (sizeWorldView
+    // ceils) and the edge clips it.
+    ctx = uictx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const kPx = zoomCur * devScale;
+    ctx.drawImage(worldCv, 0, 0, WV_W, WV_H, 0, 0, WV_W * kPx, WV_H * kPx);
+    // everything from here draws in VIEW space, blown up by the whole-number
+    // devScale - so 1px HUD rects and the 3x5 font stay exact at any zoom
+    ctx.setTransform(devScale, 0, 0, devScale, 0, 0);
+
     renderWeather(ex, ey);
     renderVignettes();
     replayTick(now); // banks the finished world frame - must stay above renderUI
@@ -4830,7 +4971,7 @@
     const ret = (mode, dim, extra) =>
       Object.assign({ kind: 'reticle', mode, dim, nock: nockF, dry, amb: ambushReady(player) }, extra);
 
-    const wx = mouse.x + camX, wy = mouse.y + camY;
+    const wx = mouseWX(), wy = mouseWY();
     const tx = Math.floor(wx / TILE), ty = Math.floor(wy / TILE);
     const o = structOf(objAt(tx, ty));
     const busy = player.fallT > 0 || player.dodgeT > 0; // tools locked out
@@ -5000,7 +5141,7 @@
     const p = Math.min(1, Math.max(0.18, player.chargeT / kitOf(player).bowCharge));
     const range = (170 + 190 * p) * 0.85; // speed x lifetime, as fireArrow() sets them
     const x0 = player.x, y0 = player.y - BOW_Y; // exactly fireArrow()'s origin and direction
-    const dx = mouse.x + camX - x0, dy = mouse.y + camY - y0;
+    const dx = mouseWX() - x0, dy = mouseWY() - y0;
     const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
     // walk the flight: stop at the first solid tile or the first animal the
     // arrow would hit (same 8px body test as the arrow update)
@@ -5053,7 +5194,7 @@
     const want = state.mode === 'play' && !player.dead && !inAir(player) && player.quiver < QUIVER_MAX;
     for (const s of shafts) {
       const sx = Math.round(s.x - ex), sy = Math.round(s.y - ey);
-      if (sx < -12 || sy < -12 || sx > VIEW_W + 12 || sy > VIEW_H + 12) continue;
+      if (sx < -12 || sy < -12 || sx > WV_W + 12 || sy > WV_H + 12) continue;
       const left = SHAFT_LIFE - s.t;
       if (left < 1.6 && ((now * 7) | 0) % 2) continue;
       const fade = Math.min(1, left / 4);
@@ -5197,7 +5338,7 @@
     const vd = Math.hypot(a.vx, a.vy) || 1;
     const nx = a.vx / vd, ny = a.vy / vd, qx = -ny, qy = nx;
     const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
-    if (hx < -16 || hx > VIEW_W + 16 || hy < -16 || hy > VIEW_H + 16) return;
+    if (hx < -16 || hx > WV_W + 16 || hy < -16 || hy > WV_H + 16) return;
     const tm = TEAMS[a.team];
     ctx.globalAlpha = 0.28;                       // soft halo under the rim
     ctx.fillStyle = tm.mark;
@@ -5219,7 +5360,7 @@
       const tm = TEAMS[o.team === undefined ? 0 : o.team];
       const m = turretMuzzle(o);
       const mx = Math.round(m.x - ex), my = Math.round(m.y - ey);
-      if (mx < -90 || my < -90 || mx > VIEW_W + 90 || my > VIEW_H + 90) continue;
+      if (mx < -90 || my < -90 || mx > WV_W + 90 || my > WV_H + 90) continue;
       if (o.tgt && o.chg > 0.02) {
         // a dashed line crawling out to the mark, brightening and tightening as it locks
         const tx = o.tgt.x - ex, ty = turretAimY(o.tgt) - ey;
@@ -5769,8 +5910,8 @@
     if (state.wheel) {
       tx = state.wheel.tx; ty = state.wheel.ty;
     } else {
-      tx = Math.floor((mouse.x + camX) / TILE);
-      ty = Math.floor((mouse.y + camY) / TILE);
+      tx = Math.floor(mouseWX() / TILE);
+      ty = Math.floor(mouseWY() / TILE);
       const o = structOf(objAt(tx, ty));
       if (!o) return;
       if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
@@ -6015,7 +6156,7 @@
     if (duskT > 0) {
       ctx.globalAlpha = Math.max(0, duskT) * 0.16;
       ctx.fillStyle = '#ff9a5c';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.fillRect(0, 0, WV_W, WV_H);
       ctx.globalAlpha = 1;
     }
     // dawn pink
@@ -6024,7 +6165,7 @@
     if (dawnT > 0 && dark < 0.8) {
       ctx.globalAlpha = dawnT * 0.1;
       ctx.fillStyle = '#ff88aa';
-      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.fillRect(0, 0, WV_W, WV_H);
       ctx.globalAlpha = 1;
     }
 
@@ -6034,17 +6175,17 @@
       return;
     }
 
-    lctx.clearRect(0, 0, VIEW_W, VIEW_H);
+    lctx.clearRect(0, 0, WV_W, WV_H);
     lctx.globalCompositeOperation = 'source-over';
     lctx.fillStyle = 'rgba(10,16,42,' + (dark * 0.84).toFixed(3) + ')';
-    lctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    lctx.fillRect(0, 0, WV_W, WV_H);
 
     lctx.globalCompositeOperation = 'destination-out';
     for (const L of lights) {
       const flick = 1 + Math.sin(now * 9 + L.x) * 0.05 + Math.sin(now * 23 + L.y) * 0.03;
       const r = L.r * flick;
       const lx = L.x - ox, ly = L.y - oy;
-      if (lx < -r || ly < -r || lx > VIEW_W + r || ly > VIEW_H + r) continue;
+      if (lx < -r || ly < -r || lx > WV_W + r || ly > WV_H + r) continue;
       const grd = lctx.createRadialGradient(lx, ly, 2, lx, ly, r);
       grd.addColorStop(0, 'rgba(255,255,255,1)');
       grd.addColorStop(0.55, 'rgba(255,255,255,0.75)');
@@ -6077,7 +6218,7 @@
       const flick = 1 + Math.sin(now * 9 + L.x) * 0.06;
       const r = L.r * 0.95 * flick;
       const lx = L.x - ox, ly = L.y - oy;
-      if (lx < -r || ly < -r || lx > VIEW_W + r || ly > VIEW_H + r) continue;
+      if (lx < -r || ly < -r || lx > WV_W + r || ly > WV_H + r) continue;
       const a = Math.min(1, strength * 3.2);
       const grd = ctx.createRadialGradient(lx, ly, 1, lx, ly, r);
       grd.addColorStop(0, 'rgba(255,205,150,' + a.toFixed(3) + ')');
@@ -6092,7 +6233,7 @@
       const flick = 1 + Math.sin(now * 11 + L.x) * 0.1;
       const r = L.warm * 0.35 * flick;
       const lx = L.x - ox, ly = L.y - oy;
-      if (lx < -r || ly < -r || lx > VIEW_W + r || ly > VIEW_H + r) continue;
+      if (lx < -r || ly < -r || lx > WV_W + r || ly > WV_H + r) continue;
       const grd = ctx.createRadialGradient(lx, ly, 1, lx, ly, r);
       grd.addColorStop(0, 'rgba(255,170,80,' + (strength * 0.9).toFixed(3) + ')');
       grd.addColorStop(1, 'rgba(255,150,60,0)');
@@ -6102,13 +6243,16 @@
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // world-space flakes wrapped into the view (see the flakes block in fx
-  // updates); a landed flake fades out where it came to rest
+  // World-space flakes wrapped into the view (see the flakes block in fx
+  // updates); a landed flake fades out where it came to rest. This runs on the
+  // SCREEN, above the world blit, so a flake stays its own crisp size however
+  // far in the camera is - the drift multiplies by the zoom so the field still
+  // scrolls with the ground under it.
   function renderWeather(ex, ey) {
     ctx.fillStyle = '#ffffff';
     for (const f of flakes) {
-      const sx = ((f.x - ex) % VIEW_W + VIEW_W) % VIEW_W;
-      const sy = ((f.y - ey) % VIEW_H + VIEW_H) % VIEW_H;
+      const sx = (((f.x - ex) * zoomCur) % VIEW_W + VIEW_W) % VIEW_W;
+      const sy = (((f.y - ey) * zoomCur) % VIEW_H + VIEW_H) % VIEW_H;
       ctx.globalAlpha = f.rest > 0 ? f.a * (f.rest / FLAKE_REST) : f.a;
       ctx.fillRect(Math.round(sx), Math.round(sy), f.size, f.size);
     }
@@ -7069,7 +7213,7 @@
     ctx.strokeStyle = 'rgba(58,44,28,0.5)';
     ctx.lineWidth = 1;
     ctx.strokeRect(MAP_X + (camX / TILE) * MAP_S + 0.5, MAP_Y + (camY / TILE) * MAP_S + 0.5,
-      (VIEW_W / TILE) * MAP_S - 1, (VIEW_H / TILE) * MAP_S - 1);
+      (WV_W / TILE) * MAP_S - 1, (WV_H / TILE) * MAP_S - 1);
 
     // named places: glyph plus the name, inked like the rest of the chart
     for (const L of landmarks) {
@@ -7296,9 +7440,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.36'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.37'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.37', 'THE CAMERA ZOOMS FURTHER IN AND OUT IN FINER STEPS AND GLIDES BETWEEN THEM, ALWAYS SETTLING WHERE THE PIXELS LAND EXACTLY, AND ZOOMING NO LONGER RESIZES THE HUD - ONLY THE WORLD.'],
     ['1.36', 'OPENING THE MAP NO LONGER STOPS THE WORLD - THE MATCH RUNS ON WHILE YOU READ IT, AND YOU CAN KEEP WALKING WITH IT UP.'],
     ['1.35', 'CTRL LIES YOU DOWN IN THE SNOW AND PULLS IT OVER YOU: ALMOST NOBODY CAN SEE YOU, YOU CAN ONLY BELLY-CRAWL, AND THE ARROW YOU LOOSE OUT OF COVER HITS FOR TWO AND A HALF TIMES.'],
     ['1.34', 'ARROWS ARE A QUIVER NOW: EVERY SHOT SPENDS ONE AND TAKES A MOMENT TO RENOCK, AND EVERY ARROW THAT LANDS STICKS IN THE SNOW TO BE PICKED BACK UP.'],
@@ -7512,11 +7657,11 @@
   function titleCamTarget() {
     const c = WORLD * TILE / 2;
     const t = state.menu.camT;
-    const rx = Math.max(0, (WORLD / 2 - BORDER_MAX - 6) * TILE - VIEW_W / 2);
-    const ry = Math.max(0, Math.min(rx * 0.8, (WORLD / 2 - BORDER_MAX - 6) * TILE - VIEW_H / 2));
+    const rx = Math.max(0, (WORLD / 2 - BORDER_MAX - 6) * TILE - WV_W / 2);
+    const ry = Math.max(0, Math.min(rx * 0.8, (WORLD / 2 - BORDER_MAX - 6) * TILE - WV_H / 2));
     return {
-      x: c + Math.cos(t * 0.045 + 0.7) * rx - VIEW_W / 2,
-      y: c + Math.sin(t * 0.031 + 0.7) * ry - VIEW_H / 2,
+      x: c + Math.cos(t * 0.045 + 0.7) * rx - WV_W / 2,
+      y: c + Math.sin(t * 0.031 + 0.7) * ry - WV_H / 2,
     };
   }
 
@@ -9102,14 +9247,14 @@
   // ------------------------------------------------------------ eagle drop
   // Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle
   // along a seed-fixed line across the world (mode 'drop'). The view zooms out
-  // to DROP_ROWS, a chart in the corner shows the line and the bird, and the
+  // to DROP_ZOOM, a chart in the corner shows the line and the bird, and the
   // rider jumps with Space/Enter/E/click (AI slots jump at their own hashed
   // fraction of the route). A jumper free-falls for FALL_T onto the nearest
   // open tile, which becomes its spawn tile (the bot brain's home); the human's landing snaps the
-  // view back to base zoom and runs the HUD slide-in. If the rider never jumps,
+  // view back to the player's own zoom and runs the HUD slide-in. If the rider never jumps,
   // the end of the line jumps for them. state.drop outlives mode 'drop' - the
   // eagle keeps flying (and dropping bots) until it is off the map.
-  const DROP_ROWS = 540;      // view rows while riding (2x the play view)
+                              // the ride's framing is DROP_ZOOM (canvas banner): half scale, twice the view
   const EAGLE_SPD = 170;      // px/s along the route
   const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
   const FALL_T = 1.3;         // seconds of free fall
@@ -9144,10 +9289,12 @@
     state.mode = 'drop';
     state.menu.panel = null;
     state.menu.screen = 'menu';
-    // the view grows around its centre; ease in from the drift's framing
-    const ow = VIEW_W, oh = VIEW_H;
-    applyView();
-    state.introFrom = { x: camX - (VIEW_W - ow) / 2, y: camY - (VIEW_H - oh) / 2 };
+    // the view grows around its centre; ease in from the drift's framing.
+    // The eagle's framing is snapped rather than eased: the ride opens on a
+    // cross-fade from the menu, and a zoom sliding under that reads as a stumble.
+    const ow = WV_W, oh = WV_H;
+    applyZoom(0, true);
+    state.introFrom = { x: camX - (WV_W - ow) / 2, y: camY - (WV_H - oh) / 2 };
     state.intro = INTRO_T; state.introLen = INTRO_T;
     SFX.dawnChime();
   }
@@ -9190,9 +9337,9 @@
     burst(p.x, p.y - 2, '#f4f7ff', 16, 70, 0.5, true);
     if (p === player) {
       state.mode = 'play';
-      applyView();                      // back to the play zoom, centred on the landing
-      camX = Math.max(0, Math.min(WORLD * TILE - VIEW_W, p.x - VIEW_W / 2));
-      camY = Math.max(0, Math.min(WORLD * TILE - VIEW_H, p.y - VIEW_H / 2));
+      applyZoom(0, true);               // back to the player's own zoom, centred on the landing
+      camX = Math.max(0, Math.min(WORLD * TILE - WV_W, p.x - WV_W / 2));
+      camY = Math.max(0, Math.min(WORLD * TILE - WV_H, p.y - WV_H / 2));
       state.introFrom = { x: camX, y: camY };
       state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, the camera settles
       state.menu.screenT = 0;
@@ -9240,7 +9387,7 @@
     const spr = frames[[0, 1, 2, 1][Math.floor(d.flap * 7) % 4]];
     const w = spr.width * S, h = spr.height * S;
     const sx = Math.round(d.x - ex), sy = Math.round(d.y - ey);
-    if (sx > -w && sy > -h - DROP_ALT && sx < VIEW_W + w && sy < VIEW_H + h) {
+    if (sx > -w && sy > -h - DROP_ALT && sx < WV_W + w && sy < WV_H + h) {
       const bob = Math.round(Math.sin(now * 2.4) * 3);
       ctx.save();
       ctx.translate(sx + 10, sy + DROP_ALT);
@@ -9405,8 +9552,8 @@
   buildHelpPanel();
   buildPatchPanel();
   rebuildLights();
-  camX = player.x - VIEW_W / 2;
-  camY = player.y - VIEW_H / 2;
+  camX = player.x - WV_W / 2;
+  camY = player.y - WV_H / 2;
   // landing from a reroll: the whiteout the die left behind clears to the new world
   try {
     if (sessionStorage.getItem('softfall.reroll')) {
@@ -9491,8 +9638,13 @@
     },
     findSite, structOf, footprint,
     finishBuild: (o) => { if (o && o.building) o.buildT = o.buildTotal; },
-    setZoom: (n) => { zoomStep = Math.max(0, n | 0); },
-    getZoom: () => ({ step: zoomStep, applied: zoomEff, max: zoomMax }),
+    // z is a world scale; it lands on the nearest pixel-exact rung, as the
+    // wheel does. snap skips the ease. setK sets the rung itself.
+    setZoom: (z, snap) => { kWant = Math.max(kMin(), Math.min(kMax(), Math.round((+z || 1) * devScale))); if (snap) applyZoom(0, true); },
+    setK: (k, snap) => { kWant = Math.max(kMin(), Math.min(kMax(), k | 0)); if (snap) applyZoom(0, true); },
+    getZoom: () => ({ want: zoomWantOf(), applied: zoomCur, k: kWant, devScale, exact: Math.abs(zoomCur * devScale - Math.round(zoomCur * devScale)) < 1e-6,
+      rungs: (() => { const r = []; for (let k = kMin(); k <= kMax(); k++) r.push(+(k / devScale).toFixed(4)); return r; })(),
+      wv: [WV_W, WV_H], mm: mmScale() }),
     setTool: (i, p) => { (p || player).tool = i; },
     getTool: (p) => (p || player).tool,
     cam: () => ({ x: camX, y: camY }),

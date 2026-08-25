@@ -14,10 +14,14 @@ resolution setting**; camera zoom is a gameplay feature (below), not a display o
 
 - It picks an integer **device**-pixel scale (via `devicePixelRatio`, so game pixels land
   exactly on device pixels even under fractional 125%/150% OS scaling) closest to
-  `deviceH / viewRows`. `viewRows` is `TARGET_ROWS` except during the eagle drop, where
-  `applyView()` swaps in `DROP_ROWS` (540) so the rider sees twice the world (the one sanctioned
-  zoom-out: nobody is in the world yet, so the fairness ceiling doesn't apply). `scale` is
-  fractional in CSS px and must not be floored.
+  `deviceH / TARGET_ROWS`. It does not depend on the zoom — the canvas is laid out the same at
+  every zoom (see [World zoom](#world-zoom-and-the-two-pixel-spaces)), which is what keeps the
+  HUD a fixed size on screen. `scale` is fractional in CSS px and must not be floored.
+- **The backing store is in device pixels**: `canvas.width = VIEW_W * devScale`. The UI still
+  draws in `VIEW_W`×`VIEW_H` space — `render()` puts a `devScale` transform under it, so 1px
+  rects and the 3×5 font blow up by a whole number and stay exact — and no layout code changes.
+  The extra resolution exists for one reason: it is what lets a world pixel be a whole number of
+  *device* pixels at zooms that are not whole numbers of *canvas* pixels.
 - Heights that don't divide cleanly (1440p → 5×, 288 rows) **"breathe"** a few percent rather
   than letterbox or blur — the Terraria/Stardew trade. 16:9 screens always fill edge-to-edge.
 - `VIEW_W` is **capped at 16:9** (`ceil(VIEW_H * 16/9)`): wider-than-16:9 monitors get pillarbox
@@ -35,20 +39,83 @@ resolution setting**; camera zoom is a gameplay feature (below), not a display o
   is cleared and fully covered. It uses `hash2`, so it must never run before boot — it is baked
   once per canvas size by `relayout()`, never per frame, and the game never draws into it.
 
-**Scroll-wheel camera zoom** rides on the same machinery: each `zoomStep` raises the integer
-device-pixel scale by one (so every level stays pixel-perfect), zoom **out** is hard-capped at
-the `TARGET_ROWS` baseline (the fairness ceiling — scrolling out never buys extra vision) and
-zoom **in** at `MIN_ROWS` (150) rows, so the number of steps varies per monitor (`zoomMax`, set
-by `fitCanvas()`). The wheel handler only bumps `zoomStep`; `applyView()` (first thing in
-`update()`, also called directly by `beginDrop`/`landPlayer`) applies it by diffing against
-`zoomEff`/`viewRows` and calling `fitCanvas()`/`relayout()` — overlays (map/settings) and non-play
-modes force base zoom so the fixed-size panels always fit, restoring on close. The whole
-presentation zooms, HUD included. `DBG.setZoom(n)`/`DBG.getZoom()` drive it externally. The
-scroll wheel is zoom only — there is no tool selection to cycle.
+## World zoom, and the two pixel spaces
 
-**All game logic and drawing works in the `VIEW_W`×`VIEW_H` space** — mouse coords are divided
-by `scale` on the way in. Round positions when drawing (`Math.round`) or sprites smear across
-subpixels.
+**Zoom scales the world and nothing else.** The canvas keeps its `TARGET_ROWS` size at every
+zoom level, so the HUD, the baked panels, the minimap and the cursor are pixel-identical
+however close the camera is — scrolling in moves the camera, it does not magnify the interface.
+
+That falls out of rendering in **two pixel spaces**:
+
+| Space | Size | Written through | Holds |
+| --- | --- | --- | --- |
+| world | `WV_W`×`WV_H` | `ctx` while it points at `wctx` | ground → … → `renderLighting` |
+| screen | `VIEW_W`×`VIEW_H` (backed by `VIEW * devScale` device px) | `ctx` while it points at `uictx`, under a `devScale` transform | weather, vignettes, all UI |
+
+`ctx` is therefore **not a fixed binding**: `render()` sets `ctx = wctx` before the ground blit
+and `ctx = uictx` straight after `renderLighting`. Between them it drops to the identity
+transform and blits `worldCv` **in device pixels** at `k = zoomCur * devScale` px per world px,
+then sets the `devScale` transform for everything below. Doing the scale-up as **one
+nearest-neighbour resample of an already-composed frame** is what keeps it coherent: ground,
+sprites, particles and floaters are drawn together at 1:1 first, so they share one pixel grid
+instead of each rounding its own edges and shimmering against its neighbours.
+
+Consequences a new pass has to respect:
+
+- **A world pass bounds itself against `WV_W`/`WV_H`, never `VIEW_W`/`VIEW_H`.** Below zoom 1
+  the world view is *wider* than the canvas, and culling to the canvas eats the edges.
+- `worldCv` and `lightCv` are allocated at the most zoomed-out size (`ZOOM_FLOOR`) once per
+  canvas size, and each frame uses the `WV_W`×`WV_H` corner — never resize them per frame.
+- Anything **UI-layer but anchored to a world point** (only the radial wheel today) converts
+  through `wToSX`/`wToSY`, and keeps its own pixel size.
+- **A pointer position becomes a world position only through `mouseWX()`/`mouseWY()`**
+  (`mouse / zoomCur + cam`). Aim, hover, the work target and the right-click tile all read them,
+  so the zoom cannot be applied in one place and forgotten in another.
+- The camera centres and clamps on `WV_W`/`WV_H`; the aim lean divides by `zoomCur` so it stays
+  the same *fraction* of the view at every zoom.
+- Weather and the vignettes sit **above** the blit deliberately: a flake keeps its own crisp
+  size at every zoom, and its drift multiplies by `zoomCur` so the field still scrolls with the
+  ground under it.
+
+### The resting zoom is always pixel-exact
+
+A world pixel ends up covering **`zoom × devScale` device pixels**. Unless that is a whole
+number, some world pixels get an extra row of device pixels and their neighbours do not — which
+on a 16×16 sprite is exactly what "stretched" looks like. So the zoom the player rests at is
+not stored as a float at all:
+
+- **`kWant` is that whole number** — device px per world px — and the wheel steps it by **±1**,
+  clamped to `kMin()`…`kMax()` (`ZOOM_MIN` 0.5 … `ZOOM_MAX` 3.6 × `devScale`). `zoomWantOf()`
+  derives the float scale as `kWant / devScale`.
+- The rungs are therefore `k / devScale`. At `devScale` 4 that is **quarter steps** — 0.5, 0.75,
+  1, 1.25, 1.5 … 3.5, thirteen of them; at 3 it is thirds, ten of them. A display with fewer
+  pixels to spend gets fewer, coarser rungs, which is the honest answer rather than a lie.
+- `sizeWorldView()` **ceils** (never rounds): `WV × k` must *cover* the canvas or a sliver of
+  stale pixels survives down the right edge.
+- `fitCanvas()` re-rungs `kWant` onto the new ladder (`round(zoomCur * dev)`) whenever `devScale`
+  changes — a resize, a fullscreen toggle, a drag to another monitor.
+
+**In motion it is deliberately not exact.** `applyZoom(dt)`, first thing in `update()`, eases
+`zoomCur` toward `kWant / devScale` exponentially at `ZOOM_EASE` 16/s (~0.13 s to 90%,
+frame-rate independent) and parks it exactly on the rung. While the ease runs the blit scale is
+fractional and ~12% of pixels break the grid; nobody reads pixel edges mid-zoom, and it lands
+clean. Measured with a block-uniformity scan over ~270k device px per rung: **0 stray pixels at
+every rung, on both a `devScale` 3 and a `devScale` 4 display; 12.3% mid-glide.**
+
+Nothing in that path touches the canvas, so unlike the old `applyView()` it never calls
+`fitCanvas()`/`relayout()` **and the overlays no longer force the zoom back to base** — the
+fixed-size panels fit at any zoom now. `applyZoom(0, true)` snaps instead of easing, which is
+what `beginDrop`/`landPlayer` use. The eagle ride forces `DROP_ZOOM` 0.5 (twice the world) for
+as long as mode is `drop`; landing returns to whatever the player had set.
+`DBG.setK(k, snap)` sets the rung directly, `DBG.setZoom(z, snap)` lands on the nearest rung,
+and `DBG.getZoom()` reports `k`, `devScale`, `exact` and the whole `rungs` ladder. The scroll
+wheel is zoom only — there is no tool selection to cycle.
+
+Zooming **out** past the baseline is now allowed, which retires the old fairness ceiling
+(nobody buys vision) — a PvP rule from when widening the view meant enlarging the canvas.
+
+**Mouse coords are divided by `scale` on the way in**, landing in screen space. Round positions
+when drawing (`Math.round`) or sprites smear across subpixels.
 
 **Cross-file invariant:** any code path that changes the canvas size — window resize,
 `fullscreenchange` — must call `fitCanvas()` then `relayout()`. `relayout()` recomputes
@@ -81,7 +148,10 @@ stump / finished structure, or the wheel's target) → the E work prompt (`drawW
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows (bolts branch to `drawBolt`) → `drawTurretFx` (each turret's charging aim line and its
 muzzle flash) → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
-eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` → `renderWeather` (snow, see below) →
+eagle, its shadow, the rider and every faller, while `state.drop` exists) → `renderLighting` →
+**the world blit** (`worldCv` scaled onto the canvas — everything above it drew in world space,
+everything below draws in screen space; see [World zoom](#world-zoom-and-the-two-pixel-spaces))
+→ `renderWeather` (snow, see below) →
 `renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
@@ -161,7 +231,10 @@ open, and `buildWorldMapImg()` re-inks the terrain each frame so a wall built or
 behind the parchment shows up on it.
 The minimap is a scrolling viewport, not a whole-world view: `renderMinimap()` blits a
 `MM_R / s`-tile square of `mmCv` around `viewPlayer()` into the disc, where `s = mmScale()` is
-px per tile — `MM_ZOOMS[settings.mmZoom]` (0.5 … 3, index 2 = the 1:1 baseline), stepped by the
+px per tile — an eased `mmCur` chasing `MM_ZOOMS[settings.mmZoom]` (0.25 … 4 over twelve rungs,
+index 5 = the 1:1 baseline) on the same `ZOOM_EASE` the camera uses, so both zooms under one
+hand feel like one control. A save written before `settings.v` indexes the old six-rung ladder
+and is carried across by `MM_MIGRATE` on load. Stepped by the
 scroll wheel while `overMinimap()` (pointer inside the disc + ring), which pre-empts the camera
 zoom in the wheel handler and is saved with the settings. Every marker drawn over it (slots,
 landmark glyphs) multiplies its tile offset by `s`. The disc sits on an opaque `#0f1632`
@@ -286,7 +359,8 @@ anything is drawn, and no amount of stored resolution brings them back. The same
 *screen* is `RP_W * devScale` px across (640 device px at a 1080p fullscreen's 4× scale), which is
 **more** pixels than the view itself has. So the frame goes to its own canvas, `#replay`
 (z-order above `#game`, `pointer-events: none`), positioned over that rect by `layoutReplay()` —
-which `relayout()` calls, so it follows every resize, fullscreen toggle and camera zoom. The game
+which `relayout()` calls, so it follows every resize and fullscreen toggle (camera zoom no longer
+resizes anything). The game
 canvas draws only the plate, the frost rim, the playhead and a low-res copy underneath, which
 keeps the feature legible in a plain `canvas.toDataURL()` capture (`POST /shot`) and is covered
 exactly by the overlay on screen.
@@ -511,7 +585,7 @@ Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGa
 puts every active slot aboard (`p.aboard`), builds `state.drop` from `makeEagleRoute()` — two
 points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
 `hash2` so the line is the seed's — bakes the chart once (`buildWorldMapImg` into `mapCv`), sets
-mode `drop`, refits the view to `DROP_ROWS` around its centre and starts the menu exit. The bird
+mode `drop`, snaps the world zoom to `DROP_ZOOM` around its centre and starts the menu exit. The bird
 flies the line at `EAGLE_SPD` (170 px/s, ~13–15 s); `updateDrop` (called from `updatePlay`, so
 pause stops it) moves it, carries everyone aboard with it, jumps each AI slot at its hashed
 `p.dropU` (0.12–0.88 of the line, scattered ±4 tiles off it) and the human at the end if they
@@ -519,7 +593,7 @@ never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T`
 with WASD/arrows at `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the
 movement axis alive in mode `drop` while zeroing everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object and no
 water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow burst.
-Only the human's landing changes mode: `play`, `applyView()` back to base zoom centred on the
+Only the human's landing changes mode: `play`, `applyZoom(0, true)` back to the player's own zoom centred on the
 landing, `shake`, and the landing intro above. `state.drop` outlives the mode: the eagle keeps
 flying (and dropping bots) until it is 60 tiles past the line's end with nobody in the air.
 

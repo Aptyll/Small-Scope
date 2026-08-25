@@ -745,12 +745,13 @@ your own marker cross it. Consequences worth knowing:
   the banked frames are clean world frames. `replayShowing` still hides the *window* under the panel.
 - Dying with the map open is now possible; `endMatch` already clears `state.mapOpen`, and M only
   toggles in `play` mode, so the chart cannot survive into the death overlay.
-- `applyView()` still drops to base zoom while the map is up (the panel is a fixed 308×226 and has
-  to fit), so opening it zooms the world out under the parchment and closing it zooms back.
+- The world keeps the zoom you were playing at. The panel is a fixed 308×226 and the canvas no
+  longer shrinks when you zoom ([World zoom](rendering.md#world-zoom-and-the-two-pixel-spaces)),
+  so it fits regardless and the map no longer yanks the camera back to base.
 
 ## Settings
 
-`settings` (`volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`) persists to
+`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry `res`, `fps` or `seed` keys from removed settings;

@@ -1,6 +1,6 @@
 # Where things live in game.js
 
-`game.js` is one ~9500-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~9700-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -13,7 +13,9 @@ don't cite line numbers here, they go stale within a session.
 | --- | --- | --- |
 | tuning numbers (yields, reach, momentum caps, draw time) | `YIELD`, `WORK_REACH`, `ICE_MAX`, `BOW_CHARGE` | `constants` |
 | the prone tuning block (crawl speed, bury time, sight cut, sniff floor, crit) | `PRONE_SPEED`, `PRONE_BURY`, `PRONE_CUT`, `PRONE_SNIFF`, `AMBUSH_MUL` | `constants` |
-| resolution, zoom, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` |
+| resolution, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` |
+| world zoom: the pixel-exact rung, the eased scale, the world view, the two coordinate bridges | `ZOOM_*`, `kWant`/`kMin`/`kMax`/`zoomWantOf`, `zoomCur`, `WV_W`/`WV_H`, `sizeWorldView`, `wToSX`/`wToSY`, `mouseWX`/`mouseWY` | `canvas` |
+| the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` |
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | declared next to `relayout()` | `canvas` |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` |
