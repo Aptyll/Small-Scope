@@ -201,16 +201,14 @@ quiver as shafts around the body, the same way `spillInventory` spills the walle
 
 Four indicators carry it, and none of them is a word:
 
-- **The quiver strip** (`drawQuiver`, bottom-centre — the strip `renderUI` had reserved for combat
-  abilities). One pip per arrow, drawn from the `QUIVER_PIP` char grid: lit = held, dark plate =
-  spent, and the pip on the boundary fills **from the nock up** as `fletchT` runs, so an arrow
-  visibly re-forms. The glyph is diagonal on purpose — an upright arrow 5 px wide reads as a
-  dagger or an anchor whatever you do to the head and feathers. Fletching is the local team's
-  colour, the same colour on every shaft in the snow. A gained arrow (`quiverFlash`) and a
-  completed renock (`readyFlash`) flash the strip white; a press on an empty bow (`dryT`, set by
-  `dryFire`) shakes it and reddens the empty *plates* (reddening the glyphs reads as six red
-  arrows, which is the opposite of what happened). Under the pips, one gold rule sweeps the strip
-  while `nockT` runs and lands white when it clears.
+- **The hud strip** (`drawHudStrip`, bottom-centre). A segmented xp bar fills outward from a
+  central level diamond (gold, because xp is lifetime gold), and under it four ability wells —
+  a nocked bow, a winter boot, a buried hood, a fletching knife — carry the combat timers the
+  old quiver pips used to. Lit pip counts and a 1px cooldown wipe are the whole readout; keys
+  1–4 sit in the corner of each well. A gained arrow (`quiverFlash`) and a completed renock
+  (`readyFlash`) flash the bow well; a press on an empty bow (`dryT`, set by `dryFire`) shakes
+  that well and reddens its rim. The fletching on the bow and knife icons is the local team's
+  colour, the same colour on every shaft in the snow.
 - **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
   *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
   geometry either way, so it never jumps.

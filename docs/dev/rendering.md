@@ -260,7 +260,7 @@ the left during the landing intro any more.
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the event feed | `renderEventLog` |
-| bottom centre | the quiver strip | `drawQuiver` |
+| bottom centre | xp bar + four ability slots | `drawHudStrip` |
 | bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip | `drawBag` |
 
 ### The backpack and gear widget
@@ -709,8 +709,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   into `play` with the player already standing in the world.
 - **Landing intro**: the human's `landPlayer` sets `state.intro = state.introLen = HUD_IN_T` (0.7 s)
   with `introFrom` at the touchdown framing, so `renderUI` slides the HUD in (the left stack from
-  the left, the minimap from the top, the backpack-and-gear widget from the right and the quiver
-  strip up from the bottom) while the camera settles onto the play framing.
+  the left, the minimap from the top, the backpack-and-gear widget from the right and the hud strip
+  up from the bottom) while the camera settles onto the play framing.
   The first-run hint message fires when that intro ends.
 
 `DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and

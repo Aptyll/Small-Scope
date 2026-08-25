@@ -42,7 +42,7 @@ don't cite line numbers here, they go stale within a session.
 | the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` |
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
 | the snow over a buried body, its row spans, and the bury meter | `drawSnowCover`, `poseBounds`, `poseSpans`, `drawBuryRing` | `entity draw` |
-| the quiver strip (bottom-centre) and its pip glyph | `QUIVER_PIP`, `quiverRect`, `drawQuiverPip`, `drawQuiver` | `UI` › `quiver strip` |
+| the hud strip (bottom-centre): segmented xp bar and four ability slots | `AB_CELL`/`hudStripRect`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
 | build, upgrade, demolish, refunds | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost` | `stump structures` |
 | wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |

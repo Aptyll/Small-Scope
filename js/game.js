@@ -5466,7 +5466,7 @@
       ctx.fillStyle = near ? '#fff3c4' : TEAMS[s.team].mark;
       for (let k = shaftEnd; k < SHAFT_PX.length; k += 2) ctx.fillRect(SHAFT_PX[k], SHAFT_PX[k + 1], 1, 1);
       if (near) {
-        // a small arrowhead bobbing over it - the same wedge the quiver pip wears
+        // a small arrowhead bobbing over it - the same wedge a flying arrow wears
         const by = sy - 11 - Math.round(Math.abs(Math.sin(now * 4)) * 2);
         for (let r = 0; r < 3; r++) {
           const w = r * 2 + 1;
@@ -7160,80 +7160,285 @@
     ctx.restore();
   }
 
-  // ---- quiver strip: the ammo readout, bottom-centre ----------------------
-  // The bow's whole economy in one control, built out of the same arrow the
-  // world is full of: a lit pip is an arrow you have, a dark one is an arrow you
-  // spent, and the pip on the boundary re-forms from the nock upward as it is
-  // fletched - so the fact that arrows come back is something you watch happen,
-  // not something you are told. Under it, one gold rule sweeps the strip while
-  // the renock runs and lands white the instant the bow is ready: the cooldown,
-  // drawn where the count already is. Pressing an empty bow shakes it red.
-  // The fletching is the local team's colour, the same colour that is on every
-  // shaft in the snow, which is what ties the two halves of the system together.
-  // The pip is drawn on the DIAGONAL, and that is the whole reason it reads. An
-  // upright arrow this small is a vertical stroke with a bar across it - i.e. a
-  // dagger - however the head and feathers are shaped; every upright variant
-  // tried came out as a cross or an anchor. On the slant the shaft is a solid
-  // staircase with a wedge head and a fletched tail, which is what an arrow
-  // looks like in this game anyway: the ones in the snow are never upright
-  // either. `#` is shaft, `=` is fletching (the local team's colour).
-  const QUIVER_PIP = [
-    '##.....',
-    '###....',
-    '.###...',
-    '..###..',
-    '...###.',
-    '....##.',
-    '...=.##',
-    '..==.==',
-    '...=...',
+  // ---- hud strip: xp bar over four ability slots, bottom-centre -----------
+  // One opaque plate. A segmented xp bar - gold, since xp IS lifetime gold -
+  // fills OUTWARD from a central level diamond, both halves in step, so the
+  // strip is mirror-true at every fill. Under it sit four ability slots, keys
+  // 1-4 in the corner: LOOSE (the nocked bow, arrow count), DODGE (a winter
+  // boot, two charge pips), AMBUSH (a buried hood, bury ticks) and FLETCH
+  // (an arrow on the knife). A cooldown wipes top-down in whole pixels under
+  // a 1px sweep line; a finished one flashes its well white for a beat.
+  // Icons are 16x16 char grids with the outline IN the art (the same language
+  // as the bag's gear glyphs) - an extra rim pass blobs the leather and the
+  // fletching into a smear. Team fletching is injected at bake time.
+  const AB_CELL = 20, AB_GAP = 3, AB_N = 4;
+  const AB_W = AB_N * AB_CELL + (AB_N - 1) * AB_GAP; // 89: odd, so the centre is a real column
+  const AB_BG = '#0d1229';
+  const AB_COVER = 'rgba(8,12,30,0.82)';
+  function hudStripRect() {
+    return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - 39, w: AB_W, h: 31 };
+  }
+  // o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
+  const AB_PAL = {
+    o: '#141a2c',
+    W: '#f4f7ff', b: '#cfe0f2', s: '#9fb6d8', S: '#5f6f96',
+    t: '#e8dcb4', d: '#a89263', w: '#a8794a', u: '#6e4a28',
+    h: '#c49a6a', g: '#f2cc6a', G: '#b98a2e', n: '#1a2142',
+  };
+  const AB_ICONS = [
+    [ // LOOSE: D-bow facing right, string taut, arrow through the grip
+      '....oooooooo....',
+      '...oWWWWWWWWo...',
+      '..oWbo.....oWo..',
+      '.oWbo.......oWo.',
+      'oWbo.........oWo',
+      'oWbo.........oWo',
+      'oWooooooooooooWo',
+      'oWfFtdttttttWWoo',
+      'oWooooooooooooWo',
+      'oWdo.........oWo',
+      'oWdo.........oWo',
+      '.oWdo.......oWo.',
+      '..oWdo.....oWo..',
+      '...oWdddddddo...',
+      '....oooooooo....',
+      '................',
+    ],
+    [ // DODGE: side-view winter boot, fur cuff, buckle, heel and toe
+      '......oooo......',
+      '......oWWWo.....',
+      '......owwuo.....',
+      '......owhwo.....',
+      '......owgwo.....',
+      '......owwuo.....',
+      '......owwwuo....',
+      '.....owwwwuo....',
+      '....owwwwwuo....',
+      '...owwwwwwuo....',
+      '..ouuuuussuo....',
+      '..ou.o...o.o....',
+      '..oooooooooo....',
+      '................',
+      '................',
+      '................',
+    ],
+    [ // AMBUSH: hooded face under a snow cap, two eyes in the slit
+      '................',
+      '....oooooooo....',
+      '...oWWWWWWWWo...',
+      '..oWbWWWWWWbo...',
+      '.oWboooooooWbo..',
+      '.oWo.nnnnnn.oWo.',
+      '.oWo.nEnnEn.oWo.',
+      '.oWo.nnnnnn.oWo.',
+      '.oWooooooooWWo..',
+      '..oWbbbbbbWWo...',
+      '...oWWWWWWWo....',
+      '....oooooooo....',
+      '................',
+      '................',
+      '................',
+      '................',
+    ],
+    [ // FLETCH: a fat quill, one-sided barbs, calamus at the bottom
+      '.........oW.....',
+      '........oWbW....',
+      '.......oWbWb....',
+      '......oWbbbW....',
+      '.....oWbWbWb....',
+      '....oWbbbWbW....',
+      '...oWbWbWbf.....',
+      '..oWbbbWbf......',
+      '.oWbWbWo........',
+      '.oWbbbWo........',
+      '..oWddo.........',
+      '..otso..........',
+      '..otso..........',
+      '..oddo..........',
+      '...oo...........',
+      '................',
+    ],
   ];
-  const QP_W = 7, QP_H = 9, QP_GAP = 3;
-  function quiverRect() {
-    const w = QUIVER_MAX * (QP_W + QP_GAP) - QP_GAP;
-    return { x: Math.round((VIEW_W - w) / 2), y: VIEW_H - 25, w, h: QP_H };
-  }
-  // one pip. `fill` (0..1) draws it from the nock up, so a fletching arrow grows
-  // into its slot instead of blinking into existence.
-  function drawQuiverPip(x, y, fill, shaft, fletch, dim) {
-    const cut = Math.ceil((1 - fill) * QP_H);
-    for (let r = 0; r < QP_H; r++) {
-      const row = QUIVER_PIP[r];
-      for (let q = 0; q < QP_W; q++) {
-        const ch = row[q];
-        if (ch === '.') continue;
-        ctx.fillStyle = r < cut ? dim : ch === '=' ? fletch : shaft;
-        ctx.fillRect(x + q, y + r, 1, 1);
+  const abIconCache = new Map();
+  function abIcon(i, gold) {
+    const team = TEAMS[player.team];
+    const key = i + ':' + team.mark + (gold ? ':g' : '');
+    let cv = abIconCache.get(key);
+    if (!cv) {
+      cv = document.createElement('canvas');
+      cv.width = cv.height = 16;
+      const g = cv.getContext('2d');
+      const pal = Object.assign({}, AB_PAL, {
+        f: team.mark, F: team.coatL, E: gold ? '#f2cc6a' : '#f4f7ff',
+      });
+      const rows = AB_ICONS[i];
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        for (let c = 0; c < row.length; c++) {
+          const col = pal[row[c]];
+          if (!col) continue;
+          g.fillStyle = col;
+          g.fillRect(c, r, 1, 1);
+        }
       }
+      abIconCache.set(key, cv);
     }
+    return cv;
   }
-  function drawQuiver(now) {
-    const R = quiverRect();
-    const x0 = R.x + (player.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0); // the empty-press shake
-    const hot = player.quiverFlash > 0 || player.readyFlash > 0;
-    const shaft = hot ? '#ffffff' : '#e8dcb4';
-    const fletch = hot ? '#ffffff' : TEAMS[player.team].mark;
-    // an empty press reddens the SLOTS, not the arrows: painting the glyphs red
-    // reads as six red arrows, which is the opposite of what happened
-    const dim = player.dryT > 0 ? '#5d2a34' : '#2a3358';
-    const plate = player.dryT > 0 ? 'rgba(74,18,28,0.85)' : 'rgba(12,18,42,0.78)';
-    for (let i = 0; i < QUIVER_MAX; i++) {
-      const x = x0 + i * (QP_W + QP_GAP);
-      ctx.fillStyle = plate;
-      ctx.fillRect(x - 1, R.y - 1, QP_W + 2, QP_H + 2);
-      const fill = i < player.quiver ? 1
-        : i === player.quiver ? player.fletchT / QUIVER_REGEN : 0;
-      drawQuiverPip(x, R.y, fill, shaft, fletch, dim);
+  // level-ups and a dodge charge coming back are edges the sim never announces
+  // to the HUD, so the strip watches for them itself and pops white
+  let abLvSeen = 0, abLvFlash = 0, abChSeen = -1, abChFlash = 0;
+  function drawXpBar(now, x, y) {
+    const p = player, cx = x + (AB_W >> 1);
+    if (p.level > abLvSeen && abLvSeen > 0) abLvFlash = now + 0.5;
+    abLvSeen = p.level;
+    const hot = now < abLvFlash;
+    const max = p.level >= LEVEL_MAX;
+    const frac = max ? 1
+      : (p.xp - LEVEL_XP[p.level - 1]) / (LEVEL_XP[p.level] - LEVEL_XP[p.level - 1]);
+    // finials: a steel point either end, gold once there is nothing left to earn
+    ctx.fillStyle = max || hot ? '#f2cc6a' : '#6d7ea6';
+    ctx.fillRect(x - 2, y + 1, 1, 3); ctx.fillRect(x - 3, y + 2, 1, 1);
+    ctx.fillRect(x + AB_W + 1, y + 1, 1, 3); ctx.fillRect(x + AB_W + 2, y + 2, 1, 1);
+    // eight wells, four a side, filling from the diamond out
+    const nSeg = 4, segW = 9, inner = segW - 2;
+    const segF = frac * nSeg;
+    const fillCol = hot ? '#f4f7ff' : '#f2cc6a';
+    const hiCol = hot ? '#ffffff' : '#f8e29a';
+    const loCol = hot ? '#cfd8e8' : '#b98a2e';
+    const paintSeg = (sx, t, fromRight) => {
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(sx, y, segW, 5);
+      ctx.fillStyle = '#1a2142';
+      ctx.fillRect(sx + 1, y + 1, inner, 3);
+      ctx.fillStyle = '#151a38';
+      ctx.fillRect(sx + 1, y + 3, inner, 1);
+      const fw = t >= 1 ? inner : t <= 0 ? 0 : Math.round(t * inner);
+      if (fw <= 0) return;
+      const fx = fromRight ? sx + 1 + inner - fw : sx + 1;
+      ctx.fillStyle = fillCol;
+      ctx.fillRect(fx, y + 1, fw, 3);
+      ctx.fillStyle = hiCol;
+      ctx.fillRect(fx, y + 1, fw, 1);
+      ctx.fillStyle = loCol;
+      ctx.fillRect(fx, y + 3, fw, 1);
+    };
+    for (let i = 0; i < nSeg; i++) {
+      const t = Math.max(0, Math.min(1, segF - i));
+      paintSeg(cx - 14 - i * (segW + 1), t, true);
+      paintSeg(cx + 6 + i * (segW + 1), t, false);
     }
-    if (player.nockT > 0 || player.readyFlash > 0) {
-      const frac = player.readyFlash > 0 ? 1 : 1 - player.nockT / Math.max(0.01, kitOf(player).nock);
-      const by = R.y + QP_H + 3;
-      ctx.fillStyle = 'rgba(12,18,42,0.78)';
-      ctx.fillRect(x0 - 1, by - 1, R.w + 2, 4);
-      ctx.fillStyle = '#3a3448';
-      ctx.fillRect(x0, by, R.w, 2);
-      ctx.fillStyle = player.readyFlash > 0 ? '#f4f7ff' : '#ffd95c';
-      ctx.fillRect(x0, by, Math.max(1, Math.round(R.w * frac)), 2);
+    // the level diamond, dead centre, the number inside it
+    const cy = y + 2;
+    const rim = hot ? '#f4f7ff' : max ? '#f2cc6a' : '#6d7ea6';
+    for (let dr = -5; dr <= 5; dr++) {
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(cx - (5 - Math.abs(dr)), cy + dr, (5 - Math.abs(dr)) * 2 + 1, 1);
+    }
+    for (let dr = -4; dr <= 4; dr++) {
+      ctx.fillStyle = rim;
+      ctx.fillRect(cx - (4 - Math.abs(dr)), cy + dr, (4 - Math.abs(dr)) * 2 + 1, 1);
+    }
+    for (let dr = -3; dr <= 3; dr++) {
+      ctx.fillStyle = hot ? '#35426e' : '#182350';
+      ctx.fillRect(cx - (3 - Math.abs(dr)), cy + dr, (3 - Math.abs(dr)) * 2 + 1, 1);
+    }
+    drawPixelText(ctx, String(p.level), cx - 1, cy - 2, hot ? '#f4f7ff' : '#f2cc6a');
+  }
+  function drawHudStrip(now) {
+    const p = player, kit = kitOf(p);
+    const R = hudStripRect();
+    // one chamfered plate behind bar and slots - the bag's ground, so the two
+    // HUD pieces sit in the same family
+    ctx.fillStyle = AB_BG;
+    ctx.fillRect(R.x - 3, R.y, R.w + 6, R.h);
+    ctx.fillStyle = '#35426e';
+    ctx.fillRect(R.x - 2, R.y, R.w + 4, 1);
+    ctx.fillRect(R.x - 2, R.y + R.h - 1, R.w + 4, 1);
+    ctx.fillRect(R.x - 3, R.y + 1, 1, R.h - 2);
+    ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
+    drawXpBar(now, R.x, R.y + 3);
+    if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
+    abChSeen = p.dodgeCharges;
+    const dry = p.quiver <= 0;
+    const amb = ambushReady(p);
+    const clamp01 = (v) => Math.max(0, Math.min(1, v));
+    const nockF = p.nockT > 0 ? clamp01(1 - p.nockT / Math.max(0.01, kit.nock)) : 1;
+    const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
+      : clamp01(1 - p.dodgeRegenT / Math.max(0.01, kit.dodgeCd));
+    const flF = p.quiver >= QUIVER_MAX ? 1 : clamp01(p.fletchT / QUIVER_REGEN);
+    const slots = [
+      { frac: nockF, wipe: p.nockT > 0, flash: p.readyFlash > 0 },
+      { frac: chF, wipe: p.dodgeCharges <= 0, flash: now < abChFlash },
+      { frac: 1, wipe: false, flash: false },
+      { frac: flF, wipe: p.quiver < QUIVER_MAX, flash: p.quiverFlash > 0 },
+    ];
+    for (let i = 0; i < AB_N; i++) {
+      const s = slots[i];
+      const x = R.x + i * (AB_CELL + AB_GAP) +
+        (i === 0 && p.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0);
+      const y = R.y + 11;
+      const rim = s.flash ? '#f4f7ff'
+        : i === 2 && amb ? '#f2cc6a'
+        : i === 0 && dry ? '#7e3346' : '#35426e';
+      ctx.fillStyle = rim;
+      ctx.fillRect(x, y, AB_CELL, AB_CELL);
+      if (rim === '#35426e') {
+        ctx.fillStyle = '#46548a';
+        ctx.fillRect(x, y, AB_CELL, 1);
+        ctx.fillStyle = '#283258';
+        ctx.fillRect(x, y + AB_CELL - 1, AB_CELL, 1);
+      }
+      ctx.fillStyle = i === 0 && dry ? '#241028' : BAG_WELL;
+      ctx.fillRect(x + 1, y + 1, AB_CELL - 2, AB_CELL - 2);
+      if (i === 0 && dry) ctx.globalAlpha = 0.55;
+      ctx.drawImage(abIcon(i, i === 2 && amb), x + 2, y + 2);
+      ctx.globalAlpha = 1;
+      // AMBUSH charge-up: four gold ticks along the top of the well, then the
+      // rim itself goes gold at full cover - no translucent snow over the art
+      if (i === 2 && p.hide > 0) {
+        const ticks = Math.round(p.hide * 4);
+        for (let k = 0; k < 4; k++) {
+          ctx.fillStyle = k < ticks ? (amb ? '#f2cc6a' : '#cfe0f2') : '#2c3560';
+          ctx.fillRect(x + 3 + k * 4, y + 2, 3, 2);
+        }
+      }
+      if (s.wipe) {
+        const cov = 16 - Math.round(s.frac * 16);
+        if (cov > 0) {
+          ctx.fillStyle = AB_COVER;
+          ctx.fillRect(x + 2, y + 2, 16, cov);
+          if (cov < 16) {
+            ctx.fillStyle = '#9fb6d8';
+            ctx.fillRect(x + 2, y + 1 + cov, 16, 1);
+          }
+        }
+      }
+      if (s.flash) {
+        ctx.fillStyle = '#f4f7ff';
+        ctx.fillRect(x + 2, y + 2, 16, 1);
+        ctx.fillRect(x + 2, y + 2, 1, 16);
+      }
+      if (i === 0) {
+        const col = dry ? '#e0637a' : p.quiverFlash > 0 ? '#f2cc6a' : '#f4f7ff';
+        drawPixelTextOutline(ctx, String(p.quiver), x + 2, y + 12, col, '#0f1632');
+      }
+      if (i === 1) {
+        for (let k = 0; k < DODGE_CHARGES; k++) {
+          ctx.fillStyle = '#0f1632';
+          ctx.fillRect(x + 2 + k * 5, y + 13, 4, 4);
+          const on = k < p.dodgeCharges;
+          const regen = !on && k === p.dodgeCharges;
+          ctx.fillStyle = on ? '#f2cc6a' : '#2c3560';
+          ctx.fillRect(x + 3 + k * 5, y + 14, 2, 2);
+          if (regen) {
+            const h = Math.max(1, Math.round(s.frac * 2));
+            ctx.fillStyle = '#9fb6d8';
+            ctx.fillRect(x + 3 + k * 5, y + 16 - h, 2, h);
+          }
+        }
+      }
+      drawPixelTextOutline(ctx, String(i + 1), x + AB_CELL - 6, y + AB_CELL - 8, '#8fa0c8', '#0f1632');
     }
   }
 
@@ -7242,7 +7447,8 @@
     if (state.mode === 'dead' && state.over === 'won') return; // the victory screen owns the frame
 
     // title -> play: the HUD slides in over the last part of the intro - the
-    // minimap from the top, the backpack from the right, the quiver from below.
+    // minimap from the top, the backpack from the right, the hud strip from
+    // below.
     // The TOP LEFT is deliberately empty: the berry and fish counts that used
     // to stack there (and the gold that sat left of the minimap) are all on the
     // backpack's bottom strip now, which is why nothing slides in from the left
@@ -7266,11 +7472,12 @@
       ctx.restore();
     }
 
-    // quiver strip, bottom-centre; it rides the intro slide up from below
+    // hud strip (xp bar + ability slots), bottom-centre; it rides the intro
+    // slide up from below
     if (!out) {
       ctx.save();
       ctx.translate(0, Math.round(slide * 40));
-      drawQuiver(now);
+      drawHudStrip(now);
       ctx.restore();
     }
 
@@ -7300,7 +7507,7 @@
       const a = Math.min(1, state.msgT * 2);
       ctx.globalAlpha = a;
       const w = pixelTextWidth(state.msg);
-      drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 44, '#fff4d8', '#0f1632');
+      drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 54, '#fff4d8', '#0f1632');
       ctx.globalAlpha = 1;
     }
 
@@ -7854,9 +8061,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.41'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.42'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.42', 'THE QUIVER STRIP IS NOW A SEGMENTED XP BAR OVER FOUR ABILITY SLOTS, BOTTOM CENTRE.'],
     ['1.41', 'YOU CARRY A BACKPACK NOW - TEN SLOTS OPENED WITH B, WITH YOUR GEAR AND YOUR GOLD IN THE SAME FRAME BOTTOM RIGHT.'],
     ['1.40', 'ONE KEY FOR BOTH DEBUG VIEWS NOW: . DRAWS THE HITBOXES, AND A SECOND PRESS ADDS THE ROUTE EVERY WALKER IS FOLLOWING.'],
     ['1.38', 'THE . KEY DRAWS EVERY HITBOX IN THE WORLD - THE CIRCLES AND BOXES THE GAME ACTUALLY TESTS - AND A SECOND PRESS ADDS EVERY REACH AND SIGHT RANGE ON TOP.'],
@@ -9994,8 +10202,9 @@
     wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
     // the quiver: the shafts lying in the world, the ceiling, and a way to set
-    // a slot's ammo / renock without playing to it
-    shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, quiverRect, stickArrow,
+    // a slot's ammo / renock without playing to it. hudStripRect is the xp bar
+    // + ability row that reads all of it back, bottom-centre.
+    shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow,
     setQuiver: (n, p) => { const q = p || player; q.quiver = Math.max(0, Math.min(QUIVER_MAX, n)); q.fletchT = 0; return q.quiver; },
     setNock: (t, p) => { (p || player).nockT = t; },
     // multiplayer slots: every slot, the local one, and the teams table
