@@ -333,6 +333,7 @@
     // 'menu' (the planks) | 'spec' (following a living slot); spec: that slot's
     // id; sel + hover: the planks' keyboard pick and per-plank hover eases
     over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
+    win: null,     // a win freezes the numbers the victory screen prints: winSnapshot(), the victory banner
     msg: null, msgT: 0,
     hints: { stump: false },
     loc: null,     // the named place the local player is standing in: { L, t }
@@ -1129,6 +1130,12 @@
 
   // ------------------------------------------------------------ helpers
   function showMsg(t, dur) { state.msg = t; state.msgT = dur || 5; }
+
+  // seconds as M:SS - the HUD's match clock and the victory tally's, one source
+  function clockTxt(sec) {
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
 
   function addFloater(x, y, txt, color) {
     floaters.push({ x, y, txt, color: color || '#ffffff', t: 0 });
@@ -3060,11 +3067,22 @@
   // slots still in the match (riding the eagle counts: it is about to land)
   function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
 
-  // the local slot alive and every rival gone: the match is won (only once,
-  // and only when there was anyone to beat)
+  // slots on the other side of p, by the same rule enemyOf() states, minus its
+  // inAir() skip - a rival still on the eagle has not lost, it is about to land.
+  // all = every rival the match ever fielded, the dead ones included.
+  function rivalCount(p, all) {
+    let n = 0;
+    for (const q of players) if (q !== p && q.active && (all || !q.dead) && (!PVP || q.team !== p.team)) n++;
+    return n;
+  }
+
+  // the local slot alive and every RIVAL gone: the match is won (only once, and
+  // only when there was another side to beat). Teams win together - a living
+  // teammate is not something left to beat - so this is the last TEAM standing,
+  // not the last player.
   function checkLastStanding() {
-    if (state.over || player.dead || aliveCount() !== 1) return;
-    if (players.filter((p) => p.active).length < 2) return;
+    if (state.over || player.dead || rivalCount(player, false) > 0) return;
+    if (!rivalCount(player, true)) return;
     endMatch('won');
   }
 
@@ -3080,6 +3098,11 @@
     state.settingsOpen = false;
     state.wheel = null;
     state.deadTimer = 0;
+    // a win freezes its numbers here, not in the render pass: the match runs on
+    // underneath (a generator can still pay out) and a total that climbs behind
+    // a tally which already counted it reads as a bug
+    state.win = how === 'won' ? winSnapshot() : null;
+    if (state.win) { SFX.victory(); state.shake = Math.max(state.shake, 4); }
     player.input = makeInput(); // whatever was held dies with the slot
   }
 
@@ -3380,7 +3403,11 @@
     else dark = 1 - (t - (CYCLE - 10)) / 10;
     state.darkness = dark;
 
-    if (state.mode === 'dead') state.deadTimer += dt; // the overlay's fade-in
+    if (state.mode === 'dead') {
+      const was = state.deadTimer;
+      state.deadTimer += dt; // the overlay's fade-in, and the victory screen's clock
+      if (state.over === 'won') winCues(was, state.deadTimer);
+    }
 
     // the match runs on while the local player is down - other slots are still
     // playing. Only the local overlays (pause, map, settings) stop the sim.
@@ -4302,6 +4329,7 @@
     // both sit above the death dim: the feed and the standings are exactly what
     // you read while you are down. They duck under the map/settings panels.
     if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
+      !(state.mode === 'dead' && state.over === 'won') && // the victory screen owns the frame
       (state.mode === 'play' || state.mode === 'dead')) renderEventLog();
     if (scoreboardOpen()) renderScoreboard();
     if (!window.DBG.hideUI) drawTags();
@@ -4873,14 +4901,17 @@
     { y: 11, x: 5, w: 6 },         // legs: across the hips
     { y: 13, x: 5, w: 2, x2: 9 },  // boots: one mark per foot
   ];
-  function drawGearMarks(p, px, py) {
+  // s scales the whole 16x16 grid the marks are authored on: 1 in the world,
+  // 5 on the victory screen's big champion
+  function drawGearMarks(p, px, py, s) {
+    s = s || 1;
     for (let i = 0; i < GEAR_MARKS.length; i++) {
       const lv = p.gearLv[i];
       if (lv < 2) continue;
       const m = GEAR_MARKS[i];
       ctx.fillStyle = GEAR_MATS[lv - 1];
-      ctx.fillRect(px + m.x, py + m.y, m.w, 1);
-      if (m.x2 !== undefined) ctx.fillRect(px + m.x2, py + m.y, m.w, 1);
+      ctx.fillRect(px + m.x * s, py + m.y * s, m.w * s, s);
+      if (m.x2 !== undefined) ctx.fillRect(px + m.x2 * s, py + m.y * s, m.w * s, s);
     }
   }
 
@@ -5543,7 +5574,9 @@
   function replayShowing() {
     if (!rpCount || window.DBG.hideUI || state.mapOpen || state.settingsOpen) return false;
     if (state.paused) return true;
-    return state.mode === 'dead' && state.deadView === 'menu' && state.deadTimer >= 0.5;
+    // not over a win: the victory screen is a composition, and the window sits
+    // exactly where its tally does
+    return state.mode === 'dead' && state.over !== 'won' && state.deadView === 'menu' && deadReady();
   }
 
   // px the event feed lifts to clear the window
@@ -5767,9 +5800,7 @@
     // beneath the minimap, one centred row: slots still in the match (a pixel
     // figure + the count, no label) then the elapsed play-time. Clear of the
     // fps readout, which owns the extreme top-right corner.
-    const mins = Math.floor(state.elapsed / 60);
-    const secs = Math.floor(state.elapsed % 60);
-    const clock = mins + ':' + (secs < 10 ? '0' : '') + secs;
+    const clock = clockTxt(state.elapsed);
     const alive = String(aliveCount());
     const rowW = ALIVE_ICON_W + 2 + pixelTextWidth(alive) + 7 + pixelTextWidth(clock);
     let rx = Math.round(MM_CX - rowW / 2);
@@ -5880,6 +5911,7 @@
 
   function renderUI(now) {
     if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
+    if (state.mode === 'dead' && state.over === 'won') return; // the victory screen owns the frame
 
     // title -> play: the HUD slides in over the last part of the intro - the
     // left stack from the left, the minimap stack from the top, messages from below
@@ -6513,9 +6545,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.32'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.33'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.33', 'WINNING NOW GETS A REAL VICTORY SCREEN - CROWN, BANNERS, AURORA AND THE NUMBERS FROM YOUR RUN - AND THE LAST TEAM STANDING WINS, NOT THE LAST PLAYER.'],
     ['1.32', 'HOUSEKEEPING: THE DEV NOTES LEARN THE GEAR SYSTEM AND FOUR STALE POINTERS NOW MATCH THE GAME; NOTHING IN THE GAME CHANGED.'],
     ['1.31', 'THE F3 READOUT IS NOW A TIDY LABELLED COLUMN IN THE HUD\'S OWN COLOURS, WITH RED SAVED FOR A BAD FRAME RATE.'],
     ['1.30', 'F3 NOW FLIPS ONE INFO READOUT - FPS, YOUR X AND Y, AND THE SEED - IN PLACE OF THE OLD SEPARATE TOGGLES.'],
@@ -7642,9 +7675,11 @@
   }
 
   // ------------------------------------------------------------ death & spectate
-  // Death is final: the local slot's death (or its win, once every rival is
-  // gone) puts the game in mode 'dead' with the match running on underneath.
-  // The overlay offers two planks - SPECTATE follows a living slot through a
+  // Death is final: the local slot's death - or its win, once every RIVAL is
+  // gone (teams win together, see checkLastStanding) - puts the game in mode
+  // 'dead' with the match running on underneath. A loss dims the screen and
+  // offers two planks; a win hands the whole frame to the victory banner below
+  // and offers two of its own. SPECTATE follows a living slot through a
   // top-centre control: two pixel arrows around the name, clickable, the arrow
   // keys do the same, ESC comes back (no hint text: the arrows are the
   // explanation). LOBBY fades out and reloads into the title screen on the same seed. viewPlayer() is who the camera and minimap
@@ -7660,9 +7695,16 @@
   function deadLayout() {
     const items = DEAD_ITEMS[state.over] || DEAD_ITEMS.lost;
     const w = items.length * DEAD_BW + (items.length - 1) * DEAD_GAP;
-    const x0 = Math.round((VIEW_W - w) / 2), y = Math.round(VIEW_H / 2) + 10;
+    const x0 = Math.round((VIEW_W - w) / 2);
+    // a win seats them at the foot of the victory screen, under the tally;
+    // a loss keeps the middle of the screen it always had
+    const y = state.over === 'won' ? winLayout().plankY : Math.round(VIEW_H / 2) + 10;
     return items.map((label, i) => ({ x: x0 + i * (DEAD_BW + DEAD_GAP), y, w: DEAD_BW, h: DEAD_BH, label }));
   }
+
+  // the overlay has finished arriving and the planks are live: half a second
+  // for a death, the whole victory ceremony for a win (which can be skipped)
+  function deadReady() { return state.deadTimer >= (state.over === 'won' ? WIN_T.menu : 0.5); }
 
   // the spectate control, top centre: [<] NAME [>]. Arrow boxes are SPEC_AW
   // wide; the name plate between them is sized to the widest slot name so the
@@ -7687,7 +7729,7 @@
 
   // which plank is under the pointer (-1 for none); the overlay must have faded in
   function deadHit() {
-    if (state.deadView !== 'menu' || state.deadTimer < 0.5) return -1;
+    if (state.deadView !== 'menu' || !deadReady()) return -1;
     const rs = deadLayout();
     for (let i = 0; i < rs.length; i++) {
       const r = rs[i];
@@ -7733,6 +7775,7 @@
       else if (k === 'arrowleft' || k === 'a') { specNext(-1); SFX.pickup(); }
       return;
     }
+    if (winSkip()) return;
     if (state.deadTimer < 0.5) return;
     const n = deadLayout().length;
     if (k === 'arrowleft' || k === 'a') { state.deadSel = (state.deadSel + n - 1) % n; SFX.pickup(); }
@@ -7743,13 +7786,12 @@
   function deadClick() {
     if (state.fade) return;
     if (state.deadView === 'spec') { const d = specHit(); if (d) { specNext(d); SFX.pickup(); } return; }
+    if (winSkip()) return;
     const h = deadHit();
     if (h >= 0) { state.deadSel = h; deadActivate(h); }
   }
 
   function renderDead(now) {
-    const rs = deadLayout();
-    const hot = deadHit();
     if (state.deadView === 'spec') {
       // top centre: [<] NAME [>]. The name sits on a plate in the target's
       // team colour; each arrow is its own box that lights gold under the
@@ -7788,26 +7830,521 @@
       }
       return;
     }
+    if (state.over === 'won') { renderVictory(now); return; } // a win gets a ceremony, not a dim
     const a = Math.min(0.75, state.deadTimer * 0.6);
     ctx.fillStyle = 'rgba(8,10,28,' + a + ')';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     if (state.deadTimer < 0.5) return;
-    const won = state.over === 'won';
-    const t = won ? 'LAST ONE STANDING' : 'YOU COLLAPSED IN THE SNOW';
-    drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 24, won ? '#ffd95c' : '#a8c4ff', '#0a0e23', 2);
-    const t2 = won ? 'EVERY RIVAL IS DOWN' : 'YOU ARE OUT OF THE MATCH';
+    const t = 'YOU COLLAPSED IN THE SNOW';
+    drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 24, '#a8c4ff', '#0a0e23', 2);
+    const t2 = 'YOU ARE OUT OF THE MATCH';
     drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, VIEW_H / 2 - 6, '#8f9cc4', '#0a0e23');
-    // the planks: hovered or keyboard-picked is hot, the ease runs per plank
-    // (the hover eases only step while the overlay is up, so they use the frame delta)
-    const dt = Math.min(0.05, now - (renderDead.last || now)); renderDead.last = now;
+    drawEndPlanks(now, 0);
+  }
+
+  // the planks both endings share: hovered or keyboard-picked is hot, and the
+  // ease runs on the frame delta (it only steps while the overlay is up). dy
+  // slides them on screen without moving the rects deadHit() tests, so a plank
+  // is only clickable once it has arrived.
+  function drawEndPlanks(now, dy) {
+    const rs = deadLayout();
+    const hot = deadHit();
+    const dt = Math.min(0.05, now - (drawEndPlanks.last || now)); drawEndPlanks.last = now;
     for (let i = 0; i < rs.length; i++) {
       const want = (hot >= 0 ? hot === i : state.deadSel === i) ? 1 : 0;
       state.deadHover[i] += (want - state.deadHover[i]) * Math.min(1, dt * 14);
-      const hv = state.deadHover[i];
-      drawMenuButton(rs[i], rs[i].label, hv, now, false); // prints its own 2x label
+      drawMenuButton({ x: rs[i].x, y: rs[i].y + dy, w: rs[i].w, h: rs[i].h },
+        rs[i].label, state.deadHover[i], now, false); // prints its own 2x label
     }
   }
 
+  // ------------------------------------------------------------ victory
+  // Winning is the one thing in a match that earns a ceremony, so the screen is
+  // staged rather than drawn. state.deadTimer - already ticking for the death
+  // overlay - is the clock, and WIN_T names every beat, so the render pass and
+  // the sound cues read one timeline and cannot drift apart. Any press before
+  // the last beat skips to it (winSkip): the reward is worth watching, never
+  // twice. Everything here is procedural in the title screen's idiom (hash2 for
+  // static grain, the frame clock for flicker); the only sprites are the
+  // champion, the gear icons and the coin.
+  const WIN_T = {
+    flash: 0.30,   // the white bloom off the winning frame
+    dim: 0.50,     // the backdrop has finished settling
+    title: 0.45, letter: 0.07, land: 0.26, // VICTORY drops in a letter at a time
+    rule: 1.10,    // the gold rule sweeps out of the middle
+    stage: 1.00,   // banners, dais and the champion rise
+    crown: 1.70, crownLand: 2.02,
+    stats: 2.25, statStep: 0.16, roll: 0.5, // the tally, one plate at a time
+    menu: 3.30,    // the planks are up and the screen is live
+  };
+  const WIN_SLIDE = 0.32; // the planks' slide, finishing exactly on WIN_T.menu
+
+  // the composition, in the 270-tall frame everything else is authored in
+  function winLayout() {
+    const toy = Math.round((VIEW_H - 270) / 2);
+    const cx = Math.round(VIEW_W / 2);
+    return {
+      toy, cx,
+      spread: Math.min(112, cx - 22), // the braziers; the banners sit inside them
+      titleY: toy + 20,   // VICTORY, 4x - 20px tall
+      ruleY: toy + 44,
+      subY: toy + 56,
+      champY: toy + 68,   // top of the 5x champion (80px tall, feet at +75)
+      daisY: toy + 146,   // top face of the dais: the champion stands on it
+      statY: toy + 170,
+      gearY: toy + 198,
+      plankY: toy + 226,
+    };
+  }
+
+  // the numbers the screen prints, frozen at the win. Icon plus number, no
+  // labels - the icon is the label. roll climbs from zero during the tally.
+  const WIN_STATS = [
+    { icon: 'gold', roll: true, val: (w) => String(w.gold) },
+    { icon: 'kills', roll: true, val: (w) => String(w.kills) },
+    { icon: 'level', roll: true, val: (w) => String(w.level) },
+    { icon: 'time', roll: false, val: (w) => clockTxt(w.time) },
+  ];
+
+  function winSnapshot() {
+    return {
+      gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
+      team: player.team, champ: player.champ,
+      gear: player.gear.slice(), gearLv: player.gearLv.slice(),
+      // a teammate still standing means the TEAM won, and the headline says so
+      mates: players.filter((q) => q !== player && q.active && !q.dead && q.team === player.team).length,
+    };
+  }
+
+  // the ceremony's sound track: every cue inside this tick's slice of the
+  // timeline fires once. A skip jumps state.deadTimer before update() reads it,
+  // so nothing in the skipped span plays.
+  function winCues(t0, t1) {
+    if (!state.win) return;
+    const at = (t) => t0 < t && t1 >= t;
+    if (at(WIN_T.crownLand)) { SFX.levelUp(); state.shake = Math.max(state.shake, 2.5); }
+    const TICK = 0.055;
+    for (let i = 0; i < WIN_STATS.length; i++) {
+      const s0 = WIN_T.stats + i * WIN_T.statStep;
+      if (at(s0)) SFX.place();
+      if (!WIN_STATS[i].roll) continue;
+      const a = Math.max(s0, Math.min(s0 + WIN_T.roll, t0));
+      const b = Math.max(s0, Math.min(s0 + WIN_T.roll, t1));
+      if (b > a && Math.floor((b - s0) / TICK) > Math.floor((a - s0) / TICK)) SFX.tally();
+    }
+  }
+
+  // a press during the ceremony jumps to its end instead of being swallowed;
+  // true means it was consumed and the caller should do nothing else
+  function winSkip() {
+    if (state.over !== 'won' || deadReady()) return false;
+    state.deadTimer = WIN_T.menu;
+    SFX.pickup();
+    return true;
+  }
+
+  // ---- the art -------------------------------------------------------------
+  // A char grid painted at (x, y) with s-px cells - the shape sprites.js
+  // authors in, for art only this screen needs and so never earns a baked
+  // sprite. rim, when given, stamps a one-cell dark border under the whole
+  // silhouette first, so the piece reads against the aurora behind it.
+  function stampGrid(rows, pal, x, y, s, rim) {
+    for (let pass = rim ? 0 : 1; pass < 2; pass++) {
+      if (pass === 0) ctx.fillStyle = rim;
+      for (let r = 0; r < rows.length; r++) {
+        const row = rows[r];
+        for (let c = 0; c < row.length; c++) {
+          if (!pal[row[c]]) continue;
+          if (pass === 0) {
+            ctx.fillRect(x + (c - 1) * s, y + r * s, s * 3, s);
+            ctx.fillRect(x + c * s, y + (r - 1) * s, s, s * 3);
+          } else {
+            ctx.fillStyle = pal[row[c]];
+            ctx.fillRect(x + c * s, y + r * s, s, s);
+          }
+        }
+      }
+    }
+  }
+
+  // the winner's crown: three gem-tipped spikes on a jewelled gold band
+  const WIN_CROWN = [
+    '.w....w....w.',
+    '.g....g....g.',
+    'ggg..ggg..ggg',
+    'hhhhhhhhhhhhh',
+    'gggjggjggjggg',
+    'ddddddddddddd',
+  ];
+  const WIN_CROWN_PAL = { '.': null, w: '#ffffff', g: '#f2cc6a', h: '#ffedb0', j: '#7ad4ff', d: '#b8912f' };
+  // the two stat glyphs with no sprite of their own: stacked chevrons for the
+  // hero level, a clock face for the match time (gold and the bow are sprites)
+  const WIN_LVL_ICON = [
+    '........', '...gg...', '..g..g..', '.g....g.',
+    '........', '...gg...', '..g..g..', '.g....g.',
+  ];
+  const WIN_TIME_ICON = [
+    '..oooo..', '.o....o.', 'o..h...o', 'o..h...o',
+    'o..hhh.o', 'o......o', '.o....o.', '..oooo..',
+  ];
+  const WIN_ICON_PAL = { '.': null, g: '#f2cc6a', o: '#cfe0ff', h: '#ffd95c' };
+
+  // the sky answers: three curtains across the top band, each a row of 2px
+  // strands riding its own sine, length breathing along it. Additive, like
+  // every other light in the game.
+  const WIN_AURORA = [
+    { y: 26, amp: 10, k: 0.030, spd: 0.10, len: 30, hi: '#3ce8a0', lo: '#1f8f6a' },
+    { y: 44, amp: 14, k: 0.019, spd: -0.07, len: 24, hi: '#5aa8f0', lo: '#2a5aa0' },
+    { y: 16, amp: 7, k: 0.046, spd: 0.16, len: 16, hi: '#a86ce8', lo: '#5a3a90' },
+  ];
+  function drawWinAurora(now, a, toy) {
+    ctx.globalCompositeOperation = 'lighter';
+    for (const b of WIN_AURORA) {
+      for (let x = 0; x < VIEW_W; x += 2) {
+        const ph = x * b.k + now * b.spd;
+        const top = toy + b.y + Math.sin(ph) * b.amp + Math.sin(ph * 2.3 + 1.7) * b.amp * 0.3;
+        const len = b.len * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(ph * 1.7 + 2.1)));
+        const seg = Math.max(2, Math.round(len / 5));
+        const shimmer = 0.6 + 0.4 * Math.sin(now * 1.7 + x * 0.05);
+        for (let i = 0; i < 5; i++) {
+          ctx.globalAlpha = a * 0.23 * (1 - i / 5) * shimmer;
+          ctx.fillStyle = i < 2 ? b.hi : b.lo;
+          ctx.fillRect(x, Math.round(top + (i * len) / 5), 2, seg);
+        }
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  // light behind the winner: wedges stepped outward from a point a block at a
+  // time, so they stay on the pixel grid instead of being a smooth triangle
+  function drawWinRays(cx, cy, now, a) {
+    ctx.globalCompositeOperation = 'lighter';
+    const N = 10, far = Math.max(VIEW_W, VIEW_H) * 0.55;
+    for (let i = 0; i < N; i++) {
+      const ang = (i / N) * Math.PI * 2 + now * 0.09 + hash2(i, 7) * 0.5;
+      const ca = Math.cos(ang), sa = Math.sin(ang);
+      for (let d = 10; d < far; d += 2) {
+        const f = d / far;
+        const sz = 2 + Math.round(d * 0.06);
+        ctx.globalAlpha = a * 0.075 * (1 - f) * (1 - f);
+        ctx.fillStyle = i & 1 ? '#ffd95c' : '#ffb347';
+        ctx.fillRect(Math.round(cx + ca * d - sz / 2), Math.round(cy + sa * d - sz / 2), sz, sz);
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  // gold and snow drifting down over everything: no state and no array, the
+  // same procedural loop the title's embers use, so a resize costs it nothing
+  function drawWinMotes(now, a, n) {
+    const span = VIEW_H + 40;
+    for (let i = 0; i < n; i++) {
+      const h1 = hash2(i * 13 + 1, 57), h2 = hash2(i * 7 + 5, 113), h3 = hash2(i * 5 + 9, 191);
+      const y = ((now * (10 + h1 * 26) + h2 * span) % span) - 20;
+      const x = Math.round(h3 * (VIEW_W - 2) + Math.sin(now * (0.7 + h1) + i) * 5);
+      ctx.globalAlpha = a * (0.45 + 0.5 * (0.5 + 0.5 * Math.sin(now * 3.1 + i * 2.3)));
+      ctx.fillStyle = h1 > 0.55 ? '#ffd95c' : h1 > 0.28 ? '#ff8a3c' : '#e8f2ff';
+      ctx.fillRect(x, Math.round(y), h2 > 0.78 ? 2 : 1, h2 > 0.78 ? 2 : 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // a hanging team banner: iron rail, cloth with a lit left fold and a dark
+  // right edge, a swallowtail bitten out of the bottom, the team's mark as a
+  // diamond over a gold band. The whole length ripples on one slow sine.
+  function drawWinBanner(x, top, w, h, tm, a, now) {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 4, top - 4, w + 8, 4);
+    ctx.fillStyle = '#4a5a90'; ctx.fillRect(x - 4, top - 4, w + 8, 1);
+    ctx.fillStyle = '#2a3560'; ctx.fillRect(x - 4, top - 1, w + 8, 1);
+    const wobAt = (yy) => Math.round(Math.sin(now * 1.1 + yy * 0.17) * 1.2);
+    for (let yy = 0; yy < h; yy++) {
+      const wob = wobAt(yy);
+      const tail = h - yy;
+      const cut = tail <= 8 ? 9 - tail : 0; // the swallowtail bitten up the middle
+      const half = w >> 1;
+      const segs = cut === 0 ? [[0, w]]
+        : cut < half ? [[0, half - cut], [half + cut, w - half - cut]] : [];
+      for (const seg of segs) {
+        const o = seg[0], sw = seg[1];
+        if (sw <= 0) continue;
+        const px = x + o + wob;
+        ctx.fillStyle = tm.coat; ctx.fillRect(px, top + yy, sw, 1);
+        ctx.fillStyle = tm.coatD; ctx.fillRect(px + sw - 1, top + yy, 1, 1);
+        if (o === 0) { ctx.fillStyle = tm.coatL; ctx.fillRect(px, top + yy, 2, 1); }
+        if (yy % 9 === 4) { ctx.fillStyle = tm.coatD; ctx.fillRect(px + 2, top + yy, Math.max(1, sw - 4), 1); }
+      }
+    }
+    // gold band and the team diamond, riding the same ripple as the cloth
+    const my = top + 16, mx = x + (w >> 1) + wobAt(16);
+    ctx.fillStyle = '#c89a3c';
+    ctx.fillRect(mx - (w >> 1), my - 6, w, 1); ctx.fillRect(mx - (w >> 1), my + 6, w, 1);
+    for (let d = -4; d <= 4; d++) {
+      const dw = 4 - Math.abs(d);
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(mx - dw - 1, my + d, dw * 2 + 3, 1);
+    }
+    for (let d = -3; d <= 3; d++) {
+      const dw = 3 - Math.abs(d);
+      ctx.fillStyle = d < 0 ? tm.trim : tm.mark; ctx.fillRect(mx - dw, my + d, dw * 2 + 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // a standing brazier: iron bowl on a stem, coals over the rim, a flickering
+  // ember stack and warm additive light - the title pillar's fire, freed from
+  // the pillar so it can flank the dais
+  function drawWinBrazier(cx, baseY, now, a) {
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - 2, baseY - 16, 4, 16); ctx.fillRect(cx - 7, baseY - 4, 14, 4);
+    ctx.fillStyle = '#3a2a22'; ctx.fillRect(cx - 1, baseY - 15, 2, 13);
+    ctx.fillStyle = '#5a4434'; ctx.fillRect(cx - 1, baseY - 15, 1, 13);
+    ctx.fillStyle = '#2a3560'; ctx.fillRect(cx - 6, baseY - 3, 12, 3);
+    ctx.fillStyle = '#4a5a90'; ctx.fillRect(cx - 6, baseY - 3, 12, 1);
+    ctx.fillStyle = '#f4f7ff'; ctx.fillRect(cx - 6, baseY - 4, 5, 1); ctx.fillRect(cx + 2, baseY - 4, 4, 1);
+    const by = baseY - 22;
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - 8, by, 16, 7); ctx.fillRect(cx - 5, by + 7, 10, 1);
+    ctx.fillStyle = '#3a2a22'; ctx.fillRect(cx - 7, by + 1, 14, 5);
+    ctx.fillStyle = '#5a4434'; ctx.fillRect(cx - 7, by + 1, 14, 1);
+    ctx.fillStyle = '#ff8a3c'; ctx.fillRect(cx - 5, by, 10, 1);
+    const fl = now * 11 + cx;
+    const hgt = 5 + Math.round(Math.sin(fl) + Math.sin(fl * 0.37) * 0.8);
+    const rows = [[8, '#ffe37a'], [8, '#ffd95c'], [6, '#ffb347'], [4, '#ff8a3c'], [4, '#ff6a30'], [2, '#ff4a28'], [2, '#ff4a28']];
+    for (let i = 0; i < Math.min(rows.length, hgt); i++) {
+      const dx = i > 2 ? Math.round(Math.sin(fl * 1.3 + i * 1.7)) : 0;
+      ctx.fillStyle = rows[i][1];
+      ctx.fillRect(cx - (rows[i][0] >> 1) + dx, by - 1 - i, rows[i][0], 1);
+    }
+    drawEmbers(now, a * 0.9, cx, by - 5, 11, 7, (cx | 0) + 3);
+    ctx.globalAlpha = a;
+    ctx.globalCompositeOperation = 'lighter';
+    const gr = 66 * (1 + Math.sin(now * 9 + cx) * 0.08), gy = by - 3;
+    const grd = ctx.createRadialGradient(cx, gy, 1, cx, gy, gr);
+    grd.addColorStop(0, 'rgba(255,170,80,' + (0.40 * a).toFixed(3) + ')');
+    grd.addColorStop(0.45, 'rgba(255,140,60,' + (0.13 * a).toFixed(3) + ')');
+    grd.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = grd; ctx.fillRect(cx - gr, gy - gr, gr * 2, gr * 2);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+  }
+
+  // the dais: a snow-capped slab the winner stands on, set on a wider base
+  // step that carries a gold inlay with the team's diamond, icicles under the
+  // lower lip. Two tiers rather than one - a single slab reads as a plank.
+  function drawWinDais(cx, top, hw, tm, a) {
+    ctx.globalAlpha = a;
+    // one tier: dark rim, speckled snow cap, lit-left coursed stone face
+    const step = (y, half, h, ice) => {
+      const x = cx - half, w = half * 2;
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 2, y - 1, w + 4, h + 2);
+      ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x - 1, y, w + 2, 3);
+      for (let px = 0; px < w + 2; px++) {
+        const hb = hash2(px * 7 + 3, y * 5);
+        if (hb > 0.82) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 1 + px, y - 1, 1, 1); }
+        else if (hb < 0.16) { ctx.fillStyle = '#dfe8f8'; ctx.fillRect(x - 1 + px, y + 2, 1, 1); }
+      }
+      ctx.fillStyle = '#b8cce6'; ctx.fillRect(x - 1, y + 3, w + 2, 1);
+      ctx.fillStyle = '#2a3560'; ctx.fillRect(x, y + 4, w, h - 4);
+      ctx.fillStyle = '#3a4878'; ctx.fillRect(x, y + 4, 2, h - 4);
+      ctx.fillStyle = '#161d3c'; ctx.fillRect(x + w - 2, y + 4, 2, h - 4);
+      for (let px = 2; px < w - 2; px++) for (let py = 5; py < h; py++) {
+        if (hash2(px * 5 + py * 3, cx + 11) < 0.05) { ctx.fillStyle = '#1c2750'; ctx.fillRect(x + px, y + py, 1, 1); }
+      }
+      if (ice) {
+        for (let px = 3; px < w - 3; px += 3) {
+          const hb = hash2(px * 11 + 7, cx + y);
+          if (hb < 0.5) continue;
+          ctx.fillStyle = '#cfe4f2'; ctx.fillRect(x + px, y + h, 1, 2 + Math.round(hb * 3));
+          ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x + px, y + h, 1, 1);
+        }
+      }
+      return { x, w };
+    };
+    step(top, hw, 10, false);
+    const b = step(top + 10, hw + 14, 13, true);
+    // gold inlay across the base, the team's diamond set in the middle of it
+    const iy = top + 17;
+    ctx.fillStyle = '#c89a3c'; ctx.fillRect(b.x + 5, iy, b.w - 10, 1);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(cx - 20, iy, 40, 1);
+    for (let d = -3; d <= 3; d++) {
+      const dw = 3 - Math.abs(d);
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - dw - 1, iy + d, dw * 2 + 3, 1);
+    }
+    for (let d = -2; d <= 2; d++) {
+      const dw = 2 - Math.abs(d);
+      ctx.fillStyle = d < 0 ? tm.mark : tm.coatD; ctx.fillRect(cx - dw, iy + d, dw * 2 + 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // one number: a chamfered plate, its icon on the left, the value at 2x. The
+  // plate pops up as it arrives and the value climbs from zero behind it, the
+  // rule going gold on the frame it lands.
+  function drawWinStatPlate(r, st, ws, t, i) {
+    const s0 = WIN_T.stats + i * WIN_T.statStep;
+    if (t < s0) return;
+    const pop = easeOut(Math.min(1, (t - s0) / 0.24));
+    const y = r.y + Math.round((1 - pop) * 8);
+    const roll = Math.min(1, Math.max(0, (t - s0) / WIN_T.roll));
+    const txt = st.roll ? String(Math.round(Number(st.val(ws)) * roll)) : st.val(ws);
+    const done = !st.roll || roll >= 1;
+    ctx.globalAlpha = pop;
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(r.x + 2, r.y + 2, r.w, r.h);
+    ctx.fillStyle = '#0a0e23'; chamRect(r.x, y, r.w, r.h);
+    ctx.fillStyle = '#141c3c'; chamRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+    ctx.fillStyle = done ? '#c89a3c' : '#35426e';
+    ctx.fillRect(r.x + 2, y + 1, r.w - 4, 1); ctx.fillRect(r.x + 2, y + r.h - 2, r.w - 4, 1);
+    const iy = y + ((r.h - 8) >> 1);
+    if (st.icon === 'gold') ctx.drawImage(SPRITES.itemGold, r.x + 4, iy);
+    else if (st.icon === 'kills') ctx.drawImage(SPRITES.itemBow, r.x + 4, iy);
+    else stampGrid(st.icon === 'level' ? WIN_LVL_ICON : WIN_TIME_ICON, WIN_ICON_PAL, r.x + 4, iy, 1);
+    drawPixelTextShadow(ctx, txt, r.x + 15, y + ((r.h - 10) >> 1), done ? '#ffd95c' : '#f4f7ff', '#0a0e23', 2);
+    ctx.globalAlpha = 1;
+  }
+
+  function renderVictory(now) {
+    const ws = state.win || (state.win = winSnapshot());
+    const t = state.deadTimer;
+    const L = winLayout();
+    const tm = TEAMS[ws.team];
+    const dim = Math.min(1, t / WIN_T.dim);
+
+    // --- backdrop: wash, aurora, rays, vignette, flurry ---------------------
+    ctx.fillStyle = 'rgba(7,10,26,' + (0.88 * dim).toFixed(3) + ')';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    drawWinAurora(now, dim, L.toy);
+    drawWinRays(L.cx, L.toy + 110, now, dim);
+    const vg = ctx.createRadialGradient(L.cx, L.toy + 120, VIEW_H * 0.22, L.cx, L.toy + 120, VIEW_W * 0.62);
+    vg.addColorStop(0, 'rgba(3,5,16,0)');
+    vg.addColorStop(1, 'rgba(3,5,16,' + (0.85 * dim).toFixed(3) + ')');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    drawWinMotes(now, dim, 52);
+
+    // the white bloom off the last frame of the match, over the wash
+    if (t < WIN_T.flash) {
+      ctx.globalAlpha = Math.min(1, 1 - t / WIN_T.flash);
+      ctx.fillStyle = '#f4f7ff'; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      ctx.globalAlpha = 1;
+    }
+
+    // --- the stage: braziers, banners, dais, the champion -------------------
+    const rise = easeOut(Math.max(0, Math.min(1, (t - WIN_T.stage) / 0.55)));
+    if (rise > 0) {
+      const lift = Math.round((1 - rise) * 26);
+      drawWinBrazier(L.cx - L.spread, L.daisY + 14, now, rise);
+      drawWinBrazier(L.cx + L.spread, L.daisY + 14, now, rise);
+      const bw = 22, bh = 78;
+      for (const sx of [-1, 1]) {
+        drawWinBanner(L.cx + sx * Math.round(L.spread * 0.62) - (bw >> 1),
+          L.toy + 64 - lift, bw, bh, tm, rise, now);
+      }
+      drawWinDais(L.cx, L.daisY + lift, 40, tm, rise);
+      // the champion: 5x, breathing in place, wearing the gear it finished in
+      const bob = Math.round(Math.sin(now * 2.2) * 1.5);
+      const bx = L.cx - 40, by = L.champY + lift + bob;
+      ctx.globalAlpha = rise;
+      ctx.drawImage(SPRITES.champ[ws.champ][ws.team].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
+      drawGearMarks(ws, bx, by, 5);
+      ctx.globalAlpha = 1;
+      // the crown, dropped onto the head
+      const ct = (t - WIN_T.crown) / (WIN_T.crownLand - WIN_T.crown);
+      if (ct > 0) {
+        const e = Math.min(1, ct);
+        const cy = Math.round(by + 3 - (1 - e * e) * 70);
+        stampGrid(WIN_CROWN, WIN_CROWN_PAL, L.cx - 19, cy + (ct > 1 && ct < 1.25 ? 1 : 0), 3, '#3c2a1e');
+        if (ct >= 1 && ct < 1.6) { // a ring of sparks off the landing
+          const f = (ct - 1) / 0.6;
+          ctx.globalAlpha = 1 - f;
+          for (let i = 0; i < 14; i++) {
+            const ang = (i / 14) * Math.PI * 2, rr = 6 + f * 30;
+            ctx.fillStyle = i & 1 ? '#ffd95c' : '#ffffff';
+            ctx.fillRect(Math.round(L.cx + Math.cos(ang) * rr), Math.round(cy + 8 + Math.sin(ang) * rr * 0.6), 2, 2);
+          }
+          ctx.globalAlpha = 1;
+        }
+      }
+    }
+
+    // --- the headline: VICTORY, one letter at a time ------------------------
+    const TXT = 'VICTORY', S = 4;
+    const tw = pixelTextWidth(TXT, S);
+    const tx0 = Math.round((VIEW_W - tw) / 2);
+    for (let i = 0; i < TXT.length; i++) {
+      const lt = (t - WIN_T.title - i * WIN_T.letter) / WIN_T.land;
+      if (lt <= 0) continue;
+      const e = easeOut(Math.min(1, lt));
+      const lx = tx0 + i * 4 * S;
+      const ly = L.titleY - Math.round((1 - e) * 40);
+      ctx.globalAlpha = Math.min(1, lt * 2.5);
+      // a hot white frame on the beat it lands, gold from then on
+      drawPixelTextOutline(ctx, TXT[i], lx, ly, lt < 1.12 ? '#ffffff' : '#ffd95c', '#2a1c10', S);
+      ctx.globalAlpha = 1;
+      if (lt >= 1 && lt < 1.5) { // snow kicked up where it hit
+        const f = (lt - 1) / 0.5;
+        ctx.globalAlpha = 1 - f;
+        ctx.fillStyle = '#dfe8f8';
+        for (let k = 0; k < 5; k++) {
+          const h = hash2(i * 7 + k, 23);
+          ctx.fillRect(Math.round(lx + h * 4 * S + (h - 0.5) * f * 22), Math.round(L.titleY + 5 * S - f * 9), 1, 1);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // the rule sweeps out of the middle, then the line that says who won
+    if (t > WIN_T.rule) {
+      drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * easeOut(Math.min(1, (t - WIN_T.rule) / 0.4))), 1);
+      const sub = ws.mates > 0 ? tm.name + ' HOLDS THE FROSTLANDS' : 'LAST ONE STANDING';
+      ctx.globalAlpha = Math.min(1, (t - WIN_T.rule) / 0.5);
+      drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
+        ws.mates > 0 ? tm.mark : '#9fb6d8', '#0a0e23');
+      ctx.globalAlpha = 1;
+    }
+
+    // --- the tally ----------------------------------------------------------
+    const vals = WIN_STATS.map((st) => st.val(ws));
+    const pw = 15 + Math.max.apply(null, vals.map((v) => pixelTextWidth(v, 2))) + 5;
+    let sx = Math.round((VIEW_W - (WIN_STATS.length * pw + (WIN_STATS.length - 1) * 6)) / 2);
+    for (let i = 0; i < WIN_STATS.length; i++) {
+      drawWinStatPlate({ x: sx, y: L.statY, w: pw, h: 18 }, WIN_STATS[i], ws, t, i);
+      sx += pw + 6;
+    }
+
+    // the kit it was won in: the four pieces at the material they reached,
+    // carrying the same buy pips the in-match HUD row draws
+    const gt = (t - (WIN_T.stats + WIN_STATS.length * WIN_T.statStep)) / 0.3;
+    if (gt > 0) {
+      ctx.globalAlpha = Math.min(1, gt);
+      const gwAll = GEAR_SLOTS.length * GEAR_PLATE + (GEAR_SLOTS.length - 1) * GEAR_GAP;
+      let gx = Math.round((VIEW_W - gwAll) / 2);
+      ctx.fillStyle = '#0a0e23'; chamRect(gx - 4, L.gearY - 3, gwAll + 8, GEAR_PLATE + 6);
+      ctx.fillStyle = '#141c3c'; chamRect(gx - 3, L.gearY - 2, gwAll + 6, GEAR_PLATE + 4);
+      for (let i = 0; i < GEAR_SLOTS.length; i++) {
+        const lv = ws.gearLv[i];
+        ctx.fillStyle = lv >= GEAR_LV_MAX ? '#c89a3c' : '#35426e';
+        ctx.fillRect(gx, L.gearY, GEAR_PLATE, GEAR_PLATE);
+        ctx.fillStyle = '#0f1632';
+        ctx.fillRect(gx + 1, L.gearY + 1, GEAR_PLATE - 2, GEAR_PLATE - 2);
+        ctx.drawImage(SPRITES.gearIcons[i][ws.gear[i]][lv - 1], gx + 3, L.gearY + 2);
+        for (let k = 0; k < GEAR_LV_MAX - 1; k++) {
+          ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
+          ctx.fillRect(gx + 3 + k * 4, L.gearY + GEAR_PLATE - 3, 3, 1);
+        }
+        gx += GEAR_PLATE + GEAR_GAP;
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // --- the planks, sliding up to land exactly on WIN_T.menu ---------------
+    if (t > WIN_T.menu - WIN_SLIDE) {
+      const e = easeOut(Math.min(1, (t - (WIN_T.menu - WIN_SLIDE)) / WIN_SLIDE));
+      ctx.globalAlpha = e;
+      drawEndPlanks(now, Math.round((1 - e) * 16));
+      ctx.globalAlpha = 1;
+    }
+  }
   // ------------------------------------------------------------ eagle drop
   // Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle
   // along a seed-fixed line across the world (mode 'drop'). The view zooms out

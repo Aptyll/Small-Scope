@@ -152,8 +152,9 @@ killer pockets the gold via `gainGold`, an uncredited death spills it, and food 
 still show what the slot earned); `updatePlayer` just zeroes a dead slot's intents. Only the local slot's death takes
 the screen with it (`endMatch('lost')` → `state.mode = 'dead'` and the death overlay: spectate a
 living rival through `viewPlayer()`/`specNext()`, or `toLobby()` back to the title), and every
-death runs `checkLastStanding()`, which ends the match as a win when the local slot is the only one
-left. **The match keeps simulating while you are out** — `update()` runs `updatePlay` in both
+death runs `checkLastStanding()`, which ends the match as a win once no **rival** is left —
+`rivalCount()` reads the same other-team rule `enemyOf` does, so the last *team* standing wins and
+a surviving teammate does not keep the match open. **The match keeps simulating while you are out** — `update()` runs `updatePlay` in both
 `play` and `dead` mode; only the local overlays (pause, map, settings) stop the world. Full
 detail: [Death is final](gameplay.md#death-is-final).
 

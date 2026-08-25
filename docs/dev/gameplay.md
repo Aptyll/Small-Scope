@@ -542,11 +542,19 @@ handler are already generic per type (`itemFish` included). The standings are un
 `scoreOf` ranks lifetime `xp`, not the purse, so a looted slot keeps the place it earned. `die`
 also credits the kill and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — and then
-`checkLastStanding()` asks whether the local slot is now the only one left (with at least one
-rival to have beaten), which ends the match as a win. Either way the local slot leaves through
+`checkLastStanding()` asks whether every **rival** is now gone, which ends the match as a win.
+Rivals, not players: `rivalCount(p, all)` counts live slots on another team by the same rule
+`enemyOf` states, minus its `inAir()` skip (a rival on the eagle has not lost, it is about to
+land), so **teams win together** — a surviving teammate is not something left to beat. `all` asks
+the same question of the whole roster, dead included, and a match that never fielded a rival
+cannot be won. Either way the local slot leaves through
 `endMatch('lost' | 'won')` (the `death & spectate` banner): `state.mode = 'dead'`, every local
-overlay closed, and the death overlay takes the screen with two planks — **SPECTATE** (lost) or
-**KEEP PLAYING** (won), and **LOBBY**. Spectating sets `state.spec` to a living rival's id and
+overlay closed, and the screen goes to the loss overlay — two planks, **SPECTATE** and
+**LOBBY** — or to [the victory screen](rendering.md#the-victory-screen), whose planks are
+**KEEP PLAYING** and **LOBBY**. A win also freezes what it will print (`winSnapshot()` on
+`state.win`: gold, kills, level, clock, team, champion and the kit) because the match keeps
+running underneath and a total that climbs behind a tally which already counted it reads as a
+bug. Spectating sets `state.spec` to a living rival's id and
 `viewPlayer()` — the one place the camera and minimap ask who to frame — returns it. The control is
 a top-centre `[<] NAME [>]` strip (`specLayout`/`specHit`, sized to the widest slot name so the
 arrows never shift): clicking an arrow or pressing the arrow keys cycles (`specNext`, slot order,
@@ -592,4 +600,9 @@ title only the fps line shows. Beneath the minimap
 `SFX` creates its `AudioContext` lazily inside `ensure()`. Browsers require a user gesture, so
 `SFX.unlock()` is called from click handlers — any new entry point that plays sound before the
 first click needs to call it too.
+
+`SFX.victory()` (a four-note fanfare over a held low fifth) is the one cue longer than a second;
+`endMatch` fires it the moment the match is won. `SFX.tally()` is the dry blip a climbing number
+makes on the victory screen — see [The victory screen](rendering.md#the-victory-screen) for the
+rest of that timeline.
 

@@ -84,7 +84,9 @@ eagle, its shadow, the rider and every faller, while `state.drop` exists) → `r
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
-map/settings overlays → `renderTitle` (the main menu, also during the play intro) → death overlay →
+map/settings overlays → `renderTitle` (the main menu, also during the play intro) → the end-of-match
+overlay (`renderDead`: the death dim and its planks, or `renderVictory` — see
+[The victory screen](#the-victory-screen)) →
 `renderReplay` (the replay window, above both the death dim and the pause dim) →
 the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
 [Scoreboard and event feed](#scoreboard-and-event-feed)) →
@@ -212,10 +214,38 @@ so the same glyph reads on parchment, on snow and over forest.
   [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
   blotchy).
 
+## The victory screen
+
+Winning gets a ceremony instead of a dim, in the `victory` banner. `renderVictory` draws it and
+`WIN_T` is the single timeline both it and the sound cues (`winCues`, called from `update`) read,
+clocked off `state.deadTimer`: white bloom → **VICTORY** dropping in a letter at a time (each
+landing white, then gold, kicking up snow) → the gold rule sweeping out → braziers, team banners,
+the two-tier dais and the champion at 5× rising → a crown falling onto its head → the four stat
+plates popping in with their numbers climbing from zero → the kit strip → the planks sliding up.
+`winLayout()` is the one source of those anchors (in the same 270-tall authored frame every other
+screen uses) and `deadLayout()` reads its `plankY`, so **KEEP PLAYING** / **LOBBY** sit under the
+tally. Any press before the last beat calls `winSkip()`, which jumps `state.deadTimer` to the end.
+
+The screen owns the whole frame: `renderUI`, `renderEventLog` and `replayShowing` all bow out
+while `state.mode === 'dead' && state.over === 'won'` (the replay window sits exactly where the
+tally does). The held-TAB scoreboard and the info stack still draw over it.
+
+The art is procedural, in the title screen's idiom — `drawWinAurora` (three additive curtains of
+2 px strands across the top band), `drawWinRays` (stepped wedges walking out from behind the
+champion, blocks rather than an anti-aliased triangle), `drawWinMotes` (gold and snow falling
+from `hash2` alone, no array), `drawWinBanner`, `drawWinBrazier` (the title pillar's fire without
+the pillar) and `drawWinDais`. `stampGrid(rows, pal, x, y, s, rim)` paints a char grid at any cell
+size, the shape [sprites.js](../../js/sprites.js) authors in, for the crown and the two stat
+glyphs that never earned a baked sprite; the sprites it does use are the champion,
+`SPRITES.gearIcons`, `itemGold` and `itemBow`. `drawEndPlanks(now, dy)` is the plank pass both
+endings share — `dy` slides them without moving the rects `deadHit()` tests, so a plank is only
+clickable once it has arrived.
+
 ## Replay: the last four seconds
 
 The `replay` banner keeps a rolling four seconds of what was on screen and plays it back in the
-bottom-left corner while you are **dead** (the planks view, not while spectating) or **paused**.
+bottom-left corner while you are **dead** (the planks view, not while spectating, and never over
+[the victory screen](#the-victory-screen)) or **paused**.
 It records pixels, not state, so it costs nothing to keep and re-renders nothing to play.
 
 **Why it is not drawn in the game canvas.** The window is `RP_W`×`RP_H` (160×90) *game* px, and a
@@ -285,7 +315,8 @@ cost, so a headless driver can check the resolution without playing to a death.
 
 Two readouts of the **match** rather than of the world, in the `scoreboard & log` banner. Both
 draw after the death overlay, so the dim never touches them — being down is exactly when you read
-them — and both duck under the map/settings panels.
+them — and both duck under the map/settings panels. The feed also stands down over
+[the victory screen](#the-victory-screen); the scoreboard does not.
 
 **The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
 newest along the bottom. It shares that corner with the

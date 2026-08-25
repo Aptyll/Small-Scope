@@ -8,7 +8,8 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - **Gear**: 4 pieces × 3 variants (`GEAR` table), piece levels 1–4 bought with gold from anywhere
   (keys 1–4 / the HUD plates); the sim reads champions *and* gear only through `kitOf(p)`.
 - 6 slots in `players` (slot 0 = you, the rest AI), four team colours, two champions (WREN, SKADI — a look + a kit via `kitOf(p)`).
-- Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to the lobby.
+- Everyone rides in on a white eagle and jumps (Space) to land. **Death is final** — spectate or back to
+  the lobby. The **last team standing** wins (`rivalCount`, not a head count) and gets the victory screen.
 - The world has named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY (birds).
 - Night is mostly visual, but not inert: wolves see ×1.75 further at full dark and the only passive heal stops (`darkness < 0.3`).
 
@@ -61,7 +62,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 arrays `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`,
 `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~7400-line IIFE organized only by `// ------ name` banners. **Keep every banner
+`game.js` is one ~8700-line IIFE organized only by `// ------ name` banners. **Keep every banner
 honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
 read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).

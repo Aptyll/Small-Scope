@@ -126,6 +126,20 @@
       tone(784, 0.5, 'triangle', 0.07, 0, 0.36);
     },
     levelUp() { tone(523, 0.08, 'square', 0.08); tone(659, 0.08, 'square', 0.08, 0, 0.07); tone(784, 0.16, 'square', 0.09, 0, 0.14); tone(1046, 0.22, 'triangle', 0.08, 0, 0.2); },
+    // the match won: a four-note fanfare over a held low fifth, capped by a
+    // bright ring - the only sound in the game that lasts more than a second
+    victory() {
+      tone(392, 0.11, 'square', 0.09);
+      tone(523, 0.11, 'square', 0.09, 0, 0.10);
+      tone(659, 0.11, 'square', 0.09, 0, 0.20);
+      tone(784, 0.45, 'square', 0.10, 0, 0.30);
+      tone(1046, 0.75, 'triangle', 0.09, 0, 0.46);
+      tone(196, 1.5, 'triangle', 0.07, 0, 0.30);
+      tone(294, 1.5, 'triangle', 0.05, 0, 0.30);
+      noise(0.45, 0.09, 3200);
+    },
+    // one number climbing on the victory screen: a dry, quiet blip
+    tally() { tone(1320, 0.03, 'square', 0.035); },
     heal() { tone(440, 0.1, 'triangle', 0.08); tone(554, 0.12, 'triangle', 0.08, 0, 0.08); },
     splash() { noise(0.28, 0.28, 750); tone(300, 0.22, 'sine', 0.1, -190); noise(0.14, 0.12, 1500, 0.06); },
     // the wolf den: a rising howl that sags at the end, then the pack answering
