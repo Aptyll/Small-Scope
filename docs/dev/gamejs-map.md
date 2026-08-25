@@ -26,7 +26,8 @@ don't cite line numbers here, they go stale within a session.
 | picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the F3 readout: fps, coords, seed | `drawTags` | `render` |
-| the `.` hitbox overlay and its 1px ring/box rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `HB_*` | `hitbox overlay` |
+| the `.` hitbox overlay and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `HB_*` | `debug overlays` |
+| the `,` route overlay: a walker's remaining waypoints and its goal tile | `drawNavPaths` | `debug overlays` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` |

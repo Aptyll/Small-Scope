@@ -751,7 +751,7 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
+`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`, `paths`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`, which the resource row in `renderUI()` also positions
 itself against. (Old saves may still carry `res`, `fps` or `seed` keys from removed settings;
@@ -760,9 +760,10 @@ itself against. (Old saves may still carry `res`, `fps` or `seed` keys from remo
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
 still refits the canvas when the browser toggles it.
 
-Below the six rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
-(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one and `. HITBOX` the right one, and the
-rows start at y 137 rather than 140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
+Below the six rows, the baked CONTROLS block lists the hotkeys in columns of **seven and eight**
+(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one, `. HITBOX` and `, PATHS` the right one,
+which is why the rows start at y 137 and the pitch is 9 rather than 10: the eighth still has to
+clear `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
 as `CTRL HIDE IN SNOW`.
 
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
@@ -780,8 +781,10 @@ title only the fps line shows.
 
 `settings.hitbox` is the same idea one key over: **`.`** cycles it 0 → 1 → 2 (off / bodies /
 bodies + ranges) in any mode, and draws the circles and boxes the sim actually tests over the
-sprites that hide them — see [Hitboxes](rendering.md#hitboxes-the--overlay). It has no ESC-menu
-row (the panel is full), only the `. HITBOX` line in the CONTROLS block.
+sprites that hide them; `settings.paths`, toggled by **`,`**, draws the route every walker is
+following and the tile it is heading for. Neither has an ESC-menu row — only the `. HITBOX` and
+`, PATHS` lines in the CONTROLS block. Both are in
+[Debug overlays](rendering.md#debug-overlays-hitboxes-and-routes).
 
 Beneath the minimap
 `renderMinimap()` prints one centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with

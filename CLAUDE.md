@@ -33,8 +33,8 @@ refresh always picks up changes). `PORT` overrides the port; `.claude/launch.jso
 outside: `window.DBG` (end of [js/game.js](js/game.js)) exposes the live singletons and stages a
 scene without playing to it, `?seed=N` pins the world so two screenshots are comparable, and
 `POST /shot` ([serve.js](serve.js#L14)) sinks `canvas.toDataURL()` to `shot.png` for a headless
-driver — never commit that file, and in the game itself **`.`** draws the hitboxes the sim
-actually tests over the sprites that hide them. How to use all four:
+driver — never commit that file, and in the game itself **`.`** and **`,`** draw the hitboxes the
+sim tests and the routes every walker is following. How to use all four:
 [checklists](docs/dev/checklists.md#verifying-a-change).
 
 ## Deep docs

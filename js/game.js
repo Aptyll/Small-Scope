@@ -467,7 +467,7 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0 };
+  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0, paths: false };
   // Minimap zoom ladder, px per world tile: index settings.mmZoom (5 = the 1:1
   // baseline). Twice the rungs and twice the reach of the old six, and like the
   // camera it eases between them rather than snapping - mmCur is what anything
@@ -834,6 +834,9 @@
     // beside F3 and for the same reason: what it draws is as true of the title
     // screen's living world and of a spectated match as it is of your own feet
     if (e.key === '.') { settings.hitbox = (settings.hitbox + 1) % 3; saveSettings(); return; }
+    // ',' is its neighbour on the keyboard and its neighbour in the render:
+    // the routes every walker is following, under the hitboxes on the same layer
+    if (e.key === ',') { settings.paths = !settings.paths; saveSettings(); return; }
     if (state.mode === 'title') { menuKey(e); return; }
     if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
     if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
@@ -4651,7 +4654,6 @@
     for (const b of robots) draws.push({ y: b.y + 4, r: b });
     draws.sort((a, b) => a.y - b.y);
 
-    if (window.DBG.showPaths) drawNavPaths(ex, ey);
     for (const d of draws) {
       if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
@@ -4838,7 +4840,9 @@
 
     drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
     renderLighting(ox, oy, ex, ey, now);
-    drawHitboxes(ox, oy, ex, ey); // the '.' overlay - above the lighting on purpose, see its banner
+    // the two debug views, above the lighting on purpose - see the banner
+    if (settings.paths || window.DBG.showPaths) drawNavPaths(ox, oy, ex, ey);
+    drawHitboxes(ox, oy, ex, ey);
 
     // Back to the screen, and the only place the two pixel spaces meet. The
     // blit is done in DEVICE pixels (identity transform) at k = zoom * devScale
@@ -4888,25 +4892,6 @@
     if (settings.pixelCursor && mouse.inside && !window.DBG.hideUI) drawCursor(cur, now);
   }
 
-  // debug: every walker's live route (DBG.showPaths), waypoints joined from the unit
-  function drawNavPaths(ex, ey) {
-    ctx.save();
-    ctx.lineWidth = 1;
-    const one = (e, col) => {
-      const nav = e.nav;
-      if (!nav || !nav.path) return;
-      ctx.strokeStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(Math.round(e.x - ex) + 0.5, Math.round(e.y - ey) + 0.5);
-      for (let i = nav.i; i < nav.path.length; i++) ctx.lineTo(Math.round(nav.path[i][0] - ex) + 0.5, Math.round(nav.path[i][1] - ey) + 0.5);
-      ctx.stroke();
-    };
-    for (const p of players) if (p.active && !p.dead && !inAir(p)) one(p, '#ffe27a');
-    for (const a of animals) if (!a.dead) one(a, a.kind === 'wolf' ? '#ff6a6a' : '#8ef0a0');
-    for (const b of robots) if (!b.dead) one(b, '#7fc8ff');
-    ctx.restore();
-  }
-
   // the info stack (settings.info - the INFO row in the ESC menu, or F3, the
   // minecraft reflex): fps, the framed slot's tile coordinates, and the run
   // seed as one vertical list on the left edge at the top quarter of the view,
@@ -4934,7 +4919,7 @@
     }
   }
 
-  // ------------------------------------------------------------ hitbox overlay
+  // ------------------------------------------------------------ debug overlays
   // What the sim actually tests, drawn on top of what the art shows. The '.'
   // key cycles `settings.hitbox`: 0 off, 1 bodies, 2 bodies + ranges - one key,
   // and the extra rings are their own step because a wolf's sight ring is 96px
@@ -4979,6 +4964,24 @@
     ctx.fillStyle = col;
     ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1);
     ctx.fillRect(x, y + 1, 1, h - 2); ctx.fillRect(x + w - 1, y + 1, 1, h - 2);
+  }
+  // one line, same idiom: Bresenham in 1px world pixels, `step` plotting one
+  // pixel in N (the dotted look a planned-but-not-yet-walked leg uses)
+  function hbLine(x0, y0, x1, y1, col, step) {
+    if ((x0 < 0 && x1 < 0) || (y0 < 0 && y1 < 0) ||
+      (x0 > WV_W && x1 > WV_W) || (y0 > WV_H && y1 > WV_H)) return;
+    const dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy, n = 0;
+    ctx.fillStyle = col;
+    for (;;) {
+      if ((!step || n % step === 0) && x0 >= 0 && y0 >= 0 && x0 < WV_W && y0 < WV_H) ctx.fillRect(x0, y0, 1, 1);
+      n++;
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
   }
   // the anchor point itself: a circle drawn around the wrong origin looks right
   // until you see where its centre is
@@ -5065,6 +5068,32 @@
     }
     for (const s of shafts) hbRing(s.x - ex, s.y + 2 - ey, SHAFT_R, HB_PICK);
     for (const f of fish) hbRing(f.x - ex, f.y - ey, 7, HB_PICK); // hoverFish
+  }
+
+  // debug: every walker's live route (',' — `settings.paths`, or `DBG.showPaths`).
+  // The line is the PLAN, not the walk: it leaves the unit, runs through the
+  // waypoints it has left, and ends in a box on `nav.gtx/gty`, the tile it
+  // decided to go to - which is the answer to "why is it walking over there".
+  // The leg it is on now is solid and the legs behind that are dotted, so a
+  // route being followed reads differently from a route being replanned.
+  function drawNavPaths(ox, oy, ex, ey) {
+    const one = (e, col) => {
+      const nav = e.nav;
+      if (!nav || !nav.path) return;
+      let px = Math.round(e.x - ex), py = Math.round(e.y - ey);
+      for (let i = nav.i; i < nav.path.length; i++) {
+        const qx = Math.round(nav.path[i][0] - ex), qy = Math.round(nav.path[i][1] - ey);
+        hbLine(px, py, qx, qy, col, i === nav.i ? 0 : 2);
+        hbDot(qx, qy, col);
+        px = qx; py = qy;
+      }
+      hbBox(nav.gtx * TILE - ox, nav.gty * TILE - oy, TILE, TILE, col);
+    };
+    // one colour per kind of walker, as they read on the minimap: the slots
+    // gold, a wolf red, the rest of the wildlife green, a worker bot blue
+    for (const p of players) if (p.active && !p.dead && !inAir(p)) one(p, '#ffe27a');
+    for (const a of animals) if (!a.dead) one(a, a.kind === 'wolf' ? '#ff6a6a' : '#8ef0a0');
+    for (const b of robots) if (!b.dead) one(b, '#7fc8ff');
   }
 
   // ------------------------------------------------------------ cursor & aim line
@@ -7471,15 +7500,15 @@
     // hotkey listing, two columns
     const cols = [
       [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH']],
-      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
+      [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX'], [',', 'PATHS']],
     ];
     for (let c = 0; c < 2; c++) {
-      let y = 137; // seven rows a column now that CTRL is one: start a little higher so the last one still clears ESC CLOSE
+      let y = 137; // eight rows in the right-hand column now: the pitch is 9 rather than 10 so the last one still clears ESC CLOSE
       const x0 = c === 0 ? 16 : 128;
       for (const [k, desc] of cols[c]) {
         drawPixelText(g, k, x0, y, '#ffd95c');
         drawPixelText(g, desc, x0 + (c === 0 ? 36 : 26), y, '#7a8bb8');
-        y += 10;
+        y += 9;
       }
     }
     // close hint
@@ -7578,9 +7607,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.38'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.39'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.39', 'THE , KEY DRAWS THE ROUTE EVERY WOLF, BOT AND RIVAL IS WALKING AND THE TILE IT IS HEADING FOR.'],
     ['1.38', 'THE . KEY DRAWS EVERY HITBOX IN THE WORLD - THE CIRCLES AND BOXES THE GAME ACTUALLY TESTS - AND A SECOND PRESS ADDS EVERY REACH AND SIGHT RANGE ON TOP.'],
     ['1.37', 'THE CAMERA ZOOMS FURTHER IN AND OUT IN FINER STEPS AND GLIDES BETWEEN THEM, ALWAYS SETTLING WHERE THE PIXELS LAND EXACTLY, AND ZOOMING NO LONGER RESIZES THE HUD - ONLY THE WORLD.'],
     ['1.36', 'OPENING THE MAP NO LONGER STOPS THE WORLD - THE MATCH RUNS ON WHILE YOU READ IT, AND YOU CAN KEEP WALKING WITH IT UP.'],
