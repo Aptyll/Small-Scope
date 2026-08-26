@@ -74,8 +74,9 @@ Two passes settle piles; the pass is deterministic (fixed order, no `rng`).
 
 ## Pathfinding
 
-Everything that walks to a goal on its own — robots, fleeing prey, hunting wolves, bot slots,
-any future enemy — routes through the `pathfinding` banner rather than steering straight at it.
+Everything that walks to a goal on its own — robots, bot slots, hunting wolves and patrolling
+ones, prey both fleeing and grazing, any future enemy — routes through the `pathfinding` banner
+rather than steering straight at it. Nothing that walks holds a bare heading on a timer any more.
 `findPath(sx, sy, gx, gy, reach, budget)` is grid A* over the tile map: a tile is `walkable()`
 when it is in-world, not `isSolidTile`, and not open water (ground 2); eight-connected with no
 corner cutting (a diagonal needs both orthogonal neighbours open, so a unit of radius ≤ 5 never
@@ -402,14 +403,28 @@ one place a kill pays out, straight from the `YIELD` table. Everything in `anima
 for arrows (`animalHit(a, x, y)`, shared by the arrow update and the aim line), gets the amber
 hunt reticle, and joins the y-sorted draws.
 
-Prey behaviour lives in `updatePrey()`: both wander in idle/move bursts; when a
-rabbit picks a new wander it drifts toward the nearest berried bush within 7 tiles
-(`nearestBerryBush`) and idles ("nibbles") once within 22 px; rabbits also bolt when **any**
-player comes within 26 px, and a hit sends either species fleeing from the nearest one
-(`fleeT`). A flight is a chain of routed legs: `fleeGoal(a, from)` picks a tile ~6 tiles off, as
-straight away from the threat as the ground allows (fanning out, then sideways, then past it),
-the first it can route to, and `navStep` runs it ([Pathfinding](#pathfinding)); a leg that
-arrives or fails hands over to the next, and an animal with nowhere to run stops fleeing. Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
+Prey behaviour lives in `updatePrey()`, and **every step of it is a routed goal** — grazing
+included, which is what keeps the `.` overlay honest ([rendering.md](rendering.md#routes)).
+
+- **Grazing.** Idle, then pick one goal and walk it. `wanderGoal(a, base, spread, near, far)`
+  tries 8 tiles in an arc, takes the first it can actually route to, and returns `null` when the
+  animal is boxed in (the caller just idles and picks again). `preyWander` is the per-kind
+  chooser: a rabbit with a berried bush inside 7 tiles (`nearestBerryBush`) aims at it and
+  returns `null` — idling, i.e. "nibbling" — once within 22 px, which is what makes a bush patch
+  read as a warren; everyone else takes an open direction, 3–6 tiles. `navStep` walks it at
+  `PREY_SPD`, and arriving (or `ok === false`) drops the goal and idles.
+- **Bolting.** Both species now flee, on `FLEE_SIGHT` / `FLEE_TIME`: a rabbit sits tight and goes
+  at 26 px, a deer watches wider and runs longer at 46 px. The trigger asks
+  **`seenAt(p, FLEE_SIGHT[kind])`**, not raw distance, so GHOSTSTEP and lying buried in the snow
+  are how a hunter closes on a deer at all — measured, full cover collapses a deer's ring from 46
+  to `PRONE_SNIFF` (22), and inside *that* it bolts no matter what you are lying under. A hit
+  also sends either species running from the nearest player (`fleeT`).
+- **The flight** is a chain of routed legs at `PREY_RUN`: `fleeGoal(a, from)` picks a tile ~6
+  tiles off, as straight away from the threat as the ground allows (fanning out, then sideways,
+  then past it), the first it can route to; a leg that arrives or fails hands over to the next,
+  and an animal with nowhere to run stops fleeing.
+
+Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
 floater. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
 to players, robots and each other except birds, which fly (see
 [Unit collisions](#unit-collisions)), and sprites are side-view only (`dir` is `left|right`).
@@ -436,7 +451,9 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   wolves from deleting anyone: measured, standing in a den costs ~9 hp/s, so a level-1 slot has
   ~10 s to get out. Death reads `WENT TO THE WOLVES` in the feed
   ([multiplayer.md](multiplayer.md#kills-and-the-event-feed)).
-- **Off duty** it patrols its den, wandering back whenever it drifts past `r * 0.8` tiles.
+- **Off duty** it patrols its den on routed legs from the same `wanderGoal` the prey graze with
+  (2–5 tiles); once it drifts past `r * 0.8` the arc narrows to 0.5 rad straight back at the den,
+  so the only way it will walk out there is home. Taking a quarry drops the patrol goal.
 - **The payout** is `YIELD.wolf` — 24 gold, the biggest single kill in the game, for 30 hp of
   arrows (three full draws at level 1). Dangerous, rewarding.
 
@@ -920,10 +937,11 @@ in exactly the way a mis-wired cue is* — every sampled sound falls back to its
 game sounds untouched — so without it "I hear no new sounds" has three indistinguishable causes.
 See [Audio](#audio).
 
-`settings.hitbox` is the same idea one key over: **`.`** cycles it 0 → 1 → 2 in any mode. One
-press draws the circles and boxes the sim actually tests over the sprites that hide them; a second
-adds the route every walker is following and the tile it is heading for. It has no ESC-menu row,
-only the `. HITBOX` line in the CONTROLS block; the rest is in [Debug overlays](rendering.md#debug-overlays-hitboxes-and-routes).
+`settings.hitbox` is the same idea one key over: **`.`** toggles it 0 ↔ 2 in any mode. One press
+draws the circles and boxes the sim actually tests over the sprites that hide them, *and* the
+route every walker is following with the tile it is heading for; the next press turns both off. It
+has no ESC-menu row, only the `. HITBOX` line in the CONTROLS block; the rest is in
+[Debug overlays](rendering.md#debug-overlays-hitboxes-and-routes).
 
 Beneath the minimap
 `renderMinimap()` prints one centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with

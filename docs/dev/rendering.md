@@ -393,14 +393,13 @@ structures show flash, shake, and damage cracks instead.
 What the sim tests, drawn over what the art shows — the two are deliberately different (a tree's
 canopy overhangs the tile above it; an arrow is tested against a circle at the *chest*, 6 px above
 the feet), and every collision question is faster to answer by looking than by reading. One key:
-`.` cycles `settings.hitbox` in **any** mode, beside F3 and for the same reason — the title
+`.` toggles `settings.hitbox` in **any** mode, beside F3 and for the same reason — the title
 screen's world is live and a spectated match is someone else's feet:
 
 | `settings.hitbox` | draws |
 | --- | --- |
 | `0` | nothing (default; persists to `localStorage` like every other setting) |
-| `1` | bodies: tile boxes, unit circles, projectile points, pickup radii |
-| `2` | ...plus the route every walker is following |
+| `2` | bodies (tile boxes, unit circles, projectile points, pickup radii) plus the route every walker is following |
 
 Colour carries the kind, so there is nothing to label: **cyan** a wall to everyone (`isSolidTile`,
 so a multi-tile building boxes each of its footprint tiles), **blue** open water — a wall to
@@ -425,7 +424,7 @@ soft edge into mush. It plots the left/right extremes by row and the top/bottom 
 ring closes at every radius and a fractional one (`PLAYER_R` is 4.5) is not rounded away. `hbLine`
 is the same idiom for a straight run, and its `step` is what dots a planned route leg.
 
-### Routes (the second press)
+### Routes
 
 `drawNavPaths` runs from the same place, one layer under the hitboxes, because a route is on the
 ground and a body stands on it. It draws the **plan, not the walk** — the line leaves the unit,
@@ -438,6 +437,24 @@ gold, a wolf red, the rest of the wildlife green, a worker bot blue.
 Most routes are one leg: `navTo` takes the straight line whenever `navLineClear` allows it and
 `navSmooth` collapses the rest, so a chain of waypoints means the unit is genuinely going around
 something. `DBG.showPaths` still forces the same pass on by itself, whatever `settings.hitbox` is.
+
+**Everything that walks has one of these**, grazing and patrolling included — see
+[wildlife](gameplay.md#wildlife). That is what makes the overlay readable: a line always shrinks
+into its box and ends on the tile the walker actually stops on. It used to be that an idling
+animal held a random heading on a timer with no `nav` at all, so there was nothing honest to draw
+and it stopped mid-stride wherever the clock ran out; wandering is a routed goal now, so that
+whole class of "line that never shrinks" is gone.
+
+The two exceptions are the two things that don't walk:
+
+| Not a walker | Drawn as | Why |
+| --- | --- | --- |
+| a bird in flight | straight dotted line to `a.perch` + the goal box | it flies over the route grid, but the perch it's coming down on is a real decided destination |
+| a fish | `hbArrow` — a barbed heading stub, teal, **no box** | it steers (`f.a`) and genuinely has nowhere it is going; a box would claim a destination that doesn't exist |
+
+The arrowhead is the whole tell: **a barbed stub is a heading, a line ending in a box is a walk to
+a decided place.** Keep that split if you add another mover — draw the box only when there is a
+goal tile to put it on.
 
 ## Landmarks on the maps
 
