@@ -214,8 +214,14 @@ the arrow speed/damage formulas in `fireArrow()`,
 ## Known drift
 
 - [README.md](../../README.md) is a storefront page (hero + mechanic shots in `docs/media/`), not a
-  tech guide — no run instructions, controls list, or code layout. Those live in the root
-  [CLAUDE.md](../../CLAUDE.md) and these dev docs.
+  tech guide. It carries the one-line "double-click `index.html`" and links into
+  [game.md](game.md) / [architecture.md](architecture.md); the controls list and the code layout
+  stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
+- **Every shot in `docs/media/` predates the free-for-all** — they are solo-survival captures from
+  the original storefront, so there is no image of a team colour, a Keep, a worker bot, a fish net
+  or a landmark. The README copy was rewritten in `PATCH 1.54` to describe the current game *around
+  what those seven shots actually show*, which is why the wildlife cells carry the economy and the
+  newer pillars sit in text below the table. New captures would let the table carry them instead.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
 - The flat `SPRITES.spawner` (the old 16×16 hut grid in the three tier palettes) is baked but

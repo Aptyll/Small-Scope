@@ -1,18 +1,9 @@
 # CLAUDE.md
 
-Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map.
-
-- **Arrows are finite** on an always-in-hand bow, and spent shafts stick in the snow for anyone.
-  **E** harvests and breaks enemy buildings, **Ctrl** goes prone and the snow covers you, and
-  momentum is the movement — ice, chained dodges, and **a roll is a hit**.
-- **Gold is the only currency, and gold = XP.** You carry a 10-cell backpack (`p.bag`); **gear**
-  is 4 pieces × 3 variants bought from anywhere. Berries and fish are food.
-- 6 slots in `players` (slot 0 = you, the rest AI), four teams, two champions, all dropped in by
-  eagle. **A team's Keep is its way back** — no living Keep = permadeath — and crafts rarity-rolled
-  **roguelike cards**. **Last team standing wins.**
-- **An ice hole is a build site** for the one water building, a **fish net**, over a live fish
-  population. **Hold middle mouse to aim your one worker flag, release to plant** — *what it sits
-  on is the order*. Named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY.
+Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map. Six
+slots over four teams, dropped in by eagle; a team's Keep is its way back, and last team standing
+wins. **Read [docs/dev/game.md](docs/dev/game.md) before proposing a feature or judging whether
+one fits** — that is the design in one page. This file is only the rules.
 
 ## Commands
 
@@ -38,25 +29,22 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 | Working on | Read |
 | --- | --- |
+| what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
 | movement, bow and tools, dodge, wildlife, wolves and birds, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
+| the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | which banner / function in game.js owns a thing | [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) |
 
 ## Architecture
 
-Four IIFEs plus one generated data file, loaded in a fixed order by [index.html](index.html) and communicating only through globals — each file's globals must exist before the next loads.
-
-| File | Exposes | Role |
-| --- | --- | --- |
-| [js/font.js](js/font.js) | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | 3×5 bitmap font, uppercase only, unknown chars render as `?`. **Text over the world uses `Outline`** (1px dark rim on all sides, opaque colour); `Shadow` is for text on panels/planks |
-| [js/sprites.js](js/sprites.js) | `SPRITES` | every sprite as a char-grid + palette map, baked to offscreen canvases at load |
-| [js/sfxdata.js](js/sfxdata.js) | `SFXDATA` | **generated** — `audio/sfx/*.mp3` as base64, built by `node tools/bake-sfx.js`. Rerun it after any change to `audio/sfx/` |
-| [js/audio.js](js/audio.js) | `SFX` | three layers: a WebAudio synth for UI blips *and* as the fallback under every cue, one-shot samples out of `SFXDATA`, and `SFX.music` streaming `audio/music/`. Master / MUSIC / SOUNDS dials — see [gameplay](docs/dev/gameplay.md#audio) |
-| [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
+Four IIFEs plus one generated data file — `font.js`, `sprites.js`, the generated `sfxdata.js`,
+`audio.js`, `game.js` — loaded in that fixed order by [index.html](index.html) and communicating
+**only through globals**, so each file's globals must exist before the next loads. What each one
+exposes: [architecture](docs/dev/architecture.md).
 
 All game state lives in module-scope singletons — `state`, `settings`, `players` (`player`/`inv`
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
@@ -86,7 +74,9 @@ onboarding** (the two `showMsg` teaching lines). Anything else that wants words 
 
 ## Hard rules
 
-Cross-file invariants — breaking one produces a bug that looks unrelated to its cause.
+Cross-file invariants — breaking one produces a bug that looks unrelated to its cause. The test
+for a line belonging here: **would you break it without ever having reason to open the deep doc?**
+If not, it lives in `docs/dev/*.md` beside the code it protects.
 
 - **Canvas size changed?** Call `fitCanvas()` **then** `relayout()` — both paths (window resize,
   `fullscreenchange`) do. Never write layout against a literal 480/270; the view is `VIEW_W`×`VIEW_H`.
@@ -100,6 +90,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
 - **Screen position is `round(world − camera)`, rounded exactly once.** Statics subtract the
   rounded `ox`/`oy`; moving entities subtract the exact `ex`/`ey` and round at the end. Rounding
   camera and entity separately makes sprites vibrate ±1 px against the background while walking.
+- **Text over the world uses `drawPixelTextOutline`** (a 1px dark rim on all sides, opaque colour);
+  `Shadow` is for text on panels and planks, and for anything under a `globalAlpha` fade. White
+  pixel text on white snow with only a drop shadow is unreadable.
 - **Runtime ground change?** Call `repaintGround(tx, ty)` — it repaints the tile plus its four
   neighbours into the prerendered ground canvas. Never call `renderGround()` per frame; it bakes
   the entire 3712×3712 world and is a boot-time cost.
@@ -127,22 +120,15 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
   `w`/`h` in `STRUCTS` (the bot bay, 3×2) fills its other tiles with `part` objects pointing at the
   anchor — **read one off a tile with `structOf(objAt(...))`**, create/remove only via
   `createStruct`/`removeStruct`.
-- **Anything drawn through `drawSpriteFlash()` must fit in 64×64** — it recolours through a shared
-  64×64 scratch canvas and larger sprites clip.
-- **[js/sprites.js](js/sprites.js) has a UTF-8 BOM** and **seven** rows repairing a mangled byte via
-  `.replace()` (`stump`, `imp1`×2, `wall`×2, `heartHalf`, `heartEmpty`) — preserve its encoding.
 
 ## Keeping the docs current
 
 **The docs are part of the deliverable.** When a change makes a line in this file or in
-`docs/dev/*.md` false, fix it in the same turn as the code change — edit the section that already
-covers the topic, and prune what the change made false, including
-[Known drift](docs/dev/checklists.md#known-drift) entries once fixed. A stale line is worse than a
-missing one, because future sessions act on it without re-verifying. What is worth recording:
-[checklists](docs/dev/checklists.md#what-is-worth-recording).
+`docs/dev/*.md` false, fix it in the same turn as the code change — a stale line is worse than a
+missing one, because future sessions act on it without re-verifying. Prune
+[Known drift](docs/dev/checklists.md#known-drift) entries once fixed; what is worth recording at
+all: [checklists](docs/dev/checklists.md#what-is-worth-recording).
 
-**This file loads in full at the start of every session — keep it under ~150 lines.** It is a
-system prompt, not a knowledge base: every line costs context in *every* session, and rule
+**Keep this file under ~150 lines** — it loads in full at the start of every session, and rule
 adherence drops as it grows. Anything derivable by reading the code belongs in `docs/dev/*.md`,
-which costs nothing until opened. When this file outgrows the budget, move a section out rather
-than thinning every section into mush.
+which costs nothing until opened. Move a section out rather than thinning every section into mush.

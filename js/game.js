@@ -9660,9 +9660,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.53'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.54'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.54', 'HOUSEKEEPING ONLY - THE PROJECT DOCS SPLIT THE DESIGN AND THE FILE LAYOUT OUT INTO PAGES OF THEIR OWN, AND THE README FINALLY DESCRIBES THE FREE-FOR-ALL INSTEAD OF A SOLO SURVIVAL GAME, WITH NOTHING IN THE GAME CHANGED.'],
     ['1.53', 'HOUSEKEEPING ONLY - 34 MB OF UNUSED ALTERNATE MUSIC TAKES AND ALBUM ART LEFT THE FOLDER AND THE PROJECT DOCS GOT A TRIM, WITH NOTHING IN THE GAME CHANGED.'],
     ['1.52', 'HOUSEKEEPING ONLY - THE DEV SERVER AND THE SOUND BAKER MOVED INTO A TOOLS FOLDER, AND NOTHING IN THE GAME CHANGED.'],
     ['1.51', 'THE ICE OPENS IN TWO HITS AND THE HOLE IS A BUILD SITE - SET A FISH NET ON IT AND IT FISHES FOR YOU, HOLDING THREE AT A TIME FOR WHOEVER WALKS OUT ONTO IT, YOURS OR NOT - WHILE THE SHOAL IS A LIVING POPULATION NOW, FISHED DOWN AND REFILLED BY NEW FISH SWIMMING UP OUT OF THE DEEP.'],
