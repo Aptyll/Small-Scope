@@ -526,9 +526,13 @@
     // `worker flags` banner for why the preview is a gesture and not a mode.
     flagAim: false,
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
-    // the open sub-panel ('settings' | 'help' | null) and its slide progress
+    // the open sub-panel ('settings' | 'help' | 'patch' | 'name' | null) and its slide progress
     menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row
       panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
+      // the PLAYER panel (the `player profile` banner): the name being typed,
+      // whether this is the first-launch prompt (SKIP) or an edit (CANCEL),
+      // the refusal rattle and the two planks' hover eases
+      nameBuf: '', nameFirst: false, nameShake: 0, nameHover: [0, 0],
       moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
       // the frozen plank: refusal shudder timer, per-knock crack seed, the
       // struck point (plank-local) and the ice chips it sprays (screen-space)
@@ -567,12 +571,14 @@
   // (unclamped) frame deltas, so sim clamping can't mask slow frames
   const perf = { fps: 0, frames: 0, acc: 0 };
 
-  function saveSettings() {
-    try { localStorage.setItem('softfall.settings', JSON.stringify(settings)); } catch (e) { }
-  }
+  // Settings live UNDER the profile - PROFILE.putSettings / PROFILE.settings,
+  // js/profile.js, the one file in the game that touches storage. A pre-profile
+  // save under the old 'softfall.settings' key is folded in by PROFILE.load()
+  // before this ever runs, so the mmZoom migration below still sees it.
+  function saveSettings() { PROFILE.putSettings(settings); }
   function loadSettings() {
     try {
-      const s = JSON.parse(localStorage.getItem('softfall.settings'));
+      const s = PROFILE.settings(); // null when this profile has never saved any
       if (s) Object.assign(settings, s);
       // a save from before the minimap ladder grew: its mmZoom indexes the old
       // six-rung array, so carry it across instead of silently rescaling the
@@ -652,6 +658,7 @@
   function gainGold(p, n) {
     p.inv.gold += n;
     p.xp += n;
+    if (p === player) PROFILE.addGold(n); // lifetime total, coalesced - see profile.js
     while (p.level < LEVEL_MAX && p.xp >= LEVEL_XP[p.level]) levelUp(p);
   }
   function levelUp(p) {
@@ -913,7 +920,9 @@
       this.id = slot;
       this.team = slot % TEAM_COUNT;
       this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
-      this.name = control === 'human' ? 'YOU' : TEAMS[this.team].name + '-' + (slot + 1);
+      // the local slot wears the profile's display name; every other slot is
+      // named off its team. Editing the name at the menu calls applyProfileName().
+      this.name = control === 'human' ? PROFILE.name() : TEAMS[this.team].name + '-' + (slot + 1);
       this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
       this.inv = { gold: 0 };             // the wallet is currency only - carried goods are in the bag
       this.bagCap = BAG_CAP;              // slots; one starting backpack
@@ -1077,6 +1086,9 @@
     // reach the browser's focus traversal
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'Tab', 'F3'].includes(e.key)) e.preventDefault();
     keys[e.key.toLowerCase()] = true;
+    // the name editor owns the keyboard while it is up: its letters are text,
+    // not shortcuts, and F3 / '.' below would fire on keys the field ignores
+    if (state.mode === 'title' && state.menu.panel === 'name') { nameKey(e); return; }
     // F3 flips the info stack in any mode, minecraft-style (the browser's own
     // F3 find bar is suppressed above)
     if (e.key === 'F3') { settings.info = !settings.info; saveSettings(); return; }
@@ -4642,6 +4654,9 @@
   // the screen (mode 'dead'), the sim runs on underneath it
   function endMatch(how) {
     state.over = how;
+    // day 1 never reaches the dawn that records itself, so the end of the match
+    // is the other half of the best-day stat
+    if (how === 'won' || how === 'lost') PROFILE.recordDay(state.day);
     state.mode = 'dead';
     state.deadView = 'menu';
     state.deadSel = 0;
@@ -5053,6 +5068,9 @@
       if (state.time >= CYCLE) {
         state.time -= CYCLE;
         state.day++;
+        // the profile's best day: recorded as each dawn is reached, not at the
+        // end, so quitting to the lobby mid-match still keeps the day you made
+        if (!player.eliminated) PROFILE.recordDay(state.day);
         SFX.dawnChime();
         showMsg('DAY ' + state.day, 3);
         // carved ice holes freeze back over during the night; cracks heal too.
@@ -6499,8 +6517,10 @@
         if (dragSlider) return { kind: 'grab' };
         return { kind: settingsHit() ? 'hand' : 'arrow' };
       }
+      if (m.panel === 'name') return { kind: menuPanelReady() && namePanelHit() >= 0 ? 'hand' : 'arrow' };
       if (m.screen === 'gear') return { kind: m.gearT >= 1 && gearScreenHit() ? 'hand' : 'arrow' };
       if (m.screen === 'select') return { kind: m.screenT >= 1 && m.gearT <= 0 && selectHit() >= 0 ? 'hand' : 'arrow' };
+      if (!m.panel && (overNameTag() || overPatchTag())) return { kind: 'hand' }; // the two corner tags
       if (!m.panel) { const h = menuHit(); if (h >= 0 && h !== MENU_FROZEN) return { kind: 'hand' }; } // the frozen plank isn't clickable, so no hand
       return { kind: 'arrow' };
     }
@@ -7277,12 +7297,13 @@
       ctx.fillRect(bx + 1, by + 1, 5, 5);
       drawPixelText(ctx, String(p.level), bx + 2, by + 1, '#f2cc6a');
     }
-    // rivals carry a name tag in their team colour so a fight stays legible
-    if (!local) {
-      drawPixelTextOutline(ctx, p.name,
-        Math.round(p.x - ex - pixelTextWidth(p.name) / 2), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
-        TEAMS[p.team].mark, '#0f1632');
-    }
+    // Every slot carries a name tag in its team colour so a fight stays
+    // legible - your own included: the profile name is what the rest of the
+    // table sees over your head, and hiding it from you alone would make it
+    // the one label in the game you cannot check.
+    drawPixelTextOutline(ctx, p.name,
+      Math.round(p.x - ex - pixelTextWidth(p.name) / 2), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
+      TEAMS[p.team].mark, '#0f1632');
     // dodge stamina: one clean unsegmented bar under the health bar - charges
     // stay discrete in the sim, the bar just shows the pooled total. Drawn for
     // every slot (a rival out of rolls is a tell, and the level badge spans
@@ -9648,6 +9669,211 @@
     if (slide) ctx.restore();
   }
 
+  // ------------------------------------------------------------ player profile
+  // Who you are between matches: the display name every other slot reads over
+  // your head, and the three lifetime numbers under it. The STORE is
+  // js/profile.js and nothing here touches localStorage - this banner is only
+  // the panel, the field and the title-screen tag that opens them.
+  //
+  // The panel is the menu's fourth sub-panel ('name'), so it inherits the slide,
+  // the frost slab and overMenuPanel() from the settings/tutorial/patch set. It
+  // opens itself once, on a first launch (updateTitle), and after that only from
+  // the tag bottom-left. There is no separate "click to edit" state: the panel
+  // being open IS the editor, and the keyboard belongs to it while it is up.
+  const NAME_FIELD = { x: 22, y: 30, w: 196, h: 22 }; // panel-local, like every other panel offset
+  const NAME_TICK_Y = 58;   // the capacity ticks under the field: one per allowed character
+  const NAME_STAT_Y = 100;  // first stat row
+  const NAME_STAT_P = 24;   // and the pitch of the three
+  const NAME_PLANK_Y = 176;
+  const NAME_BW = 88, NAME_BH = 20, NAME_GAP = 12;
+  const NAME_SHAKE_T = 0.3; // the field's refusal: it rattles and flushes red
+
+  // The three stats wear icons and no labels, the way the victory tally does:
+  // the eagle that starts every match, the coin, and the sun for the day you
+  // reached. The quill is the edit affordance on the title-screen tag.
+  const NAME_BIRD_ICON = [
+    '........', '........', '...oo...', 'oo.oo.oo',
+    '.oooooo.', '...oo...', '........', '........',
+  ];
+  const NAME_SUN_ICON = [
+    '...yy...', '.y....y.', '..yyyy..', 'y.yyyy.y',
+    'y.yyyy.y', '..yyyy..', '.y....y.', '...yy...',
+  ];
+  const NAME_ICON_PAL = { '.': null, o: '#cfe0ff', y: '#f2cc6a' };
+  const NAME_QUILL = ['....hh', '...hh.', '..hh..', '.hh...', 'th....', 't.....'];
+  const NAME_QUILL_PAL = { '.': null, h: '#9fb6d8', t: '#f2cc6a' };
+  const NAME_QUILL_HOT = { '.': null, h: '#ffd95c', t: '#fff1c2' };
+
+  const namePanelCv = document.createElement('canvas');
+  namePanelCv.width = SET_W; namePanelCv.height = SET_H;
+  function buildNamePanel() {
+    const g = namePanelCv.getContext('2d');
+    bakeFrostSlab(g, SET_W, SET_H, 'PLAYER');
+    // the field: a well sunk into the slab (dark floor, lit lower lip), with
+    // the frame's ice-blue picked up in its top corners
+    const f = NAME_FIELD;
+    g.fillStyle = '#080c1c'; g.fillRect(f.x - 1, f.y - 1, f.w + 2, f.h + 2);
+    g.fillStyle = '#0a0e23'; g.fillRect(f.x, f.y, f.w, f.h);
+    g.fillStyle = '#2c3a68'; g.fillRect(f.x + 1, f.y + f.h - 1, f.w - 2, 1);
+    g.fillStyle = '#35426e';
+    g.fillRect(f.x, f.y, 3, 1); g.fillRect(f.x, f.y, 1, 3);
+    g.fillRect(f.x + f.w - 3, f.y, 3, 1); g.fillRect(f.x + f.w - 1, f.y, 1, 3);
+    // the rule between the name and the numbers it has earned
+    g.fillStyle = '#2c3a68'; g.fillRect(14, 74, SET_W - 28, 1);
+  }
+
+  // the local slot wears the profile name; it is set in the Player constructor
+  // and this is the only other place it changes
+  function applyProfileName() { player.name = PROFILE.name(); }
+
+  function openNamePanel(first) {
+    const m = state.menu;
+    m.nameFirst = !!first;      // a first launch offers SKIP; an edit offers CANCEL
+    m.nameBuf = PROFILE.get().name || '';
+    m.nameShake = 0;
+    m.nameHover = [0, 0];
+    openMenuPanel('name');
+  }
+  // the buffer as it stands would be accepted: what lights the DONE plank
+  function nameOk() { return PROFILE.validate(state.menu.nameBuf).ok; }
+
+  function nameCommit() {
+    const m = state.menu;
+    const r = PROFILE.setName(m.nameBuf);
+    if (!r.ok) { m.nameShake = NAME_SHAKE_T; SFX.iceKnock(); return; } // rejected: the field says so, and stays open
+    applyProfileName();
+    SFX.unlock();
+    closeMenuPanel();
+  }
+  // ESC, or the right-hand plank. On a first launch this is the SKIP the prompt
+  // promises - the default name stands until it is edited - and afterwards it is
+  // a plain cancel that leaves the stored name alone.
+  function nameDismiss() {
+    if (state.menu.nameFirst) { PROFILE.skipName(); applyProfileName(); }
+    SFX.pickup();
+    closeMenuPanel();
+  }
+
+  // The editor owns the keyboard while it is up (see the keydown handler). A
+  // character the name may not hold is simply never drawn - that refusal IS the
+  // validation message, so the only rejections with a sound are a full field and
+  // a name the filter turns down.
+  function nameKey(e) {
+    const m = state.menu;
+    if (m.panelT < 1 || m.closing) return; // still sliding
+    if (e.key === 'Enter') { nameCommit(); return; }
+    if (e.key === 'Escape') { nameDismiss(); return; }
+    if (e.key === 'Backspace') {
+      if (m.nameBuf) { m.nameBuf = m.nameBuf.slice(0, -1); SFX.tally(); }
+      return;
+    }
+    if (e.key.length !== 1) return;
+    const ch = e.key.toUpperCase();
+    if (!/^[A-Z0-9]$/.test(ch)) return;
+    if (m.nameBuf.length >= PROFILE.NAME_MAX) { m.nameShake = NAME_SHAKE_T; SFX.iceKnock(); return; }
+    m.nameBuf += ch;
+    SFX.tally();
+  }
+
+  function namePlankRects() {
+    const y = SET_Y + NAME_PLANK_Y;
+    const x0 = SET_X + Math.round((SET_W - (NAME_BW * 2 + NAME_GAP)) / 2);
+    return [{ x: x0, y, w: NAME_BW, h: NAME_BH }, { x: x0 + NAME_BW + NAME_GAP, y, w: NAME_BW, h: NAME_BH }];
+  }
+  // which plank is under the pointer, or -1; DONE refuses the hover while the
+  // buffer would be rejected, so the hand cursor never promises a dead click
+  function namePanelHit() {
+    const r = namePlankRects();
+    for (let i = 0; i < 2; i++) {
+      if (mouse.x >= r[i].x - 2 && mouse.x < r[i].x + r[i].w + 2 &&
+        mouse.y >= r[i].y - 3 && mouse.y < r[i].y + r[i].h + 3) return i === 0 && !nameOk() ? -1 : i;
+    }
+    return -1;
+  }
+  function namePanelClick() {
+    const h = namePanelHit();
+    if (h === 0) { state.menu.pressT = 0.12; nameCommit(); }
+    else if (h === 1) { state.menu.pressT = 0.12; nameDismiss(); }
+  }
+
+  function renderNamePanel(now, slide) {
+    const m = state.menu;
+    const px = SET_X, py = SET_Y + slide;
+    ctx.drawImage(namePanelCv, px, py);
+
+    // ---- the field -------------------------------------------------------
+    const f = NAME_FIELD;
+    const bad = m.nameShake / NAME_SHAKE_T;
+    const shake = bad > 0 ? Math.round(Math.sin(now * 90) * 2.5 * bad) : 0;
+    if (bad > 0) { // the refusal floods the well red rather than printing a reason
+      ctx.globalAlpha = 0.5 * bad;
+      ctx.fillStyle = '#a83a3a'; ctx.fillRect(px + f.x, py + f.y, f.w, f.h);
+      ctx.globalAlpha = 1;
+    }
+    // an empty buffer shows the default, greyed: what SKIP would give you
+    const empty = !m.nameBuf;
+    const txt = empty ? PROFILE.DEFAULT_NAME : m.nameBuf;
+    const tw = pixelTextWidth(txt, 2);
+    const tx = px + f.x + Math.round((f.w - tw - 5) / 2) + shake;
+    const ty = py + f.y + 6;
+    drawPixelTextShadow(ctx, txt, tx, ty, empty ? '#4a5480' : bad > 0 ? '#ffb0a0' : '#f4f7ff', '#0a0e23', 2);
+    if (Math.floor(now * 2) % 2 === 0) { // caret: after the buffer, or before the ghost default
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(empty ? tx - 5 : tx + tw + 2, ty, 2, 10);
+    }
+    // capacity: one tick per allowed character, lit as far as the buffer reaches
+    const tks = PROFILE.NAME_MAX;
+    const kw = tks * 4 - 1;
+    let kx = px + Math.round((SET_W - kw) / 2);
+    for (let i = 0; i < tks; i++) {
+      ctx.fillStyle = i < m.nameBuf.length ? '#f2cc6a' : '#2c3a68';
+      ctx.fillRect(kx, py + NAME_TICK_Y, 3, 2);
+      kx += 4;
+    }
+
+    // ---- the lifetime numbers --------------------------------------------
+    const st = PROFILE.stats();
+    const rows = [[NAME_BIRD_ICON, String(st.games), '#cfe0ff'],
+      [null, String(st.gold), '#f2cc6a'], [NAME_SUN_ICON, String(st.bestDay), '#cfe0ff']];
+    for (let i = 0; i < rows.length; i++) {
+      const ry = py + NAME_STAT_Y + i * NAME_STAT_P;
+      const ix = px + 84;
+      if (rows[i][0]) stampGrid(rows[i][0], NAME_ICON_PAL, ix, ry + 1, 1);
+      else ctx.drawImage(SPRITES.itemGold, ix, ry + 1);
+      drawPixelTextShadow(ctx, rows[i][1], ix + 16, ry, rows[i][2], '#0a0e23', 2);
+    }
+
+    // ---- the two planks ---------------------------------------------------
+    const r = namePlankRects();
+    const ok = nameOk();
+    const pressed = m.pressT > 0;
+    ctx.globalAlpha = ok ? 1 : 0.4; // a name that would be refused dims its own way out
+    drawMenuButton({ x: r[0].x, y: r[0].y + slide, w: r[0].w, h: r[0].h }, 'DONE',
+      ok ? m.nameHover[0] : 0, now, ok && pressed && m.nameHover[0] > 0.5);
+    ctx.globalAlpha = 1;
+    drawMenuButton({ x: r[1].x, y: r[1].y + slide, w: r[1].w, h: r[1].h },
+      m.nameFirst ? 'SKIP' : 'CANCEL', m.nameHover[1], now, pressed && m.nameHover[1] > 0.5);
+  }
+
+  // The name bottom-left of the title screen, mirroring the patch tag on the
+  // right: the name plus a quill that gilds on hover. Clicking either opens the
+  // panel - the quill IS the edit affordance, so there is nothing to caption.
+  function nameTagRect() {
+    return { x: 5, y: VIEW_H - 9, w: pixelTextWidth(PROFILE.name()) + 4 + 6, h: 6 };
+  }
+  function overNameTag() {
+    const r = nameTagRect();
+    return mouse.x >= r.x - 3 && mouse.x < r.x + r.w + 3 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3;
+  }
+  function drawNameTag() {
+    const hot = !state.menu.panel && overNameTag();
+    const r = nameTagRect();
+    const nm = PROFILE.name();
+    drawPixelTextShadow(ctx, nm, r.x, r.y, hot ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
+    stampGrid(NAME_QUILL, hot ? NAME_QUILL_HOT : NAME_QUILL_PAL, r.x + pixelTextWidth(nm) + 4, r.y, 1);
+    if (hot) { ctx.fillStyle = '#c89a3c'; ctx.fillRect(r.x, r.y + 7, r.w, 1); }
+  }
+
   // ------------------------------------------------------------ main menu
   // The title screen is a real menu over the living world: the camera drifts
   // around the interior while animals, fish and snow keep running, the items
@@ -9660,9 +9886,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.54'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.55'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.55', 'YOU HAVE A NAME NOW - THE GAME ASKS FOR ONE THE FIRST TIME IT OPENS, IT SITS BOTTOM-LEFT OF THE TITLE SCREEN WITH A QUILL TO CHANGE IT, IT RIDES OVER YOUR HEAD IN THE MATCH THE WAY EVERY RIVAL NAME ALREADY DID, AND THE MATCHES GOLD AND DAYS BEHIND IT ARE KEPT.'],
     ['1.54', 'HOUSEKEEPING ONLY - THE PROJECT DOCS SPLIT THE DESIGN AND THE FILE LAYOUT OUT INTO PAGES OF THEIR OWN, AND THE README FINALLY DESCRIBES THE FREE-FOR-ALL INSTEAD OF A SOLO SURVIVAL GAME, WITH NOTHING IN THE GAME CHANGED.'],
     ['1.53', 'HOUSEKEEPING ONLY - 34 MB OF UNUSED ALTERNATE MUSIC TAKES AND ALBUM ART LEFT THE FOLDER AND THE PROJECT DOCS GOT A TRIM, WITH NOTHING IN THE GAME CHANGED.'],
     ['1.52', 'HOUSEKEEPING ONLY - THE DEV SERVER AND THE SOUND BAKER MOVED INTO A TOOLS FOLDER, AND NOTHING IN THE GAME CHANGED.'],
@@ -9847,9 +10074,11 @@
       if (!menuPanelReady()) return;
       if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
       if (m.panel === 'patch' && overMenuPanel()) { patchPanelClick(mouse.x - SET_X, mouse.y - SET_Y); return; }
+      if (m.panel === 'name') { if (overMenuPanel()) namePanelClick(); else if (!m.nameFirst) nameDismiss(); return; } // the first-launch prompt is modal: it wants an answer, not a stray click
       if (!overMenuPanel()) closeMenuPanel();
       return;
     }
+    if (overNameTag()) { openNamePanel(false); return; }
     if (overPatchTag()) { openMenuPanel('patch'); return; }
     const h = menuHit();
     if (h < 0) return;
@@ -9915,6 +10144,15 @@
       m.moved = false;
       const h = menuHit();
       if (h >= 0 && h !== MENU_FROZEN && h !== m.sel) m.sel = h;
+    }
+    // the first launch asks for a name once the title has finished arriving;
+    // PROFILE.named() is what stops it coming back, and SKIP sets it too
+    if (!PROFILE.named() && !m.panel && m.screen === 'menu' && m.t > 1.4 && !state.intro && !state.fade) openNamePanel(true);
+    // the name field's refusal rattle, and the PLAYER planks' hover eases
+    if (m.nameShake > 0) m.nameShake = Math.max(0, m.nameShake - dt);
+    if (m.panel === 'name') {
+      const nh = menuPanelReady() ? namePanelHit() : -1;
+      for (let i = 0; i < 2; i++) m.nameHover[i] += ((nh === i ? 1 : 0) - m.nameHover[i]) * Math.min(1, dt * 14);
     }
     // the frozen plank can't be selected, so its hover ease tracks the pointer instead
     const iceHover = !m.panel && m.screen === 'menu' && menuHit() === MENU_FROZEN ? 1 : 0;
@@ -10793,6 +11031,7 @@
       const phot = !m.panel && overPatchTag();
       drawPixelTextShadow(ctx, PATCH_TXT, pr.x, pr.y, phot ? '#ffd95c' : '#5a6690', 'rgba(15,22,50,0.9)');
       if (phot) { ctx.fillStyle = '#c89a3c'; ctx.fillRect(pr.x, pr.y + 7, pr.w, 1); }
+      drawNameTag(); // the profile name and its quill, opposite corner
       ctx.globalAlpha = 1;
     }
 
@@ -10805,6 +11044,7 @@
     if (m.panel) {
       const slide = Math.round((1 - easeOut(m.panelT)) * (VIEW_H - SET_Y + 6));
       if (m.panel === 'settings') renderSettings(now, { bare: true, slide });
+      else if (m.panel === 'name') renderNamePanel(now, slide);
       else if (m.panel === 'patch') {
         ctx.drawImage(patchPanelCv, SET_X, SET_Y + slide);
         ctx.drawImage(patchNotesCv, 0, m.patchScroll, SET_W, PN_H, SET_X, SET_Y + slide + PN_Y, SET_W, PN_H);
@@ -11524,6 +11764,7 @@
   }
 
   function beginDrop() {
+    PROFILE.addGame(); // one match played, counted as the eagle takes off
     const r = makeEagleRoute();
     state.drop = Object.assign({ t: 0, x: r.x0, y: r.y0, prog: 0, flap: 0 }, r);
     for (const p of players) {
@@ -11791,6 +12032,7 @@
     beginDrop();
   }
 
+  PROFILE.load();   // the profile carries the settings, so it is read first
   loadSettings();
   relayout(); // fitCanvas already ran at load; this places the UI for the fitted view
   SFX.setVolume(settings.volume);
@@ -11809,6 +12051,7 @@
   renderGround();
   buildMapPanel();
   buildSettingsPanel();
+  buildNamePanel();
   buildHelpPanel();
   buildPatchPanel();
   rebuildLights();
@@ -11832,6 +12075,10 @@
     // drop a slot (default the local one) on a tile - how to stage a landmark
     warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
     settings, perf, treeRare, cursorInfo,
+    // the local profile: the store itself, the PLAYER panel and the two hit
+    // rects, so a driver can open the name editor and read back what it accepts
+    PROFILE, openNamePanel, nameKey, nameCommit, nameDismiss, nameOk,
+    namePlankRects, namePanelHit, nameTagRect, overNameTag, applyProfileName,
     // the radial wheel: open one by hand (state.wheel) and read back the
     // geometry the hover test and the pixels both use
     wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,

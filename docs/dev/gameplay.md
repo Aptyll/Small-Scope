@@ -1071,8 +1071,12 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
-`localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
+`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists
+**under the player profile** — `saveSettings()` is a call to `PROFILE.putSettings()` and
+`loadSettings()` reads `PROFILE.settings()`, which returns `null` when this profile has never
+saved any. A pre-profile save under the old `localStorage['softfall.settings']` key is folded in
+once by `PROFILE.load()` and the key removed; see
+[architecture.md](architecture.md#profilejs). `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`. The **backpack**'s open/closed state is `state.bagOpen`,
 not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;
 `Object.assign` in `loadSettings` copies them harmlessly and nothing reads them.)

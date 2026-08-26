@@ -75,3 +75,8 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.
+- **Not an account.** The player profile is a display name and a few lifetime numbers in the
+  browser, and it is skippable. No passwords, no sign-in, nothing gated behind it and nothing in a
+  match reading it but the name over your head — see
+  [architecture.md](architecture.md#profilejs). If a server ever holds it, it holds the same
+  object.

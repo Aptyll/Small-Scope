@@ -41,10 +41,15 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 ## Architecture
 
-Four IIFEs plus one generated data file — `font.js`, `sprites.js`, the generated `sfxdata.js`,
-`audio.js`, `game.js` — loaded in that fixed order by [index.html](index.html) and communicating
-**only through globals**, so each file's globals must exist before the next loads. What each one
-exposes: [architecture](docs/dev/architecture.md).
+Five IIFEs plus one generated data file — `profile.js`, `font.js`, `sprites.js`, the generated
+`sfxdata.js`, `audio.js`, `game.js` — loaded in that fixed order by [index.html](index.html) and
+communicating **only through globals**, so each file's globals must exist before the next loads.
+What each one exposes: [architecture](docs/dev/architecture.md).
+
+**`js/profile.js` is the only file that touches `localStorage`** — the local player profile (name,
+lifetime stats, and the settings that live under it). Everything else goes through `PROFILE`, so
+putting the profile on a server stays a one-file change; never read or write a storage key
+directly.
 
 All game state lives in module-scope singletons — `state`, `settings`, `players` (`player`/`inv`
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays

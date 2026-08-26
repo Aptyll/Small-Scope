@@ -22,7 +22,10 @@ fewer bots, a frozen target dummy, or a ghost.
 
 **A `Player` owns everything the old singleton did** — position, velocity, facing, hp, bow draw,
 dodge charges, slide state, swing state, held tool, i-frames, footprint cadence — plus `id`,
-`team`, `control`, `name`, `spawn` (the tile it landed on from the eagle), `aboard`/`dropT`/`dropU`
+`team`, `control`, `name` (`TEAMS[team].name + '-' + (slot + 1)` for an AI fill; the local slot
+wears the profile's display name, set in the constructor and refreshed by `applyProfileName()`
+when it is edited — see [architecture.md](architecture.md#profilejs)), `spawn` (the tile it landed
+on from the eagle), `aboard`/`dropT`/`dropU`
 (the eagle ride, see [Eagle drop](rendering.md#eagle-drop-mode-drop)), its own `inv` wallet and
 `bag` (see [the backpack](gameplay.md#inventory-and-the-backpack)),
 `level`/`xp` (see [Hero levels](#hero-levels)), `kills`, an `input` struct and an `ai` brain.

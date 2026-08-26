@@ -32,6 +32,11 @@ declare victory. The three affordances:
   the tile it is heading for. Reach for it before reasoning about a collision from the code alone.
   It draws in every mode, `settings.hitbox` sets it from `DBG` without the keypress, and
   `DBG.showPaths` still forces the routes on by itself.
+- **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the display-name
+  prompt only opens itself while `PROFILE.named()` is false, so a machine that has answered it
+  once will never show it again. `DBG.PROFILE` is the store and `DBG.openNamePanel(first)` opens
+  the panel either way (`true` = the SKIP variant). See
+  [architecture.md](architecture.md#profilejs).
 - **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
@@ -106,6 +111,13 @@ the item, and what using it does — `bagClick` maps a cell click onto an input 
 item needs its own branch there or clicking its cell will just deny. Gold is **not** an `ITEMS`
 entry and must not become one: it is a wallet number with no ceiling.
 See [gameplay.md](gameplay.md#inventory-and-the-backpack).
+
+**Adding a stored profile field** — the field goes in `blank()` in
+[js/profile.js](../../js/profile.js) *and* in the repair loop `PROFILE.load()` runs over an
+existing save, or an old profile reaches its readers without it. Give it an accessor on the
+`PROFILE` object rather than letting callers reach into `PROFILE.get()`, and pick a write policy:
+`saveNow()` for something the player just chose, `scheduleSave()` for anything the sim writes
+mid-match. Nothing outside that file may name a storage key.
 
 **Adding a tool** — append to `TOOLS` with a `TOOL_*` index constant, add an 8×8 icon sprite
 and name it in the entry's `icon` field, map the object types it works in `workTarget()`

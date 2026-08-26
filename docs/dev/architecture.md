@@ -5,15 +5,16 @@ Read this before adding a file, moving a function between files, or wondering wh
 came from. The rules that survive in [CLAUDE.md](../../CLAUDE.md) are the ones you break without
 ever opening this page; everything here is reference.
 
-## Four IIFEs plus one generated data file
+## Five IIFEs plus one generated data file
 
-[index.html](../../index.html) is 39 lines and loads them in a fixed order. There is no bundler,
+[index.html](../../index.html) is 42 lines and loads them in a fixed order. There is no bundler,
 no module system and no import statement anywhere — **the files communicate only through
 globals, so each file's globals must exist before the next one loads.** Reordering the script
 tags breaks the build silently: a missing global is `undefined` at call time, not at parse time.
 
 | File | Lines | Exposes | Role |
 | --- | --- | --- | --- |
+| [js/profile.js](../../js/profile.js) | ~160 | `PROFILE` | the local player profile, and the only file that touches storage |
 | [js/font.js](../../js/font.js) | ~100 | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | the bitmap font |
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
@@ -21,6 +22,29 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/game.js](../../js/game.js) | ~12000 | `DBG` | everything else — worldgen, sim, render, UI |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
+
+### profile.js
+
+The local player profile — display name, lifetime stats (`games`, `gold`, `bestDay`) and the
+`settings` object that used to live under a key of its own — as one JSON blob under
+`softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
+is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the
+local profile into a server account without touching game.js.
+There are no accounts, no passwords and no sign-in, and nothing here is authoritative — a save
+file is a save file.
+
+- **`PROFILE.load()`** repairs a partial or corrupt save against a blank profile rather than
+  throwing, and folds a pre-profile `softfall.settings` key in on the way past (once, then removes
+  it). Boot calls it **before `loadSettings()`**, which now reads `PROFILE.settings()`.
+- **`PROFILE.validate(raw)`** is the one name validator: trimmed, uppercased, `A-Z0-9` only, 16
+  characters, and a basic profanity list matched after the obvious digit-for-letter swaps are
+  folded out. It returns `{ ok, name }` or `{ ok: false, why }`. A stored name that no longer
+  passes is dropped at load and the first-launch prompt comes back for it.
+- **The stat calls coalesce.** `addGold` fires on every payout, so writes are batched behind an
+  800 ms timer and flushed on `pagehide` / `visibilitychange`; `setName` and `putSettings` write
+  through immediately.
+
+The panel, the field and the title-screen tag are in game.js, under the `player profile` banner.
 
 ### font.js
 
@@ -83,7 +107,7 @@ it is deliberately the whole external surface, and
 All game state lives in module-scope singletons inside game.js:
 
 - **`state`** — the match: tick, day/time, darkness, mode, overlays (`state.draft`, `state.msg`).
-- **`settings`** — the player's dials, persisted.
+- **`settings`** — the player's dials, persisted **under the profile** (`PROFILE.putSettings`).
 - **`players`** — the six slots. `player` and `inv` are aliases for **the local slot only**
   (slot 0) and its gold-only wallet; carried goods are `player.bag`. See
   [multiplayer.md](multiplayer.md#the-slot-model).

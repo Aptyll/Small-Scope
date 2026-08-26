@@ -358,8 +358,10 @@ turning hot orange at full draw (two discrete states — a gradient is unreadabl
 for **everyone**, because it is the tell that a shot is coming. The overhead stack floats clear of
 the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both bars), health at `py - 7`, draw meter at
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
-the stamina bar), and a rival's name tag in team colour at `py - 18`, a clear row above the meter's
-frame. The backings are translucent, so each plate paints only its own rows - no overlap.
+the stamina bar), and the slot's name tag in team colour at `py - 18`, a clear row above the meter's
+frame — **every** slot, the local one included: the name is the profile's
+([architecture.md](architecture.md#profilejs)), and yours is what the rest of the table reads over
+your head, so hiding it from you alone would make it the one label in the game you cannot check. The backings are translucent, so each plate paints only its own rows - no overlap.
 
 **The whole stack hangs off one `hy`**, not off `py` directly, for two reasons. It drops 6 rows
 for a [prone](gameplay.md#prone-under-the-snow) pose, which starts that much lower in the same
@@ -377,7 +379,7 @@ the world goes through `drawPixelTextOutline(ctx, text, x, y, color, outline, sc
 colour, then once in the text colour — a solid rim on every side, exactly 1 game px at any text
 scale, no blur. The outline colour is the opaque `#0f1632` (the eight passes overlap, so a
 translucent colour would stack unevenly). Sites: floaters (damage numbers, gold, `LEVEL n`),
-rival name tags, the E and fish prompts, the radial-wheel labels, every number on the backpack
+the overhead name tags, the E and fish prompts, the radial-wheel labels, every number on the backpack
 widget (the strip's food counts and gold, each bag cell's stack count, a gear cell's hover price),
 the alive count and clock under the minimap — the alive icon is stamped with the same eight-offset
 rim by `drawAliveIcon` — `state.msg`, the info stack, and the drop-UI text.
@@ -408,7 +410,7 @@ screen's world is live and a spectated match is someone else's feet:
 
 | `settings.hitbox` | draws |
 | --- | --- |
-| `0` | nothing (default; persists to `localStorage` like every other setting) |
+| `0` | nothing (default; persists under the profile like every other setting) |
 | `2` | bodies (tile boxes, unit circles, projectile points, pickup radii) plus the route every walker is following |
 
 Colour carries the kind, so there is nothing to label: **cyan** a wall to everyone (`isSolidTile`,
@@ -693,7 +695,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   `drawGoldRule` the gold rule with diamond finials under the logo (`SOFTFALL`, no subtitle), along the bottom and
   under the select header; `drawEmbers` the sparks rising off the logo and the braziers. The logo
   gets a pulsing ember glow behind it and a 1px ice rim along its top edges. Pillars rise from
-  below at boot and sink away with the items on play. `PATCH_TXT` prints bottom-right.
+  below at boot and sink away with the items on play. `PATCH_TXT` prints bottom-right and the
+  profile name bottom-left (`drawNameTag`); both are click targets, and both ride the footer's
+  fade so a panel hides them.
 - **Buttons** are procedural frost planks (`drawMenuButton`): chamfered slab with hashed
   wood-grain, a snow cap along the top, icicles off the bottom, corner rivets and a gold rule
   when hot (no glow behind the hot plank - it lifts and warms only). `menu.hover[i]` eases 0→1 toward the selected item and drives lift (2 px, the
@@ -716,6 +720,14 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   entries (newest first, word-wrapped) into `patchNotesCv` as tall as they need, and render blits
   the `PN_H` window at `menu.patchScroll`. Past one window a pixel scrollbar appears (`drawPatchBar`:
   iron rail, gilt thumb, ice nubs) — wheel, Up/Down, the nubs (step) and the track (page) move it.
+  PLAYER is `namePanelCv` (the `player profile` banner), opened by clicking the profile name
+  bottom-left (`nameTagRect` / `overNameTag`, the mirror of the patch tag, with a quill glyph that
+  gilds beside it) and once by itself on a first launch. It is the one panel that **owns the
+  keyboard**: the `keydown` handler routes to `nameKey()` before its own shortcuts while it is
+  up, so letters are text rather than hotkeys. A character the name may not hold is simply never
+  drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
+  the field red instead of printing a reason. The first-launch variant is modal (an outside click
+  does nothing) and its second plank reads SKIP — the default name — where an edit reads CANCEL.
   Any open panel ducks the logo to zero alpha.
 - **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
   over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on
