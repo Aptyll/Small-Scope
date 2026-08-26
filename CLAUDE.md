@@ -26,10 +26,12 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
   screen. A finished Keep also crafts rarity-rolled **Roguelike Cards** for gold (`STRUCTS.keep`,
   `startCraft`); opening one from the bag drafts a permanent pick-1-of-3 buff (`CARDS`,
   `state.draft`) folded into `kitOf(p)` like gear.
-- **Middle click plants your one worker flag** (`p.flag`, also off the M chart) and every worker bot
-  you own obeys it. *What it sits on is the order* (`flagResolve`): cut here / clear a lane out to
-  here / guard this / siege that / hunt them / march and hold — so workers got an axe. No flag =
-  the old bay gather, and the bay's mode toggle is gone.
+- **Hold middle mouse to aim your one worker flag, release to plant** (`p.flag`, also off the M
+  chart) and every worker bot you own obeys it. *What it sits on is the order* (`flagResolve`): cut
+  here / clear a lane out to here / guard this / siege that / hunt them / march and hold — so
+  workers got an axe. The preview is a **held gesture, never a resting state** (`state.flagAim`):
+  nothing about the flag is on screen otherwise. No flag = the old bay gather, and the bay's mode
+  toggle is gone.
 - The world has named **landmarks**: a WOLF DEN (the only hostile wildlife) and a ROOKERY (birds).
 - Night is mostly visual, but not inert: wolves see ×1.75 further at full dark and the only passive heal stops (`darkness < 0.3`).
 

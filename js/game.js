@@ -488,7 +488,7 @@
     over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
     win: null,     // a win freezes the numbers the victory screen prints: winSnapshot(), the victory banner
     msg: null, msgT: 0,
-    hints: { stump: false },
+    hints: { stump: false, flag: false },
     loc: null,     // the named place the local player is standing in: { L, t }
     paused: false,
     mapOpen: false,
@@ -496,6 +496,10 @@
     draft: null,         // the pick-1-of-3 card draft: { rarity, options: [id,id,id] } - HUD, does NOT stop the sim
     settingsOpen: false,
     wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
+    // middle button HELD: the worker-flag preview is up and the release plants
+    // it. Nothing about the flag is on screen unless this is true - see the
+    // `worker flags` banner for why the preview is a gesture and not a mode.
+    flagAim: false,
     // main menu (mode === 'title'): keyboard selection, per-item hover eases,
     // the open sub-panel ('settings' | 'help' | null) and its slide progress
     menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row
@@ -1076,7 +1080,10 @@
     if (e.key >= '1' && e.key <= '4') player.input.cmd = { kind: 'gear', piece: e.key.charCodeAt(0) - 49 };
     if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
     if (e.key.toLowerCase() === 'escape') {
-      if (state.wheel) state.wheel = null;
+      // the flag aim goes first: it is the most transient thing on screen, and
+      // dropping it here is what lets a held middle button be thought better of
+      if (state.flagAim) state.flagAim = false;
+      else if (state.wheel) state.wheel = null;
       else if (state.draft) state.draft = null; // closes without picking
       else if (state.mapOpen) state.mapOpen = false;
       else { state.settingsOpen = !state.settingsOpen; dragSlider = null; state.wheel = null; }
@@ -1085,9 +1092,10 @@
     if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
   });
   window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
-  // a key held while the window loses focus never sends its keyup: alt-tabbing
-  // out would otherwise leave the scoreboard (or a walk direction) stuck on
-  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  // a key - or the middle button - held while the window loses focus never sends
+  // its keyup/mouseup: alt-tabbing out would otherwise leave the scoreboard (or
+  // a walk direction, or the flag preview) stuck on
+  window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; state.flagAim = false; });
 
   canvas.addEventListener('mousemove', (e) => {
     const r = canvas.getBoundingClientRect();
@@ -1121,20 +1129,18 @@
       return;
     }
     if (e.button === 1) {
-      // The worker flag: plant, move, or - on the flag itself - pick it up.
+      // The worker flag is press-and-HOLD, the build wheel's grammar one button
+      // over: the press raises the preview, the release plants where it landed.
+      // Nothing about the flag is drawn until this press, which is the whole
+      // point - a preview for an order you have not started is clutter.
       // Middle click is also the browser's autoscroll, which only a
       // preventDefault on the PRESS suppresses.
       e.preventDefault();
       if (state.mode !== 'play' || state.settingsOpen || state.wheel || state.draft) return;
+      if (!hasWorkers(player)) return;                       // nobody to order: the button is dead
+      if (!state.mapOpen && overHud(mouse.x, mouse.y)) return; // the HUD swallows its own presses
       SFX.unlock();
-      if (state.mapOpen) {
-        // the chart commands too: it is the only way to flag a tile off-screen
-        const mt = mapTileAt(mouse.x, mouse.y);
-        if (mt) plantFlag(player, mt.tx, mt.ty); else SFX.deny();
-        return;
-      }
-      if (overHud(mouse.x, mouse.y)) return; // the HUD swallows its own clicks
-      plantFlag(player, Math.floor(mouseWX() / TILE), Math.floor(mouseWY() / TILE));
+      state.flagAim = true;
       return;
     }
     if (e.button !== 0) return;
@@ -1167,6 +1173,22 @@
   });
   window.addEventListener('mouseup', (e) => {
     if (e.button === 2 && state.wheel) { resolveWheel(); state.wheel = null; return; }
+    if (e.button === 1) {
+      // the release is the order. Escape (or losing focus) drops flagAim first,
+      // which is what makes this cancellable without a hub to release into
+      if (!state.flagAim) return;
+      state.flagAim = false;
+      if (state.mode !== 'play' || state.settingsOpen || state.wheel || state.draft) return;
+      if (state.mapOpen) {
+        // the chart commands too: it is the only way to flag a tile off-screen
+        const mt = mapTileAt(mouse.x, mouse.y);
+        if (mt) plantFlag(player, mt.tx, mt.ty); else SFX.deny();
+        return;
+      }
+      if (overHud(mouse.x, mouse.y)) return; // dragged onto the HUD to think better of it
+      plantFlag(player, Math.floor(mouseWX() / TILE), Math.floor(mouseWY() / TILE));
+      return;
+    }
     // releasing the button just drops the held intent; updatePlayer looses the
     // arrow on that falling edge, the same way an AI's shot is timed
     if (e.button === 0) player.input.fire = false;
@@ -3518,6 +3540,13 @@
             robots.push(b);
             burst(b.x, b.y - 4, '#c3c9d3', 6, 35, 0.4, true);
             burst(b.x, b.y + 2, '#e4e8ee', 5, 30, 0.45, true); // exhaust off the mouth
+            // Your first worker: the one time the flag says it exists. It has
+            // no resting affordance by design (see the `worker flags` banner),
+            // so it needs the same one-shot nudge the first stump gets.
+            if (b.owner === player.id && !state.hints.flag) {
+              state.hints.flag = true;
+              showMsg('HOLD MIDDLE MOUSE TO ORDER YOUR WORKERS', 5);
+            }
           }
         }
         // the shutter: open while a worker is out in the yard or one is rolling
@@ -3836,14 +3865,23 @@
   // off the tile as it is needed, so felling the tree a HARVEST flag stands on
   // spreads the crew outward instead of stranding it, and wrecking the building
   // a SIEGE flag stands on rolls them on to the next one nearby.
+  // TWO colours only, and they carry the STAKES, not the job - the icon is what
+  // says which job it is. Anything pointed at your own side is the game's plain
+  // pale ink; the three that point at another team are the danger red every
+  // other hostile thing in the game already uses. Amber and green are spoken
+  // for (affordable / interactable, and good), and a work order is neither.
+  // The pale one is the game's standard bright ink, NOT a soft slate: this
+  // world is snow, and anything near it disappears into the ground. It reads
+  // for the same reason drawSelection's brackets do - a dark rim under white.
+  const FLAG_MINE = '#f4f7ff', FLAG_FOE = '#ff8a7a';
   const FLAG_JOBS = {
     // icon: rects on a 7x7 grid, stamped by drawFlagIcon (the landmark idiom)
-    harvest: { col: '#9ce87a', icon: [[0, 0, 5, 1], [0, 1, 6, 1], [1, 2, 5, 1], [3, 3, 1, 4]] }, // an axe
-    path:    { col: '#8fd8ff', icon: [[1, 1, 5, 1], [2, 3, 3, 1], [3, 5, 1, 1]] },               // a lane running away
-    guard:   { col: '#ffd95c', icon: [[0, 0, 7, 2], [1, 2, 5, 2], [2, 4, 3, 1], [3, 5, 1, 1]] }, // a shield
-    siege:   { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },               // a sword
-    hunt:    { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
-    march:   { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
+    harvest: { col: FLAG_MINE, icon: [[0, 0, 5, 1], [0, 1, 6, 1], [1, 2, 5, 1], [3, 3, 1, 4]] }, // an axe
+    path:    { col: FLAG_MINE, icon: [[1, 1, 5, 1], [2, 3, 3, 1], [3, 5, 1, 1]] },               // a lane running away
+    guard:   { col: FLAG_MINE, icon: [[0, 0, 7, 2], [1, 2, 5, 2], [2, 4, 3, 1], [3, 5, 1, 1]] }, // a shield
+    siege:   { col: FLAG_FOE,  icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },               // a sword
+    hunt:    { col: FLAG_FOE,  icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
+    march:   { col: FLAG_FOE,  icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
   };
   // the three that let a worker leave its post and chase; every other job only
   // ever swings back at whoever hit it
@@ -4069,32 +4107,50 @@
   function overHud(x, y) {
     return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!abHit(x, y) || overMinimap();
   }
-  // THE PREVIEW. While the local slot has a worker to command, the pointer
-  // carries the order planting here would give - a chop, a lane, a shield or a
-  // sword - over a dashed ghost of the tile it would land on. Over your own
-  // flag it turns into the flag itself, because that press picks it up. With no
-  // workers there is nobody to order, so none of this is drawn.
-  function drawFlagHint(now) {
-    if (window.DBG.hideUI || state.paused || state.mapOpen || state.settingsOpen || state.wheel || state.draft) return;
-    if (!mouse.inside || !player || player.dead || !hasWorkers(player)) return;
-    if (overHud(mouse.x, mouse.y)) return;
+  // THE PREVIEW, and it is only up while the middle button is HELD
+  // (state.flagAim). Everything else in this game that previews, previews
+  // something you are already doing - the aim line needs a drawn bow, the build
+  // wheel a held right-click - and an order you have not started is no
+  // different. It comes in two halves because they live in two spaces:
+  // drawFlagAim() marks the target TILE in the world pass (so its brackets
+  // scale with the tile, like drawSelection's), and drawFlagCursor() rides the
+  // pointer in the UI pass at a fixed size. Both read flagTarget().
+  function flagTarget() {
+    if (!state.flagAim || window.DBG.hideUI || !mouse.inside || !player || player.dead) return null;
+    if (state.paused || state.settingsOpen || state.wheel || state.draft) return null;
     const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
-    if (!inWorld(tx, ty)) return;
+    if (!inWorld(tx, ty) || overHud(mouse.x, mouse.y)) return null;
     const f = player.flag;
-    const lift = !!f && f.tx === tx && f.ty === ty; // this press would pick it up
-    const job = lift ? null : flagResolve(player, tx, ty).job;
-    const col = lift ? '#c9d0e2' : FLAG_JOBS[job].col;
-    // the tile it would land on: a dashed 1px box, world-anchored but UI-sized
-    const x0 = Math.round(wToSX(tx * TILE)), y0 = Math.round(wToSY(ty * TILE));
-    const x1 = Math.round(wToSX((tx + 1) * TILE)), y1 = Math.round(wToSY((ty + 1) * TILE));
-    ctx.globalAlpha = 0.55 + 0.2 * Math.sin(now * 4);
-    ctx.fillStyle = col;
-    for (let x = x0; x < x1 - 1; x += 3) { ctx.fillRect(x, y0, 2, 1); ctx.fillRect(x, y1 - 1, 2, 1); }
-    for (let y = y0; y < y1 - 1; y += 3) { ctx.fillRect(x0, y, 1, 2); ctx.fillRect(x1 - 1, y, 1, 2); }
-    ctx.globalAlpha = 1;
-    // ...and the job riding the pointer, clear of the reticle's own ticks
-    if (lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[player.team].mark);
-    else drawFlagIcon(ctx, job, mouse.x + 12, mouse.y + 9, col);
+    // over your own flag the release lifts it instead, so the preview says so
+    if (f && f.tx === tx && f.ty === ty) return { tx, ty, lift: true, col: '#c9d0e2' };
+    const job = flagResolve(player, tx, ty).job;
+    return { tx, ty, job, col: FLAG_JOBS[job].col };
+  }
+  // the target tile, in the world pass: drawSelection's four corner brackets,
+  // dark rim first so they read on snow. Steady, not pulsing - the E bracket
+  // breathes to catch an eye that is not looking, and this one is only on
+  // screen because a hand is already holding it there.
+  function drawFlagAim(ox, oy) {
+    if (state.mapOpen) return;
+    const t = flagTarget();
+    if (!t) return;
+    const bx = t.tx * TILE - ox, by = t.ty * TILE - oy;
+    const corners = (c, px, py) => {
+      ctx.fillStyle = c;
+      ctx.fillRect(px, py, 3, 1); ctx.fillRect(px, py, 1, 3);
+      ctx.fillRect(px + TILE - 3, py, 3, 1); ctx.fillRect(px + TILE - 1, py, 1, 3);
+      ctx.fillRect(px, py + TILE - 1, 3, 1); ctx.fillRect(px, py + TILE - 3, 1, 3);
+      ctx.fillRect(px + TILE - 3, py + TILE - 1, 3, 1); ctx.fillRect(px + TILE - 1, py + TILE - 3, 1, 3);
+    };
+    corners('rgba(15,22,50,0.9)', bx + 1, by + 1);
+    corners(t.col, bx, by);
+  }
+  // ...and the order itself riding the pointer, clear of the reticle's ticks
+  function drawFlagCursor() {
+    const t = flagTarget();
+    if (!t) return;
+    if (t.lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[player.team].mark);
+    else drawFlagIcon(ctx, t.job, mouse.x + 12, mouse.y + 9, t.col);
   }
 
   // ------------------------------------------------------------ radial wheel
@@ -4382,6 +4438,7 @@
     state.settingsOpen = false;
     state.wheel = null;
     state.draft = null;
+    state.flagAim = false;
     state.deadTimer = 0;
     // a win freezes its numbers here, not in the render pass: the match runs on
     // underneath (a generator can still pay out) and a total that climbs behind
@@ -5807,6 +5864,7 @@
     }
 
     drawSelection(ox, oy, now);
+    drawFlagAim(ox, oy);
     drawWorkHint(ox, oy);
     drawFishHint(ex, ey, now);
 
@@ -5944,8 +6002,9 @@
     replayTick(now); // banks the finished world frame - must stay above renderUI
     renderUI(now);
     if (state.mode === 'drop') renderDropUI(now);
-    // the flag preview: world-anchored, UI-sized, and under every panel
-    if (state.mode === 'play') drawFlagHint(now);
+    // the flag order riding the pointer (its target tile is bracketed back in
+    // the world pass); only up while the middle button is held
+    if (state.mode === 'play') drawFlagCursor();
     if (state.mode === 'play' && state.wheel) renderWheel(now);
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
@@ -9078,8 +9137,9 @@
       drawFlagIcon(ctx, q.flag.job, lx + 3, ly - 10, TEAMS[q.team].mark, '#241a10');
       drawFlagPennant(ctx, lx, ly, TEAMS[q.team].mark, '#241a10');
     }
-    // the tile the pointer would plant on, while the chart is up
-    if (mouse.inside && hasWorkers(player)) {
+    // the tile the pointer would plant on - only while the middle button is
+    // held, exactly as in the world (state.flagAim)
+    if (state.flagAim && mouse.inside) {
       const mt = mapTileAt(mouse.x, mouse.y);
       if (mt) {
         const f = player.flag;
@@ -9335,9 +9395,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.49'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.50'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.50', 'THE WORKER FLAG IS A HELD GESTURE NOW - HOLD MIDDLE MOUSE TO SEE THE ORDER AND THE TILE IT WOULD LAND ON, RELEASE TO PLANT - SO NOTHING SITS ON YOUR CURSOR WHEN YOU ARE NOT GIVING ONE.'],
     ['1.49', 'MIDDLE CLICK PLANTS ONE FLAG AND EVERY WORKER YOU OWN OBEYS IT - ON A TREE OR ROCK THEY CUT THERE AND SPREAD OUT, ON OPEN GROUND THEY CLEAR A LANE OUT TO IT FROM THE BAY, ON YOUR OWN BUILDING THEY GUARD IT, AND ON ANYTHING ANOTHER TEAM OWNS THEY GO AND BREAK IT.'],
     ['1.48', 'THE DODGE ROLL IS A WEAPON NOW - IT GOES STRAIGHT THROUGH RABBITS WOLVES ROBOTS AND RIVALS, HITTING AND STUNNING EACH ONE ONCE, WHILE A DEER TREE ROCK OR BUILDING IS A TACKLE THAT HURTS AND STUNS BOTH OF YOU - AND EVERY BIT OF IT HITS HARDER THE FASTER YOU WERE GOING, SO DASH OUT OF AN ICE SLIDE.'],
     ['1.47', 'EVERY ANIMAL WALKS A REAL ROUTE NOW INSTEAD OF DRIFTING - THEY ROUND THE TREES AND STOP WHERE THEY MEANT TO - AND DEER BOLT FROM YOU THE WAY RABBITS DO, SO CRAWLING IN UNDER THE SNOW IS HOW YOU GET CLOSE TO ONE.'],
@@ -11514,6 +11575,7 @@
     plantFlag: (tx, ty, p) => plantFlag(p || player, tx, ty),
     clearFlag: (p) => clearFlag(p || player),
     flagResolve: (tx, ty, p) => flagResolve(p || player, tx, ty),
+    flagTarget, // what the held press is aiming at right now (null = nothing drawn)
     get flag() { return player.flag; },
     // the quiver: the shafts lying in the world, the ceiling, and a way to set
     // a slot's ammo / renock without playing to it. hudStripRect is the xp bar

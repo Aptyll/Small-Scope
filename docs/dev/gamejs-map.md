@@ -62,7 +62,8 @@ don't cite line numbers here, they go stale within a session.
 | the worker flag: what a tile orders, planting/moving/lifting it, whose crew reads it | `FLAG_JOBS`, `FLAG_ATTACK`, `flagResolve`, `plantFlag`, `clearFlag`, `flagRecall`, `flagOf` | `worker flags` |
 | the lane a PATH flag asks for, and who has already claimed a tile in it | `flagCorridor`, `flagPathTarget`, `objTaken` | `worker flags` |
 | a worker's attack: who is a valid mark, where the axe lands, the blow itself | `robotFoeUnit`, `enemyStructNear`, `foeAlive`, `foePoint`, `robotStrike`, `ROBOT_*` | `worker flags` |
-| drawing a flag: the job glyph, the map pennant, the planted banner, the cursor preview | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `drawFlagHint`, `hasWorkers`, `overHud` | `worker flags` |
+| drawing a flag: the job glyph, the map pennant, the planted banner | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `FLAG_MINE`/`FLAG_FOE` | `worker flags` |
+| the held-press preview: what it is aiming at, the tile brackets, the pointer glyph | `state.flagAim`, `flagTarget`, `drawFlagAim`, `drawFlagCursor`, `hasWorkers`, `overHud` | `worker flags` |
 | tuning: what a worker swing hits for, how far a flag spreads, what counts as an enemy doorstep | `ROBOT_DMG`, `ROBOT_ATK_CD`, `ROBOT_REACH`, `ROBOT_AGGRO`, `ROBOT_LEASH`, `ROBOT_MAD`, `FLAG_BASE_R`, `FLAG_HARVEST_R`, `FLAG_SIEGE_R`, `FLAG_PATH_W` | `constants` |
 | radial menu geometry and hit math | `wheelSpan`, `wheelAng`, `wheelOptions`, `wheelLayout`, `resolveWheel` | `radial wheel` |
 | what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` |

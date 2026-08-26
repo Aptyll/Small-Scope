@@ -932,25 +932,47 @@ mark dies falls back to holding the flag's ground.
 - **Only the three attack jobs chase** (`FLAG_ATTACK`). On every other flag a worker swings back
   at whoever hit it and no further ([Robots](#robots), `b.mad`). **Moving the flag home is the
   retreat** — there is no separate order for it.
-- Middle click **plants, moves and picks up**: clicking the flag's own tile lifts it, and a lifted
-  flag hands the crew back to the bay, which is exactly the behaviour that existed before flags
-  did. `flagRecall(p)` clears every commanded worker's target and route the frame an order lands,
-  so the crew is *visibly* seen to turn.
-- Middle click works **over the chart (M) too**, through `mapTileAt(sx, sy)` — the only way to
-  command a tile that is off-screen. At `MAP_S` (192/232 px per tile) one chart pixel is ~1.2
-  tiles, so a map order is ±1 tile: fine for "march on that base", not for picking one tree.
+- **The middle button is press-and-HOLD, not a click.** The press raises the preview
+  (`state.flagAim`), the release plants where the pointer ended up — the build wheel's grammar one
+  button over. It is a *gesture and not a mode* on purpose: everything else in this game that
+  previews, previews something you are already doing (the aim line needs a drawn bow, the wheel a
+  held right-click), and an always-on hover ghost for an order you have not started is clutter
+  that also fights `drawSelection` for the same tile. **Nothing about the flag is on screen unless
+  `state.flagAim` is true.** Escape or losing window focus drops it — the press has no hub to
+  release into, so those two are the cancel. The press is refused outright when `hasWorkers(p)` is
+  false (a live worker, or a bay about to roll one out): with nobody to order, the button is dead.
+- The gesture **plants, moves and picks up**: releasing on the flag's own tile lifts it, and a
+  lifted flag hands the crew back to the bay, which is exactly the behaviour that existed before
+  flags did. Releasing over the HUD is "thought better of it". `flagRecall(p)` clears every
+  commanded worker's target and route the frame an order lands, so the crew is *visibly* seen to
+  turn.
+- It works **over the chart (M) too**, through `mapTileAt(sx, sy)` — the only way to command a tile
+  that is off-screen. At `MAP_S` (192/232 px per tile) one chart pixel is ~1.2 tiles, so a map
+  order is ±1 tile: fine for "march on that base", not for picking one tree.
+- Because the flag has **no resting affordance by design**, one `state.hints.flag` message fires
+  the first time a worker rolls out of *your* bay — the same one-shot nudge the first felled tree
+  gives for stumps, and the only place the flag is ever spelled out in words.
 - The order is per-player state, not a world resource, so it does **not** go through `contest()`.
   AI slots never plant one, which is why a bot's bay still gathers exactly as it always did.
 
 **What it looks like** (the `worker flags` banner owns all three, `FLAG_JOBS` holds the 7×7 icon
 grids as landmark-style rect lists):
 
-- **The preview**, `drawFlagHint()`, drawn in UI space after `renderUI` so it ducks under every
-  panel: a dashed ghost of the tile the press would land on, plus the job's icon riding the
-  pointer — a chop green, a lane blue, a shield amber, a **sword red for all three attack jobs**.
-  Over your own flag it becomes the flag itself, because that press picks it up. It only appears
-  while the slot has a crew to command (`hasWorkers`: a live worker, or a bay about to roll one
-  out) and never over the HUD (`overHud`).
+- **The preview**, up only while the press is held, in two halves because they live in two spaces.
+  Both read `flagTarget()`, which resolves the tile once and returns `null` for every reason
+  nothing should be drawn (no `flagAim`, an overlay up, the pointer over the HUD).
+  `drawFlagAim(ox, oy)` marks the target tile in the **world** pass, right beside `drawSelection` —
+  the same four 3 px corner brackets over the same offset dark rim, so it scales with the tile and
+  speaks the language the E bracket already speaks. It does **not** pulse: the E bracket breathes
+  to catch an eye that isn't looking, and this one is only on screen because a hand is holding it
+  there. `drawFlagCursor()` rides the pointer in the **UI** pass at a fixed size, carrying the
+  job's icon — or the flag itself, when the release would lift it.
+- **Two colours, and they carry the stakes, not the job** (`FLAG_MINE` / `FLAG_FOE`): anything
+  pointed at your own side is the game's standard bright ink, the three that point at another team
+  are the danger red. The *icon* says which job it is; amber and green are already spoken for
+  (affordable / interactable, and good) and a work order is neither. `FLAG_MINE` is `#f4f7ff` and
+  not a softer slate for a reason — this world is snow, and anything near it disappears into the
+  ground; it reads for the same reason `drawSelection`'s white brackets do.
 - **The planted flag**, `drawFlag()`, y-sorted into the world draws half a pixel behind its own
   tile so a flag on a tree isn't swallowed by the canopy: a pole with a **dark banner carrying the
   same job icon inked in the team's colour**. Dark cloth and a bright glyph, not the reverse — at
@@ -958,8 +980,9 @@ grids as landmark-style rect lists):
   message. Only your own side's flags are drawn (an order marker is not intelligence to hand a
   rival), on all three surfaces.
 - **Both maps**, through the shared `drawFlagPennant()`: a pole-and-pennant in the team's colour on
-  the minimap disc, and the same pennant with the job icon over it on the chart, where the hovered
-  tile also previews.
+  the minimap disc, and the same pennant with the job icon over it on the chart. The chart's
+  *hover* preview is gated on `state.flagAim` exactly like the world's — the planted pennants are
+  always drawn, the preview never is.
 
 ## Death is final
 
