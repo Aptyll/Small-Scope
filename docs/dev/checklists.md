@@ -34,13 +34,17 @@ declare victory. The three affordances:
   `DBG.showPaths` still forces the routes on by itself.
 - **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
-  it, and `shot.png` is not gitignored — don't commit it.
+  it; `shot.png` is gitignored.
+
+The server itself needs no configuration: `PORT` overrides the default 8471, `.claude/launch.json`
+sets `autoPort` so a second session previews alongside an already-running one, and it sends
+`Cache-Control: no-store`, so a plain refresh always picks up an edit.
 
 **Test off `file://`, not just off the server.** `node tools/serve.js` hides a whole class of bug: the
 game is played by double-clicking [index.html](../../index.html), where `fetch` and XHR are
-blocked against the page's own folder. Point the driver at
-`file:///R:/bongit/Small-Scope/index.html?seed=N` for anything that loads an asset — the sampled
-sound layer was dead there for two rounds while every served check passed.
+blocked against the page's own folder. Point the driver at the repo's own
+`file:///.../index.html?seed=N` for anything that loads an asset — the sampled sound layer was dead
+there for two rounds while every served check passed.
 
 **Audio** is verifiable from outside too, and needs to be — headless Chrome has no speakers, and
 "I can't hear it" has several completely different causes that are indistinguishable by ear.
@@ -230,11 +234,11 @@ the arrow speed/damage formulas in `fireArrow()`,
   one `ITEMS` entry each away from being carryable, should a resource ever return.
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
-- `audio/music/` holds more than `TRACKS` names: `Drop the Ice (2)`, `Foxglove Drop From Eagle`,
-  `Pixel Drift`/`Pixel Quest Drift` (and their `(1)` copies) plus `Folder.jpg`/`AlbumArtSmall.jpg`
-  are alternate takes and album art, not cues. Nothing loads them; a track is only live once it is
-  in `TRACKS`. `tools/serve.js`'s `.ogg`/`.wav` MIME rows are likewise forward-looking — every asset in
-  the repo is an mp3.
+- `audio/music/` is now exactly the six files `TRACKS` names — the alternate takes and album art
+  that sat beside them (34 MB, nothing loading them) were deleted in `PATCH 1.53`; recover one with
+  `git show ee284a0:"audio/music/<name>"` if a cue ever wants it. A track is live only once it is in
+  `TRACKS`. `tools/serve.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
+  is an mp3.
 - The `tracers` pass is kept working but has no trigger — it went idle with the raiders. The
   **turret is live** (it shoots enemy players and worker bots) but it does not use `tracers`: it
   fires a travelling bolt through the `arrows` array, so the `tracers` pass still has nothing

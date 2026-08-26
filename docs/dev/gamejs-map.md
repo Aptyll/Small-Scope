@@ -1,6 +1,6 @@
 # Where things live in game.js
 
-`game.js` is one ~10000-line IIFE with no internal module boundaries, organized only by banner
+`game.js` is one ~12000-line IIFE with no internal module boundaries, organized only by banner
 comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
