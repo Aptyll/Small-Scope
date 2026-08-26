@@ -36,6 +36,37 @@ declare victory. The three affordances:
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it, and `shot.png` is not gitignored — don't commit it.
 
+**Test off `file://`, not just off the server.** `node serve.js` hides a whole class of bug: the
+game is played by double-clicking [index.html](../../index.html), where `fetch` and XHR are
+blocked against the page's own folder. Point the driver at
+`file:///R:/bongit/Small-Scope/index.html?seed=N` for anything that loads an asset — the sampled
+sound layer was dead there for two rounds while every served check passed.
+
+**Audio** is verifiable from outside too, and needs to be — headless Chrome has no speakers, and
+"I can't hear it" has several completely different causes that are indistinguishable by ear.
+- **`SFX got/want` in the info stack (F3) answers it first**, red when anything is missing — no
+  console needed. `SFX.banked()` is the same tally, and `SFX.debug()` adds the context state, the
+  three dials and the per-file errors. An **empty bank** means nothing downloaded (the console
+  carries one warning naming the first failure); a **populated bank** means the cue is wired
+  wrong, mixed too low, or a dial is at zero.
+- **Which dial is zero matters.** The SOUNDS bus carries the synth cues too, so `sfxVol: 0` kills
+  *every* sound effect, old and new, while the music plays on — whereas an empty bank kills only
+  the sampled half and leaves the old synth cues audible. "I hear the menu clicks but no new
+  sounds" and "I hear nothing but music" are different faults; do not treat them as one.
+- `SFX.meter()` is the peak on the SOUNDS bus right now. Poll it every 25 ms around a cue and take
+  the maximum: world cues should land at **0.3–0.7**, the synth UI blips at 0.15–0.18. Anything
+  under ~0.12 is inaudible in play, which is how a third of the bank was caught sitting at
+  0.05–0.15 before `trim()` levelled it ([Audio](gameplay.md#audio)). The meter costs nothing
+  until first called.
+- `SFX.music.current` names the track the state machine thinks should be sounding, and
+  `SFX.music.el(key)` hands out the live `<audio>` element: seek it to `duration - 0.6` to prove
+  the `jump → foxglove → silence` chain in seconds instead of nine minutes. `duration` is only
+  finite because [serve.js](../../serve.js) answers Range requests — a plain 200 makes an element
+  treat a multi-MB mp3 as an unbounded stream.
+- For the ESC panel, `DBG.settingsRows` and `DBG.muteBtnRect()` give the row anchors and the
+  speaker's plate, so a driver can click a dial through the real pointer instead of guessing at
+  the 14 px pitch.
+
 A page that loads the same four scripts, stages through `DBG` and POSTs the canvas is enough to
 drive the whole game from a headless browser; keep such a rig out of the repo (or delete it when
 you are done) so `index.html` stays the only entry point.
@@ -142,6 +173,26 @@ give it a surface branch in `updatePlayer()`'s momentum block (steer/decay/targe
 the template), and remember `genWorld()`'s `free()` helper treats "ground must be 0" as the
 placement rule.
 
+**Adding a sound** — drop the file in `audio/sfx/`, **run `node bake-sfx.js`** (this is not
+optional: without it the clip works when served and is silently dead when `index.html` is opened
+off the disk, which is how the game is actually played), add it to `SAMPLES` in
+[js/audio.js](../../js/audio.js) (a key may list several files; one is picked per shot), and write
+the cue as `name() { if (smp('key', {...})) return; ...synth line... }`. **The synth line is not
+optional** — `smp` returns false until the file has decoded, and a cue with nothing behind it is
+silent on the first swing of every session. `trim()` levels the file for you, so pick `vol` as a
+mix against the other cues, not against the file's own loudness — then check it with `SFX.meter()`
+(0.3–0.7 for a world cue) rather than by ear, because these clips arrive 20 dB apart. Set `dur` if
+the clip holds more than one hit; several of the existing files are a whole loop padded to a fixed
+length. World cues gate on `nearPlayer(x, y)` so a remote base cannot spam the mix; cues only the
+local slot should hear gate on `p === player`. A cue on a repeating tick (`building()` on a
+site's dust timer) needs a wide `jitter` and a `gap`, or it settles into a rhythm.
+See [Audio](gameplay.md#audio).
+
+**Adding a song** — one `TRACKS` entry in [js/audio.js](../../js/audio.js) (`f`, `loop`, `vol`,
+and `next` if it should chain into another when it ends), then one `SFX.music.play('key')` at the
+transition that owns it. Nothing polls for the right track: `play()` no-ops when its key is
+already current, so it is safe to call from a state change that repeats.
+
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
 range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint, the Keep's
 `craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
@@ -179,6 +230,11 @@ the arrow speed/damage formulas in `fireArrow()`,
   one `ITEMS` entry each away from being carryable, should a resource ever return.
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
+- `audio/music/` holds more than `TRACKS` names: `Drop the Ice (2)`, `Foxglove Drop From Eagle`,
+  `Pixel Drift`/`Pixel Quest Drift` (and their `(1)` copies) plus `Folder.jpg`/`AlbumArtSmall.jpg`
+  are alternate takes and album art, not cues. Nothing loads them; a track is only live once it is
+  in `TRACKS`. `serve.js`'s `.ogg`/`.wav` MIME rows are likewise forward-looking — every asset in
+  the repo is an mp3.
 - The spawner's guard mode (loiters) and the `tracers` pass are kept working but have no trigger —
   they went idle with the raiders. The **turret is live again** (it shoots enemy players and worker
   bots) but it does not use `tracers`: it fires a travelling bolt through the `arrows` array, so

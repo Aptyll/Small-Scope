@@ -872,7 +872,7 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
+`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists to
 `localStorage['softfall.settings']`. `applyMinimapSize()` must be called after changing `mmR` —
 it recomputes `MM_R`/`MM_CX`/`MM_CY`. The **backpack**'s open/closed state is `state.bagOpen`,
 not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;
@@ -881,7 +881,21 @@ not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may sti
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
 still refits the canvas when the browser toggles it.
 
-Below the six rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
+The panel has **seven** rows — MASTER, MUSIC, SOUNDS, MINIMAP SIZE, SCREEN SHAKE, INFO DISPLAY,
+CURSOR — at a **14 px pitch** rather than 16, which is what lets the three sound dials fit above
+the CONTROLS divider without `SET_H` growing: 218 is already close to the 240-row floor
+`fitCanvas()` guarantees, so the slab cannot get taller. `settingsHit()`'s row bands are
+`y-3 .. y+10` to match that pitch — 14 px each, touching but never overlapping, so one click can
+never land on two rows.
+
+**Mute is not a row.** It is a 9×9 speaker plate (`muteBtnRect`, `drawMuteBtn`) hard against the
+left end of the MASTER track: a cone with two waves coming off it, the waves swapped for a red ×
+when it is off. `settingsHit()` tests it *before* the track's x-gate, since it sits left of
+`SL_X`. While muted all three sound dials draw grey rather than gold (`drawSliderRow`'s `dim`)
+while MINIMAP SIZE stays gold, so what the speaker silences reads off the panel without a word of
+text. **N** still toggles the same flag from anywhere.
+
+Below those rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
 (`buildSettingsPanel`) — `CTRL SNEAK` joined the left one and `. HITBOX` the right one, and the
 rows start at y 137 rather than 140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
 as `CTRL HIDE IN SNOW`.
@@ -889,15 +903,22 @@ as `CTRL HIDE IN SNOW`.
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows
 the **info stack** — `drawTags()`, a vertical list on the left edge at the top quarter of the
-view, drawn above every overlay. Three lines — **FPS** (`loop()`
+view, drawn above every overlay. Four lines — **FPS** (`loop()`
 accumulates raw unclamped frame deltas into `perf` and refreshes `perf.fps` every half second),
+**SFX**, the sampled sound bank's decoded/asked-for tally (below),
 **POS**, the tile coordinates of the slot the camera frames (`viewPlayer()`, so spectators read
 the watched slot), and **SEED**, the run seed (see
 [world.md](world.md#determinism-and-noise)) — each drawn as a dim label plus a value on one
 shared x, so the numbers line up in a column; that dim-label / bright-value pairing is the same
 one the berry and fish counters use. **Red on the fps value (below 45) is the only colour in the
-stack that means anything** — nothing else is tinted, which is what lets the warning read. In
-title only the fps line shows.
+stack that means anything** alongside **SFX** (below), and nothing else is tinted, which is what
+lets a warning read. In title, FPS and SFX show and the other two do not.
+
+**SFX** is the sampled sound bank: files decoded / files the table asks for, from `SFX.banked()`,
+red on anything missing. It earns its place in a three-line stack because an empty bank is *silent
+in exactly the way a mis-wired cue is* — every sampled sound falls back to its synth line and the
+game sounds untouched — so without it "I hear no new sounds" has three indistinguishable causes.
+See [Audio](#audio).
 
 `settings.hitbox` is the same idea one key over: **`.`** cycles it 0 → 1 → 2 in any mode. One
 press draws the circles and boxes the sim actually tests over the sprites that hide them; a second
@@ -910,9 +931,120 @@ Beneath the minimap
 
 ## Audio
 
-`SFX` creates its `AudioContext` lazily inside `ensure()`. Browsers require a user gesture, so
-`SFX.unlock()` is called from click handlers — any new entry point that plays sound before the
-first click needs to call it too.
+[js/audio.js](../../js/audio.js) is three layers under one master dial, and `SFX` is all of them.
+
+`ensure()` builds the graph lazily: `master` (the master dial) → destination, and `sfxBus` (the
+SOUNDS dial) under it. **Everything synthesised or sampled goes through `sfxBus`**, the wind bed
+included — a new voice that connects to `master` directly would ignore the SOUNDS dial. The three
+dial setters go through `dial(v, keep)`, which keeps the old value for anything that is not a
+finite **number** — note the `typeof` test, since `+null` is `0`, not `NaN`, and a coercing guard
+would let a null from a stale save clamp a whole bus to silence. Music runs *outside* this graph,
+so a zeroed or broken `sfxBus` is silent while the songs play on, which is a confusing failure to
+be handed and worth guarding against. Browsers
+require a user gesture, so `SFX.unlock()` is called from click handlers; audio.js also arms its
+own `pointerdown`/`mousedown`/`keydown` listeners, which is what actually starts the title track
+(see *Music* below).
+
+**The synth** (`tone`/`noise`) is unchanged, and it is now two things: the UI blips in their own
+right, and the fallback line under every sampled cue.
+
+**Samples.** `SAMPLES` maps a key to the files behind it in `audio/sfx/`; `loadBank()` decodes all
+of them on the first `ensure()`.
+
+**The bytes come from [js/sfxdata.js](../../js/sfxdata.js), not from the network.** That file is
+generated — `node bake-sfx.js` writes every clip in `audio/sfx/` into it as base64 — and it exists
+because **double-clicking `index.html` has to work**: a `file://` page is allowed neither `fetch`
+nor XHR against its own folder, so the whole sample layer fell back to synth when the game was
+opened off the disk rather than served, sounding *exactly* as it did before the samples existed.
+`bytes(f)` prefers the inline data and falls back to `fetch` for a clip that is in the folder but
+not yet baked, so adding one works over http before anyone reruns the script — **rerun it before
+committing, or the new sound is dead for anyone opening the file directly.** The music is
+deliberately *not* baked: it is ~70 MB, and an `<audio>` element streams a relative `file://` path
+perfectly well — it was only ever `fetch` that was blocked. Filenames still go through
+`encodeURIComponent` on the fetch path, since several carry a `#` that a raw URL reads as a
+fragment. Each decoded buffer is run through `trim()`,
+which finds where the sound actually starts and ends inside a clip padded out to a fixed length,
+so an axe hit does not fire 200 ms late.
+
+**`trim()` also levels the bank, and that is not cosmetic.** These files arrive at wildly
+different levels — measured peaks run from **0.089** (the chewing) to **1.03** (the falling tree),
+a 20 dB spread — so each one gets a gain `g` bringing it to `SMP_PEAK`, capped at `SMP_MAXG` so a
+near-silent clip is not amplified into hiss. Without it the quiet third of the bank is inaudible
+under the music at any sane master setting, *and* no per-cue `vol` can be tuned, because the same
+number means something different for every file. With it, `vol` is a pure mix control: every world
+cue is aimed at **0.3–0.7 peak on the SOUNDS bus**, measured with `SFX.meter()`, against the synth
+UI blips at 0.15–0.18. Peak is taken across **all** channels (the files are stereo) and the
+silence threshold is relative to that peak — an absolute one trims the quiet clips' own content
+off as if it were padding.
+
+**A failed load must never be quiet about it.** `loadBank()` counts every file into `bankStat`
+(`want`/`got`/`err`), logs one console warning naming the first failure, and `SFX.banked()` reads
+the tally back — the **info stack prints `SFX got/want`, red when anything is missing**. This is
+not decoration: an empty bank falls back to the synth on every cue, so the game sounds *exactly as
+it did before the samples existed*, which is indistinguishable by ear from every cue being wired
+to the wrong event. Swallowing those rejections cost two rounds of debugging. A bank that came up
+empty also gets one retry on the next gesture (`retryBank`), since starting the dev server after
+opening the page is the ordinary way this happens.
+
+`smp(key, opts)` plays one, **and returns whether it handled the cue**: false means nothing has
+decoded yet (or ever will — `file://`, a missing folder, a codec) and the caller falls through to
+its synth line, so the game is never silent waiting on a download. It returns *true* while muted,
+so a muted cue never doubles up. Every cue therefore reads
+`someCue() { if (smp('key', {...})) return; ...synth... }`. `opts`: `vol`, `rate` + `jitter` (a
+fraction of rate, rolled per shot, which is what stops a repeated cue sounding looped), `lp`/`hp`
+filter corners, `delay`, `gap` (the minimum seconds between two of this key — insurance against
+two events in one frame), and `dur`. **`dur` matters more than it looks:** several of these clips
+hold more than one cue — the footstep file is a whole walking loop, the coin rolls for two seconds
+— so `dur` takes one hit off the front and rides a release ramp down over its last 40 ms rather
+than clicking off mid-waveform. A key with several files picks one at random per shot.
+
+New sampled cues beside the old synth ones: `coin()` (gold into the purse — a drop walked over, a
+kill bounty, a bot's deposit, a generator's payout) and `stash()` (something into the backpack)
+split off from `pickup()`, which stays the synth UI blip so menus keep an instant, identical
+click; `hammer()` (raising, upgrading or finishing a structure) splits off from `place()` the same
+way, with `building()` as its quieter, shorter sibling on a site's dust tick — it repeats for as
+long as the build takes, so it is widely jittered and must never settle into a rhythm. `step()` is
+one boot per footprint the local slot leaves; `land()` is the same boot dropped an octave under a
+low thump, so touching down off the eagle reads as weight rather than as an arrow connecting.
+`yelp()` is a creature crying out under a hit it survived, and `monsterDie(kind)` takes the
+animal's kind — a wolf yelps where a rabbit squeals.
+
+**Ambience.** `SFX.setAmbience(on, night)` is called every frame from `update()`: on wherever the
+world is live, off under the death and victory screens where a song already owns the mix. audio.js
+schedules a wind gust (or, once `state.darkness > 0.55`, sometimes an owl) every 11–26 s over the
+synth wind bed.
+
+**Music.** `SFX.music` streams `audio/music/` through one `HTMLAudioElement` per track — they run
+minutes, and decoding them into buffers would cost tens of MB. They sit *outside* the WebAudio
+graph, so `musicGain()` multiplies each element's `.volume` by its track volume, the MUSIC dial,
+the master dial and mute by hand; a 50 ms `setInterval` walks the fades. `music.play(key, opts)`
+crossfades (`in`/`out` seconds, `restart`), is a no-op when that key is already current, and
+`music.stop(fade)` fades the whole layer out. `music.current` reads back the key; `music.el(key)`
+hands out the live element, which is how a driver proves the handover chain without sitting
+through five minutes of a track.
+
+| Track | Plays from | Loops |
+| --- | --- | --- |
+| `intro` — FROZEN NORTH RUN INTRO | boot, and `leaveSelect()` back to the menu | yes |
+| `select` — FROZEN NORTH RUN CLASS SELECTION | `beginSelect()`; the gear page keeps it | yes |
+| `eagle` — FLYING ON EAGLE | `beginDrop()` | yes |
+| `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
+| `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |
+| `victory` — DROP THE ICE | `endMatch('won'\|'lost')` | yes |
+
+The jump is a **hard cut**, not a crossfade (`{ out: 0.1, in: 0.05 }`): the ride's song is
+interrupted by the leap. From there the layer runs itself — `jump` reaches its end, its `ended`
+handler follows `TRACKS.next` into `foxglove`, and when *that* ends nothing follows it, so the
+match plays out in silence until an end screen. `endMatch` is gated on `'won'`/`'lost'`: a
+`'respawning'` overlay is not the end of anything and must not start the end-screen song.
+`rerollWorld()` and `toLobby()` fade the layer out under their wipe; both reload the page, so the
+title track comes back from boot.
+
+The **title track cannot start on its own** — no gesture has happened at boot. `musicPlay` catches
+the rejected `play()` promise into `pending`, and the first click or keypress starts it. This is
+why the dev server ([serve.js](../../serve.js)) answers Range requests: served a plain 200, an
+`<audio>` element treats a multi-MB mp3 as an unbounded stream (`duration` `Infinity`) and cannot
+seek in it.
 
 The bow's rhythm has three of its own: `SFX.nock()` (a dry wooden tick when the renock clears —
 deliberately near-silent, since it fires after every shot), `SFX.dryFire()` (a slack string on an
@@ -925,8 +1057,8 @@ being heard, and it plays with a rival somewhere close by), `SFX.rise()` (the sn
 shove) and `SFX.ambush()` (the shot out of the snow landing — deeper and harder than `hit()`, with
 a crack over the top, so an ambush never sounds like an ordinary arrow).
 
-`SFX.victory()` (a four-note fanfare over a held low fifth) is the one cue longer than a second;
-`endMatch` fires it the moment the match is won. `SFX.tally()` is the dry blip a climbing number
-makes on the victory screen — see [The victory screen](rendering.md#the-victory-screen) for the
-rest of that timeline.
+`SFX.victory()` (a four-note fanfare over a held low fifth) is the one *synth* cue longer than a
+second; `endMatch` fires it the moment the match is won, as the sting the `victory` song comes up
+underneath. `SFX.tally()` is the dry blip a climbing number makes on the victory screen — see
+[The victory screen](rendering.md#the-victory-screen) for the rest of that timeline.
 

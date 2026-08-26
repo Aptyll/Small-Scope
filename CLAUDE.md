@@ -31,12 +31,19 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 
 ```
 node serve.js          # static server + screenshot sink on http://localhost:8471
+node bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after changing a clip
 ```
 
-No build step, no package manager, no dependencies, no test suite, no linter. Editing a `js/*.js`
-file and reloading the page is the whole dev loop (`Cache-Control: no-store` is set, so a plain
-refresh always picks up changes). `PORT` overrides the port; `.claude/launch.json` sets
-`autoPort`, so a second session can preview alongside an already-running server.
+**Double-clicking [index.html](index.html) has to work** — that is how the game is played, so
+nothing may depend on being served. A `file://` page cannot `fetch` its own folder, which is why
+`bake-sfx.js` inlines the sound effects; a new asset loaded any other way is silently dead off the
+disk. `serve.js` is for the screenshot sink and headless driving, not a requirement.
+
+No package manager, no dependencies, no test suite, no linter; `bake-sfx.js` is the only build
+step and its output is committed. Editing a `js/*.js` file and reloading the page is the whole dev
+loop (`Cache-Control: no-store` is set, so a plain refresh always picks up changes). `PORT`
+overrides the port; `.claude/launch.json` sets `autoPort`, so a second session can preview
+alongside an already-running server.
 
 **Verify changes in the browser, not by re-reading code.** Four affordances drive it from
 outside: `window.DBG` (end of [js/game.js](js/game.js)) exposes the live singletons and stages a
@@ -62,14 +69,15 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 ## Architecture
 
-Four IIFEs loaded in a fixed order by [index.html](index.html), communicating only through
-globals. Order matters: each file's globals must exist before the next runs.
+Four IIFEs plus one generated data file, loaded in a fixed order by [index.html](index.html) and
+communicating only through globals. Order matters: each file's globals must exist before the next.
 
 | File | Exposes | Role |
 | --- | --- | --- |
 | [js/font.js](js/font.js) | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | 3×5 bitmap font, uppercase only, unknown chars render as `?`. **Text over the world uses `Outline`** (1px dark rim on all sides, opaque colour); `Shadow` is for text on panels/planks |
 | [js/sprites.js](js/sprites.js) | `SPRITES` | every sprite as a char-grid + palette map, baked to offscreen canvases at load |
-| [js/audio.js](js/audio.js) | `SFX` | WebAudio synth; no asset files |
+| [js/sfxdata.js](js/sfxdata.js) | `SFXDATA` | **generated** — `audio/sfx/*.mp3` as base64, built by `node bake-sfx.js`. Rerun it after any change to `audio/sfx/` |
+| [js/audio.js](js/audio.js) | `SFX` | three layers: a WebAudio synth for UI blips *and* as the fallback under every cue, one-shot samples out of `SFXDATA`, and `SFX.music` streaming `audio/music/`. Master / MUSIC / SOUNDS dials — see [gameplay](docs/dev/gameplay.md#audio) |
 | [js/game.js](js/game.js) | `DBG` | everything else — worldgen, sim, render, UI |
 
 All game state lives in module-scope singletons — `state`, `settings`, `players` (with `player` /

@@ -410,8 +410,13 @@
   let SET_Y = Math.round((VIEW_H - SET_H) / 2);
   let SL_X = SET_X + 112;
   const SL_W = 66;  // slider track
-  let ROW_SOUND = SET_Y + 28, ROW_MUTE = SET_Y + 44, ROW_MAP = SET_Y + 60, ROW_SHAKE = SET_Y + 76,
-    ROW_INFO = SET_Y + 92, ROW_CURSOR = SET_Y + 108;
+  // Seven rows at a 14px pitch, so the three sound dials fit above the CONTROLS
+  // divider (still at panel-local 126) without the panel growing: SET_H is
+  // already close to the 240-row floor fitCanvas() guarantees. Mute is not a
+  // row of its own - it is the speaker beside the MASTER track (SET_MUTE_X).
+  let ROW_SOUND = SET_Y + 28, ROW_MUSIC = SET_Y + 42, ROW_SFX = SET_Y + 56, ROW_MAP = SET_Y + 70,
+    ROW_SHAKE = SET_Y + 84, ROW_INFO = SET_Y + 98, ROW_CURSOR = SET_Y + 112;
+  let SET_MUTE_X = SL_X - 14; // the speaker button: 9x9, hard against the master track
 
   const mmCv = document.createElement('canvas');
   mmCv.width = WORLD; mmCv.height = WORLD;
@@ -482,7 +487,10 @@
     fade: null,          // screen fade: { a, to, spd, color, then }
   };
 
-  const settings = { v: 2, volume: 0.5, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0 };
+  // volume is the master dial; musicVol and sfxVol sit under it (SFX.setVolume /
+  // setMusicVolume / setSfxVolume). A save written before the split simply has
+  // neither key and keeps the defaults - no version bump needed.
+  const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0 };
   // Minimap zoom ladder, px per world tile: index settings.mmZoom (5 = the 1:1
   // baseline). Twice the rungs and twice the reach of the old six, and like the
   // camera it eases between them rather than snapping - mmCur is what anything
@@ -535,8 +543,9 @@
     SET_X = Math.round((VIEW_W - SET_W) / 2);
     SET_Y = Math.round((VIEW_H - SET_H) / 2);
     SL_X = SET_X + 112;
-    ROW_SOUND = SET_Y + 28; ROW_MUTE = SET_Y + 44; ROW_MAP = SET_Y + 60;
-    ROW_SHAKE = SET_Y + 76; ROW_INFO = SET_Y + 92; ROW_CURSOR = SET_Y + 108;
+    SET_MUTE_X = SL_X - 14;
+    ROW_SOUND = SET_Y + 28; ROW_MUSIC = SET_Y + 42; ROW_SFX = SET_Y + 56; ROW_MAP = SET_Y + 70;
+    ROW_SHAKE = SET_Y + 84; ROW_INFO = SET_Y + 98; ROW_CURSOR = SET_Y + 112;
     fitFlakes();
     renderBars();
     layoutReplay();
@@ -1110,7 +1119,10 @@
     // releasing the button just drops the held intent; updatePlayer looses the
     // arrow on that falling edge, the same way an AI's shot is timed
     if (e.button === 0) player.input.fire = false;
-    if (dragSlider) { saveSettings(); SFX.pickup(); }
+    // letting go of a dial: the two sound tracks answer with a real sampled cue
+    // at the level just set, so the slider demonstrates itself instead of
+    // labelling itself - and a dead sample layer is audible the moment you drag
+    if (dragSlider) { saveSettings(); if (dragSlider === 'sfx' || dragSlider === 'vol') SFX.coin(); else SFX.pickup(); }
     mouse.down = false;
     dragSlider = null;
   });
@@ -2093,7 +2105,7 @@
           addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
           burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
           burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
-          if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.pickup(); }
+          if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.stash(); }
         });
         // the shaft is speared through the ice, not loosed: it costs no arrow,
         // but it is the same hand motion, so the bow still has to be renocked
@@ -2230,7 +2242,7 @@
           spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2); spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2);
           burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
           addFloater(ox, oy - 18, 'JACKPOT!', '#f2cc6a');
-          if (near) SFX.pickup();
+          if (near) SFX.coin();
         }
       }
     } else if (o.type === 'deadTree') {
@@ -2266,7 +2278,7 @@
       if (o.berries > 0) {
         o.berries = 0;
         o.regrow = 70;
-        if (near) SFX.pickup();
+        if (near) SFX.stash();
         spawnDrop(ox, oy, 'berry'); spawnDrop(ox, oy, 'berry');
         burst(ox, oy - 4, '#4c8560', 5, 35, 0.4, true);
       } else if (near) {
@@ -2354,7 +2366,7 @@
       if (big) { anchor = findSite(type, tx, ty); if (!anchor) return; }
       pay(t0.cost, p);
       createStruct(anchor.tx, anchor.ty, type, 0, p, true);
-      if (nearPlayer(cxp, cyp)) SFX.place();
+      if (nearPlayer(cxp, cyp)) SFX.hammer();
       burst(cxp, cyp, '#eef4fb', 8, 40, 0.4, true);
     });
   }
@@ -2411,7 +2423,7 @@
     if (!canAfford(cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
     pay(cost, p);
     o.craftT = o.craftTotal = t.craftT;
-    if (nearPlayer(o.tx * TILE + 16, o.ty * TILE + 16)) SFX.place();
+    if (nearPlayer(o.tx * TILE + 16, o.ty * TILE + 16)) SFX.hammer();
   }
 
   // rolls a rarity against tier.odds using the shared runtime rng() - never
@@ -2439,7 +2451,7 @@
     o.buildT = 0;
     o.buildTotal = t.buildT;
     o.dustT = 0;
-    if (nearPlayer(o.tx * TILE + 8, o.ty * TILE + 8)) SFX.place();
+    if (nearPlayer(o.tx * TILE + 8, o.ty * TILE + 8)) SFX.hammer();
     burst(o.tx * TILE + 8, o.ty * TILE + 8, '#eef4fb', 8, 40, 0.4, true);
   }
 
@@ -2695,7 +2707,7 @@
   // is the one standing over it.
   function animalDies(a) {
     a.dead = true;
-    if (nearPlayer(a.x, a.y)) SFX.monsterDie();
+    if (nearPlayer(a.x, a.y)) SFX.monsterDie(a.kind);
     const hunter = a.lastHit !== undefined ? players[a.lastHit] : null;
     const y = YIELD[a.kind];
     if (hunter && !hunter.dead && y && y.coins) {
@@ -3160,6 +3172,7 @@
         const big = structW(o.type) > 1 || structH(o.type) > 1;
         if (o.dustT <= 0) {
           o.dustT = 0.8;
+          if (nearPlayer(ox, oy)) SFX.building();
           if (big) {
             // dust off the whole footprint's front edge
             const c = structCenter(o);
@@ -3190,7 +3203,7 @@
             burst(ox, oy - 4, '#eef4fb', 10, 50, 0.6, true);
             burst(ox, oy - 4, o.tier === 2 ? '#f2cc6a' : o.tier === 1 ? '#a8b0c4' : '#c9a06a', 6, 45, 0.5, true);
           }
-          if (nearPlayer(ox, oy)) { SFX.place(); state.shake = Math.max(state.shake, big ? 2.5 : 1.5); }
+          if (nearPlayer(ox, oy)) { SFX.hammer(); state.shake = Math.max(state.shake, big ? 2.5 : 1.5); }
           if (o.type === 'turret') o.cd = 0;
           if (o.type === 'generator') o.payT = STRUCTS.generator.tiers[o.tier].period;
           if (o.type === 'spawner') { o.respawnT = o.respawnTotal = 1; }
@@ -3239,6 +3252,7 @@
             spawnDrop(ox, oy - 2, 'gold', t.pay);
             addFloater(ox, oy - 12, '+' + t.pay, RES_COLORS.gold);
             burst(ox, oy - 6, '#c9d0e2', 2, 20, 0.3);
+            if (nearPlayer(ox, oy)) SFX.coin();
           }
         }
       } else if (o.type === 'spawner') {
@@ -3273,7 +3287,7 @@
           spawnDrop(m.x, m.y, key, 1);
           addFloater(m.x, m.y - 12, rarity.toUpperCase() + ' CARD', RES_COLORS[key]);
           burst(m.x, m.y - 4, RES_COLORS[key], 10, 50, 0.5, true);
-          if (nearPlayer(m.x, m.y)) SFX.place();
+          if (nearPlayer(m.x, m.y)) SFX.stash();
         }
       }
     }
@@ -3384,7 +3398,7 @@
       gainGold(players[b.owner] || player, b.carry);
       addFloater(hx, hy - 14, '+' + b.carry, RES_COLORS.gold);
       b.carry = 0;
-      if (nearPlayer(hx, hy)) SFX.pickup();
+      if (nearPlayer(hx, hy)) SFX.coin();
     };
 
     const harvest = () => {
@@ -3591,7 +3605,7 @@
       if (k === 'gold' && killer && !killer.dead) {
         gainGold(killer, n);
         addFloater(killer.x, killer.y - 14, '+' + n, RES_COLORS.gold);
-        if (killer === player) SFX.pickup();
+        if (killer === player) SFX.coin();
         continue;
       }
       const parts = Math.min(k === 'gold' ? 5 : 3, n);
@@ -3758,6 +3772,8 @@
     // a tally which already counted it reads as a bug
     state.win = how === 'won' ? winSnapshot() : null;
     if (state.win) { SFX.victory(); state.shake = Math.max(state.shake, 4); }
+    // the end screen has a song of its own; a respawn timer is not the end of anything
+    if (how === 'won' || how === 'lost') SFX.music.play('victory', { in: 1.2 });
     player.input = makeInput(); // whatever was held dies with the slot
   }
 
@@ -4138,6 +4154,11 @@
 
   function update(dt) {
     applyZoom(dt);
+    // the wind gusts and the night owl audio.js schedules over its synth bed:
+    // on wherever the world is live, off under the death and victory screens,
+    // where a song already owns the mix
+    SFX.setAmbience(!state.paused && (state.mode !== 'dead' || state.over === 'respawning'),
+      state.darkness > 0.55);
 
     // time (the clock starts with the eagle - the match is live while you ride)
     if (state.mode === 'play' || state.mode === 'drop') {
@@ -4329,7 +4350,7 @@
             an.kbx = nx * kb; an.kby = ny * kb;
             burst(an.x, an.y - (an.alt || 0) - 4, HIT_PUFF[an.kind] || '#a5825a', 6, 40, 0.4);
             if (a.ambush) ambushFx(an.x, an.y - (an.alt || 0) - 4);
-            if (nearPlayer(an.x, an.y)) SFX.hit();
+            if (nearPlayer(an.x, an.y)) { SFX.hit(); if (an.hp > 0 && an.kind !== 'bird') SFX.yelp(); }
             dead = true;
             break;
           }
@@ -4432,7 +4453,7 @@
             if (d.type === 'gold') gainGold(p, got);
             d.n -= got;
             addFloater(p.x, p.y - 14, '+' + got, RES_COLORS[d.type]);
-            if (p === player) SFX.pickup();
+            if (p === player) { if (d.type === 'gold') SFX.coin(); else SFX.stash(); }
           }
           if (d.n <= 0) drops.splice(j, 1); else d.t = 0;
         });
@@ -4706,6 +4727,7 @@
         const px = p.dir === 'left' || p.dir === 'right' ? p.x : p.x + side;
         const py = p.dir === 'left' || p.dir === 'right' ? p.y + 6 + (p.footSide ? 1 : -1) : p.y + 6;
         footprints.push({ x: px, y: py, t: 0 });
+        if (p === player) SFX.step();
         if (footprints.length > 400) footprints.shift();
       }
     } else {
@@ -5323,8 +5345,9 @@
     if (!settings.info) return;
     // two columns: a dim label, then the value on one shared x so the numbers
     // line up down the stack - the same dim-label / bright-value pairing the
-    // berry and fish counters use. Red is the only colour that means anything
-    // here (a bad frame rate); nothing else is tinted for decoration.
+    // berry and fish counters use. Red means one thing and one thing only:
+    // something is wrong (a bad frame rate, a sample bank that did not load).
+    // Nothing else is tinted for decoration.
     const lx = 5, vx = lx + pixelTextWidth('SEED') + 5;
     let y = Math.round(VIEW_H * 0.25);
     const line = (label, value, col) => {
@@ -5333,6 +5356,12 @@
       y += 10;
     };
     line('FPS', String(perf.fps), perf.fps < 45 ? '#ff9a8a' : '#f4f7ff');
+    // the sampled sound bank: decoded / asked for. Red on anything missing,
+    // because an empty bank is silent in exactly the way a mis-wired cue is -
+    // every sampled sound falls back to the old synth line and the game sounds
+    // untouched. See js/audio.js loadBank().
+    const bs = SFX.banked();
+    line('SFX', bs.got + '/' + bs.want, bs.got < bs.want ? '#ff9a8a' : '#f4f7ff');
     if (state.mode !== 'title') {
       const vp = viewPlayer(); // spectators read the slot the camera frames
       line('POS', Math.floor(vp.x / TILE) + ', ' + Math.floor(vp.y / TILE));
@@ -8388,8 +8417,9 @@
     bakeFrostSlab(g, SET_W, SET_H, 'SETTINGS');
     // row labels
     const L = '#cfe0ff';
-    drawPixelText(g, 'VOLUME', 14, ROW_SOUND - SET_Y, L);
-    drawPixelText(g, 'MUTE SOUND', 14, ROW_MUTE - SET_Y, L);
+    drawPixelText(g, 'MASTER', 14, ROW_SOUND - SET_Y, L);
+    drawPixelText(g, 'MUSIC', 14, ROW_MUSIC - SET_Y, L);
+    drawPixelText(g, 'SOUNDS', 14, ROW_SFX - SET_Y, L);
     drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
     drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
     drawPixelText(g, 'INFO DISPLAY', 14, ROW_INFO - SET_Y, L);
@@ -8425,20 +8455,33 @@
     if (dragSlider === 'vol') {
       settings.volume = Math.round(t * 20) / 20;
       SFX.setVolume(settings.volume);
+    } else if (dragSlider === 'music') {
+      settings.musicVol = Math.round(t * 20) / 20;
+      SFX.setMusicVolume(settings.musicVol);
+    } else if (dragSlider === 'sfx') {
+      settings.sfxVol = Math.round(t * 20) / 20;
+      SFX.setSfxVolume(settings.sfxVol);
     } else if (dragSlider === 'map') {
       settings.mmR = Math.round(16 + t * 18);
       applyMinimapSize();
     }
   }
 
+  // the speaker beside the MASTER track: 9x9, the same plate the toggle rows use
+  function muteBtnRect() { return { x: SET_MUTE_X, y: ROW_SOUND - 1, w: 9, h: 9 }; }
+
   // which settings widget is under the pointer (null for none); shared by the
   // click handler and the cursor so the hand cursor can never disagree with a click
   function settingsHit() {
     const mx = mouse.x, my = mouse.y;
+    const b = muteBtnRect();
+    if (mx >= b.x - 2 && mx < b.x + b.w + 2 && my >= b.y - 2 && my < b.y + b.h + 2) return 'mute';
     if (mx < SL_X - 4 || mx > SL_X + SL_W + 6) return null;
-    const inRow = (y) => my >= y - 4 && my <= y + 11;
+    // 14px pitch, so the bands must not overlap or a click lands on two rows
+    const inRow = (y) => my >= y - 3 && my <= y + 10;
     if (inRow(ROW_SOUND)) return 'vol';
-    if (inRow(ROW_MUTE)) return 'mute';
+    if (inRow(ROW_MUSIC)) return 'music';
+    if (inRow(ROW_SFX)) return 'sfx';
     if (inRow(ROW_MAP)) return 'map';
     if (inRow(ROW_SHAKE)) return 'shake';
     if (inRow(ROW_INFO)) return 'info';
@@ -8450,7 +8493,7 @@
     SFX.unlock();
     const hit = settingsHit();
     if (!hit) return;
-    if (hit === 'vol' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
+    if (hit === 'vol' || hit === 'music' || hit === 'sfx' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
     if (hit === 'mute') settings.muted = SFX.toggleMute();
     else if (hit === 'shake') settings.shake = !settings.shake;
     else if (hit === 'info') settings.info = !settings.info;
@@ -8459,14 +8502,36 @@
     saveSettings();
   }
 
-  function drawSliderRow(y, t, txt) {
+  // dim: the fill and the readout go grey. The three sound dials pass it while
+  // muted, so the speaker's state reads off every track it silences at a glance
+  function drawSliderRow(y, t, txt, dim) {
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(SL_X - 1, y + 1, SL_W + 2, 5);
     ctx.fillStyle = '#2c3a68'; ctx.fillRect(SL_X, y + 2, SL_W, 3);
-    ctx.fillStyle = '#ffd95c'; ctx.fillRect(SL_X, y + 2, Math.round(t * SL_W), 3);
+    ctx.fillStyle = dim ? '#4a5480' : '#ffd95c'; ctx.fillRect(SL_X, y + 2, Math.round(t * SL_W), 3);
     const kx = SL_X + Math.round(t * SL_W);
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(kx - 2, y - 1, 5, 9);
-    ctx.fillStyle = '#f4f7ff'; ctx.fillRect(kx - 1, y, 3, 7);
-    drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, '#9fb6d8', 'rgba(8,12,28,0.9)');
+    ctx.fillStyle = dim ? '#7a8bb8' : '#f4f7ff'; ctx.fillRect(kx - 1, y, 3, 7);
+    drawPixelTextShadow(ctx, txt, SL_X + SL_W + 9, y, dim ? '#5a6690' : '#9fb6d8', 'rgba(8,12,28,0.9)');
+  }
+
+  // The mute control is a speaker, not a labelled toggle: a cone with two waves
+  // coming off it, the waves swapped for a cross when it is off.
+  function drawMuteBtn(hot) {
+    const b = muteBtnRect();
+    const on = !SFX.isMuted();
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle = hot ? '#1f2b5c' : '#121a3a'; ctx.fillRect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+    const x = b.x + 1, y = b.y + 1; // the 7x7 glyph field
+    ctx.fillStyle = on ? '#ffd95c' : '#7a8bb8';
+    ctx.fillRect(x, y + 2, 1, 3); ctx.fillRect(x + 1, y + 1, 1, 5); ctx.fillRect(x + 2, y, 1, 7);
+    if (on) {
+      ctx.fillRect(x + 4, y + 2, 1, 3);
+      ctx.fillRect(x + 6, y + 1, 1, 5);
+    } else {
+      ctx.fillStyle = '#ff6a5a';
+      ctx.fillRect(x + 4, y + 2, 1, 1); ctx.fillRect(x + 5, y + 3, 1, 1); ctx.fillRect(x + 6, y + 4, 1, 1);
+      ctx.fillRect(x + 6, y + 2, 1, 1); ctx.fillRect(x + 4, y + 4, 1, 1);
+    }
   }
 
   function drawToggleRow(y, on, onTxt, offTxt) {
@@ -8490,8 +8555,12 @@
     }
     if (slide) { ctx.save(); ctx.translate(0, slide); }
     ctx.drawImage(setPanelCv, SET_X, SET_Y);
-    drawSliderRow(ROW_SOUND, settings.volume, String(Math.round(settings.volume * 100)));
-    drawToggleRow(ROW_MUTE, SFX.isMuted());
+    const off = SFX.isMuted();
+    const hit = slide ? null : settingsHit(); // the menu's slide-in is not hoverable mid-flight
+    drawSliderRow(ROW_SOUND, settings.volume, String(Math.round(settings.volume * 100)), off);
+    drawMuteBtn(hit === 'mute');
+    drawSliderRow(ROW_MUSIC, settings.musicVol, String(Math.round(settings.musicVol * 100)), off);
+    drawSliderRow(ROW_SFX, settings.sfxVol, String(Math.round(settings.sfxVol * 100)), off);
     drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
     drawToggleRow(ROW_SHAKE, settings.shake);
     drawToggleRow(ROW_INFO, settings.info);
@@ -8511,9 +8580,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.45'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.46'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.46', 'THE FROSTLANDS HAVE A SCORE AND A VOICE NOW - A SONG FOR THE MENU, THE CLASS PAGE, THE EAGLE AND THE END SCREEN, RECORDED SOUND FOR EVERY AXE BOW AND BOOT, AND MASTER MUSIC AND SOUNDS DIALS IN THE ESC MENU.'],
     ['1.45', 'BUILD YOUR TEAM A KEEP AND DEATH IS A RESPAWN TIMER INSTEAD OF THE END - LOSE IT AND IT IS PERMANENT AGAIN - AND A FINISHED KEEP CRAFTS RARITY-ROLLED CARDS FOR A PERMANENT PICK-ONE-OF-THREE UPGRADE.'],
     ['1.44', 'THE XP BAR HAS A DARK SILHOUETTE NOW, AND LEVEL-UP SQUARES SIT ON THE FRAME RATHER THAN INSIDE IT.'],
     ['1.43', 'EACH LEVEL GIVES A SKILL POINT YOU SPEND BY CLICKING THE SQUARE ABOVE AN ABILITY.'],
@@ -8712,6 +8782,7 @@
     state.menu.screen = 'menu';
     state.menu.gearT = 0;
     SFX.dawnChime();
+    SFX.music.stop(0.6);
   }
 
   // the die: whiteout, then reload on a fresh seed (SEED is a const every
@@ -8721,6 +8792,7 @@
     if (state.fade) return;
     m.rolling = 0.6;
     SFX.dodge();
+    SFX.music.stop(0.45);
     const next = ((Date.now() ^ Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0) || 1;
     state.fade = {
       a: 0, to: 1, spd: 1 / 0.55, color: '#f4f7ff',
@@ -9326,10 +9398,12 @@
     m.screen = 'select';
     m.cswapT = 1;
     SFX.place();
+    SFX.music.play('select');
   }
   function leaveSelect() {
     state.menu.screen = 'menu';
     SFX.pickup();
+    SFX.music.play('intro');
   }
   function selectChamp(i) {
     const m = state.menu;
@@ -9742,6 +9816,7 @@
   // back to the title screen: fade to dark and reload this seed
   function toLobby() {
     if (state.fade) return;
+    SFX.music.stop(0.4);
     state.fade = {
       a: 0, to: 1, spd: 1 / 0.5, color: '#06081a',
       then: () => { location.href = location.pathname + location.search; },
@@ -10383,6 +10458,7 @@
     state.introFrom = { x: camX - (WV_W - ow) / 2, y: camY - (WV_H - oh) / 2 };
     state.intro = INTRO_T; state.introLen = INTRO_T;
     SFX.dawnChime();
+    SFX.music.play('eagle');
   }
 
   // off the bird: fall straight down from where it is right now
@@ -10397,7 +10473,12 @@
       p.x += -Math.sin(d.heading) * off;
       p.y += Math.cos(d.heading) * off;
     }
-    if (p === player) SFX.dodge();
+    if (p === player) {
+      SFX.dodge();
+      // a hard cut, not a crossfade: the ride's song is INTERRUPTED by the jump,
+      // which then runs to its end and hands over to FOXGLOVE DROP (TRACKS.next)
+      SFX.music.play('jump', { out: 0.1, in: 0.05 });
+    }
   }
 
   // touchdown: the nearest open tile to the fall point becomes the slot's
@@ -10430,7 +10511,7 @@
       state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, the camera settles
       state.menu.screenT = 0;
       state.shake = 5;
-      SFX.hit();
+      SFX.land();
     } else {
       addFloater(p.x, p.y - 20, p.name + ' LANDED', TEAMS[p.team].mark);
     }
@@ -10625,7 +10706,12 @@
   loadSettings();
   relayout(); // fitCanvas already ran at load; this places the UI for the fitted view
   SFX.setVolume(settings.volume);
+  SFX.setMusicVolume(settings.musicVol);
+  SFX.setSfxVolume(settings.sfxVol);
   SFX.setMuted(settings.muted);
+  // the title track. Browsers refuse audio before a gesture, so SFX.music holds
+  // this as pending and the first click or keypress starts it (see js/audio.js).
+  SFX.music.play('intro', { in: 1.5 });
   genWorld();
   placeLandmarks();  // worldgen's last pass, before the ground is baked
   spawnAnimals();
@@ -10746,7 +10832,14 @@
     setTool: (i, p) => { (p || player).tool = i; },
     getTool: (p) => (p || player).tool,
     cam: () => ({ x: camX, y: camY }),
-    startGame, beginIntro, beginSelect, lockIn, setChamp, CHAMPS, menu: state.menu, menuHit, menuClick, menuKey, settingsHit, selectHit,
+    startGame, beginIntro, beginSelect, lockIn, setChamp, CHAMPS, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
+    // the ESC panel: what the pointer is over, the speaker's plate, and every
+    // row anchor - so a driver can click a dial without guessing at the pitch
+    settingsHit, muteBtnRect,
+    get settingsRows() {
+      return { vol: ROW_SOUND, music: ROW_MUSIC, sfx: ROW_SFX, map: ROW_MAP,
+        shake: ROW_SHAKE, info: ROW_INFO, cursor: ROW_CURSOR, x: SL_X, w: SL_W, panel: { x: SET_X, y: SET_Y, w: SET_W, h: SET_H } };
+    },
     layout: () => ({ VIEW_W, VIEW_H, SET_X, SET_Y, SL_X, ROW_SHAKE, PANEL_X, PANEL_Y, MM_CX, MM_CY }),
     hideUI: false,
     step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },

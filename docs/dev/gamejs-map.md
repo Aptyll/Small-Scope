@@ -70,6 +70,8 @@ don't cite line numbers here, they go stale within a session.
 | the TAB standings, the event feed | `logEvent`, `renderEventLog`, `scoreGroups`, `renderScoreboard` | `scoreboard & log` |
 | the M map | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap` | `world map (M)` |
 | the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
+| the three sound dials, the speaker that mutes them, the grey-when-muted fill | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow` | `settings menu (ESC)` |
+| the songs, the sampled one-shots, the dials behind them | `SFX.music`, `TRACKS`, `SAMPLES`, `smp`, `trim`, `setAmbience` | [js/audio.js](../../js/audio.js) |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
 | the death/respawn overlay, spectating, back to the lobby, who the camera frames, the planks all three endings share | `endMatch`, `DEAD_ITEMS`, `viewPlayer`, `specNext`, `toLobby`, `renderDead`, `deadLayout`, `deadReady`, `drawEndPlanks` | `death & spectate` |
 | the victory screen: its timeline, its frozen numbers, its sound cues, its art | `WIN_T`, `winLayout`, `winSnapshot`, `winCues`, `winSkip`, `renderVictory`, `stampGrid`, `drawWinAurora`, `drawWinRays`, `drawWinMotes`, `drawWinBanner`, `drawWinBrazier`, `drawWinDais`, `drawWinStatPlate` | `victory` |

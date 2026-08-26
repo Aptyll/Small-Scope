@@ -61,8 +61,9 @@ The codebase carries at least five live hint strings:
 | [js/game.js:6089](../../js/game.js) | `'ESC CLOSE'` |
 | [js/game.js:6769](../../js/game.js), [:6787](../../js/game.js) | `'ESC BACK'` |
 
-Plus the entire settings panel, which is text rows and ON/OFF values with no iconography, and the
-eagle drop's `SPACE - JUMP` and `THE EAGLE DROPS YOU AT THE END OF ITS LINE`.
+Plus most of the settings panel, which is text rows and ON/OFF values (the mute control is the one
+row that went the other way: a speaker plate that greys the dials it silences, and no label at
+all), and the eagle drop's `SPACE - JUMP` and `THE EAGLE DROPS YOU AT THE END OF ITS LINE`.
 
 **Why it matters — and why this is a decision, not a fix.** Every one of these is a reasonable
 piece of UI. First-run onboarding and modal-dismiss affordances are the two places where a text
