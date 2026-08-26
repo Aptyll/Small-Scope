@@ -31,7 +31,8 @@ underfoot sets friction and speed caps. All the tuning constants live in the con
 - **Dodge roll** is an impulse into the same velocity: `tryDodge()` sets `vx/vy` to
   `max(DODGE_SPEED, current speed)` (a dash never slows you), the roll itself applies no
   friction, and the speed **carries out of the roll** for the surface to spend — so dashes
-  chain into real speed on ice but die fast on snow. I-frames still end with the roll.
+  chain into real speed on ice but die fast on snow. I-frames still end with the roll. That
+  carried speed is also what the roll **hits** for — see [The roll is a hit](#the-roll-is-a-hit).
 - **Shift = slide**: engages only above `SLIDE_MIN` (85), drops out below `SLIDE_EXIT` (55) or
   on release (hysteresis). Sliding keeps momentum across snow (low friction, reduced steering).
   Tools work normally while sliding — you can draw, hold, and loose the bow or E a tree
@@ -51,7 +52,9 @@ underfoot sets friction and speed caps. All the tuning constants live in the con
   surface at a flat `PRONE_SPEED`, and sliding is refused outright. See
   [Prone](#prone-under-the-snow).
 - **Walls kill the blocked axis** (`blockedX` → `vx = 0`, same for y) in both the roll and
-  normal movement, so you never grind along a treeline at full speed.
+  normal movement, so you never grind along a treeline at full speed. A wall taken **head-on
+  mid-roll** costs more than the axis: past `TACKLE_MIN` of speed driven into it, that is a
+  [tackle](#the-roll-is-a-hit).
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
   ice-gliding use the standing pose. `die(p)` and `Player.reset()` zero `vx/vy` and clear
   `sliding`. Footprints and slide trails from every slot share the one `footprints` decal array.
@@ -71,6 +74,12 @@ push goes through `moveEntity(…, strict)`, which treats open water as a wall e
 player's share is tried first, so a small unit can never pin a player in a corner: the pinner
 is the one that gets moved (a rabbit wedged between you and a rock squirts out sideways).
 Two passes settle piles; the pass is deterministic (fixed order, no `rng`).
+
+**A live dodge roll is the one exception to any of it.** `separateUnits` skips a pair outright
+when one side is a player mid-roll and the other is *small* — every player, every robot, and
+every animal but a deer — because the roll goes through them and
+[swipes them](#the-roll-is-a-hit) instead of shoving them. A deer keeps its mass and its contact,
+which is what makes running into one a tackle rather than a pass.
 
 ## Pathfinding
 
@@ -288,6 +297,51 @@ charges; pause, the settings panel and the wheel block the local player's roll (
 the local slot only — a rival's tells are their draw meter and their position. A roll out of
 [prone](#prone-under-the-snow) is legal and is the fast way out of the snow: `tryDodge` stands the
 player up first, so the escape costs a charge.
+
+### The roll is a hit
+
+A dash is a body thrown at whatever is in front of it. Every step of the roll, `rollSweep(p)`
+takes everything inside `ROLL_HIT_R` (7px) of the roller's own radius and splits it two ways:
+
+- **Small — rabbits, wolves, robots, other slots.** One swipe each, **once per roll**
+  (`p.rollHit`, cleared by `tryDodge` and again when the roll ends), and the roll goes straight
+  **through** them: `separateUnits` skips any pair where one side is a live roll and the other is
+  small, so there is nothing to bump against. Friendly bots and teammates are passed through
+  untouched — you roll *under* them, you do not run them down. A rival with i-frames up (mid-roll
+  of their own) refuses the whole thing, damage and stun both, so **rolls cancel rolls**.
+- **Big — a deer, a tree, a rock, a building.** A **tackle**: both sides take it, both are
+  stunned, and the roll ends on the spot. `rollTackle` drops the roller's own i-frames first,
+  because the tackle is the one hit a roll cannot dodge, and bounces them back off the contact.
+  A wall only counts when it is taken head-on — the speed actually driven into the axis
+  `moveEntity` refused has to clear `TACKLE_MIN` (120 px/s), so brushing past a pine at a run is
+  free and dashing straight into one is not. `tackleObject` puts real damage into an **enemy
+  building** (it has an hp pool); a tree or a rock only shudders, because its `hp` is a chop count
+  behind a tool gate and a shoulder is not an axe. Fish are under the ice and are in none of it.
+
+**Everything scales with the speed the roll is actually carrying** — `rollPow` runs from the
+champion's own `kit.dodgeSpeed` up to `ROLL_FAST` (340 px/s), which is why a dash launched out of
+an ice slide deals `ROLL_DMG`'s top end (16 and a 1.1s stun) against 5 and 0.5s off a standing
+start. That is the whole reason to chain a dash out of momentum instead of from rest.
+
+### Stun
+
+`stunUnit(e, t)` is one state across all three kinds of unit, and it never touches velocity —
+whatever hit you still slides you, and the surface spends it like any other momentum.
+
+- a **player** has every intent dropped out of `p.input` at the top of `updatePlayer` (movement,
+  fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a
+  human and an AI fill are pinned by the identical window. The draw, the swing in flight and any
+  roll are cancelled outright.
+- an **animal** or a **robot** skips its brain for the window in `updateAnimal`/`updateRobot`; a
+  shove still moves it, and an animal drops the route it was walking when it comes round.
+
+The tell is one visual everywhere: **three sparks orbiting** (`drawStunStars`), phased off the
+unit's own `stunT` so no global clock is involved and two stunned units are never in lockstep.
+Over an animal or a robot they sit above the health bar. On a player they ride a badge that
+**mirrors the level badge on the other side of the overhead frame** — same backing and track, its
+left frame column shared with the health bar backing's right edge — whose 5×5 track drains from
+the bottom as the window runs out (`stunMax` is the height it drains from). It is drawn for every
+slot, like the stamina bar: a rival seeing stars is a tell worth having.
 
 ## Prone: under the snow
 

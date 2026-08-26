@@ -5,7 +5,9 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - Always-in-hand bow, but **arrows are finite**: a `QUIVER_MAX` quiver, a per-shot renock cooldown
   (`kit.nock`), slow fletching, and every spent arrow sticks in the snow as a `shafts` entry
   anyone can walk over. **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
-- Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding.
+- Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding. **A roll is a
+  hit** scaled by the speed it carries: through anything small (one swipe + stun each), a
+  both-sides tackle into anything big.
 - **Ctrl goes prone** (a tap, never a hold — Ctrl+W closes the tab): lie still on snow and it covers
   you. You crawl at `PRONE_SPEED`, and the arrow loosed out of *full* cover hits for `AMBUSH_MUL`
   and breaks it.
@@ -131,7 +133,9 @@ Cross-file invariants — breaking one produces a bug that looks unrelated to it
 - **Added or removed a light-emitting object?** Call `rebuildLights()`.
 - **Units are solid to each other.** `separateUnits()` runs once per sim step after every mover
   has stepped and pushes overlapping players/animals/robots apart; a new kind of thing that walks
-  must be added to its list (and to `UNIT_MASS`) or it will walk through everyone.
+  must be added to its list (and to `UNIT_MASS`, and marked `small` unless a roll should stop on
+  it) or it will walk through everyone. A player mid-roll is the one exception: it skips every
+  contact with a small unit, because `rollSweep` turns that contact into a hit instead.
 - **Anything that walks to a goal routes there** through `navTo`/`navStep` (the `pathfinding`
   banner), never by steering straight at it, and **drops the goal when they return `ok = false`**
   (no route, or pinned) — there are no stuck timers; a caller that ignores `ok` stands still forever.

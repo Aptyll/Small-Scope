@@ -55,6 +55,22 @@
   const DODGE_CHARGES = 2;
   const DODGE_CD = 3.5;     // seconds to refill one charge
 
+  // The roll as a weapon. A dash goes *through* anything small - rabbits,
+  // wolves, robots, other slots - swiping each of them once per roll and
+  // leaving them seeing stars; anything too big to go through (a deer, a tree,
+  // a rock, a building) is a tackle instead, which hurts and stuns both sides
+  // and ends the roll where it hit. Everything scales off the speed the roll is
+  // actually carrying, so a dash launched out of an ice slide lands far harder
+  // than one off a standing start - which is the whole reason to chain them.
+  const ROLL_HIT_R = 7;      // px of roll body, added to the target's own radius
+  const ROLL_FAST = 340;     // px/s the scaling tops out at (a dash off ice)
+  const ROLL_DMG = [5, 16];  // damage at the champion's own dodgeSpeed .. ROLL_FAST
+  const ROLL_STUN = [0.5, 1.1];    // s the victim is out for, over the same range
+  const TACKLE_STUN = [0.35, 0.8]; // ...and what a tackler gives themselves
+  const TACKLE_SELF = 0.55;  // share of a tackle's damage the roller eats
+  const TACKLE_MIN = 120;    // px/s driven into the blocked axis before a wall is a tackle, not a graze
+  const ROLL_KB = 90;        // px/s shove out of a roll hit
+
   // Prone: lie down in the snow, pull it over yourself, and be almost - not
   // quite - invisible. Free, and paid for entirely in speed: the burrow only
   // builds while you are lying perfectly still, and the crawl that carries you
@@ -903,6 +919,8 @@
       this.quiverFlash = 0; this.readyFlash = 0; this.dryT = 0; // HUD tells: gained / renocked / pressed empty
       this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
       this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
+      this.rollHit = [];                             // what this roll has already swiped (once each)
+      this.stunT = 0; this.stunMax = 0;              // seeing stars: no intent gets through
       this.stamGhost = 0; this.stamGhostT = 0;      // spent-stamina ghost
       this.sliding = false; this.slideT = 0; this.trailD = 0; this.slideDustT = 0;
       // prone: lying down, how much snow is over you (0..1), the get-up window,
@@ -1653,10 +1671,10 @@
   function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : e.kind === 'wolf' ? 4.5 : 3; }
   function separateUnits() {
     const us = [];
-    for (const p of players) if (p.active && !p.dead && !inAir(p)) us.push({ e: p, r: PLAYER_R, m: UNIT_MASS.player, vel: true });
+    for (const p of players) if (p.active && !p.dead && !inAir(p)) us.push({ e: p, r: PLAYER_R, m: UNIT_MASS.player, vel: true, small: true, roll: p.dodgeT > 0 });
     // birds fly: they are the one unit nothing collides with
-    for (const a of animals) if (!a.dead && a.kind !== 'bird') us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false });
-    for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS.robot, vel: false });
+    for (const a of animals) if (!a.dead && a.kind !== 'bird') us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false, small: a.kind !== 'deer' });
+    for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS.robot, vel: false, small: true });
     // velocity a unit carries into a contact: players their momentum, the
     // rest their knockback (their walk is direction-only and re-chosen each tick)
     const vx = (u) => u.vel ? u.e.vx + u.e.kbx : u.e.kbx;
@@ -1664,6 +1682,10 @@
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 0; i < us.length; i++) for (let j = i + 1; j < us.length; j++) {
         const a = us[i], b = us[j];
+        // a live roll is not there for anything small: it passes straight
+        // through and rollSweep turns that contact into a hit instead. A deer
+        // is the one unit heavy enough to still stop it, and that stop is a tackle.
+        if ((a.roll && b.small) || (b.roll && a.small)) continue;
         let dx = b.e.x - a.e.x, dy = b.e.y - a.e.y;
         let d = Math.hypot(dx, dy);
         const min = a.r + b.r;
@@ -1951,7 +1973,7 @@
   // E: swing the right tool at the cursor's tile. Held E repeats every swing
   // cooldown; the bow comes back on its own once the cooldown runs out.
   function tryWork(p) {
-    if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0) return;
+    if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0 || p.stunT > 0) return;
     if (p.prone) { risePlayer(p); return; } // no swinging an axe on your belly: E stands you up
     const t = workTarget(p);
     if (!t || !t.near) return;
@@ -1972,7 +1994,7 @@
   // dodge roll: dash with i-frames in the held movement direction (8-way),
   // falling back to the facing direction when no key is down
   function tryDodge(p) {
-    if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead) return;
+    if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead || p.stunT > 0) return;
     risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
     let dx = p.input.mx, dy = p.input.my;
     if (!dx && !dy) {
@@ -1989,6 +2011,7 @@
     p.vy = p.dodgeVY;
     p.dodgeT = DODGE_T;
     p.dodgeDustT = 0;
+    p.rollHit.length = 0; // a new roll may swipe everything again, once each
     // remember the fill level before the spend so the bar can ghost the lost chunk
     const regenP = p.dodgeCharges < DODGE_CHARGES ? 1 - p.dodgeRegenT / kitOf(p).dodgeCd : 0;
     p.stamGhost = Math.max(p.stamGhost, (p.dodgeCharges + regenP) / DODGE_CHARGES);
@@ -2001,6 +2024,123 @@
     else if (dy !== 0) p.dir = dy > 0 ? 'down' : 'up';
     burst(p.x, p.y + 4, '#dfe8f4', 6, 40, 0.35, true);
     if (nearPlayer(p.x, p.y)) SFX.dodge();
+  }
+
+  // ---- the roll as a hit ---------------------------------------------------
+  // A dash is a body thrown at whatever is in front of it. updatePlayer's roll
+  // branch calls rollSweep() every step: anything small inside the roll's body
+  // takes one swipe per roll and is rolled through (separateUnits skips the
+  // pair, so there is nothing to bump against), and anything too big to go
+  // through ends the roll in a tackle that hurts both sides. Fish are under the
+  // ice and are not in any of it.
+
+  // How hard the roll in progress hits: the scale runs from the champion's own
+  // dodgeSpeed (the floor a standing dash starts at) up to ROLL_FAST, so speed
+  // stolen off ice or out of a slide is what makes a roll dangerous.
+  function rollPow(p, sp) {
+    const base = kitOf(p).dodgeSpeed;
+    return Math.max(0, Math.min(1, (sp - base) / Math.max(1, ROLL_FAST - base)));
+  }
+  function rollLerp(r, t) { return r[0] + (r[1] - r[0]) * t; }
+  function rollDmg(p, sp) { return Math.max(1, Math.round(rollLerp(ROLL_DMG, rollPow(p, sp)))); }
+
+  // One state, three kinds of unit. A stunned player has every intent dropped
+  // out of its input struct (so a human and a bot are pinned by exactly the
+  // same window), a stunned animal or robot skips its brain for it. Nobody
+  // loses their velocity: whatever knocked you still slides you, and the
+  // surface spends it the way it spends any other momentum.
+  function stunUnit(e, t) {
+    if (t <= 0) return;
+    const cur = e.stunT || 0;
+    e.stunT = Math.max(cur, t);
+    e.stunMax = cur > 0 ? Math.max(e.stunMax || 0, e.stunT) : e.stunT;
+    if (e instanceof Player) {
+      e.dodgeT = 0;                                  // no roll survives being stunned out of it
+      if (e.charging) { e.charging = false; e.chargeT = 0; }
+      e.fireArmed = false;
+      e.swingT = 0; e.swingHitDone = true;           // the swing in flight never lands
+      e.sliding = false;
+    }
+    burst(e.x, e.y - 9, '#ffe9a8', 4, 26, 0.4, true);
+  }
+
+  // A tackle: the roll met something it cannot go through. Both sides take it,
+  // both are stunned, and the roll ends on the spot - scaled by `sp`, the speed
+  // it was carrying into the hit. The roller's i-frames are dropped first,
+  // because the tackle is the one hit a roll cannot dodge.
+  function rollTackle(p, sp, nx, ny) {
+    const t = rollPow(p, sp);
+    p.dodgeT = 0;
+    p.invuln = 0;
+    p.sliding = false;
+    p.vx = -nx * 30; p.vy = -ny * 30; // bounced back off it
+    damagePlayer(p, Math.max(1, Math.round(rollLerp(ROLL_DMG, t) * TACKLE_SELF)), -nx, -ny, null, 'tackle');
+    if (!p.dead) stunUnit(p, rollLerp(TACKLE_STUN, t));
+    if (p === player) state.shake = Math.max(state.shake, 4);
+    if (nearPlayer(p.x, p.y)) SFX.hit();
+    burst(p.x + nx * 5, p.y - 3, '#eef4fb', 8, 45, 0.45, true);
+  }
+
+  // The other half of a tackle into scenery. A building on another team takes
+  // the hit for real - it has an hp pool and a body to break. A tree or a rock
+  // has neither: its `hp` is a chop count sitting behind a tool gate, so being
+  // run into shakes it and dumps its snow and nothing more.
+  function tackleObject(o, dmg, p) {
+    if (!o) return;
+    o.flash = 0.1;
+    o.shake = 0.26;
+    const c = structCenter(o);
+    burst(c.x, c.y - 6, '#eef4fb', 8, 45, 0.5, true);
+    if (!STRUCTS[o.type] || ownsStruct(o, p)) return;
+    o.hp -= dmg;
+    addDmgFloater(c.x, c.y - 12, dmg);
+    if (o.hp <= 0) {
+      destroyStructure(o, true);
+      logEvent(p.name + ' WRECKED A ' + STRUCTS[o.type].name, p);
+    }
+  }
+
+  // what the roll just slammed into, if anything: the tile straight ahead on
+  // the axis the wall refused. Null for the world border, which is a wall with
+  // nothing standing in it - the roller still eats the tackle either way.
+  function tackleObjAhead(p, nx, ny) {
+    const tx = Math.floor((p.x + nx * (PLAYER_R + 3)) / TILE);
+    const ty = Math.floor((p.y + ny * (PLAYER_R + 3)) / TILE);
+    return inWorld(tx, ty) ? structOf(objAt(tx, ty)) : null;
+  }
+
+  // Everything the roll is touching this step. Small units are swiped and
+  // passed through, once each per roll (p.rollHit); a deer is swiped and then
+  // stops the roll dead. Friendly units and teammates are passed through
+  // untouched - you roll under them, you do not run them down.
+  function rollSweep(p) {
+    const sp = Math.hypot(p.vx, p.vy);
+    const nx = sp > 1 ? p.vx / sp : 0, ny = sp > 1 ? p.vy / sp : 0;
+    const dmg = rollDmg(p, sp), stun = rollLerp(ROLL_STUN, rollPow(p, sp));
+
+    for (const a of animals) {
+      if (a.dead || a.kind === 'bird' || p.rollHit.includes(a)) continue;
+      if (Math.hypot(a.x - p.x, a.y - p.y) > ROLL_HIT_R + unitRadius(a)) continue;
+      p.rollHit.push(a);
+      hurtAnimal(a, dmg, nx, ny, ROLL_KB, p.id);
+      if (a.hp > 0) stunUnit(a, stun);
+      if (a.kind === 'deer') { rollTackle(p, sp, nx, ny); return; } // too much animal to go through
+    }
+    for (const b of robots) {
+      if (b.dead || b.team === p.team || p.rollHit.includes(b)) continue;
+      if (Math.hypot(b.x - p.x, b.y - p.y) > ROLL_HIT_R + unitRadius(b)) continue;
+      p.rollHit.push(b);
+      hurtRobot(b, dmg, nx, ny, p);
+      if (!b.dead) stunUnit(b, stun);
+    }
+    for (const q of players) {
+      if (!enemyOf(p, q) || p.rollHit.includes(q)) continue;
+      if (Math.hypot(q.x - p.x, q.y - p.y) > ROLL_HIT_R + PLAYER_R) continue;
+      p.rollHit.push(q);
+      if (q.invuln > 0) continue; // a rival mid-roll of their own is untouchable: rolls cancel rolls
+      damagePlayer(q, dmg, nx, ny, p);
+      if (!q.dead) stunUnit(q, stun);
+    }
   }
 
   // ---- prone ---------------------------------------------------------------
@@ -2500,7 +2640,7 @@
       kind, x, y, hp, maxHp: hp,
       dir: rng() < 0.5 ? 'left' : 'right',
       goal: null, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
-      animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
+      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, stunT: 0, stunMax: 0,
       fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
       home: null,                          // the landmark it belongs to, if any
       target: null, biteCd: 0,           // wolf: its quarry and its bite rhythm
@@ -2514,6 +2654,25 @@
   function animalHit(a, x, y) {
     const r = a.kind === 'bird' ? 5 : 8;
     return Math.hypot(a.x - x, a.y - (a.alt || 0) - 3 - y) < r;
+  }
+
+  // One animal taking a hit, from an arrow or from a body rolled into it. Both
+  // come through here so a swipe reacts exactly like a shot does - the den
+  // wakes, prey bolts, the flock scatters - and `lastHit` (the slot whose
+  // HUNTSMAN bonus the kill pays, see animalDies) is stamped in one place.
+  function hurtAnimal(a, dmg, nx, ny, kb, owner, ambush) {
+    a.hp -= dmg;
+    a.flash = 0.12;
+    a.lastHit = owner;
+    // a wolf does not run from a hit - the whole den comes for you
+    if (a.kind === 'wolf') wakePack(a, players[owner]);
+    else if (a.kind === 'bird') flushBirds(a.home, a);
+    else a.fleeT = a.kind === 'rabbit' ? 1.4 : 2.2;
+    addDmgFloater(a.x, a.y - (a.alt || 0) - 12, dmg, false, ambush);
+    a.kbx = nx * kb; a.kby = ny * kb;
+    burst(a.x, a.y - (a.alt || 0) - 4, HIT_PUFF[a.kind] || '#a5825a', 6, 40, 0.4);
+    if (ambush) ambushFx(a.x, a.y - (a.alt || 0) - 4);
+    if (nearPlayer(a.x, a.y)) { SFX.hit(); if (a.hp > 0 && a.kind !== 'bird') SFX.yelp(); }
   }
 
   function spawnAnimals() {
@@ -2623,7 +2782,15 @@
     a.flash = Math.max(0, a.flash - dt);
     a.kbx *= Math.pow(0.02, dt);
     a.kby *= Math.pow(0.02, dt);
-    if (a.kind === 'wolf') updateWolf(a, dt);
+    if (a.stunT > 0) {
+      // seeing stars: no brain for the window, and the route it was walking is
+      // dropped rather than resumed - a tackle can slide a body a long way from
+      // the leg it was on. A shove still moves it, same as any idle animal.
+      a.stunT = Math.max(0, a.stunT - dt);
+      a.moving = false;
+      if (Math.abs(a.kbx) + Math.abs(a.kby) > 1) moveEntity(a, a.kbx * dt, a.kby * dt, unitRadius(a));
+      if (a.stunT <= 0) { a.goal = null; a.fleeGoal = null; navClear(a); a.idleT = 0.3; }
+    } else if (a.kind === 'wolf') updateWolf(a, dt);
     else if (a.kind === 'bird') updateBird(a, dt);
     else updatePrey(a, dt);
     a.x = Math.max(8, Math.min(WORLD * TILE - 8, a.x));
@@ -3348,7 +3515,7 @@
       tgt: null, workT: 0, atkCd: 0, avoid: null, avoidT: 0, nav: null,
       carry: 0, // gold held, deposited at home
       moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
-      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
+      animT: rng() * 2, flash: 0, kbx: 0, kby: 0, stunT: 0, stunMax: 0, dead: false,
     };
   }
 
@@ -3395,6 +3562,15 @@
     b.atkCd = Math.max(0, b.atkCd - dt);
     b.kbx *= Math.pow(0.02, dt);
     b.kby *= Math.pow(0.02, dt);
+    if (b.stunT > 0) {
+      // rattled: the brain is off, but a shove still slides the chassis
+      b.stunT = Math.max(0, b.stunT - dt);
+      b.moving = false;
+      if (Math.abs(b.kbx) + Math.abs(b.kby) > 1) moveEntity(b, b.kbx * dt, b.kby * dt, 3);
+      b.x = Math.max(8, Math.min(WORLD * TILE - 8, b.x));
+      b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
+      return;
+    }
     const home = b.home;
     const hm = structMouth(home), hx = hm.x, hy = hm.y;
     let moving = false;
@@ -3622,7 +3798,7 @@
   }
 
   // what the log says when nobody gets the credit
-  const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES' };
+  const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID' };
 
   // Death empties the wallet AND the backpack. Gold goes to the credited
   // killer outright (through gainGold, so a kill also levels the killer - the
@@ -3670,6 +3846,7 @@
     p.chargeT = 0;
     p.fireArmed = false;
     p.dodgeT = 0;
+    p.stunT = 0; p.stunMax = 0;
     p.vx = p.vy = 0;
     p.sliding = false;
     p.prone = false; p.hide = 0; p.riseT = 0;
@@ -4373,19 +4550,7 @@
       if (!dead) {
         for (const an of animals) {
           if (animalHit(an, a.x, a.y)) {
-            an.hp -= a.dmg;
-            an.flash = 0.12;
-            an.lastHit = a.owner; // whose HUNTSMAN bonus the kill pays (animalDies)
-            // a wolf does not run from an arrow - the whole den comes for you
-            if (an.kind === 'wolf') wakePack(an, players[a.owner]);
-            else if (an.kind === 'bird') flushBirds(an.home, a);
-            else an.fleeT = an.kind === 'rabbit' ? 1.4 : 2.2;
-            addDmgFloater(an.x, an.y - (an.alt || 0) - 12, a.dmg, false, a.ambush);
-            const kb = 25 + 45 * a.pow;
-            an.kbx = nx * kb; an.kby = ny * kb;
-            burst(an.x, an.y - (an.alt || 0) - 4, HIT_PUFF[an.kind] || '#a5825a', 6, 40, 0.4);
-            if (a.ambush) ambushFx(an.x, an.y - (an.alt || 0) - 4);
-            if (nearPlayer(an.x, an.y)) { SFX.hit(); if (an.hp > 0 && an.kind !== 'bird') SFX.yelp(); }
+            hurtAnimal(an, a.dmg, nx, ny, 25 + 45 * a.pow, a.owner, a.ambush);
             dead = true;
             break;
           }
@@ -4520,6 +4685,19 @@
       return;
     }
 
+    // stunned: rolled through, or the wrong end of a tackle. Every intent is
+    // dropped where it arrives rather than blocked at each action, so a human
+    // and an AI fill are pinned by the identical window through the one input
+    // struct they share. Velocity is left alone - whatever hit you still slides
+    // you, and the surface spends it like any other momentum.
+    if (p.stunT > 0) {
+      p.stunT = Math.max(0, p.stunT - dt);
+      inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+      inp.work = inp.fire = inp.slide = false;
+      inp.cmd = null;
+      inp.mx = inp.my = 0;
+    }
+
     // edge-triggered intents, consumed here so a controller only has to set them
     if (inp.dodge) { inp.dodge = false; tryDodge(p); }
     if (inp.prone) { inp.prone = false; tryProne(p); }
@@ -4585,15 +4763,27 @@
       // rolling: the dash owns the velocity; friction waits until the roll ends,
       // so whatever speed the dash reached is carried out for the surface to spend
       p.dodgeT -= dt;
+      const vx0 = p.vx, vy0 = p.vy;
       const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
-      if (mv.blockedX) p.vx = 0;
+      if (mv.blockedX) p.vx = 0; // a wall still kills that axis - see below for when it costs more
       if (mv.blockedY) p.vy = 0;
+      // A wall taken head-on is a tackle, not a graze: only the speed actually
+      // driven into the blocked axis counts, so brushing past a tree at a run
+      // is free while dashing straight into one is not.
+      const into = Math.max(mv.blockedX ? Math.abs(vx0) : 0, mv.blockedY ? Math.abs(vy0) : 0);
+      if (into > TACKLE_MIN) {
+        const d = Math.hypot(vx0, vy0) || 1, tnx = vx0 / d, tny = vy0 / d;
+        tackleObject(tackleObjAhead(p, tnx, tny), rollDmg(p, d), p);
+        rollTackle(p, d, tnx, tny);
+      } else {
+        rollSweep(p); // everything small in the way takes a swipe and is rolled through
+      }
       p.dodgeDustT -= dt;
       if (p.dodgeDustT <= 0) {
         p.dodgeDustT = 0.05;
         burst(p.x, p.y + 5, '#dfe8f4', 2, 22, 0.3, true);
       }
-      if (p.dodgeT <= 0) burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true);
+      if (p.dodgeT <= 0) { p.rollHit.length = 0; burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true); }
     } else {
       const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
       // a belly crawl is a flat crawl on any surface - no ice cap, no draw
@@ -5503,11 +5693,14 @@
 
     // players: the body circle everything is pushed out of, and the hurt circle
     // an arrow is tested against - which sits 6px UP, at the chest, so a shot
-    // that looks like it went over the head is a hit and this is where you see it
+    // that looks like it went over the head is a hit and this is where you see it.
+    // A live roll adds the sweep it swipes units with, which is the body circle
+    // grown by ROLL_HIT_R and centred on the feet, not the chest.
     for (const p of players) {
       if (!p.active || p.dead || inAir(p)) continue;
       hbRing(p.x - ex, p.y - ey, PLAYER_R, HB_BODY);
       hbRing(p.x - ex, p.y - 6 - ey, 7, HB_HURT);
+      if (p.dodgeT > 0) hbRing(p.x - ex, p.y - ey, PLAYER_R + ROLL_HIT_R, HB_HURT);
       hbDot(p.x - ex, p.y - ey, HB_BODY);
     }
 
@@ -5919,6 +6112,22 @@
     ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
   }
 
+  // Seeing stars. Three sparks on an orbit, phased off the unit's own stun
+  // timer so the ring keeps turning without a global clock and two stunned
+  // units are never in lockstep; the far half of the orbit dims, which is what
+  // sells it as a ring rather than three blinking dots. This is the whole
+  // vocabulary for the state - squashed and wide over an animal's head, round
+  // and tight inside the badge on a player's frame - so it reads the same
+  // wherever it turns up.
+  function drawStunStars(cx, cy, e, r, squash) {
+    const a0 = -(e.stunT || 0) * 9, sq = squash === undefined ? 0.5 : squash;
+    for (let i = 0; i < 3; i++) {
+      const a = a0 + i * Math.PI * 2 / 3;
+      ctx.fillStyle = Math.sin(a) > 0 ? '#ffb641' : '#fff3c4'; // the near half is the bright one
+      ctx.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r * sq), 1, 1);
+    }
+  }
+
   // A big build's reveal: the first 12% of the timer is the staked foundation
   // alone, then the sprite rises bottom-up. Shared by the draw pass (the clip)
   // and updateStructures (sparks along the edge), so the two can't disagree.
@@ -6133,6 +6342,7 @@
     ctx.fillRect(Math.round(a.x - ex) - sw, Math.round(a.y + 2 - ey), sw * 2, 2);
     drawSpriteFlash(spr, px, py, a.flash);
     drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
+    if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : 10), a, 4);
   }
 
   // The only thing in the world that leaves the ground: the sprite lifts off
@@ -6194,6 +6404,7 @@
     }
 
     drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8);
+    if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
   }
 
   // every player draws through here - the local one, the AI fills, network
@@ -6354,6 +6565,22 @@
       }
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
+    }
+    // stunned: the mirror of the level badge on the other side of the frame -
+    // same backing, same track, sharing its left frame column with the health
+    // bar backing's right edge, so the stack still reads as one outline. The
+    // sparks say what the state is and the track drains from the bottom as the
+    // window runs out, which answers the only question a stun asks.
+    if (p.stunT > 0) {
+      const bx = Math.round(p.x - ex) + 8, by = hy - 8;
+      ctx.fillStyle = 'rgba(12,18,42,0.78)';
+      ctx.fillRect(bx, by, 6, 7); // 6 wide: the column to its left is the bar backing, already painted
+      ctx.fillStyle = '#3a3448';
+      ctx.fillRect(bx, by + 1, 5, 5);
+      const h = Math.max(1, Math.round(5 * Math.min(1, p.stunT / Math.max(0.01, p.stunMax))));
+      ctx.fillStyle = '#b06a14'; // bright enough to read as a fill against the track, dim enough to sit under the sparks
+      ctx.fillRect(bx, by + 6 - h, 5, h);
+      drawStunStars(bx + 2, by + 3, p, 1.5, 1);
     }
     // bow draw meter: yellow while charging, turning hot orange the moment the
     // draw is full. Drawn for everyone - it is the tell that says a shot is
@@ -8651,9 +8878,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.47'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.48'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.48', 'THE DODGE ROLL IS A WEAPON NOW - IT GOES STRAIGHT THROUGH RABBITS WOLVES ROBOTS AND RIVALS, HITTING AND STUNNING EACH ONE ONCE, WHILE A DEER TREE ROCK OR BUILDING IS A TACKLE THAT HURTS AND STUNS BOTH OF YOU - AND EVERY BIT OF IT HITS HARDER THE FASTER YOU WERE GOING, SO DASH OUT OF AN ICE SLIDE.'],
     ['1.47', 'EVERY ANIMAL WALKS A REAL ROUTE NOW INSTEAD OF DRIFTING - THEY ROUND THE TREES AND STOP WHERE THEY MEANT TO - AND DEER BOLT FROM YOU THE WAY RABBITS DO, SO CRAWLING IN UNDER THE SNOW IS HOW YOU GET CLOSE TO ONE.'],
     ['1.46', 'THE FROSTLANDS HAVE A SCORE AND A VOICE NOW - A SONG FOR THE MENU, THE CLASS PAGE, THE EAGLE AND THE END SCREEN, RECORDED SOUND FOR EVERY AXE BOW AND BOOT, AND MASTER MUSIC AND SOUNDS DIALS IN THE ESC MENU.'],
     ['1.45', 'BUILD YOUR TEAM A KEEP AND DEATH IS A RESPAWN TIMER INSTEAD OF THE END - LOSE IT AND IT IS PERMANENT AGAIN - AND A FINISHED KEEP CRAFTS RARITY-ROLLED CARDS FOR A PERMANENT PICK-ONE-OF-THREE UPGRADE.'],
@@ -10872,6 +11100,12 @@
     workTarget: (p) => workTarget(p || player),
     fireArrow: (p) => fireArrow(p || player),
     tryDodge: (p) => tryDodge(p || player),
+    // the roll as a hit: stun anything by hand, and read back what a roll at a
+    // given speed would deal (`.` draws the sweep circle over a live dash)
+    stunUnit: (t, e) => stunUnit(e || player, t),
+    rollDmg: (sp, p) => rollDmg(p || player, sp),
+    rollSweep: (p) => rollSweep(p || player),
+    ROLL_HIT_R, ROLL_FAST, ROLL_DMG, ROLL_STUN, TACKLE_STUN, TACKLE_SELF, TACKLE_MIN,
     // prone: the burrow toggle, how buried a slot reads to anything hunting it,
     // and a way to stage a fully covered body without lying in the snow for 1.5s
     tryProne: (p) => tryProne(p || player),
