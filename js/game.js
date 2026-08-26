@@ -42,6 +42,18 @@
   const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
   const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
   const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
+  // The worker flag: one order marker per player, and everything the workers
+  // reading it are allowed to do. See the `worker flags` banner.
+  const FLAG_BASE_R = 9;     // tiles: ground this close to an ENEMY building is a march order, not a path
+  const FLAG_HARVEST_R = 7;  // tiles a harvest flag spreads outward over once its own tile is cut
+  const FLAG_SIEGE_R = 14;   // tiles a siege flag rolls on to the next enemy building inside
+  const FLAG_PATH_W = 1;     // corridor half-width in tiles: 1 = a three-tile lane
+  const ROBOT_DMG = 5;       // one worker swing, against a unit or a building
+  const ROBOT_ATK_CD = 1.1;  // seconds between those swings
+  const ROBOT_REACH = 15;    // px from a worker's body to what its axe can reach
+  const ROBOT_AGGRO = 70;    // px a worker on any flag notices a foe inside
+  const ROBOT_LEASH = 90;    // px a worker on a *defensive* flag will leave its post to swing
+  const ROBOT_MAD = 6;       // seconds a struck worker stays angry at whoever hit it
   // turret gunnery. The head is NOT baked into the sprite (see js/sprites.js) - it
   // is rasterised at the live angle, pivoting on sprite-local (16, 14).
   const TUR_PIVOT_Y = -4;   // px: the pivot, relative to the anchor tile's top edge
@@ -863,7 +875,7 @@
                            // level - holding a modifier while tapping W closes the
                            // browser tab, and preventDefault cannot stop it
       eatBerry: false, eatFish: false, // edge-triggered
-      cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
+      cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
     };
   }
 
@@ -883,6 +895,10 @@
       this.skill = [0, 0, 0, 0];          // ranks on the four hud abilities, 0..AB_RANK_MAX
       this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one
       this.cards = [];                    // picked roguelike cards, {rarity,id} - like gear, survives a respawn
+      // the one order marker this slot commands its workers with (middle click,
+      // see the `worker flags` banner): null, or { tx, ty, job, unit }. NOT
+      // cleared by reset() - an order outlives the hand that gave it.
+      this.flag = null;
       this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns
       this.respawnT = 0;                  // seconds left on an active respawn countdown
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
@@ -1104,6 +1120,23 @@
       else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
       return;
     }
+    if (e.button === 1) {
+      // The worker flag: plant, move, or - on the flag itself - pick it up.
+      // Middle click is also the browser's autoscroll, which only a
+      // preventDefault on the PRESS suppresses.
+      e.preventDefault();
+      if (state.mode !== 'play' || state.settingsOpen || state.wheel || state.draft) return;
+      SFX.unlock();
+      if (state.mapOpen) {
+        // the chart commands too: it is the only way to flag a tile off-screen
+        const mt = mapTileAt(mouse.x, mouse.y);
+        if (mt) plantFlag(player, mt.tx, mt.ty); else SFX.deny();
+        return;
+      }
+      if (overHud(mouse.x, mouse.y)) return; // the HUD swallows its own clicks
+      plantFlag(player, Math.floor(mouseWX() / TILE), Math.floor(mouseWY() / TILE));
+      return;
+    }
     if (e.button !== 0) return;
     if (state.mode === 'title') { menuClick(); return; }
     if (state.mode === 'drop') { SFX.unlock(); dropJump(player); return; }
@@ -1145,6 +1178,8 @@
     dragSlider = null;
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  // middle click plants the flag; nothing about it should reach the page
+  canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
   canvas.addEventListener('wheel', (e) => {
     if (state.mode === 'title') {
       if (state.menu.panel === 'patch') { e.preventDefault(); patchScrollBy(e.deltaY > 0 ? 16 : -16); }
@@ -2426,17 +2461,28 @@
       }
     } else if (STRUCTS[o.type]) {
       // reached from swingHit only for a building on ANOTHER team
-      const c = structCenter(o);
-      o.hp -= STRUCT_HIT_DMG;
-      if (near) SFX.hit();
-      burst(c.x, c.y - 4, '#a3794f', 5, 40, 0.4, true);
-      addDmgFloater(c.x, c.y - 12, STRUCT_HIT_DMG);
-      if (p === player) state.shake = Math.max(state.shake, 1);
-      if (o.hp <= 0) {
-        // the wreck pays out like a demolition: whoever is nearest picks the rubble up
-        destroyStructure(o, true);
-        logEvent(p.name + ' WRECKED A ' + STRUCTS[o.type].name, p);
-      }
+      hurtStruct(o, STRUCT_HIT_DMG, p);
+    }
+  }
+
+  // One blow against a building on another team. Both things that can land one
+  // - a player's E swing and a worker bot's axe on a siege flag - come through
+  // here, so the flash, the floater, the wreck's payout and the feed line are
+  // one path and cannot drift apart. `p` is who swung (null = nobody to credit).
+  function hurtStruct(o, dmg, p) {
+    const c = structCenter(o);
+    o.hp -= dmg;
+    o.flash = 0.1;
+    o.shake = 0.22;
+    if (nearPlayer(c.x, c.y)) SFX.hit();
+    burst(c.x, c.y - 4, '#a3794f', 5, 40, 0.4, true);
+    addDmgFloater(c.x, c.y - 12, dmg);
+    if (p === player) state.shake = Math.max(state.shake, 1);
+    if (o.hp <= 0) {
+      const name = STRUCTS[o.type].name;
+      // the wreck pays out like a demolition: whoever is nearest picks the rubble up
+      destroyStructure(o, true);
+      if (p) logEvent(p.name + ' WRECKED A ' + name, p);
     }
   }
 
@@ -2527,7 +2573,7 @@
     // rec/mz: recoil slide and muzzle flash. scan: the idle sweep's phase.
     if (type === 'turret') { o.cd = 0; o.ang = -Math.PI / 2; o.tgt = null; o.chg = 0; o.rec = 0; o.mz = 0; o.scan = 0; }
     if (type === 'generator') o.payT = 0;
-    if (type === 'spawner') { o.mode = 'gather'; o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
+    if (type === 'spawner') { o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
     if (type === 'keep') { o.craftT = 0; o.craftTotal = 0; }
     o.sparkT = 0;
     structures.push(o);
@@ -3474,8 +3520,12 @@
             burst(b.x, b.y + 2, '#e4e8ee', 5, 30, 0.45, true); // exhaust off the mouth
           }
         }
-        // the shutter: open to gather, shut on guard, and always open for a roll-out
-        const want = (o.mode === 'gather' || (due && o.respawnT < 1.4)) ? 1 : 0;
+        // the shutter: open while a worker is out in the yard or one is rolling
+        // out, shut when the whole crew is home - so the door reports the bay's
+        // state rather than a mode nobody sets any more
+        const mo = structMouth(o);
+        const out = o.bots.some((b) => !b.dead && Math.hypot(b.x - mo.x, b.y - mo.y) > 20);
+        const want = (out || (due && o.respawnT < 1.4)) ? 1 : 0;
         o.door += Math.sign(want - o.door) * Math.min(Math.abs(want - o.door), dt * 2.2);
       } else if (o.type === 'keep' && o.craftT > 0) {
         // mirrors the generator's payT countdown; freezes for free while
@@ -3513,6 +3563,9 @@
       x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
       home: sp, team: sp.team === undefined ? 0 : sp.team, owner: sp.owner === undefined ? 0 : sp.owner,
       tgt: null, workT: 0, atkCd: 0, avoid: null, avoidT: 0, nav: null,
+      // the fight, all of it: what it is swinging at right now (drawRobot reads
+      // it), and who hit it last - a struck worker fights back for ROBOT_MAD s
+      atkAim: null, mad: null, madT: 0, madX: 0, madY: 0,
       carry: 0, // gold held, deposited at home
       moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
       animT: rng() * 2, flash: 0, kbx: 0, kby: 0, stunT: 0, stunMax: 0, dead: false,
@@ -3528,6 +3581,11 @@
   // same pipeline. src is the shooter, for the feed line on the kill.
   function hurtRobot(b, dmg, nx, ny, src) {
     if (b.dead) return;
+    // a worker under a flag remembers who hit it and swings back; with no flag
+    // it is the same defenceless hauler it always was
+    // madX/madY is where it was standing when it was hit: the leash it fights
+    // back inside, so a raider cannot walk a worker off its post
+    if (src && src.team !== b.team && flagOf(b)) { b.mad = src; b.madT = ROBOT_MAD; b.madX = b.x; b.madY = b.y; }
     b.hp -= dmg;
     b.flash = 0.12;
     b.kbx = nx * 40; b.kby = ny * 40;
@@ -3585,7 +3643,9 @@
       return n.d;
     };
 
-    const wander = () => {
+    // loiter around an anchor - home with no orders, the flag's post with them
+    const wander = (ax, ay) => {
+      if (ax === undefined) { ax = hx; ay = hy; }
       if (b.moveT > 0) {
         b.moveT -= dt;
         moving = true;
@@ -3596,12 +3656,18 @@
         if (Math.abs(b.kbx) + Math.abs(b.kby) > 1) moveEntity(b, b.kbx * dt, b.kby * dt, 3); // shoved while idle
         if (b.idleT <= 0) {
           let ang = rng() * Math.PI * 2;
-          if (Math.hypot(hx - b.x, hy - b.y) > 2.5 * TILE) ang = Math.atan2(hy - b.y, hx - b.x) + rand(-0.5, 0.5);
+          if (Math.hypot(ax - b.x, ay - b.y) > 2.5 * TILE) ang = Math.atan2(ay - b.y, ax - b.x) + rand(-0.5, 0.5);
           b.mvx = Math.cos(ang); b.mvy = Math.sin(ang);
           b.moveT = rand(0.5, 1.2);
           b.idleT = rand(0.8, 2);
         }
       }
+    };
+
+    // walk to a post and stand on it: the flag's own hold, and a guard's ring
+    const holdAt = (px, py) => {
+      if (Math.hypot(px - b.x, py - b.y) > 22) { if (walkToward(px, py) >= 0) return; }
+      wander(px, py);
     };
 
     const deposit = () => {
@@ -3616,17 +3682,19 @@
       const t = b.tgt, ox = t.tx * TILE + 8, oy = t.ty * TILE + 8;
       t.flash = 0.1;
       t.shake = 0.22;
-      if (t.type === 'tree') {
+      if (t.type === 'tree' || t.type === 'deadTree') {
+        const dry = t.type === 'deadTree';   // a rookery perch: quicker, same gold
         t.hp--;
-        b.carry += YIELD.treeHit;
+        b.carry += dry ? YIELD.deadTreeHit : YIELD.treeHit;
         if (nearPlayer(ox, oy)) SFX.chop();
         burst(ox, oy - 10, '#eef4fb', 3, 35, 0.4, true);
         if (t.hp <= 0) {
           objects[idx(t.tx, t.ty)] = { type: 'stump', tx: t.tx, ty: t.ty, flash: 0, shake: 0 };
-          b.carry += YIELD.treeFall;
+          b.carry += dry ? YIELD.deadTreeFall : YIELD.treeFall;
           if (t.rare) b.carry += YIELD.treeRare;
           burst(ox, oy - 8, '#eef4fb', 8, 45, 0.5, true);
           if (nearPlayer(ox, oy)) SFX.treeFall();
+          if (dry) flushBirds(landmarkAt(ox, oy), { x: ox, y: oy }); // the flock loses its perch
           b.tgt = null;
         }
       } else {
@@ -3642,42 +3710,105 @@
       }
     };
 
-    const carryTotal = b.carry;
-
-    if (home.mode === 'guard') {
-      // no raiders to fight: guard mode just loiters near home
-      b.tgt = null;
-      if (carryTotal > 0) {
-        const d = walkToward(hx, hy);
-        if (d >= 0 && d < 14) deposit();
+    // walk to the current target and swing at it; false = it gave the tile up
+    const workTgt = () => {
+      const txp = b.tgt.tx * TILE + 8, typ = b.tgt.ty * TILE + 8;
+      if (Math.hypot(txp - b.x, typ - b.y) > 20) {
+        // no route to it (walled in, or pinned on the way): leave it alone a while
+        if (walkToward(txp, typ, 1) < 0) { b.avoid = b.tgt; b.avoidT = 12; b.tgt = null; return false; }
       } else {
-        wander();
+        b.workT += dt;
+        if (b.workT >= 0.9) { b.workT = 0; harvest(); }
       }
-    } else if (carryTotal >= 8) {
-      const d = walkToward(hx, hy);
-      if (d >= 0 && d < 14) deposit();
-    } else {
+      return true;
+    };
+    // hold the current target if it still stands, otherwise take what `pick`
+    // offers; false = there was nothing left to work
+    const gather = (pick) => {
       if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
-      if (b.avoidT > 0) b.avoidT -= dt; else b.avoid = null;
-      if (!b.tgt) {
-        b.tgt = nearestObj(hx, hy, 8, (o) =>
-          (o.type === 'tree' || o.type === 'rock') && o !== b.avoid);
+      if (!b.tgt) b.tgt = pick();
+      if (!b.tgt) return false;
+      workTgt();
+      return true;
+    };
+    const homeRun = () => { const d = walkToward(hx, hy); if (d >= 0 && d < 14) deposit(); };
+    // anything a worker will cut, anywhere near a point, that no sibling has
+    const cutNear = (cx, cy, r) => nearestObj(cx, cy, r, (o) =>
+      (o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock') && o !== b.avoid && !objTaken(b, o));
+
+    // close on a foe and swing at it. `leash` (px, measured from lx/ly) is what
+    // keeps a worker on a defensive job from being kited off it.
+    const engage = (foe, lx, ly, leash) => {
+      const pt = foePoint(foe, b.x, b.y - 1);
+      if (leash !== undefined && Math.hypot(pt.x - lx, pt.y - ly) > leash) return false;
+      if (Math.hypot(pt.x - b.x, pt.y - (b.y - 1)) > ROBOT_REACH) {
+        // a building is a solid tile: stop beside it, not on it
+        return walkToward(pt.x, pt.y, foe.tx !== undefined ? 1 : 0) >= 0;
       }
-      if (b.tgt) {
-        const txp = b.tgt.tx * TILE + 8, typ = b.tgt.ty * TILE + 8;
-        const d = Math.hypot(txp - b.x, typ - b.y);
-        if (d > 20) {
-          // no route to it (walled in, or pinned on the way): leave it alone a while
-          if (walkToward(txp, typ, 1) < 0) { b.avoid = b.tgt; b.avoidT = 12; b.tgt = null; }
-        } else {
-          b.workT += dt;
-          if (b.workT >= 0.9) { b.workT = 0; harvest(); }
+      b.atkAim = pt;
+      if (b.atkCd <= 0) { b.atkCd = ROBOT_ATK_CD; robotStrike(b, foe, pt); }
+      return true;
+    };
+
+    // ---- the flag is the order -------------------------------------------
+    // No flag and this is the bay-centred gather it has always been. With one,
+    // the job the flag resolved to says where the crew works, stands or swings,
+    // and only an attack flag lets a worker leave its post to chase.
+    const fl = flagOf(b);
+    const job = fl ? fl.job : null;
+    const chase = !!(job && FLAG_ATTACK[job]);
+    const fx = fl ? fl.tx * TILE + 8 : hx, fy = fl ? fl.ty * TILE + 8 : hy;
+    if (b.avoidT > 0) b.avoidT -= dt; else b.avoid = null;
+    // anger only lives under a flag - an unflagged worker is the same
+    // defenceless hauler it always was
+    if (b.madT > 0 && fl && foeAlive(b, b.mad)) b.madT -= dt;
+    else { b.mad = null; b.madT = 0; }
+    b.atkAim = null;
+
+    if (!fl) {
+      if (b.carry >= 8) homeRun();
+      else if (!gather(() => nearestObj(hx, hy, 8, (o) =>
+        (o.type === 'tree' || o.type === 'rock') && o !== b.avoid))) {
+        if (b.carry > 0) homeRun(); else wander();
+      }
+    } else if (chase) {
+      b.tgt = null;
+      // the mark: the flag's own - a hunted unit, or the flagged building and
+      // then the nearest one still standing around it - with anything hostile
+      // met on the way taking priority over all of it
+      let foe = null;
+      if (job === 'hunt') foe = foeAlive(b, fl.unit) ? fl.unit : null;
+      else if (job === 'siege') foe = enemyStructNear(b.team, fx, fy, FLAG_SIEGE_R * TILE);
+      const met = robotFoeUnit(b, ROBOT_AGGRO);
+      if (met) foe = met;
+      if (!foe || !engage(foe)) holdAt(fx, fy); // nothing left to break: hold the ground
+    } else if (b.carry >= 8) {
+      homeRun();
+    } else if (b.mad && engage(b.mad, b.madX, b.madY, ROBOT_LEASH)) {
+      // struck at its post: swings back from where it was standing, and never
+      // follows past the leash - chasing is what an attack flag is for
+    } else if (job === 'guard') {
+      b.tgt = null;
+      const o = structOf(objAt(fl.tx, fl.ty));
+      const post = o ? structMouth(o) : { x: fx, y: fy };
+      const met = robotFoeUnit(b, ROBOT_AGGRO);
+      if (!met || !engage(met, post.x, post.y, ROBOT_LEASH)) {
+        if (b.carry > 0 && Math.hypot(hx - b.x, hy - b.y) < 40) homeRun();
+        else {
+          // one post each, spaced around the building it is watching
+          const a = (Math.max(0, home.bots.indexOf(b))) * 2.4;
+          holdAt(post.x + Math.cos(a) * 18, post.y + Math.sin(a) * 11);
         }
-      } else if (carryTotal > 0) {
-        const d = walkToward(hx, hy);
-        if (d >= 0 && d < 14) deposit();
-      } else {
-        wander();
+      }
+    } else if (job === 'path') {
+      // the lane first; once it is open, work the ground around the far end
+      if (!gather(() => flagPathTarget(b, fl) || cutNear(fx, fy, FLAG_HARVEST_R))) {
+        if (b.carry > 0) homeRun(); else holdAt(fx, fy);
+      }
+    } else {
+      // harvest: the flagged tile itself, then outward around it
+      if (!gather(() => cutNear(fx, fy, FLAG_HARVEST_R))) {
+        if (b.carry > 0) homeRun(); else holdAt(fx, fy);
       }
     }
 
@@ -3687,6 +3818,283 @@
     b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
 
     if (b.hp <= 0 && !b.dead) robotDies(b, null);
+  }
+
+  // ------------------------------------------------------------ worker flags
+  // ONE marker per player, planted with the middle mouse button, that every
+  // worker bot that player owns reads as its standing order. What the flag is
+  // STANDING ON is the order - there is no menu and no mode: a tree or a rock
+  // means cut here, open ground means clear a road out to here, your own
+  // building means guard it, and anything another team owns means go break it.
+  // Moving the flag re-gives the order, moving it home is the retreat, and
+  // middle-clicking the flag itself picks it up and hands the crew back to the
+  // bay - which is exactly the behaviour that existed before flags did.
+  //
+  //   p.flag = { tx, ty, job, unit }   // `unit` is only ever set for a hunt
+  //
+  // Only `job` (and a hunt's mark) is remembered. Everything else is re-read
+  // off the tile as it is needed, so felling the tree a HARVEST flag stands on
+  // spreads the crew outward instead of stranding it, and wrecking the building
+  // a SIEGE flag stands on rolls them on to the next one nearby.
+  const FLAG_JOBS = {
+    // icon: rects on a 7x7 grid, stamped by drawFlagIcon (the landmark idiom)
+    harvest: { col: '#9ce87a', icon: [[0, 0, 5, 1], [0, 1, 6, 1], [1, 2, 5, 1], [3, 3, 1, 4]] }, // an axe
+    path:    { col: '#8fd8ff', icon: [[1, 1, 5, 1], [2, 3, 3, 1], [3, 5, 1, 1]] },               // a lane running away
+    guard:   { col: '#ffd95c', icon: [[0, 0, 7, 2], [1, 2, 5, 2], [2, 4, 3, 1], [3, 5, 1, 1]] }, // a shield
+    siege:   { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },               // a sword
+    hunt:    { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
+    march:   { col: '#ff8a7a', icon: [[2, 0, 3, 3], [1, 3, 5, 1], [3, 4, 1, 3]] },
+  };
+  // the three that let a worker leave its post and chase; every other job only
+  // ever swings back at whoever hit it
+  const FLAG_ATTACK = { siege: 1, hunt: 1, march: 1 };
+
+  // a unit on another team standing on this point: a hunt order's mark. A rival
+  // buried deep enough to be off both maps cannot be flagged either - concealOf
+  // is the one place "can this be noticed" is decided.
+  function flagUnitAt(team, x, y) {
+    for (const q of players) {
+      if (!q.active || q.dead || inAir(q) || q.team === team) continue;
+      if (concealOf(q) >= PRONE_MAP) continue;
+      if (Math.hypot(q.x - x, q.y - 6 - y) < 10) return q;
+    }
+    for (const b of robots) {
+      if (b.dead || b.team === team) continue;
+      if (Math.hypot(b.x - x, b.y - 1 - y) < 10) return b;
+    }
+    return null;
+  }
+
+  // nearest building belonging to any other team, within r px of (x, y)
+  function enemyStructNear(team, x, y, r) {
+    let best = null, bd = r;
+    for (const o of structures) {
+      if (o.team === undefined || o.team === team) continue;
+      const c = structCenter(o);
+      const d = Math.hypot(c.x - x, c.y - y);
+      if (d < bd) { bd = d; best = o; }
+    }
+    return best;
+  }
+
+  // What planting here would order. The cursor preview and plantFlag() both
+  // read this one function, so what the pointer promises is what the crew does.
+  function flagResolve(p, tx, ty) {
+    const x = tx * TILE + 8, y = ty * TILE + 8;
+    const u = flagUnitAt(p.team, x, y);
+    if (u) return { job: 'hunt', unit: u };
+    const o = structOf(objAt(tx, ty));
+    if (o && STRUCTS[o.type]) return { job: ownsStruct(o, p) ? 'guard' : 'siege', unit: null };
+    if (o && (o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock')) return { job: 'harvest', unit: null };
+    // open ground this close to somebody else's building is a march on it,
+    // not a road-building job - the same tile says two different things
+    // depending on whose doorstep it is
+    if (enemyStructNear(p.team, x, y, FLAG_BASE_R * TILE)) return { job: 'march', unit: null };
+    return { job: 'path', unit: null };
+  }
+
+  // plant / move / pick up: one button does all three, and the flag itself is
+  // the pick-up target, so there is no separate cancel
+  function plantFlag(p, tx, ty) {
+    if (!inWorld(tx, ty)) return;
+    if (p.flag && p.flag.tx === tx && p.flag.ty === ty) { clearFlag(p); return; }
+    const r = flagResolve(p, tx, ty);
+    p.flag = { tx, ty, job: r.job, unit: r.unit };
+    flagRecall(p);
+    burst(tx * TILE + 8, ty * TILE + 8, FLAG_JOBS[r.job].col, 8, 45, 0.4, true);
+    if (p === player) SFX.place();
+  }
+  function clearFlag(p) {
+    if (!p.flag) return;
+    const x = p.flag.tx * TILE + 8, y = p.flag.ty * TILE + 8;
+    p.flag = null;
+    flagRecall(p);
+    burst(x, y, '#c9d0e2', 6, 40, 0.35, true);
+    if (p === player) SFX.pickup();
+  }
+  // every worker on this flag drops what it was doing and turns for the new
+  // order the same frame it lands - an order has to be visibly obeyed at once
+  function flagRecall(p) {
+    for (const b of robots) if (b.owner === p.id && !b.dead) { b.tgt = null; b.atkAim = null; navClear(b); }
+  }
+  // the order a given worker is under: its bay owner's flag, or none
+  function flagOf(b) { const p = players[b.owner]; return p && p.active ? p.flag : null; }
+
+  // Every tile of the lane a PATH flag asks for: a straight corridor
+  // FLAG_PATH_W tiles either side of the line from the bay's mouth out to the
+  // flag, walked OUTWARD, so a crew clears it from the door forward instead of
+  // from the far end back.
+  function flagCorridor(from, tx, ty) {
+    const sx = Math.floor(from.x / TILE), sy = Math.floor(from.y / TILE);
+    const dx = tx - sx, dy = ty - sy;
+    const n = Math.max(Math.abs(dx), Math.abs(dy)) || 1;
+    const across = Math.abs(dx) >= Math.abs(dy); // widen square to the lane
+    const out = [], seen = new Set();
+    for (let i = 0; i <= n; i++) {
+      const cx = Math.round(sx + dx * i / n), cy = Math.round(sy + dy * i / n);
+      for (let k = -FLAG_PATH_W; k <= FLAG_PATH_W; k++) {
+        const px = across ? cx : cx + k, py = across ? cy + k : cy;
+        if (!inWorld(px, py)) continue;
+        const id = idx(px, py);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push([px, py]);
+      }
+    }
+    return out;
+  }
+  // is another live worker out of the same bay already swinging at this?
+  function objTaken(b, o) {
+    for (const s of b.home.bots) if (s !== b && !s.dead && s.tgt === o) return true;
+    return false;
+  }
+  // the first thing still standing in that lane no sibling has already claimed
+  function flagPathTarget(b, fl) {
+    for (const [tx, ty] of flagCorridor(structMouth(b.home), fl.tx, fl.ty)) {
+      const o = objAt(tx, ty);
+      if (!o || (o.type !== 'tree' && o.type !== 'deadTree' && o.type !== 'rock')) continue;
+      if (o === b.avoid || objTaken(b, o)) continue;
+      return o;
+    }
+    return null;
+  }
+
+  // ---- a worker's simple attack -------------------------------------------
+  // Workers were never fighters; a flag that points at another team has to hand
+  // them something to point back with. One axe swing on a flat cooldown - the
+  // same swing the harvest animation already draws, aimed at a body instead of
+  // a trunk. Nothing here scales with anything yet; that is the balance pass.
+  function foeAlive(b, e) {
+    if (!e) return false;
+    if (e.tx !== undefined) return structOf(objAt(e.tx, e.ty)) === e && e.team !== b.team;
+    if (e.input) return e.active && !e.dead && !inAir(e) && e.team !== b.team;
+    return !e.dead && e.team !== b.team;
+  }
+  // Where a worker aims. A body is a point a little above its feet; a building
+  // is the nearest point on its FOOTPRINT, not its centre - the bay is 3x2, and
+  // a worker measuring to the middle of it could never reach its own axe past
+  // the wall it is standing against.
+  function foePoint(e, fx, fy) {
+    if (e.tx === undefined) return { x: e.x, y: e.y - 4 };
+    if (fx === undefined) return structCenter(e);
+    const x0 = e.tx * TILE, y0 = e.ty * TILE;
+    return {
+      x: Math.max(x0, Math.min(x0 + structW(e.type) * TILE, fx)),
+      y: Math.max(y0, Math.min(y0 + structH(e.type) * TILE, fy)),
+    };
+  }
+  // nearest enemy UNIT (slot or worker) inside range. Slots are noticed through
+  // seenAt, so a body under the snow is as invisible to a worker as to a wolf.
+  function robotFoeUnit(b, range) {
+    let best = null, bd = range;
+    for (const q of players) {
+      if (!q.active || q.dead || inAir(q) || q.team === b.team) continue;
+      const d = Math.hypot(q.x - b.x, q.y - 6 - b.y);
+      if (d < bd && d <= seenAt(q, range)) { bd = d; best = q; }
+    }
+    for (const r of robots) {
+      if (r === b || r.dead || r.team === b.team) continue;
+      const d = Math.hypot(r.x - b.x, r.y - 1 - b.y);
+      if (d < bd) { bd = d; best = r; }
+    }
+    return best;
+  }
+  // the blow itself: a building goes through hurtStruct (the same path an E
+  // swing takes), a body through damagePlayer / hurtRobot, all credited to the
+  // bay's owner so a worker kill still pays and still levels
+  function robotStrike(b, e, pt) {
+    const src = players[b.owner] || null;
+    const d = Math.hypot(pt.x - b.x, pt.y - (b.y - 1)) || 1;
+    const nx = (pt.x - b.x) / d, ny = (pt.y - (b.y - 1)) / d;
+    if (nearPlayer(b.x, b.y)) SFX.swing();
+    if (e.tx !== undefined) hurtStruct(e, ROBOT_DMG, src);
+    else if (e.input) damagePlayer(e, ROBOT_DMG, nx, ny, src, 'worker');
+    else hurtRobot(e, ROBOT_DMG, nx, ny, src);
+  }
+
+  // ---- what a flag looks like ---------------------------------------------
+  // the job glyph, 7x7 about (x, y), stamped with the 1px dark rim a landmark's
+  // icon uses so it reads on snow, on parchment and on team cloth alike
+  function drawFlagIcon(g, job, x, y, col, rim) {
+    const spec = FLAG_JOBS[job];
+    if (!spec) return;
+    const x0 = Math.round(x) - 3, y0 = Math.round(y) - 3;
+    g.fillStyle = rim || '#0f1632';
+    for (const [rx, ry, rw, rh] of spec.icon) g.fillRect(x0 + rx - 1, y0 + ry - 1, rw + 2, rh + 2);
+    g.fillStyle = col || spec.col;
+    for (const [rx, ry, rw, rh] of spec.icon) g.fillRect(x0 + rx, y0 + ry, rw, rh);
+  }
+  // the small marker - a pole and a pennant, (x, y) is its FOOT. Both maps and
+  // the pick-up cursor draw the same one, so a flag is the same shape whatever
+  // it is standing on.
+  function drawFlagPennant(g, x, y, col, rim) {
+    const px = Math.round(x), py = Math.round(y);
+    const rects = [[px, py - 7, 1, 8], [px + 1, py - 7, 4, 3]];
+    g.fillStyle = rim || '#0f1632';
+    for (const [rx, ry, rw, rh] of rects) g.fillRect(rx - 1, ry - 1, rw + 2, rh + 2);
+    g.fillStyle = col;
+    for (const [rx, ry, rw, rh] of rects) g.fillRect(rx, ry, rw, rh);
+  }
+  // The planted flag itself, in the world pass (y-sorted with the entities): a
+  // pole at the tile's centre and a dark banner on it carrying the SAME job
+  // icon the cursor previewed, inked in the team's colour - so what the crew
+  // was told, and who told them, both read from across the field. Dark cloth
+  // and a bright glyph, not the other way round: at nine pixels square a solid
+  // colour with a hole punched in it is a blob, and the glyph is the message.
+  function drawFlag(q, ex, ey, now) {
+    const f = q.flag;
+    const bx = Math.round(f.tx * TILE + 8 - ex), by = Math.round((f.ty + 1) * TILE - 2 - ey);
+    const col = TEAMS[q.team].mark;
+    ctx.fillStyle = 'rgba(110,130,170,0.35)';
+    ctx.fillRect(bx - 3, by - 1, 7, 2);
+    ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 21, 3, 21);
+    ctx.fillStyle = '#c9d0e2'; ctx.fillRect(bx, by - 20, 1, 19);
+    ctx.fillStyle = col; ctx.fillRect(bx - 1, by - 4, 3, 3); // a team-coloured collar at the foot
+    const w = Math.round(Math.sin(now * 2.4 + f.tx)); // 1px of flutter
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(bx + w, by - 21, 13, 11);
+    ctx.fillStyle = '#141c3c';
+    ctx.fillRect(bx + 1 + w, by - 20, 11, 9);
+    drawFlagIcon(ctx, f.job, bx + 6 + w, by - 16, col, '#141c3c');
+  }
+  // Does this slot have anyone to command? A live worker, or a bay that is
+  // about to roll one out - the affordance has to be there the moment the bay
+  // is up, not only once the first bot is in the yard. No crew, no preview.
+  function hasWorkers(p) {
+    for (const b of robots) if (!b.dead && b.owner === p.id) return true;
+    for (const o of structures) if (o.type === 'spawner' && o.owner === p.id) return true;
+    return false;
+  }
+  // the pointer is over HUD that owns its own clicks, not over the world
+  function overHud(x, y) {
+    return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!abHit(x, y) || overMinimap();
+  }
+  // THE PREVIEW. While the local slot has a worker to command, the pointer
+  // carries the order planting here would give - a chop, a lane, a shield or a
+  // sword - over a dashed ghost of the tile it would land on. Over your own
+  // flag it turns into the flag itself, because that press picks it up. With no
+  // workers there is nobody to order, so none of this is drawn.
+  function drawFlagHint(now) {
+    if (window.DBG.hideUI || state.paused || state.mapOpen || state.settingsOpen || state.wheel || state.draft) return;
+    if (!mouse.inside || !player || player.dead || !hasWorkers(player)) return;
+    if (overHud(mouse.x, mouse.y)) return;
+    const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
+    if (!inWorld(tx, ty)) return;
+    const f = player.flag;
+    const lift = !!f && f.tx === tx && f.ty === ty; // this press would pick it up
+    const job = lift ? null : flagResolve(player, tx, ty).job;
+    const col = lift ? '#c9d0e2' : FLAG_JOBS[job].col;
+    // the tile it would land on: a dashed 1px box, world-anchored but UI-sized
+    const x0 = Math.round(wToSX(tx * TILE)), y0 = Math.round(wToSY(ty * TILE));
+    const x1 = Math.round(wToSX((tx + 1) * TILE)), y1 = Math.round(wToSY((ty + 1) * TILE));
+    ctx.globalAlpha = 0.55 + 0.2 * Math.sin(now * 4);
+    ctx.fillStyle = col;
+    for (let x = x0; x < x1 - 1; x += 3) { ctx.fillRect(x, y0, 2, 1); ctx.fillRect(x, y1 - 1, 2, 1); }
+    for (let y = y0; y < y1 - 1; y += 3) { ctx.fillRect(x0, y, 1, 2); ctx.fillRect(x1 - 1, y, 1, 2); }
+    ctx.globalAlpha = 1;
+    // ...and the job riding the pointer, clear of the reticle's own ticks
+    if (lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[player.team].mark);
+    else drawFlagIcon(ctx, job, mouse.x + 12, mouse.y + 9, col);
   }
 
   // ------------------------------------------------------------ radial wheel
@@ -3711,9 +4119,8 @@
     if (w.kind === 'build') return STRUCT_ORDER.map((type) => ({ id: type }));
     const o = structOf(objAt(w.tx, w.ty));
     // upgrade is always the wedge straight up and demolish always the last one,
-    // so the bay's extra option lands between them instead of displacing either
+    // so a type's extra option lands between them instead of displacing either
     const opts = [{ id: 'upgrade' }];
-    if (o && o.type === 'spawner') opts.push({ id: 'mode' });
     if (o && o.type === 'keep' && !o.building) opts.push({ id: 'craft' });
     opts.push({ id: 'demolish' });
     return opts;
@@ -3772,12 +4179,6 @@
     if (c.kind === 'upgrade') startUpgrade(o, p);
     else if (c.kind === 'demolish') demolishStruct(o, p);
     else if (c.kind === 'craft') startCraft(o, p);
-    else if (c.kind === 'mode') {
-      o.mode = o.mode === 'gather' ? 'guard' : 'gather';
-      const c0 = structCenter(o);
-      addFloater(c0.x, o.ty * TILE - 4, o.mode.toUpperCase(), '#ffd95c');
-      if (nearPlayer(c0.x, c0.y)) SFX.pickup();
-    }
   }
 
   // src: the player who dealt it (kill credit + the log line), null for the
@@ -3799,6 +4200,9 @@
 
   // what the log says when nobody gets the credit
   const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID' };
+  // ...and what the line says when there IS credit but no arrow: `cause` is
+  // read for the verb too, so a worker's axe doesn't get written up as a shot
+  const KILL_VERB = { worker: 'CUT DOWN' };
 
   // Death empties the wallet AND the backpack. Gold goes to the credited
   // killer outright (through gainGold, so a kill also levels the killer - the
@@ -3876,7 +4280,7 @@
         if (nearPlayer(killer.x, killer.y)) SFX.heal();
       }
     }
-    logEvent(killer ? killer.name + ' SHOT ' + p.name
+    logEvent(killer ? killer.name + ' ' + (KILL_VERB[cause] || 'SHOT') + ' ' + p.name
       : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
     if (teamHasLivingKeep(p.team)) p.respawnT = RESPAWN_TIME;
     else p.eliminated = true;
@@ -5315,12 +5719,19 @@
     }
     for (const a of animals) draws.push({ y: a.y + 4, a });
     for (const b of robots) draws.push({ y: b.y + 4, r: b });
+    // your side's worker flags, half a pixel behind their own tile so a flag
+    // planted on a tree is never swallowed by that tree's canopy
+    for (const q of players) {
+      if (!q.active || !q.flag || q.team !== viewPlayer().team) continue;
+      draws.push({ y: (q.flag.ty + 1) * TILE + 0.5, f: q });
+    }
     draws.sort((a, b) => a.y - b.y);
 
     for (const d of draws) {
       if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
       if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
       if (d.r) { drawRobot(d.r, ex, ey); continue; }
+      if (d.f) { drawFlag(d.f, ex, ey, now); continue; }
       const o = d.o;
       const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
       const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
@@ -5533,6 +5944,8 @@
     replayTick(now); // banks the finished world frame - must stay above renderUI
     renderUI(now);
     if (state.mode === 'drop') renderDropUI(now);
+    // the flag preview: world-anchored, UI-sized, and under every panel
+    if (state.mode === 'play') drawFlagHint(now);
     if (state.mode === 'play' && state.wheel) renderWheel(now);
 
     if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
@@ -6372,10 +6785,19 @@
     ctx.fillStyle = 'rgba(110,130,170,0.35)';
     ctx.fillRect(bx + 1, Math.round(b.y + 3 - ey), 10, 2);
 
-    let tdx = 0, tdy = 0, working = false;
-    if (b.tgt && !b.moving) {
+    // one swing animation, two jobs: the harvest tick, or - on an attack flag -
+    // the same axe aimed at whatever b.atkAim points to (see `worker flags`)
+    let tdx = 0, tdy = 0, working = false, icon = null, prog = 0;
+    if (b.atkAim) {
+      tdx = b.atkAim.x - b.x; tdy = b.atkAim.y - b.y;
+      working = true;
+      icon = SPRITES.itemAxe;
+      prog = 1 - b.atkCd / ROBOT_ATK_CD;
+    } else if (b.tgt && !b.moving) {
       tdx = b.tgt.tx * TILE + 8 - b.x; tdy = b.tgt.ty * TILE + 8 - b.y;
       working = Math.hypot(tdx, tdy) <= 20;
+      icon = SPRITES[b.tgt.type === 'rock' ? 'itemPick' : 'itemAxe'];
+      prog = Math.min(1, b.workT / 0.9);
     }
 
     drawSpriteFlash(spr, bx, by, b.flash);
@@ -6392,8 +6814,6 @@
     // working: raised away from the target through a slow wind-up, then a
     // fast chop that lands pointing at it (workT resets on the hit)
     if (working) {
-      const icon = SPRITES[b.tgt.type === 'tree' ? 'itemAxe' : 'itemPick'];
-      const prog = Math.min(1, b.workT / 0.9);
       const e = prog < 0.7 ? prog / 0.7 * 0.3 : 0.3 + (prog - 0.7) / 0.3 * 0.7;
       const a = Math.atan2(tdy, tdx) - 1.6 * (1 - e);
       ctx.save();
@@ -7001,8 +7421,7 @@
         }
         ctx.globalAlpha = 1;
       } else {
-        const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' :
-          opt.id === 'craft' ? 'CARD' : 'MODE';
+        const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'CARD';
         drawPixelTextOutline(ctx, label,
           Math.round(ix - pixelTextWidth(label) / 2), Math.round(iy - 2),
           hovered ? '#ffd95c' : '#9fb6d8', '#0f1632');
@@ -7037,9 +7456,6 @@
           label = 'QUEUE CARD : ' + costText({ gold: t.craftCost });
           color = canAfford({ gold: t.craftCost }) ? '#ffd95c' : '#ff8a7a';
         }
-      } else {
-        label = 'MODE: ' + (o && o.mode === 'gather' ? 'GUARD' : 'GATHER');
-        color = '#ffd95c';
       }
     }
     // centred under the wheel, but never off the edge: the wheel sits where the
@@ -7478,6 +7894,14 @@
       ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
       ctx.fillStyle = TEAMS[p.team].mark;
       ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
+    }
+    // worker flags on your side, as the same pennant the chart draws: where the
+    // crew was sent is exactly the kind of thing you check without opening a map
+    for (const q of players) {
+      if (!q.active || q.team !== vp.team || !q.flag) continue;
+      const dx = (q.flag.tx + 0.5 - ptx) * s, dy = (q.flag.ty + 0.5 - pty) * s;
+      if (Math.hypot(dx, dy) > MM_R - 2) continue;
+      drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[q.team].mark);
     }
     // named places, glyph only - a name would not fit inside the disc (the
     // world map and the arrival toast are where they are read by name)
@@ -8441,6 +8865,15 @@
   // ------------------------------------------------------------ world map (M)
   // PANEL_*/MAP_* anchors are declared in the canvas banner (relayout() writes them).
 
+  // a screen point over the chart -> the world tile under it (null off the map).
+  // The chart is the only way to flag a tile that is off-screen, so the middle
+  // click needs the inverse of the MAP_S projection everything else draws with.
+  function mapTileAt(sx, sy) {
+    if (sx < MAP_X || sy < MAP_Y || sx >= MAP_X + MAP_W || sy >= MAP_Y + MAP_W) return null;
+    const tx = Math.floor((sx - MAP_X) / MAP_S), ty = Math.floor((sy - MAP_Y) / MAP_S);
+    return inWorld(tx, ty) ? { tx, ty } : null;
+  }
+
   const mapCv = document.createElement('canvas');
   mapCv.width = WORLD; mapCv.height = WORLD;
   const mapCtx = mapCv.getContext('2d');
@@ -8633,6 +9066,30 @@
       ctx.fillRect(ox2 - 2, oy2 - 2, 5, 5);
       ctx.fillStyle = TEAMS[p.team].mark;
       ctx.fillRect(ox2 - 1, oy2 - 1, 3, 3);
+    }
+
+    // worker flags, your side's only: the same pennant the minimap draws, with
+    // the job's icon over it - the chart is where an order across the world is
+    // given and read, so it has room to say which order it was
+    for (const q of players) {
+      if (!q.active || q.team !== player.team || !q.flag) continue;
+      const lx = MAP_X + Math.round((q.flag.tx + 0.5) * MAP_S);
+      const ly = MAP_Y + Math.round((q.flag.ty + 0.5) * MAP_S);
+      drawFlagIcon(ctx, q.flag.job, lx + 3, ly - 10, TEAMS[q.team].mark, '#241a10');
+      drawFlagPennant(ctx, lx, ly, TEAMS[q.team].mark, '#241a10');
+    }
+    // the tile the pointer would plant on, while the chart is up
+    if (mouse.inside && hasWorkers(player)) {
+      const mt = mapTileAt(mouse.x, mouse.y);
+      if (mt) {
+        const f = player.flag;
+        const lift = !!f && f.tx === mt.tx && f.ty === mt.ty;
+        const gx = MAP_X + Math.round((mt.tx + 0.5) * MAP_S), gy = MAP_Y + Math.round((mt.ty + 0.5) * MAP_S);
+        ctx.globalAlpha = 0.55 + 0.2 * Math.sin(now * 4);
+        if (lift) drawFlagPennant(ctx, gx, gy, '#f4f7ff', '#241a10');
+        else drawFlagIcon(ctx, flagResolve(player, mt.tx, mt.ty).job, gx, gy - 6, '#f4f7ff', '#241a10');
+        ctx.globalAlpha = 1;
+      }
     }
 
     // player marker: inked diamond + pulsing ring
@@ -8878,9 +9335,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.48'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.49'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.49', 'MIDDLE CLICK PLANTS ONE FLAG AND EVERY WORKER YOU OWN OBEYS IT - ON A TREE OR ROCK THEY CUT THERE AND SPREAD OUT, ON OPEN GROUND THEY CLEAR A LANE OUT TO IT FROM THE BAY, ON YOUR OWN BUILDING THEY GUARD IT, AND ON ANYTHING ANOTHER TEAM OWNS THEY GO AND BREAK IT.'],
     ['1.48', 'THE DODGE ROLL IS A WEAPON NOW - IT GOES STRAIGHT THROUGH RABBITS WOLVES ROBOTS AND RIVALS, HITTING AND STUNNING EACH ONE ONCE, WHILE A DEER TREE ROCK OR BUILDING IS A TACKLE THAT HURTS AND STUNS BOTH OF YOU - AND EVERY BIT OF IT HITS HARDER THE FASTER YOU WERE GOING, SO DASH OUT OF AN ICE SLIDE.'],
     ['1.47', 'EVERY ANIMAL WALKS A REAL ROUTE NOW INSTEAD OF DRIFTING - THEY ROUND THE TREES AND STOP WHERE THEY MEANT TO - AND DEER BOLT FROM YOU THE WAY RABBITS DO, SO CRAWLING IN UNDER THE SNOW IS HOW YOU GET CLOSE TO ONE.'],
     ['1.46', 'THE FROSTLANDS HAVE A SCORE AND A VOICE NOW - A SONG FOR THE MENU, THE CLASS PAGE, THE EAGLE AND THE END SCREEN, RECORDED SOUND FOR EVERY AXE BOW AND BOOT, AND MASTER MUSIC AND SOUNDS DIALS IN THE ESC MENU.'],
@@ -11048,6 +11506,15 @@
     // geometry the hover test and the pixels both use
     wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,
     structures, robots, tracers, arrows, STRUCTS, TOOLS,
+    // the worker flag: plant one without a mouse, read back what a tile would
+    // order, and reach the corridor a PATH flag asks its crew to clear
+    FLAG_JOBS, flagCorridor, mapTileAt,
+    // the two coordinate bridges, so a driver can put the pointer on a tile
+    wToSX, wToSY, mouseWX, mouseWY,
+    plantFlag: (tx, ty, p) => plantFlag(p || player, tx, ty),
+    clearFlag: (p) => clearFlag(p || player),
+    flagResolve: (tx, ty, p) => flagResolve(p || player, tx, ty),
+    get flag() { return player.flag; },
     // the quiver: the shafts lying in the world, the ceiling, and a way to set
     // a slot's ammo / renock without playing to it. hudStripRect is the xp bar
     // + ability row that reads all of it back, bottom-centre.

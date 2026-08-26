@@ -239,7 +239,8 @@ hand feel like one control. A save written before `settings.v` indexes the old s
 and is carried across by `MM_MIGRATE` on load. Stepped by the
 scroll wheel while `overMinimap()` (pointer inside the disc + ring), which pre-empts the camera
 zoom in the wheel handler and is saved with the settings. Every marker drawn over it (slots,
-landmark glyphs) multiplies its tile offset by `s`. The disc sits on an opaque `#0f1632`
+landmark glyphs, your side's [worker flags](gameplay.md#worker-flags)) multiplies its tile
+offset by `s`. The disc sits on an opaque `#0f1632`
 backing with a pale 1 px outer rim that brightens while hovered — the hover state is the whole
 affordance, there is no hint. **No `arc()` anywhere in it**: canvas arcs anti-alias, and at
 game resolution that reads as blur, so `mmRing(g, cx, cy, r0, r1, col, a0?, a1?)` paints the

@@ -707,8 +707,9 @@ bay (`STRUCT_ORDER`, type `spawner`), Keep (`STRUCT_ORDER`, type `keep`) — `wh
 layout code, only the option itself; push out of the hub and release over a wedge to build,
 release inside the hub to cancel. Right-clicking a **finished** structure (any tile of it) opens a
 **manage wheel**: upgrade straight up, demolish last, and — unlike the build wheel — this list
-*isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it): a bay gets a mode toggle, a
-Keep gets `craft` (QUEUE CARD, see below), between the two. This wheel is the **only** way to
+*isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it): a Keep gets `craft`
+(QUEUE CARD, see below) between the two. The bay used to get a gather/guard toggle here; that is
+gone — its crew is commanded by the [worker flag](#worker-flags). This wheel is the **only** way to
 build — there are no free-placed buildables. All the data lives in the `STRUCTS` table: three
 tiers for wall/turret/generator/**keep** (the wood → stone → gold *look* is just the sprite
 palette) and **one for the bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats.
@@ -794,7 +795,9 @@ Mechanics, all in `game.js`:
   `makeRobot` spawns at `structMouth()` (the ring around the footprint if that is blocked) with an
   exhaust puff. `drawBayOverlay()` draws everything live on top of the baked sprite: the next bot
   sliding down the doorway over the last 0.8 s of its timer; a roll-up **shutter** over the doorway
-  (`o.door`, lerped in the tick — open in gather, shut in guard, and always open for a roll-out);
+  (`o.door`, lerped in the tick — open while any of its workers is out of the yard or one is
+  rolling out, shut when the whole crew is home, so the door reports the bay's state rather than
+  a mode nobody sets any more);
   three **bot pips** on the right flank (lit = alive, blinking = being built, dark = empty) with the
   roll-out timer as a bar under them; a flickering slat across each vent grille; a roof **beacon**
   that blinks amber while a bot is due; and an hp bar over the roof once damaged. `removeStruct()`
@@ -843,20 +846,37 @@ Mechanics, all in `game.js`:
 
 `robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
 tread frames — see [sprites.md](sprites.md)). `updateRobot()` mirrors the animal state machine plus
-jobs, driven live by the owning bay's `mode`: **gather** — pick the nearest tree/rock within 8
-tiles of the bay's mouth (`structMouth`, also where they deposit)
+jobs. **What job it runs is decided by the [worker flag](#worker-flags) of the player who owns its
+bay** (`flagOf(b)`); with no flag it falls back to the original bay-centred gather: pick the
+nearest tree/rock within 8 tiles of the bay's mouth (`structMouth`, also where they deposit)
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
 `carry` gold count (same `YIELD` numbers as `hitObject`, tree-fall leaves a stump and pays the
 jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
-floater at 8+ carried; **guard** — with
-raiders removed it just loiters near home (the mode toggle is kept for a future threat).
-Robots drive on `navStep` ([Pathfinding](#pathfinding): reach 1 to a tree or rock, reach 0
-home) and are solid to players and animals (see [Unit collisions](#unit-collisions)); a target
+floater at 8+ carried. A worker's `harvest()` handles **deadTree** too (rookery perches: quicker,
+`YIELD.deadTree*`, and felling one calls `flushBirds`), because a flag can be planted on one.
+Robots drive on `navStep` ([Pathfinding](#pathfinding): reach 1 to a tree, rock or building,
+reach 0 to a body or home) and are solid to players and animals (see
+[Unit collisions](#unit-collisions)); a target
 with no route, or one they get pinned on the way to, goes on `b.avoid` for 12 s. They die with
 their bay and are reaped like animals. They inherit their bay's `team`/`owner`, join the y-sorted draws via
 `drawRobot()` in team colours (the whole sprite bobs while driving, the tool swings at a target,
 carried gold shows as a nugget up front), and show a health bar. Their SFX are gated on player proximity
 (`nearPlayer`) so a remote base doesn't spam audio.
+
+**A worker can now fight.** One axe swing, `ROBOT_DMG` (5) every `ROBOT_ATK_CD` (1.1 s) at
+anything inside `ROBOT_REACH` (15 px) — deliberately flat, with nothing scaling it yet; that is
+the balance pass. `robotStrike(b, e, pt)` is the single blow: a building goes through
+`hurtStruct` (the same path a player's E swing takes, so the wreck, the rubble payout and the
+`WRECKED A` line are one code path), a slot through `damagePlayer` with `cause: 'worker'`, a rival
+worker through `hurtRobot` — all credited to `players[b.owner]`, so a worker kill pays the bounty
+and levels its owner like any other. `cause` doubles as the feed's **verb** (`KILL_VERB`), so a
+worker kill reads `YOU CUT DOWN <NAME>` instead of `SHOT`. Targets come from
+`robotFoeUnit(b, range)` (nearest enemy slot or worker; slots are noticed through `seenAt`, so a
+buried body is as invisible to a worker as to a wolf) and `enemyStructNear(team, x, y, r)`.
+`foePoint(e, fx, fy)` is where the axe lands: a body a little above its feet, or **the nearest
+point on a building's footprint** — the bay is 3×2 and a worker measuring to its centre could
+never reach past the wall it is standing against. The same swing animation `drawRobot()` already
+had draws it, off `b.atkAim` and `b.atkCd` instead of `b.tgt` and `b.workT`.
 
 A worker is **shootable**: `robotHit(b, x, y)` is its hitbox (radius 7 about `b.y - 1`, the middle
 of a body whose treads sit at `b.y + 4`), and `hurtRobot(b, dmg, nx, ny, src)` is the single entry
@@ -868,7 +888,78 @@ what makes shooting a loaded worker on its way home worth the arrows — and log
 `<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed slot, so it never touches
 the kill count. `updateRobot`'s own `hp <= 0` check routes through the same function (with no
 `src`, so the wreck goes unclaimed). Turret bolts ride the arrow pipeline, so a turret's mark
-finally dies; nothing else — a swing, wildlife, the AI's target picker — goes after a worker.
+finally dies; a rival's **worker on an attack flag** melees one; nothing else — a player's swing,
+wildlife, the AI's target picker — goes after a worker.
+
+`hurtRobot` also sets `b.mad`/`b.madT`/`b.madX`/`b.madY` when the hit came from another team **and
+the worker is under a flag**: it fights back for `ROBOT_MAD` (6 s) from where it was standing, and
+never follows past `ROBOT_LEASH` (90 px) of that spot. An unflagged worker is the same defenceless
+hauler it always was — see [Worker flags](#worker-flags) for why the anger is gated on the flag.
+
+## Worker flags
+
+**One order marker per player, planted with the middle mouse button, that every worker bot that
+player owns reads as its standing order.** Two players on one team have one flag each; the crew a
+flag commands is `b.owner === p.id`, i.e. everyone out of the bays that player built. The whole
+system is the `worker flags` banner in [game.js](../../js/game.js), plus the dispatch at the tail
+of `updateRobot()`.
+
+**What the flag is standing on IS the order.** There is no menu and no mode. `flagResolve(p, tx, ty)`
+is the one function that decides, and both the cursor preview and `plantFlag` read it, so what the
+pointer promises is what the crew does:
+
+| under the flag | job | what the crew does |
+| --- | --- | --- |
+| a unit on another team | `hunt` | chase *that* unit anywhere and kill it |
+| a building on another team | `siege` | break it, then the nearest enemy building within `FLAG_SIEGE_R` (14 tiles) of the flag |
+| your own building | `guard` | ring up on its `structMouth` and hold; swing at any foe inside `ROBOT_AGGRO` (70 px) without leaving the post |
+| a tree, dead tree or rock | `harvest` | cut that spot, then spread outward over `FLAG_HARVEST_R` (7 tiles) |
+| open ground within `FLAG_BASE_R` (9 tiles) of an enemy building | `march` | route there fighting hostile *units* met on the way, then hold |
+| open ground anywhere else | `path` | clear a straight lane to it from the bay's mouth, chopping and mining what is in the way |
+
+Only `job` (and a hunt's `unit`) is stored on `p.flag = { tx, ty, job, unit }`. Everything else is
+re-read off the tile as it is needed, which is what makes the jobs *survive their own success*:
+felling the tree a harvest flag stands on spreads the crew outward instead of stranding it, and
+wrecking the building a siege flag stands on rolls them straight on to the next one. A hunt whose
+mark dies falls back to holding the flag's ground.
+
+- **`path`** builds its lane with `flagCorridor(from, tx, ty)` — the straight line from
+  `structMouth(b.home)` out to the flag, `FLAG_PATH_W` (1) tiles either side of it, walked
+  **outward** so a crew clears from the door forward rather than from the far end back.
+  `flagPathTarget` hands each worker the first obstacle in it no sibling has already claimed
+  (`objTaken`), so they fan out along the lane instead of stacking on one trunk. Once the lane is
+  open they fall through to harvesting around the far end.
+- **Only the three attack jobs chase** (`FLAG_ATTACK`). On every other flag a worker swings back
+  at whoever hit it and no further ([Robots](#robots), `b.mad`). **Moving the flag home is the
+  retreat** — there is no separate order for it.
+- Middle click **plants, moves and picks up**: clicking the flag's own tile lifts it, and a lifted
+  flag hands the crew back to the bay, which is exactly the behaviour that existed before flags
+  did. `flagRecall(p)` clears every commanded worker's target and route the frame an order lands,
+  so the crew is *visibly* seen to turn.
+- Middle click works **over the chart (M) too**, through `mapTileAt(sx, sy)` — the only way to
+  command a tile that is off-screen. At `MAP_S` (192/232 px per tile) one chart pixel is ~1.2
+  tiles, so a map order is ±1 tile: fine for "march on that base", not for picking one tree.
+- The order is per-player state, not a world resource, so it does **not** go through `contest()`.
+  AI slots never plant one, which is why a bot's bay still gathers exactly as it always did.
+
+**What it looks like** (the `worker flags` banner owns all three, `FLAG_JOBS` holds the 7×7 icon
+grids as landmark-style rect lists):
+
+- **The preview**, `drawFlagHint()`, drawn in UI space after `renderUI` so it ducks under every
+  panel: a dashed ghost of the tile the press would land on, plus the job's icon riding the
+  pointer — a chop green, a lane blue, a shield amber, a **sword red for all three attack jobs**.
+  Over your own flag it becomes the flag itself, because that press picks it up. It only appears
+  while the slot has a crew to command (`hasWorkers`: a live worker, or a bay about to roll one
+  out) and never over the HUD (`overHud`).
+- **The planted flag**, `drawFlag()`, y-sorted into the world draws half a pixel behind its own
+  tile so a flag on a tree isn't swallowed by the canopy: a pole with a **dark banner carrying the
+  same job icon inked in the team's colour**. Dark cloth and a bright glyph, not the reverse — at
+  nine pixels square a solid colour with a hole punched in it is a blob, and the glyph is the
+  message. Only your own side's flags are drawn (an order marker is not intelligence to hand a
+  rival), on all three surfaces.
+- **Both maps**, through the shared `drawFlagPennant()`: a pole-and-pennant in the team's colour on
+  the minimap disc, and the same pennant with the job icon over it on the chart, where the hovered
+  tile also previews.
 
 ## Death is final
 

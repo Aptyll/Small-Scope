@@ -49,7 +49,7 @@ prone         edge-triggered (Ctrl): TOGGLES the burrow, never a held level -
               holding a modifier while tapping W is Ctrl+W, which closes the tab
 eatBerry      edge-triggered (Q)
 eatFish       edge-triggered (F)
-cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'mode', tx, ty, id}
+cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id}
               or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
               or {kind:'skill', i} - a hud-ability rank: same, free (a skill point)
 ```
