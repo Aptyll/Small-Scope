@@ -173,8 +173,9 @@ What else keys off the cycle:
 
 - `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every slot.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
-- Carved ice holes refreeze at dawn (cracks heal too) and the fish shoal tops back up to
-  `FISH_COUNT` — see [Ice holes and fishing](#ice-holes-and-fishing).
+- Carved ice holes refreeze at dawn and cracks heal — **unless a fish net stands on the hole**,
+  which is what holds that water open. The shoal is *not* topped up here any more; it refills
+  continuously instead. See [Ice holes and fishing](#ice-holes-and-fishing).
 
 `state.day` no longer drives any difficulty. What damages a player: another player's arrows, a
 plunge through the ice (see [PvP](multiplayer.md#pvp)), and the wolves of a
@@ -185,10 +186,11 @@ plunge through the ice (see [PvP](multiplayer.md#pvp)), and the wolves of a
 **E over a bare ice tile** (no object) brings out the pickaxe and calls `crackIce(tx, ty)` on
 that tile (see [Tools and the bow](gameplay.md#tools-and-the-bow)). Hits accumulate in the
 `iceCracks` map (`tile idx → hits`, rendered as bright fracture decals in their own pass);
-`ICE_HOLE_HITS` (3) breaks through — the tile becomes `ground = 2` (open water), joins the
-`holes` list, and is repainted into the ground canvas via `repaintGround()`. Constants live in
-the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COUNT`,
-`FISH_CATCH_R`).
+`ICE_HOLE_HITS` (2) breaks through — the tile becomes `ground = 2` (open water), joins the
+`holes` list, and is repainted into the ground canvas via `repaintGround()`. Breaking through for
+the first time is the one place the net is spelled out (`state.hints.hole`, the same one-shot
+`showMsg` the first stump gets). Constants live in the constants banner (`ICE_HOLE_HITS`,
+`HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_MAX`/`FISH_MIN`, `FISH_CATCH_R`, and the `NET_*` set).
 
 - **Falling in**: standing over a hole tile (checked at the player's feet in `updatePlay`)
   plunges the player: `HOLE_FALL_DMG` (15) via `damagePlayer`, velocity zeroed, and
@@ -197,20 +199,27 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   the sprite to the waterline with ripple rects. The climb-out teleports to
   `nearestDryTile()` with brief i-frames. An **active dodge roll crosses holes safely**
   (the fall check skips while `dodgeT > 0`). Every player falls in; `die(p)` and `Player.reset()`
-  clear `fallT`.
+  clear `fallT`. **A hole with a net on it is planked over** and the check skips it (`netAt`) —
+  that tile is walked across like any other, which is how the catch changes hands.
 - **Everyone else avoids water**: `moveEntity` treats hole tiles as solid for every entity
-  except the player, so animals and robots never wade in. `isSolidTile` itself is unchanged —
-  arrows still fly over holes.
+  except the player, so animals and robots never wade in — a net does not change that, because
+  `walkable()` still refuses `ground === 2`, so no bot ever routes over one. `isSolidTile` now
+  skips any `water: true` STRUCTS entry, so a net is not solid either; arrows still fly over holes.
 - **Refreeze**: at dawn every hole reverts to ice (`repaintGround` again) and `iceCracks`
-  clears.
-- **Fish**: the `fish` array holds `FISH_COUNT` (30) passive swimmers spawned at boot
-  (`spawnFish()`, after `spawnAnimals()`) on **interior** ice only (tile centers passing
+  clears — except a hole carrying a net, which stays open water *and stays in `holes`*, so it
+  refreezes the dawn after somebody wrecks the net.
+- **Fish**: the `fish` array holds up to `FISH_MAX` (30) passive swimmers, that many spawned at
+  boot (`spawnFish()`, after `spawnAnimals()`) on **interior** ice only (tile centers passing
   `fishClear` with a 14 px margin, ~a tile off the shore). `updateFish()` wanders them with a
   **soft edge cap**: `fishClear(x, y)` requires `FISH_MARGIN` (6 px) of water on all four sides
   of the body, the steering veers away from shore a look-ahead early (choosing the more open
   side, falling back to the fish's per-fish `ts` turn bias), and movement is hard-clamped —
-  a position that would poke the body into snow is never committed, so fish can't visually
-  overlap the shoreline. They render as translucent silhouettes
+  a position that would poke the body into snow is never committed. That clamp is **axis-aligned**
+  (`fishClear` probes ±margin on the four compass directions from the centre) while the drawn body
+  is rotated, so a fish swimming diagonally along a shore can still clip a corner of snow with its
+  nose or tail for a frame or two — measured at ~19 frames in 20 s across a 30-fish shoal, at the
+  0.4 alpha an under-ice fish is drawn with. It is a shimmer at the waterline, not a fish in a
+  snowdrift. They render as translucent silhouettes
   through the ice — brighter and surfaced inside an open hole — in a pass right after the
   ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
 - **Bow-fishing**: `fireArrow(p)` first checks whether that player stands on an ice tile with a
@@ -224,7 +233,74 @@ the constants banner (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`, `FISH_COU
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
   the berry's Q/+20), counted beside the berries on the backpack strip
-  (`SPRITES.itemFish`, 8×8, own `FIPAL`). The shoal tops back up to `FISH_COUNT` each dawn,
-  never within 120 px of any player. `SFX.splash()` was added for the water sounds. `DBG`
-  exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`.
+  (`SPRITES.itemFish`, 8×8, own `FIPAL`). `SFX.splash()` was added for the water sounds. `DBG`
+  exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`, `spawnEmerger`, `netAt`,
+  `buildSiteAt`.
+
+### The shoal is a population, not a nightly reset
+
+Spears and nets take fish **out** of `fish`, and nothing puts them back at dawn any more. What
+refills it is a trickle in `updateFish`: `state.fishT` counts down `FISH_SPAWN_T` (11 s), or
+`FISH_SPAWN_FAST` (4 s) while the shoal is under `FISH_MIN` (10), and each expiry calls
+`spawnEmerger()` unless the shoal is already at `FISH_MAX` (30). So the water can be fished down
+hard, never to nothing, and recovers fastest when it is emptiest. Measured from a shoal of 4:
+**4 → 11 in 30 s** under the floor, then **11 → 16 over the next 60 s** above it.
+
+**`born` is a fish's whole life story.** A born fish is the one the game always had: hard-clamped
+inside the water, drawn, spearable, nettable. An **emerger** is none of those. `spawnEmerger()`
+puts it two tiles *into the snow* beside a roomy shore tile, pointed at the water — the snow being
+the deep lake the map has no way to draw — and it creeps in at `FISH_EMERGE_SPD` (7 px/s) with the
+wander, the edge cap and the clamp all switched off, because the shore is the thing it is crossing.
+
+`fishVis(f)` samples five points nose-to-tail and returns the fraction over water; that is `f.vis`,
+and it is what promotes the fish (`vis >= 1` *and* `fishClear` agreeing ⇒ `born`, after which the
+clamp keeps `vis` at 1 forever). The **draw alpha ramps off the back half of it** —
+`max(0, (vis - 0.5) * 2)` — so an emerger is completely invisible until more than half its body is
+under the ice, and by the time anything is drawn the only part still outside is a pixel or two of
+tail at a fraction of 0.4 (worst case measured: **0.24**). An emerger that has not made it in
+`FISH_EMERGE_MAX` (14 s) is dropped, unseen. Everything that selects a fish — `hoverFish`,
+`fishInRange`, `fireArrow`'s catch, `drawAimLine`'s marker, the net, the `crackIce` spook — tests
+`born` first.
+
+**The emerge sites are found once and cached** (`emergeSites`/`buildEmergeSites`, a lazy one-time
+scan costing ~1.4 ms). The first version rejection-sampled random tiles for one, and on a 232²
+world the odds of a random tile being ice with swimming room *and* having snow exactly two tiles
+off are low enough that thirty tries routinely found nothing — which silently throttled the whole
+trickle to near zero (measured 0 successes in 12 calls). With the cached list it is 20/20. The
+shoreline never moves, and a hole only flips ice↔water which `fishClear` counts as swimmable
+either way, so one scan stays correct for the match; `genWorld()` only ever runs at boot.
+
+### Fish nets
+
+`STRUCTS.net` (`FISH NET`, 8 gold, 45 hp, one tier) is the only `water: true` building, and that
+one flag — never the type name — is what every site reads:
+
+| `water: true` means | where |
+| --- | --- |
+| built on a bare open hole, not a stump | `placeStruct` (and the contest callback re-checks it) |
+| the wheel over open water offers it, and only it | `buildSiteAt` → `buildOptionsAt` → `WATER_STRUCT_ORDER` |
+| not solid — you walk **on** it, and the plunge check skips it | `isSolidTile`, `updatePlay` |
+| its hole never refreezes while it stands | the dawn branch, via `netAt` |
+| drawn flat, under everything, never y-sorted | `drawNet` in the flat pass — see [rendering](rendering.md#render-pass-order) |
+
+Right-clicking a hole opens the ordinary build wheel with a single option. Nothing is special-cased
+for a one-option wheel: `wheelSpan(1)` is the full circle, so any direction out of the hub picks
+the net and the hub still cancels.
+
+A finished net runs two clocks in `updateStructures`' `net` branch:
+
+- **Catching.** Any `born` fish within `NET_R` (9 px) of the tile centre is spliced out of `fish`
+  and becomes `o.fish`, capped at `NET_CAP` (3), one every `NET_CATCH_T` (2.2 s) so a net fills
+  visibly instead of hoovering the pond. Fish are *drawn into* it: `nearestNet` gives every born
+  fish a gentle lean toward any net inside `NET_LURE` (44 px) that still has room — that lure is
+  what makes a net read as working rather than waiting on luck.
+- **Emptying.** Any living player whose feet are on the tile takes one fish every `NET_TAKE_T`
+  (0.3 s) straight into their bag — **team is never checked**. A net is a thing lying on the ice,
+  not a locked chest, so an enemy standing on yours walks off with the catch. It is
+  [contested](multiplayer.md#contested-orders) (`net:<idx>`) so two players over one rope cannot
+  take the same fish, and a full bag flashes the refusal (`bagDenied`) and leaves the fish in.
+
+Enemies break a net with **E** like any other building (`workTarget` finds the object on the tile
+and gates on `ownsStruct`); the owner demolishes it from the manage wheel. Either way
+`destroyStructure` tips what it was holding back out as `fish` drops before it goes.
 

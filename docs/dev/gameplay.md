@@ -163,7 +163,7 @@ instead. Since it only appears in reach, it doubles as the "you're close enough"
 always picks the right tool it is no longer reachable in normal play; buildings are not gated
 at all, since the axe is the only tool E ever brings out for one.
 
-**Stumps** are not E targets — they are the right-click wheel's domain. **Buildings on another
+**Stumps and open ice holes** are not E targets — they are the right-click wheel's domain (`buildSiteAt`). **Buildings on another
 team are**: `workTarget()` resolves the tile through `structOf()` (so any tile of a 3×2 footprint
 counts, via its `part`) and returns the axe when `ownsStruct()` is false, and `swingHit` routes
 the swing to the anchor. Your own buildings stay wheel-only, so E is never ambiguous. See
@@ -316,7 +316,8 @@ takes everything inside `ROLL_HIT_R` (7px) of the roller's own radius and splits
   `moveEntity` refused has to clear `TACKLE_MIN` (120 px/s), so brushing past a pine at a run is
   free and dashing straight into one is not. `tackleObject` puts real damage into an **enemy
   building** (it has an hp pool); a tree or a rock only shudders, because its `hp` is a chop count
-  behind a tool gate and a shoulder is not an axe. Fish are under the ice and are in none of it.
+  behind a tool gate and a shoulder is not an axe. Fish are under the ice and are in none of it — and
+  nor is a **fish net**, which is not solid, so a roll crosses one without a contact at all.
 
 **Everything scales with the speed the roll is actually carrying** — `rollPow` runs from the
 champion's own `kit.dodgeSpeed` up to `ROLL_FAST` (340 px/s), which is why a dash launched out of
@@ -555,8 +556,9 @@ through `gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-l
 else through `bagAdd`) and floats that number in `RES_COLORS[type]`. **Whatever was taken comes
 off `d.n`, and the drop is only removed when `d.n` hits zero** — that is what lets a stack of 5
 berries half-fill a bag and leave 3 lying in the snow. A drop's `type` is `gold` or an `ITEMS`
-key; sources pay `gold` and `berry`, a caught fish goes straight into the bag, and death spills
-carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
+key; sources pay `gold` and `berry`, a caught fish goes straight into the bag (speared, or handed
+over by a [fish net](world.md#fish-nets) you are standing on), and death spills — and a wrecked
+net's contents — carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
 the **strip along the bottom of the backpack frame** (bottom right) — food from the left as icon
 + count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
 wallet and bag both —
@@ -705,14 +707,26 @@ screen position (clamped to stay on-screen), five even wedges now: wall, turret,
 bay (`STRUCT_ORDER`, type `spawner`), Keep (`STRUCT_ORDER`, type `keep`) — `wheelSpan(n)`/
 `wheelAng(i, n)` re-derive n even wedges from `STRUCT_ORDER.length` alone, so a 5th entry needed no
 layout code, only the option itself; push out of the hub and release over a wedge to build,
-release inside the hub to cancel. Right-clicking a **finished** structure (any tile of it) opens a
+release inside the hub to cancel.
+
+**The site picks the menu.** `buildSiteAt(tx, ty)` answers `'land'` for a stump, `'water'` for a
+bare open ice hole, and `null` otherwise — and the input handler, the cursor's hammer, the
+selection brackets and `wheelOptions()` all ask that one function, so none of them can offer a site
+another refuses. A water site lists `WATER_STRUCT_ORDER`, which is just the
+[fish net](world.md#fish-nets); nothing is special-cased for a single option, because
+`wheelSpan(1)` is the whole circle and the hub still cancels.
+
+Right-clicking a **finished** structure (any tile of it) opens a
 **manage wheel**: upgrade straight up, demolish last, and — unlike the build wheel — this list
 *isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it): a Keep gets `craft`
 (QUEUE CARD, see below) between the two. The bay used to get a gather/guard toggle here; that is
 gone — its crew is commanded by the [worker flag](#worker-flags). This wheel is the **only** way to
 build — there are no free-placed buildables. All the data lives in the `STRUCTS` table: three
 tiers for wall/turret/generator/**keep** (the wood → stone → gold *look* is just the sprite
-palette) and **one for the bay**, each with a gold `cost`, `hp`, `buildT`, and per-type stats.
+palette) and **one each for the bay and the net**, each with a gold `cost`, `hp`, `buildT`, and
+per-type stats. A `water: true` entry (only the net) goes on a hole instead of a stump, and that
+flag — never the type name — is what `placeStruct`, `isSolidTile` and the dawn refreeze each read;
+see [Fish nets](world.md#fish-nets).
 `tiers[0]` is what the wheel builds; upgrading pays the next tier's cost and re-runs a shorter
 construction, and the last tier (`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear)
 are the two gold sinks (a Keep's card craft is a third, gated behind building one first).

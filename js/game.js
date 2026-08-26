@@ -126,12 +126,26 @@
   const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
 
   // ice fishing: the pickaxe opens holes in bare ice, fish swim underneath
-  const ICE_HOLE_HITS = 3;   // pickaxe hits to break through
+  const ICE_HOLE_HITS = 2;   // pickaxe hits to break through
   const HOLE_FALL_DMG = 15;  // falling into open water hurts
   const HOLE_FALL_T = 1.1;   // seconds floundering before climbing back out
-  const FISH_COUNT = 30;     // shoal size, topped back up each dawn
   const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
   const FISH_MARGIN = 6;     // body clearance from snow: soft-steered away, hard-clamped
+  // The shoal is a live population, not a nightly reset: it is fished down by
+  // spears and nets and refilled by a trickle of new fish swimming in from
+  // under the snow - the deep water no hole ever reaches (see spawnEmerger).
+  const FISH_MAX = 30;       // cap: the boot shoal, and the ceiling the trickle fills to
+  const FISH_MIN = 10;       // floor: below it the trickle runs at FISH_SPAWN_FAST instead
+  const FISH_SPAWN_T = 11;   // seconds between new fish while the shoal is healthy
+  const FISH_SPAWN_FAST = 4; // ...and while it is under FISH_MIN
+  const FISH_EMERGE_SPD = 7; // px/s an unborn fish creeps out from under the shore
+  const FISH_EMERGE_MAX = 14; // seconds before an emerger that never found water is dropped
+  // fish nets: a building laid over an open hole that fishes it on its own
+  const NET_CAP = 3;         // fish a net holds before it stops catching
+  const NET_R = 9;           // px from the net's centre a fish is caught at
+  const NET_LURE = 44;       // ...and px it draws fish gently toward
+  const NET_CATCH_T = 2.2;   // seconds between catches, so a net fills visibly
+  const NET_TAKE_T = 0.3;    // seconds between fish handed to whoever stands on it
 
   // landmark inhabitants (the places themselves are the LANDMARKS table in
   // the landmarks banner). Wolves are the only thing in the world that hunts
@@ -184,6 +198,15 @@
     spawner: { name: 'BOT BAY', w: 3, h: 2, tiers: [
       { cost: { gold: 45 }, hp: 220, buildT: 16, bots: 3, botHp: 24 },
     ]},
+    // The fish net: the one building that goes on water instead of a stump.
+    // `water: true` is the whole difference, and every site reads that flag
+    // rather than the type name - it builds on an open hole (placeStruct),
+    // never freezes over while it stands (the dawn refreeze), and is not solid
+    // (isSolidTile), because walking onto it is how anyone - owner or not -
+    // takes the catch out of it.
+    net: { name: 'FISH NET', water: true, tiers: [
+      { cost: { gold: 8 }, hp: 45, buildT: 5 },
+    ]},
     // the team's Keep: a 2x2 singleton (see teamHasLivingKeep) that a downed
     // teammate respawns at (see updateRespawns) and that crafts roguelike
     // cards (see startCraft/updateStructures' keep branch) - "queue card" pays
@@ -198,7 +221,8 @@
         odds: { white: .18, green: .27, blue: .30, purple: .18,  gold: .07  } },
     ]},
   };
-  const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner', 'keep']; // wheel: 5 even wedges
+  const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner', 'keep']; // stump wheel: 5 even wedges
+  const WATER_STRUCT_ORDER = ['net']; // open-hole wheel: one wedge, the whole circle
 
   // ------------------------------------------------------------ canvas
   const canvas = document.getElementById('game');
@@ -488,7 +512,8 @@
     over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
     win: null,     // a win freezes the numbers the victory screen prints: winSnapshot(), the victory banner
     msg: null, msgT: 0,
-    hints: { stump: false, flag: false },
+    hints: { stump: false, flag: false, hole: false },
+    fishT: FISH_SPAWN_T, // countdown to the next fish swimming in (see updateFish)
     loc: null,     // the named place the local player is standing in: { L, t }
     paused: false,
     mapOpen: false,
@@ -1120,10 +1145,11 @@
       SFX.unlock();
       const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
       const o = structOf(objAt(tx, ty));
-      if (!o) return;
+      const site = buildSiteAt(tx, ty); // a stump, or an open hole to net over
+      if (!o && !site) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
       // ax/ay: the press point every later pointer move is measured against
-      if (o.type === 'stump') state.wheel = { kind: 'build', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
+      if (site) state.wheel = { kind: 'build', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
       else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
       else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
       return;
@@ -1283,9 +1309,34 @@
     if (!o) return false;
     // any STRUCTS entry (wall/turret/generator/spawner/keep/...) is solid for
     // free, plus scenery and a multi-tile building's non-anchor filler tiles -
-    // a future structure type never needs this list touched again
-    return !!STRUCTS[o.type] || o.type === 'tree' || o.type === 'deadTree' ||
+    // a future structure type never needs this list touched again. A `water`
+    // building (the fish net) is the exception: it lies flat on the surface and
+    // is walked over, not into.
+    if (STRUCTS[o.type]) return !STRUCTS[o.type].water;
+    return o.type === 'tree' || o.type === 'deadTree' ||
       o.type === 'rock' || o.type === 'den' || o.type === 'part';
+  }
+
+  // the fish net on a tile, if one stands there - the single read that says
+  // "this open water is planked over": the dawn refreeze skips it, the plunge
+  // check skips it, and drawing it is a flat pass
+  function netAt(tx, ty) {
+    const o = objAt(tx, ty);
+    return o && o.type === 'net' ? o : null;
+  }
+
+  // What right-clicking a tile opens - one question, asked by the input
+  // handler, the cursor, the selection brackets and the wheel alike, so none of
+  // them can offer a site the others refuse. A stump is a land site (the five
+  // buildings that stand on snow); a bare open hole is a water site (the net);
+  // anything else is not a site.
+  function buildSiteAt(tx, ty) {
+    const o = objAt(tx, ty);
+    if (o) return o.type === 'stump' ? 'land' : null;
+    return inWorld(tx, ty) && ground[idx(tx, ty)] === 2 ? 'water' : null;
+  }
+  function buildOptionsAt(tx, ty) {
+    return buildSiteAt(tx, ty) === 'water' ? WATER_STRUCT_ORDER : STRUCT_ORDER;
   }
 
   // Multi-tile buildings. STRUCTS[type].w/h > 1 means the anchor tile (top-left)
@@ -2016,14 +2067,14 @@
   // the fish under the cursor, if any (their bodies are ~10x5, so a 7px disc)
   function hoverFish() {
     const wx = mouseWX(), wy = mouseWY();
-    for (const f of fish) if (Math.hypot(f.x - wx, f.y - wy) < 7) return f;
+    for (const f of fish) if (f.born && Math.hypot(f.x - wx, f.y - wy) < 7) return f;
     return null;
   }
   // bow-fishing works when the player stands on ice with the fish in FISH_CATCH_R
   function fishInRange(f, p) {
     p = p || player;
     const ftx = Math.floor(p.x / TILE), fty = Math.floor((p.y + 4) / TILE);
-    return inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1 &&
+    return f.born && inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1 &&
       Math.hypot(f.x - p.x, f.y - p.y) < FISH_CATCH_R;
   }
 
@@ -2281,6 +2332,7 @@
     if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
       let bi = -1, bd = FISH_CATCH_R;
       for (let i = 0; i < fish.length; i++) {
+        if (!fish[i].born) continue; // still swimming in from under the shore: not there to spear yet
         const d = Math.hypot(fish[i].x - p.x, fish[i].y - p.y);
         if (d < bd) { bd = d; bi = i; }
       }
@@ -2373,11 +2425,17 @@
       repaintGround(tx, ty);
       if (nearPlayer(px, py)) SFX.splash();
       if (p === player) state.shake = Math.max(state.shake, 2);
+      // the one time a hole says it is also a build site - the same one-shot
+      // nudge the first stump gets, for the same reason
+      if (p === player && !state.hints.hole) {
+        state.hints.hole = true;
+        showMsg('RIGHT CLICK THE HOLE TO SET A FISH NET', 5);
+      }
       burst(px, py, '#3a6080', 10, 50, 0.5, true);
       burst(px, py, '#ddf1f8', 8, 55, 0.5, true);
       // the noise sends nearby fish darting away
       for (const f of fish) {
-        if (Math.hypot(f.x - px, f.y - py) < 40) {
+        if (f.born && Math.hypot(f.x - px, f.y - py) < 40) {
           f.a = Math.atan2(f.y - py, f.x - px);
           f.spook = 1.2;
         }
@@ -2509,9 +2567,13 @@
   }
 
   function destroyStructure(o, refund) {
+    // a net going down tips its catch back out onto the ice - the fish in it
+    // were never the owner's, and wrecking one should not delete them
+    const spill = o.type === 'net' ? o.fish || 0 : 0;
     if (STRUCTS[o.type]) removeStruct(o);
     else objects[idx(o.tx, o.ty)] = null;
     const c = structCenter(o), ox = c.x, oy = c.y;
+    for (let i = 0; i < spill; i++) spawnDrop(ox, oy, 'fish');
     if (nearPlayer(ox, oy)) SFX.break_();
     burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
     burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
@@ -2543,14 +2605,19 @@
   function placeStruct(tx, ty, type, p) {
     p = p || player;
     const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
+    // Two kinds of site, and the type picks which: a `water` building wants a
+    // bare open hole (nothing on it, ground 2), everything else wants a stump.
+    const water = !!STRUCTS[type].water;
     const site = objAt(tx, ty);
-    if (!site || site.type !== 'stump') { deny(); return; }
+    if (water ? (site || !inWorld(tx, ty) || ground[idx(tx, ty)] !== 2)
+              : (!site || site.type !== 'stump')) { deny(); return; }
     const cxp = tx * TILE + 8, cyp = ty * TILE + 8;
     if (Math.hypot(cxp - p.x, cyp - p.y) > 60) { deny(); return; }
     const big = structW(type) > 1 || structH(type) > 1;
-    // all four buildings are solid - never let a player entomb themselves
-    // (findSite does the same check over a big footprint)
-    if (!big && Math.abs(cxp - p.x) < 8 + PLAYER_R && Math.abs(cyp - p.y) < 8 + PLAYER_R) {
+    // the solid buildings must never entomb the player who ordered one
+    // (findSite does the same check over a big footprint); a net is walked on,
+    // so standing over the hole is exactly where you set one from
+    if (!big && !water && Math.abs(cxp - p.x) < 8 + PLAYER_R && Math.abs(cyp - p.y) < 8 + PLAYER_R) {
       deny('STEP OFF THE STUMP FIRST', 1.6);
       return;
     }
@@ -2564,7 +2631,8 @@
     }
     contest('site:' + idx(tx, ty), p, () => {
       const s = objAt(tx, ty);
-      if (!s || s.type !== 'stump' || !canAfford(t0.cost, p)) return;
+      if (water ? (s || ground[idx(tx, ty)] !== 2) : (!s || s.type !== 'stump')) return;
+      if (!canAfford(t0.cost, p)) return;
       // re-checked inside the contest callback (not just at the pre-contest
       // deny above): two teammates ordering a keep on two different stumps in
       // the same tick each pass the early check, but resolveContests() runs
@@ -2597,6 +2665,9 @@
     if (type === 'generator') o.payT = 0;
     if (type === 'spawner') { o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
     if (type === 'keep') { o.craftT = 0; o.craftTotal = 0; }
+    // fish: what the net is holding. catchT/takeT are the two clocks that let
+    // it fill and empty a fish at a time instead of all at once
+    if (type === 'net') { o.fish = 0; o.catchT = NET_CATCH_T; o.takeT = 0; }
     o.sparkT = 0;
     structures.push(o);
     return o;
@@ -2771,10 +2842,18 @@
   // ------------------------------------------------------------ fish
   // passive swimmers that live under the frozen water, visible as silhouettes
   // through the ice; the bow spears one when it's right under the player
-  function addFish(x, y) {
+  // `born` is the whole two-state life of a fish. A born fish is the one the
+  // game has always had: hard-clamped inside the water, drawn, spearable,
+  // catchable. An emerger is none of those yet - it is still under the snow
+  // (the deep water the map does not draw), swimming for the shallows at
+  // FISH_EMERGE_SPD with the clamp lifted, and `vis` - how much of its body is
+  // over water - is both its alpha and the test that promotes it. So a fish is
+  // literally never drawn on snow: what is visible IS what is under the ice.
+  function addFish(x, y, a, born) {
     fish.push({
-      x, y, a: rand(0, Math.PI * 2), spd: rand(9, 18), t: rand(0, 9), turnT: rand(1, 3),
+      x, y, a: a === undefined ? rand(0, Math.PI * 2) : a, spd: rand(9, 18), t: rand(0, 9), turnT: rand(1, 3),
       spook: 0, ts: rng() < 0.5 ? -1 : 1, // preferred turn direction at a dead end
+      born: born !== false, vis: born === false ? 0 : 1, emT: 0,
     });
   }
 
@@ -2790,7 +2869,8 @@
       fishWater(x, y - m) && fishWater(x, y + m);
   }
 
-  function spawnFish(minPlayerDist) {
+  // the seed shoal: dropped straight into interior water, already born
+  function spawnFish() {
     const spots = [];
     for (let i = 0; i < WORLD * WORLD; i++) {
       if (ground[i] !== 1) continue;
@@ -2798,21 +2878,106 @@
       if (fishClear(x, y, 14)) spots.push(i); // interior ice only, ~a tile off the shore
     }
     let guard = 0;
-    while (fish.length < FISH_COUNT && spots.length && guard++ < 400) {
+    while (fish.length < FISH_MAX && spots.length && guard++ < 400) {
       const i = spots[randi(0, spots.length - 1)];
-      const x = (i % WORLD + 0.5) * TILE, y = ((i / WORLD | 0) + 0.5) * TILE;
-      if (minPlayerDist && players.some((p) => p.active && Math.hypot(x - p.x, y - p.y) < minPlayerDist)) continue;
-      addFish(x, y);
+      addFish((i % WORLD + 0.5) * TILE, ((i / WORLD | 0) + 0.5) * TILE);
     }
   }
 
+  // Where a replacement fish comes from: a roomy shore tile of ice, entered
+  // from the snow two tiles back - which is what "deep lake" means here, since
+  // the map has no deep water to draw.
+  //
+  // These are found ONCE and cached. Rejection-sampling random tiles for one
+  // (ice with swimming room, snow exactly two tiles off) hits so rarely on a
+  // 232x232 world that thirty tries routinely found nothing at all, which
+  // silently throttled the whole respawn trickle to near zero. The shoreline
+  // never moves - a hole only flips ice to water and back, and `fishClear`
+  // counts both as swimmable - so one scan at first use stays correct for the
+  // match, and `genWorld()` runs only at boot.
+  let emergeSites = null;
+  function buildEmergeSites() {
+    const out = [];
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let ty = 2; ty < WORLD - 2; ty++) {
+      for (let tx = 2; tx < WORLD - 2; tx++) {
+        if (ground[idx(tx, ty)] !== 1) continue;
+        const x = tx * TILE + 8, y = ty * TILE + 8;
+        if (!fishClear(x, y, 10)) continue; // real swimming room, not a rim tile
+        for (const d of dirs) {
+          const sx = tx + d[0] * 2, sy = ty + d[1] * 2;
+          if (!inWorld(sx, sy) || ground[idx(sx, sy)] !== 0) continue;
+          const px = sx * TILE + 8, py = sy * TILE + 8;
+          out.push({ x: px, y: py, a: Math.atan2(y - py, x - px) });
+        }
+      }
+    }
+    return out;
+  }
+  function spawnEmerger() {
+    if (!emergeSites) emergeSites = buildEmergeSites();
+    if (!emergeSites.length) return false; // a world with no reachable shoreline
+    const s = emergeSites[randi(0, emergeSites.length - 1)];
+    addFish(s.x, s.y, s.a, false);
+    return true;
+  }
+
+  // How much of a fish's body is over water, sampled nose to tail: 1 = fully
+  // under the ice, 0 = fully under the snow. It is the draw alpha, so nothing
+  // half-beached can ever be seen half-beached, and it is what says an emerger
+  // has arrived.
+  function fishVis(f) {
+    let n = 0;
+    for (const o of [5, 2, 0, -2, -5]) if (fishWater(f.x + Math.cos(f.a) * o, f.y + Math.sin(f.a) * o)) n++;
+    return n / 5;
+  }
+
+  // shortest signed turn from a to b - the one steering helper the lure needs
+  function angDelta(a, b) {
+    let d = b - a;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    return d;
+  }
+
+  // the standing, room-to-spare net nearest a point, within its lure radius
+  function nearestNet(x, y) {
+    let best = null, bd = NET_LURE;
+    for (const o of structures) {
+      if (o.type !== 'net' || o.building || o.fish >= NET_CAP) continue;
+      const cx = o.tx * TILE + 8, cy = o.ty * TILE + 8;
+      const d = Math.hypot(cx - x, cy - y);
+      if (d < bd) { bd = d; best = { cx, cy, o, d }; }
+    }
+    return best;
+  }
+
   function updateFish(dt) {
-    for (const f of fish) {
+    for (let i = fish.length - 1; i >= 0; i--) {
+      const f = fish[i];
       f.t += dt;
       f.spook = Math.max(0, f.spook - dt);
+      if (!f.born) {
+        // an emerger holds its heading and creeps in; no wander, no edge cap,
+        // no clamp - the shore is the thing it is crossing. It is born the
+        // moment its whole body is in water with the usual margin to spare.
+        f.emT += dt;
+        f.x += Math.cos(f.a) * FISH_EMERGE_SPD * dt;
+        f.y += Math.sin(f.a) * FISH_EMERGE_SPD * dt;
+        f.vis = fishVis(f);
+        if (f.vis >= 1 && fishClear(f.x, f.y)) { f.born = true; f.vis = 1; f.emT = 0; }
+        else if (f.emT > FISH_EMERGE_MAX) fish.splice(i, 1); // walled in: never surfaced, never seen
+        continue;
+      }
       f.turnT -= dt;
       if (f.turnT <= 0) { f.turnT = rand(1, 3); f.a += rand(-1.1, 1.1); }
       const spd = f.spd * (f.spook > 0 ? 3 : 1);
+      // a net baits the water around it: nothing forced, just a lean toward the
+      // rope, which is what makes a net visibly work instead of waiting on luck
+      if (f.spook <= 0) {
+        const nt = nearestNet(f.x, f.y);
+        if (nt) f.a += angDelta(f.a, Math.atan2(nt.cy - f.y, nt.cx - f.x)) * 1.2 * dt;
+      }
       // soft edge cap: veer away well before the shore, turning toward
       // whichever side opens into water (falling back to the fish's own bias)
       if (!fishClear(f.x + Math.cos(f.a) * 10, f.y + Math.sin(f.a) * 10)) {
@@ -2824,6 +2989,13 @@
       const nx = f.x + Math.cos(f.a) * spd * dt, ny = f.y + Math.sin(f.a) * spd * dt;
       if (fishClear(nx, ny)) { f.x = nx; f.y = ny; }
       else f.a += f.ts * 5 * dt; // pinned: keep rotating until a way out opens
+    }
+    // the trickle that keeps the shoal alive: one fish at a time, twice as fast
+    // once the water is fished down past FISH_MIN, nothing at all at the cap
+    state.fishT -= dt;
+    if (state.fishT <= 0) {
+      state.fishT = fish.length < FISH_MIN ? FISH_SPAWN_FAST : FISH_SPAWN_T;
+      if (fish.length < FISH_MAX) spawnEmerger();
     }
   }
 
@@ -3556,6 +3728,43 @@
         const out = o.bots.some((b) => !b.dead && Math.hypot(b.x - mo.x, b.y - mo.y) > 20);
         const want = (out || (due && o.respawnT < 1.4)) ? 1 : 0;
         o.door += Math.sign(want - o.door) * Math.min(Math.abs(want - o.door), dt * 2.2);
+      } else if (o.type === 'net') {
+        // The net fishes on its own: any born fish that swims over the rope is
+        // caught and comes out of the shoal (which is what the trickle in
+        // updateFish refills), one every NET_CATCH_T so a net visibly fills
+        // rather than snapping shut on the whole pond at once.
+        o.catchT -= dt;
+        if (o.fish < NET_CAP && o.catchT <= 0) {
+          for (let k = fish.length - 1; k >= 0; k--) {
+            const f = fish[k];
+            if (!f.born || Math.hypot(f.x - ox, f.y - oy) > NET_R) continue;
+            fish.splice(k, 1);
+            o.fish++;
+            o.catchT = NET_CATCH_T;
+            if (nearPlayer(ox, oy)) SFX.splash();
+            burst(ox, oy, '#7fa9c6', 6, 40, 0.4, true);
+            burst(ox, oy, '#ddf1f8', 5, 45, 0.4, true);
+            break;
+          }
+        }
+        // ...and it hands the catch to whoever is standing on it, theirs or
+        // not: a net is a thing lying on the ice, not a locked chest. Contested,
+        // so two players over one rope cannot take the same fish.
+        o.takeT -= dt;
+        if (o.fish > 0 && o.takeT <= 0) {
+          for (const p of players) {
+            if (!p.active || p.dead || inAir(p)) continue;
+            if (Math.floor(p.x / TILE) !== o.tx || Math.floor((p.y + 4) / TILE) !== o.ty) continue;
+            if (bagRoom(p, 'fish') <= 0) { if (p === player) bagDenied(); continue; }
+            contest('net:' + idx(o.tx, o.ty), p, () => {
+              if (o.fish <= 0 || bagAdd(p, 'fish', 1) < 1) return;
+              o.fish--;
+              o.takeT = NET_TAKE_T;
+              addFloater(p.x, p.y - 14, '+1', RES_COLORS.fish);
+              if (p === player) SFX.stash();
+            });
+          }
+        }
       } else if (o.type === 'keep' && o.craftT > 0) {
         // mirrors the generator's payT countdown; freezes for free while
         // o.building (an upgrade), since this whole branch is skipped above
@@ -4172,7 +4381,11 @@
 
   function wheelOptions() {
     const w = state.wheel;
-    if (w.kind === 'build') return STRUCT_ORDER.map((type) => ({ id: type }));
+    // the site decides the menu: a stump offers the five buildings that stand
+    // on land, an open hole offers the one that floats. A single option is not
+    // special-cased either - wheelSpan(1) is the whole circle, so any direction
+    // out of the hub picks it and the hub still cancels.
+    if (w.kind === 'build') return buildOptionsAt(w.tx, w.ty).map((type) => ({ id: type }));
     const o = structOf(objAt(w.tx, w.ty));
     // upgrade is always the wedge straight up and demolish always the last one,
     // so a type's extra option lands between them instead of displacing either
@@ -4842,15 +5055,21 @@
         state.day++;
         SFX.dawnChime();
         showMsg('DAY ' + state.day, 3);
-        // carved ice holes freeze back over during the night; cracks heal too
+        // carved ice holes freeze back over during the night; cracks heal too.
+        // A hole with a net on it is the exception - the net is what holds that
+        // water open - so it stays in the list and refreezes the dawn after
+        // whoever wrecks the net.
+        const kept = [];
         for (const i of holes) {
+          if (netAt(i % WORLD, (i / WORLD) | 0)) { kept.push(i); continue; }
           ground[i] = 1;
           repaintGround(i % WORLD, (i / WORLD) | 0);
         }
         holes.length = 0;
+        for (const i of kept) holes.push(i);
         iceCracks.clear();
-        // and the shoal recovers (never right under the player)
-        spawnFish(120);
+        // the shoal is not reset here any more: it is a live population now,
+        // fished down and refilled a fish at a time by updateFish's trickle
       }
     }
     // darkness curve
@@ -5305,7 +5524,9 @@
     // dodge roll carries across the gap)
     if (p.fallT <= 0 && p.dodgeT <= 0) {
       const htx = Math.floor(p.x / TILE), hty = Math.floor((p.y + 4) / TILE);
-      if (inWorld(htx, hty) && ground[idx(htx, hty)] === 2) {
+      // a net is planked over its hole: you stand on it, and that is how the
+      // catch comes out of it (see updateStructures' net branch)
+      if (inWorld(htx, hty) && ground[idx(htx, hty)] === 2 && !netAt(htx, hty)) {
         p.fallT = HOLE_FALL_T;
         p.fallRipT = 0;
         p.vx = p.vy = 0;
@@ -5629,6 +5850,13 @@
 
     // fish: silhouettes drifting under the thin ice, crisp in open holes
     for (const f of fish) {
+      // `vis` is how much of the body is over water (1 for every born fish).
+      // The alpha ramps off the BACK half of it, so an emerger stays completely
+      // invisible until most of it is under the ice and only its tail is still
+      // outside - by which point that tail is a couple of pixels at a fraction
+      // of 0.4. Nothing readable is ever drawn over snow.
+      const em = f.born ? 1 : Math.max(0, (f.vis - 0.5) * 2);
+      if (em <= 0) continue;
       const sx = f.x - ex, sy = f.y - ey;
       if (sx < -12 || sy < -12 || sx > WV_W + 12 || sy > WV_H + 12) continue;
       const surfaced = ground[idx(Math.floor(f.x / TILE), Math.floor(f.y / TILE))] === 2;
@@ -5636,7 +5864,7 @@
       ctx.save();
       ctx.translate(Math.round(sx), Math.round(sy));
       ctx.rotate(f.a);
-      ctx.globalAlpha = surfaced ? 0.95 : 0.4;
+      ctx.globalAlpha = (surfaced ? 0.95 : 0.4) * em;
       ctx.fillStyle = surfaced ? '#7fa9c6' : '#4a708c';
       // tapered oval body with a pointed nose (drawn along +x)
       ctx.fillRect(-3, -1, 7, 3);            // core
@@ -5740,6 +5968,8 @@
         const px = tx * TILE - ox, py = ty * TILE - oy;
         // +4 like rocks and bushes - any lower and the canopy of a tree on the tile below buries it
         if (o.type === 'stump') ctx.drawImage(SPRITES.stump, px, py + 4);
+        // nets lie flat on the water, under everything that walks on them
+        else if (o.type === 'net') drawNet(o, px, py, now);
       }
     }
 
@@ -5761,7 +5991,8 @@
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
         let o = objects[idx(tx, ty)];
-        if (!o || o.type === 'stump') continue;
+        // stumps and nets are both drawn flat, above, and never y-sorted
+        if (!o || o.type === 'stump' || o.type === 'net') continue;
         if (o.type === 'part') {
           o = o.of;
           if ((o.tx >= tx0 && o.tx <= tx1 && o.ty >= ty0 && o.ty <= ty1) || seen.has(o)) continue;
@@ -6309,7 +6540,7 @@
     const o = structOf(objAt(tx, ty));
     const busy = player.fallT > 0 || player.dodgeT > 0; // tools locked out
     // build sites (right-click) outrank tool hints; beyond the 60px reach they dim
-    if (o && (o.type === 'stump' || (STRUCTS[o.type] && !o.building && o.team === player.team))) {
+    if (buildSiteAt(tx, ty) || (o && STRUCTS[o.type] && !o.building && o.team === player.team)) {
       const far = Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60;
       return { kind: 'hammer', dim: far };
     }
@@ -6458,6 +6689,7 @@
     if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
       let best = null, bd = FISH_CATCH_R;
       for (const f of fish) {
+        if (!f.born) continue;
         const d = Math.hypot(f.x - player.x, f.y - player.y);
         if (d < bd) { bd = d; best = f; }
       }
@@ -6793,6 +7025,35 @@
     ctx.fillRect(px + 43, sy - 6, 4, 2);
     if (o.hp < o.maxHp) drawHealthBar(px + 24, sy - 11, o.hp, o.maxHp, 24);
   }
+
+  // The fish net, drawn flat on its hole in the pass right after the ground
+  // instead of y-sorted with the buildings that stand up out of it - a player
+  // walks OVER this one, so it must never sort in front of them. An unfinished
+  // net is rope still being paid out into the water (no scaffold: there is
+  // nothing out there to stand a frame on), and the catch shows through the
+  // mesh, which is the only thing that says a net is worth walking to.
+  function drawNet(o, px, py, now) {
+    const spr = structSprite(o);
+    const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
+    if (o.building) {
+      ctx.globalAlpha = 0.3 + 0.55 * Math.min(1, o.buildT / o.buildTotal);
+      ctx.drawImage(spr, px + sh, py);
+      ctx.globalAlpha = 1;
+      return;
+    }
+    drawSpriteFlash(spr, px + sh, py, o.flash);
+    // the catch: up to NET_CAP fish lying in the mesh, each on its own bob
+    for (let i = 0; i < o.fish; i++) {
+      const fx = px + sh + NET_FISH_AT[i][0], fy = py + NET_FISH_AT[i][1] + (Math.floor(now * 3 + i) % 2);
+      ctx.fillStyle = '#7fa9c6';
+      ctx.fillRect(fx, fy, 5, 2);
+      ctx.fillRect(fx + 5, fy - 1, 1, 1); ctx.fillRect(fx + 5, fy + 2, 1, 1); // tail fork
+      ctx.fillStyle = '#c9dded'; ctx.fillRect(fx + 1, fy + 1, 2, 1);
+      ctx.fillStyle = '#101d2c'; ctx.fillRect(fx + 1, fy, 1, 1);
+    }
+    if (o.hp < o.maxHp) drawHealthBar(px + 8, py - 5, o.hp, o.maxHp, 12);
+  }
+  const NET_FISH_AT = [[3, 4], [8, 8], [4, 11]]; // where a held fish lies in the mesh
 
   // a building wears its owner's team palette over its tier material
   function structSprite(o) {
@@ -7287,8 +7548,10 @@
       tx = Math.floor(mouseWX() / TILE);
       ty = Math.floor(mouseWY() / TILE);
       const o = structOf(objAt(tx, ty));
-      if (!o) return;
-      if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
+      // a bare open hole brackets too: it is a build site with nothing on it,
+      // and the brackets are the only thing that says so
+      if (!o) { if (!buildSiteAt(tx, ty)) return; }
+      else if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
       if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) return;
     }
     // a big building brackets its whole footprint, from its anchor
@@ -7875,6 +8138,7 @@
         else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
         else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
         else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
+        else if (o.type === 'net') { r = 150; g = 186; b = 200; }
         else if (o.type === 'keep') { r = 224; g = 96; b = 96; }
         else { r = 188; g = 200; b = 218; } // stump
       } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
@@ -9048,6 +9312,7 @@
         else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
         else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
         else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
+        else if (o && o.type === 'net') { r = 118; g = 156; b = 176; }
         else if (o && o.type === 'keep') { r = 196; g = 70; b = 70; }
         else if (ground[i] === 2) { r = 44; g = 74; b = 104; } // carved water hole
         else if (ground[i] === 1) {
@@ -9395,9 +9660,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.50'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.51'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.51', 'THE ICE OPENS IN TWO HITS AND THE HOLE IS A BUILD SITE - SET A FISH NET ON IT AND IT FISHES FOR YOU, HOLDING THREE AT A TIME FOR WHOEVER WALKS OUT ONTO IT, YOURS OR NOT - WHILE THE SHOAL IS A LIVING POPULATION NOW, FISHED DOWN AND REFILLED BY NEW FISH SWIMMING UP OUT OF THE DEEP.'],
     ['1.50', 'THE WORKER FLAG IS A HELD GESTURE NOW - HOLD MIDDLE MOUSE TO SEE THE ORDER AND THE TILE IT WOULD LAND ON, RELEASE TO PLANT - SO NOTHING SITS ON YOUR CURSOR WHEN YOU ARE NOT GIVING ONE.'],
     ['1.49', 'MIDDLE CLICK PLANTS ONE FLAG AND EVERY WORKER YOU OWN OBEYS IT - ON A TREE OR ROCK THEY CUT THERE AND SPREAD OUT, ON OPEN GROUND THEY CLEAR A LANE OUT TO IT FROM THE BAY, ON YOUR OWN BUILDING THEY GUARD IT, AND ON ANYTHING ANOTHER TEAM OWNS THEY GO AND BREAK IT.'],
     ['1.48', 'THE DODGE ROLL IS A WEAPON NOW - IT GOES STRAIGHT THROUGH RABBITS WOLVES ROBOTS AND RIVALS, HITTING AND STUNNING EACH ONE ONCE, WHILE A DEER TREE ROCK OR BUILDING IS A TACKLE THAT HURTS AND STUNS BOTH OF YOU - AND EVERY BIT OF IT HITS HARDER THE FASTER YOU WERE GOING, SO DASH OUT OF AN ICE SLIDE.'],
@@ -11557,7 +11823,7 @@
   // debug/dev harness: lets external tooling step frames & stage scenes
   window.DBG = {
     SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes,
-    fish, iceCracks, holes, crackIce, addFish,
+    fish, iceCracks, holes, crackIce, addFish, spawnEmerger, netAt, buildSiteAt,
     // named places: the live registry, the table behind it, and what is where
     landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
     // drop a slot (default the local one) on a tile - how to stage a landmark

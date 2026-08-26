@@ -5,6 +5,11 @@ Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a
 - Always-in-hand bow, but **arrows are finite**: a `QUIVER_MAX` quiver, a per-shot renock cooldown
   (`kit.nock`), slow fletching, and every spent arrow sticks in the snow as a `shafts` entry
   anyone can walk over. **E** harvests and breaks *enemy* buildings (axe/pickaxe come out on their own); build on stumps.
+- **A cracked-open ice hole is a build site too** (`buildSiteAt`, two pickaxe hits): its wheel
+  offers the one `water: true` building, a **fish net** — walked *on*, fishes by itself, and gives
+  its catch to whoever stands on it, enemies included. The shoal is a live population, fished down
+  and refilled by fish swimming in from under the snow (`born`/`vis`):
+  [world](docs/dev/world.md#ice-holes-and-fishing).
 - Momentum is the movement: slippery frozen rivers, chained dodges, shift-sliding. **A roll is a
   hit** scaled by the speed it carries: through anything small (one swipe + stun each), a
   both-sides tackle into anything big.

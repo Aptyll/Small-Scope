@@ -140,11 +140,11 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 `render()` runs: ground blit → under-ice fish → ice-crack decals → footprints (walking prints,
 slide grooves, skate scratches and belly-crawl furrows all share the one `footprints` array,
 branching on `f.k`) → flat objects
-(stumps) → spent arrows (`drawShafts`) → item drops → **y-sorted
+(stumps, and **fish nets** via `drawNet`) → spent arrows (`drawShafts`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
-stump / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
+stump / open ice hole / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → construction progress bars → particles →
 arrows (bolts branch to `drawBolt`) → `drawTurretFx` (each turret's charging aim line and its
 muzzle flash) → turret tracers → swing arcs (one per swinging player) → floaters → `drawDropAir` (the
@@ -174,6 +174,15 @@ Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile
 **dead tree** shares that 16×24 footprint and that offset. Short ground sprites (rock, bush,
 stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
 a tree on the tile below hides it almost completely.
+
+The **fish net** is the one building that is not in `draws` at all. It lies flat on its hole and
+gets walked over, so y-sorting it would put it in front of the player standing on it: `drawNet`
+runs in the flat pre-pass instead, at `(px, py)` filling its tile exactly, with its own health bar
+and its catch (up to `NET_CAP` fish at `NET_FISH_AT`, each on its own bob) drawn into the mesh —
+the catch showing through the rope is the only thing that says a net is worth walking to. An
+unfinished net fades in with `buildT` rather than wearing a scaffold, because there is nothing out
+on the water to stand a frame on. Its construction bar comes from the shared progress-bar pass
+like every other building's.
 
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 64×64 `scratch`
 canvas with `source-in` — sprites larger than 64×64 will clip (the 48×38 bot bay is the biggest).

@@ -53,7 +53,10 @@ don't cite line numbers here, they go stale within a session.
 | wildlife behaviour: prey, the wolf pack, the flock | `updateAnimal`, `updatePrey`, `updateWolf`, `updateBird`, `animalDies` | `animals` |
 | an animal taking a hit from anything (arrow or roll): flee/wake, floater, knockback, kill credit | `hurtAnimal` | `animals` |
 | where an animal walks next: the graze/patrol goal, and the bolt away from a player | `wanderGoal`, `preyWander`, `fleeGoal` | `animals` |
-| fish shoal and ice holes | `updateFish`, `fishClear`, `spawnFish` | `fish` |
+| fish shoal and ice holes | `updateFish`, `fishClear`, `fishWater`, `spawnFish` | `fish` |
+| where new fish come from, and why one is invisible until it is under the ice | `spawnEmerger`, `buildEmergeSites`, `fishVis`, `f.born`/`f.vis`, `FISH_MAX`/`FISH_MIN`, `state.fishT` | `fish` |
+| a fish net: the lure, the catch, handing the catch over, drawing it | `nearestNet`, `angDelta`, `updateStructures` (`net` branch), `drawNet`, `NET_*` | `fish` / `structures & robots` / `entity draw` |
+| is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt`, `STRUCT_ORDER`, `WATER_STRUCT_ORDER` | `helpers` |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
 | shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `structures & robots` |

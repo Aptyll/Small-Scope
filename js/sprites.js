@@ -1180,6 +1180,41 @@
     '................',
   ];
 
+  // ---------------------------------------------------------------- fish net
+  // A fishing net, laid flat over an open water hole (STRUCTS.net, water: true)
+  // instead of standing on the snow: it is the one building drawn under
+  // everything rather than y-sorted, because a player walks onto it. 14x14 of
+  // rope inside a 16x16 tile - a squared frame on four corner floats, a plain
+  // orthogonal mesh (a diagonal one turns to mush at this size), and the water
+  // showing through every gap. k/K/e are the team fitting/glow keys
+  // teamBuildPal swaps, so the frame and the floats carry the owner's colour.
+  const NETPAL = {
+    '.': null,
+    'n': '#c0ab84', // rope
+    'N': '#e6d9b6', // rope knot
+    'k': '#3a4056', // frame dark  (team fit)
+    'K': '#5c6884', // frame light (team fitL)
+    'e': '#ffd95c', // corner float (team glow)
+  };
+  const net = [
+    '................',
+    '.ekKKKKKKKKKKke.',
+    '..k..n..n..n.k..',
+    '..K..n..n..n.K..',
+    '..k..n..n..n.k..',
+    '..knnNnnNnnNnk..',
+    '..K..n..n..n.K..',
+    '..k..n..n..n.k..',
+    '..KnnNnnNnnNnK..',
+    '..k..n..n..n.k..',
+    '..K..n..n..n.K..',
+    '..knnNnnNnnNnk..',
+    '..K..n..n..n.K..',
+    '..k..n..n..n.k..',
+    '.ekKKKKKKKKKKke.',
+    '................',
+  ];
+
   // ---------------------------------------------------------------- bot bay
   // The spawner: a 48x38 bot garage on a 3x2 tile footprint (see STRUCTS.spawner
   // w/h), drawn with its snow skirt on the footprint's bottom edge. Steel
@@ -2038,6 +2073,7 @@
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: [bake(bay, bayTeamPal(t))],
+    net: [bake(net, teamBuildPal(NETPAL, t))],
     keep: TIER_PALS.map((b) => bake(keep, teamBuildPal(b, t))),
     // wheel glyphs for sprites too big to be their own icon
     icon: {
@@ -2429,6 +2465,7 @@
     turret: [bake(turret, WPAL), bake(turret, WPAL_STONE), bake(turret, WPAL_GOLD)],
     generator: [bake(generator, WPAL), bake(generator, WPAL_STONE), bake(generator, WPAL_GOLD)],
     spawner: [bake(spawner, WPAL), bake(spawner, WPAL_STONE), bake(spawner, WPAL_GOLD)],
+    net: [bake(net, NETPAL)],
     scaffold: [bake(scaffold1, SCPAL), bake(scaffold2, SCPAL), bake(scaffold3, SCPAL)],
     robot: teamRobots[0],
     spikes: bake(spikes, SPAL),
