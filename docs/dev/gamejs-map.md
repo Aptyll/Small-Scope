@@ -33,7 +33,7 @@ don't cite line numbers here, they go stale within a session.
 | picking variants pre-match: the full-page picker | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard` | `main menu` › `the gear screen` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the F3 readout: fps, coords, seed | `drawTags` | `render` |
-| the `.` overlay: hitboxes, and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `HB_*` | `debug overlays` |
+| the `.` overlay: hitboxes, the model centre column, and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `hbMid`, `HB_*` | `debug overlays` |
 | the `.` overlay's routes: waypoints + goal tile, a bird's perch line, a fish's heading arrow | `drawNavPaths`, `hbArrow` | `debug overlays` |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` |

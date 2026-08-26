@@ -30,6 +30,10 @@ declare victory. The three affordances:
 - **`.`** cycles the [debug overlay](rendering.md#debug-overlays-hitboxes-and-routes): one press
   for the boxes and circles the sim tests, a second for the route every walker is following and
   the tile it is heading for. Reach for it before reasoning about a collision from the code alone.
+  It also draws the **pink centre column** down every player, animal, robot and building
+  ([hbMid](rendering.md#the-centre-column-hbmid)) — the only way to see whether an overhead frame
+  is square with the sprite it belongs to, since the true middle of an even-width sprite is a pixel
+  boundary and being three pixels out is invisible without it.
   It draws in every mode, `settings.hitbox` sets it from `DBG` without the keypress, and
   `DBG.showPaths` still forces the routes on by itself.
 - **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the display-name

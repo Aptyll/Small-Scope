@@ -363,6 +363,24 @@ frame — **every** slot, the local one included: the name is the profile's
 ([architecture.md](architecture.md#profilejs)), and yours is what the rest of the table reads over
 your head, so hiding it from you alone would make it the one label in the game you cannot check. The backings are translucent, so each plate paints only its own rows - no overlap.
 
+**The frame is square with the body, and that costs an empty plate.** Horizontally it is three
+pieces: a 6 px level plate, the 16 px bar backing, and a 6 px plate on the other side — 28 px
+spanning `cx-14 .. cx+13`, exactly centred on the seam a 16×16 sprite is centred on. The right
+plate holds the stun readout, but it is drawn **empty whenever nothing is stunning**, because the
+level plate is permanent: a right plate that only appeared during a stun left the resting frame
+6 px longer on the left and reading three pixels off centre, and shifting the bars to compensate
+would have made them jump sideways the moment a stun landed. An always-present slot lights up
+instead. Turn the [centre column](#the-centre-column-hbmid) on under `.` before changing any of
+those numbers.
+
+**Every other bar in the game is centred the same way, on its model.** `drawHealthBar(cxp, …)`
+centres an even-width bar on `cxp`, and every caller hands it a true centre: `a.x - ex` for an
+animal (whose sprite is placed at `round(a.x - w/2 - ex)`), `b.x - ex` for a robot, and the centre
+of the **footprint** for a building — `sx + sh + (spr.width >> 1)`, which is where the sprite
+centres itself, `+ sh` so the readout rides the hit shudder with the thing it belongs to rather
+than holding still over a wall that is rocking. Bar widths are kept even for the same reason the
+sprites are.
+
 **The whole stack hangs off one `hy`**, not off `py` directly, for two reasons. It drops 6 rows
 for a [prone](gameplay.md#prone-under-the-snow) pose, which starts that much lower in the same
 16×16 cell — bars floating where a head no longer is look broken. And its alpha fades with
@@ -418,10 +436,26 @@ so a multi-tile building boxes each of its footprint tiles), **blue** open water
 animals and robots, a hole a player falls into — **green** the body circle
 `moveEntity`/`separateUnits` push apart, plus a dot on the anchor point itself, **red** the circle
 an arrow is tested against, **violet** a walk-over pickup or a click target, **gold** a projectile
-(a point, never a circle).
+(a point, never a circle), **pink** the model's own centre column (`hbMid`).
 
 Every shape is read from the expression the sim uses, never a copy of the number — an overlay that
 disagrees with the sim is worse than none, because it is believed.
+
+### The centre column (`hbMid`)
+
+The one shape here that is about the **art** rather than the sim. The overhead frame — health bar,
+stamina bar, level plate — is the only thing in the game that has to line up with a *sprite*
+instead of with a number, and nothing else on screen shows where a sprite's middle is; a frame
+three pixels off centre is invisible until something draws the line. Every player, animal, robot
+and building gets one: movers off the exact camera (`ex`/`ey`), buildings off the rounded one
+(`ox`/`oy`) and from the centre of the **footprint**, which is what a structure sprite centres
+itself over whether or not it is wider than its tiles.
+
+Every sprite in the game is an **even** number of pixels wide and centred on the seam between its
+two halves, so the true middle is a pixel *boundary* and no 1 px line can sit on it. `hbMid` draws
+at `round(centre)` — the column just right of that seam — which turns the test into a count: a
+frame that is genuinely centred has as many columns strictly left of the line as it has from the
+line rightwards. It is dotted so the frame it is measuring reads through it.
 
 **Reaches and sight ranges are deliberately not drawn.** `WORK_REACH`, a wolf's bite and sight, a
 turret's acquisition ring, the bird flush, the fish catch: they were in an earlier version of the

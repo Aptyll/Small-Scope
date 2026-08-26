@@ -6105,8 +6105,12 @@
           }
           // damage readout: only once hurt, so an untouched base stays clean.
           // the bay has its own bar inside drawBayOverlay - don't draw two.
+          // `+ sh` so the readout rides the hit shudder with the building it
+          // belongs to: it only ever appears while the thing is being hit, and a
+          // bar holding still over a wall that is rocking is a bar centred on
+          // nothing. drawBayOverlay is handed `sx + sh` and has always done this.
           if (o.type !== 'spawner' && o.hp < o.maxHp) {
-            drawHealthBar(sx + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)));
+            drawHealthBar(sx + sh + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)));
           }
         }
       }
@@ -6328,6 +6332,7 @@
   //   red    the circle an arrow is tested against - offset UP from the feet
   //   violet a walk-over pickup, or a click target
   //   gold   a projectile, which is a point and not a circle
+  //   pink   the model's own centre column, for lining an overhead frame up on
   // Reaches and sight ranges are deliberately NOT here: they are wide enough to
   // bury the 7px circle that decides whether an arrow lands, and they come back
   // on their own terms later.
@@ -6336,6 +6341,7 @@
   // eat it.
   const HB_SOLID = '#5ad0ff', HB_WATER = '#3f76ff', HB_BODY = '#4dff7d';
   const HB_HURT = '#ff4d5e', HB_PICK = '#c07dff', HB_SHOT = '#ffd95c';
+  const HB_MID = '#ff2ee6';
 
   // One ring, plotted as 1px world pixels. Not an arc() stroke: that is
   // anti-aliased, and the world blit magnifies a soft edge into mush. Rows give
@@ -6399,6 +6405,27 @@
     }
   }
 
+  // The model's own centre column, and the one overlay here that is about the
+  // ART rather than the sim: the overhead frame (health bar, stamina bar, level
+  // badge) is the only thing in the game that has to line up with a sprite
+  // instead of with a number, and nothing else on screen shows you where a
+  // sprite's middle actually is.
+  //
+  // Every sprite in the game is an even number of pixels wide and centred on
+  // the seam between its two halves, so the true middle is a pixel BOUNDARY and
+  // no 1px line can sit on it. This draws at `round(centre)` — the column just
+  // right of that seam — which makes the test a count: a frame that is genuinely
+  // centred has as many columns strictly left of the line as it has from the
+  // line rightwards. It is dotted so the frame it is measuring still reads
+  // through it.
+  function hbMid(cx, y0, y1) {
+    const x = Math.round(cx);
+    if (x < 0 || x > WV_W) return;
+    ctx.fillStyle = HB_MID;
+    const a = Math.max(0, Math.round(y0)), b = Math.min(WV_H, Math.round(y1));
+    for (let y = a; y < b; y += 2) ctx.fillRect(x, y, 1, 1);
+  }
+
   function drawHitboxes(ox, oy, ex, ey) {
     if (!settings.hitbox) return;
 
@@ -6423,6 +6450,7 @@
       hbRing(p.x - ex, p.y - 6 - ey, 7, HB_HURT);
       if (p.dodgeT > 0) hbRing(p.x - ex, p.y - ey, PLAYER_R + ROLL_HIT_R, HB_HURT);
       hbDot(p.x - ex, p.y - ey, HB_BODY);
+      hbMid(p.x - ex, p.y - 32 - ey, p.y + 4 - ey); // up past the name tag, down past the feet
     }
 
     // animals: birds are the one unit nothing collides with, so they get no
@@ -6432,6 +6460,7 @@
       if (a.kind !== 'bird') hbRing(a.x - ex, a.y - ey, unitRadius(a), HB_BODY);
       hbRing(a.x - ex, a.y - (a.alt || 0) - 3 - ey, a.kind === 'bird' ? 5 : 8, HB_HURT);
       hbDot(a.x - ex, a.y - ey, HB_BODY);
+      hbMid(a.x - ex, a.y - (a.alt || 0) - 26 - ey, a.y + 4 - ey);
     }
 
     for (const b of robots) {
@@ -6439,6 +6468,15 @@
       hbRing(b.x - ex, b.y - ey, unitRadius(b), HB_BODY);
       hbRing(b.x - ex, b.y - 1 - ey, 7, HB_HURT); // robotHit
       hbDot(b.x - ex, b.y - ey, HB_BODY);
+      hbMid(b.x - ex, b.y - 24 - ey, b.y + 4 - ey);
+    }
+
+    // buildings: the centre of the FOOTPRINT, which is what the sprite centres
+    // itself over (`sx` in the structure draw) whether it is wider than its
+    // tiles or not - so it is the line the damage bar has to sit on too
+    for (const o of structures) {
+      const w = structW(o.type) * TILE, h = structH(o.type) * TILE;
+      hbMid(o.tx * TILE + w / 2 - ox, o.ty * TILE - 24 - oy, o.ty * TILE + h - oy);
     }
 
     // an arrow is a point: it is the tile under that point that stops it, and
@@ -7071,7 +7109,7 @@
       ctx.fillStyle = '#c9dded'; ctx.fillRect(fx + 1, fy + 1, 2, 1);
       ctx.fillStyle = '#101d2c'; ctx.fillRect(fx + 1, fy, 1, 1);
     }
-    if (o.hp < o.maxHp) drawHealthBar(px + 8, py - 5, o.hp, o.maxHp, 12);
+    if (o.hp < o.maxHp) drawHealthBar(px + sh + 8, py - 5, o.hp, o.maxHp, 12); // + sh: rides the shudder, like every other building bar
   }
   const NET_FISH_AT = [[3, 4], [8, 8], [4, 11]]; // where a held fish lies in the mesh
 
@@ -7327,21 +7365,32 @@
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
-    // stunned: the mirror of the level badge on the other side of the frame -
-    // same backing, same track, sharing its left frame column with the health
-    // bar backing's right edge, so the stack still reads as one outline. The
-    // sparks say what the state is and the track drains from the bottom as the
-    // window runs out, which answers the only question a stun asks.
-    if (p.stunT > 0) {
+    // The stun plate: the mirror of the level badge on the other side of the
+    // frame - same backing, same track, sharing its left frame column with the
+    // health bar backing's right edge, so the stack still reads as one outline.
+    // The sparks say what the state is and the track drains from the bottom as
+    // the window runs out, which answers the only question a stun asks.
+    //
+    // It is drawn EMPTY when nothing is stunning, and that is the whole reason
+    // the frame is square with the body: the level badge is permanent, so a
+    // right-hand plate that only appeared during a stun left the resting frame
+    // 6 px longer on the left than on the right and reading three pixels off
+    // centre - see the pink centre column under '.' (drawHitboxes). With both
+    // plates always present the frame is 28 px spanning cx-14..cx+13, exactly
+    // centred on the sprite's own seam, and a stun lights a slot that was
+    // always there instead of shunting the bars sideways.
+    {
       const bx = Math.round(p.x - ex) + 8, by = hy - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx, by, 6, 7); // 6 wide: the column to its left is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx, by + 1, 5, 5);
-      const h = Math.max(1, Math.round(5 * Math.min(1, p.stunT / Math.max(0.01, p.stunMax))));
-      ctx.fillStyle = '#b06a14'; // bright enough to read as a fill against the track, dim enough to sit under the sparks
-      ctx.fillRect(bx, by + 6 - h, 5, h);
-      drawStunStars(bx + 2, by + 3, p, 1.5, 1);
+      if (p.stunT > 0) {
+        const h = Math.max(1, Math.round(5 * Math.min(1, p.stunT / Math.max(0.01, p.stunMax))));
+        ctx.fillStyle = '#b06a14'; // bright enough to read as a fill against the track, dim enough to sit under the sparks
+        ctx.fillRect(bx, by + 6 - h, 5, h);
+        drawStunStars(bx + 2, by + 3, p, 1.5, 1);
+      }
     }
     // bow draw meter: yellow while charging, turning hot orange the moment the
     // draw is full. Drawn for everyone - it is the tell that says a shot is
@@ -9886,9 +9935,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.55'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.56'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.56', 'THE HEALTH FRAME OVER YOUR HEAD SITS SQUARE WITH YOU NOW INSTEAD OF HANGING THREE PIXELS TO THE LEFT - THE STUN SLOT ON ITS RIGHT IS ALWAYS THERE, EMPTY UNTIL SOMETHING STUNS YOU - AND THE HITBOX KEY DRAWS A PINK LINE DOWN THE MIDDLE OF EVERY PLAYER ANIMAL ROBOT AND BUILDING SO YOU CAN SEE IT.'],
     ['1.55', 'YOU HAVE A NAME NOW - THE GAME ASKS FOR ONE THE FIRST TIME IT OPENS, IT SITS BOTTOM-LEFT OF THE TITLE SCREEN WITH A QUILL TO CHANGE IT, IT RIDES OVER YOUR HEAD IN THE MATCH THE WAY EVERY RIVAL NAME ALREADY DID, AND THE MATCHES GOLD AND DAYS BEHIND IT ARE KEPT.'],
     ['1.54', 'HOUSEKEEPING ONLY - THE PROJECT DOCS SPLIT THE DESIGN AND THE FILE LAYOUT OUT INTO PAGES OF THEIR OWN, AND THE README FINALLY DESCRIBES THE FREE-FOR-ALL INSTEAD OF A SOLO SURVIVAL GAME, WITH NOTHING IN THE GAME CHANGED.'],
     ['1.53', 'HOUSEKEEPING ONLY - 34 MB OF UNUSED ALTERNATE MUSIC TAKES AND ALBUM ART LEFT THE FOLDER AND THE PROJECT DOCS GOT A TRIM, WITH NOTHING IN THE GAME CHANGED.'],
