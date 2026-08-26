@@ -373,6 +373,18 @@ would have made them jump sideways the moment a stun landed. An always-present s
 instead. Turn the [centre column](#the-centre-column-hbmid) on under `.` before changing any of
 those numbers.
 
+**The name tag is centred by `centreTextX`, and that is not the same expression.** A glyph run is
+an **odd** number of pixels wide at scale 1 (`pixelTextWidth` is `4n - 1`), so unlike the frame it
+can never sit exactly on the seam — but it must at least sit on the same side of it every frame,
+and `round(p.x - ex - w / 2)` does not: the half pixel the odd width carries lands on top of the
+camera's own fraction, so which way it rounds flips as the model walks and the tag hops a pixel
+left and right against a body that is holding still. `centreTextX` rounds the position first (the
+once-and-only-once rule in [CLAUDE.md](../../CLAUDE.md)) and then steps back a whole number of
+pixels, `w >> 1`, which puts the run's **middle column** on `round(sx)` — the column
+[hbMid](#the-centre-column-hbmid) draws, so the overlay runs straight down the middle glyph. Use it
+for any text centred over a model; free-floating text (damage floaters, wheel labels) is not
+centred on anything and keeps its own maths.
+
 **Every other bar in the game is centred the same way, on its model.** `drawHealthBar(cxp, …)`
 centres an even-width bar on `cxp`, and every caller hands it a true centre: `a.x - ex` for an
 animal (whose sprite is placed at `round(a.x - w/2 - ex)`), `b.x - ex` for a robot, and the centre

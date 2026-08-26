@@ -7232,6 +7232,19 @@
     }
   }
 
+  // Centre a run of pixel text over a model. A glyph run is an ODD number of
+  // pixels wide at scale 1 (`pixelTextWidth` is `4n - 1`), so it can never sit
+  // exactly on the seam an even-width sprite is centred on - but it must at
+  // least sit on the same side of that seam every frame, and rounding
+  // `x - ex - w / 2` in one go does not. The half pixel the odd width carries
+  // lands on top of the camera's own fraction, so which way it rounds flips as
+  // the model walks and the tag hops a pixel left and right against a body that
+  // is holding still. Round the position first - the once-and-only-once rule in
+  // CLAUDE.md - then step back a whole number of pixels. `w >> 1` puts the run's
+  // MIDDLE COLUMN on `round(sx)`, which is the column the debug centre line
+  // (hbMid) draws, so the overlay runs straight down the middle glyph.
+  function centreTextX(sx, txt, scale) { return Math.round(sx) - (pixelTextWidth(txt, scale) >> 1); }
+
   function drawPlayer(p, ex, ey, now) {
     const local = p === player;
     const lying = p.prone;
@@ -7340,7 +7353,7 @@
     // table sees over your head, and hiding it from you alone would make it
     // the one label in the game you cannot check.
     drawPixelTextOutline(ctx, p.name,
-      Math.round(p.x - ex - pixelTextWidth(p.name) / 2), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
+      centreTextX(p.x - ex, p.name), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
       TEAMS[p.team].mark, '#0f1632');
     // dodge stamina: one clean unsegmented bar under the health bar - charges
     // stay discrete in the sim, the bar just shows the pooled total. Drawn for
@@ -9935,9 +9948,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.56'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.57'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.57', 'THE NAME OVER A HEAD IS CENTRED ON THE BODY NOW AND STAYS THERE - IT USED TO HOP A PIXEL LEFT AND RIGHT AS YOU WALKED, BECAUSE THE HALF PIXEL AN ODD-WIDTH WORD CARRIES WAS BEING ROUNDED TOGETHER WITH THE CAMERA.'],
     ['1.56', 'THE HEALTH FRAME OVER YOUR HEAD SITS SQUARE WITH YOU NOW INSTEAD OF HANGING THREE PIXELS TO THE LEFT - THE STUN SLOT ON ITS RIGHT IS ALWAYS THERE, EMPTY UNTIL SOMETHING STUNS YOU - AND THE HITBOX KEY DRAWS A PINK LINE DOWN THE MIDDLE OF EVERY PLAYER ANIMAL ROBOT AND BUILDING SO YOU CAN SEE IT.'],
     ['1.55', 'YOU HAVE A NAME NOW - THE GAME ASKS FOR ONE THE FIRST TIME IT OPENS, IT SITS BOTTOM-LEFT OF THE TITLE SCREEN WITH A QUILL TO CHANGE IT, IT RIDES OVER YOUR HEAD IN THE MATCH THE WAY EVERY RIVAL NAME ALREADY DID, AND THE MATCHES GOLD AND DAYS BEHIND IT ARE KEPT.'],
     ['1.54', 'HOUSEKEEPING ONLY - THE PROJECT DOCS SPLIT THE DESIGN AND THE FILE LAYOUT OUT INTO PAGES OF THEIR OWN, AND THE README FINALLY DESCRIBES THE FREE-FOR-ALL INSTEAD OF A SOLO SURVIVAL GAME, WITH NOTHING IN THE GAME CHANGED.'],
