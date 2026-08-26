@@ -176,7 +176,7 @@
     return u.buffer;
   }
 
-  // Where a clip's bytes come from. js/sfxdata.js (baked by bake-sfx.js) is
+  // Where a clip's bytes come from. js/sfxdata.js (baked by tools/bake-sfx.js) is
   // preferred and is what makes opening index.html off the disk work at all - a
   // file:// page is allowed neither fetch nor XHR against its own folder, so
   // without it every sampled cue silently falls back to synth. fetch stays as
@@ -210,7 +210,7 @@
                 + 'which is what "the new sounds do nothing" sounds like. '
                 + (window.SFXDATA ? 'js/sfxdata.js is loaded but does not carry this clip: rerun '
                   : 'js/sfxdata.js did not load - index.html must include it, and it is built by ')
-                + '`node bake-sfx.js`. First failure:', bankStat.err[0]);
+                + '`node tools/bake-sfx.js`. First failure:', bankStat.err[0]);
             }
           });
       }

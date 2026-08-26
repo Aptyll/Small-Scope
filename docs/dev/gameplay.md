@@ -1152,7 +1152,7 @@ right, and the fallback line under every sampled cue.
 of them on the first `ensure()`.
 
 **The bytes come from [js/sfxdata.js](../../js/sfxdata.js), not from the network.** That file is
-generated — `node bake-sfx.js` writes every clip in `audio/sfx/` into it as base64 — and it exists
+generated — `node tools/bake-sfx.js` writes every clip in `audio/sfx/` into it as base64 — and it exists
 because **double-clicking `index.html` has to work**: a `file://` page is allowed neither `fetch`
 nor XHR against its own folder, so the whole sample layer fell back to synth when the game was
 opened off the disk rather than served, sounding *exactly* as it did before the samples existed.
@@ -1242,7 +1242,7 @@ title track comes back from boot.
 
 The **title track cannot start on its own** — no gesture has happened at boot. `musicPlay` catches
 the rejected `play()` promise into `pending`, and the first click or keypress starts it. This is
-why the dev server ([serve.js](../../serve.js)) answers Range requests: served a plain 200, an
+why the dev server ([tools/serve.js](../../tools/serve.js)) answers Range requests: served a plain 200, an
 `<audio>` element treats a multi-MB mp3 as an unbounded stream (`duration` `Infinity`) and cannot
 seek in it.
 
