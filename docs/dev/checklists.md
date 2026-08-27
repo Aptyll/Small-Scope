@@ -107,7 +107,9 @@ null = any), `verb` and `lift` (the E key prompt), and `mm`/`map` (the colour ea
 paints it — an `[r, g, b]`, or a `(o, i, h)` function when it is not a constant, as the tree's
 canopy and the bush's berries are not). `isSolidTile()`, `workTarget()`, `hitObject()`'s tool
 gate, `drawWorkHint()`, `updateMinimap()` and `buildWorldMapImg()` all read that one entry and
-need no edit — none of them names a type any more.
+need no edit — none of them names a type any more. An object *instance* carrying a `team` field
+(the roosting eagles' hitbox tiles) is a rival-only E target — `workTarget()` applies that
+generically, the same rule buildings answer through `ownsStruct`.
 
 What is still per-type and has to be written by hand: the sprite branch in the flat pass or the
 `draws` y-sort in `render()` (the draw *order* is one ordered function on purpose — see

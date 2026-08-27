@@ -31,6 +31,13 @@ const OBJECTS = {
               mm: [88, 148, 108],  map: (o) => o.berries > 0 ? MAP_BUSH_RIPE : MAP_BUSH_BARE },
   den:      { solid: true,  mm: [92, 86, 100],   map: [86, 80, 92] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
+  // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
+  // solid to walkers and a work target for RIVAL E swings only - workTarget
+  // reads the `team` an object carries. Drawn by drawEagle, never the object
+  // pass; the swing itself lands in hitObject's eagle branch (hurtEagle).
+  eagle:    { solid: true,  tool: 'axe',  needs: null,   verb: 'STRIKE', lift: 16,
+              mm: (o) => o.team ? MM_EAGLE_BLUE : MM_EAGLE_RED,
+              map: (o) => o.team ? MAP_EAGLE_BLUE : MAP_EAGLE_RED },
   // a multi-tile building's filler tiles: solid, and structOf() has resolved
   // them to their anchor long before either map sees one
   part:     { solid: true },
@@ -39,6 +46,8 @@ const OBJECTS = {
 // handful of shared arrays rather than a fresh one: buildWorldMapImg walks
 // every tile in the world on every frame the map is open.
 const MAP_BUSH_RIPE = [170, 72, 80], MAP_BUSH_BARE = [118, 128, 98];
+const MM_EAGLE_RED = [224, 85, 72], MM_EAGLE_BLUE = [106, 168, 232];
+const MAP_EAGLE_RED = [196, 74, 64], MAP_EAGLE_BLUE = [92, 140, 200];
 const MAP_TREE_RIM = [116, 144, 104], MAP_TREE_DEEP = [44, 66, 50],
       MAP_TREE_MID = [60, 88, 64], MAP_TREE_LIT = [74, 102, 74];
 // a canopy on the parchment: a lit rim wherever the tile above is not another

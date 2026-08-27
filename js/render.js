@@ -183,8 +183,9 @@ function render() {
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
       let o = objects[idx(tx, ty)];
-      // stumps and nets are both drawn flat, above, and never y-sorted
-      if (!o || o.type === 'stump' || o.type === 'net') continue;
+      // stumps and nets are both drawn flat, above, and never y-sorted; an
+      // eagle's hitbox tiles have no pixels of their own (drawEagle draws the bird)
+      if (!o || o.type === 'stump' || o.type === 'net' || o.type === 'eagle') continue;
       if (o.type === 'part') {
         o = o.of;
         if ((o.tx >= tx0 && o.tx <= tx1 && o.ty >= ty0 && o.ty <= ty1) || seen.has(o)) continue;

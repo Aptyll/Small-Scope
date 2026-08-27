@@ -86,9 +86,12 @@ function workTarget(p) {
     if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) t = TOOL_AXE; }
     else {
       // scenery answers from its OBJECTS entry: `tool` is what E reaches for,
-      // and `ready` (the bush's berries) is what decides it is worth reaching
+      // and `ready` (the bush's berries) is what decides it is worth reaching.
+      // An object carrying a `team` (a roosting eagle's hitbox tiles) is a
+      // rival-only target, the same rule a building answers above.
       const d = OBJECTS[o.type];
-      if (d && d.tool && (!d.ready || d.ready(o))) t = d.tool === 'pick' ? TOOL_PICK : TOOL_AXE;
+      if (d && d.tool && (!d.ready || d.ready(o)) &&
+        (o.team === undefined || o.team !== p.team)) t = d.tool === 'pick' ? TOOL_PICK : TOOL_AXE;
     }
   } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
   if (t < 0) return null;
@@ -563,6 +566,14 @@ function hitObject(o, p) {
       spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2 + kitOf(p).harvest);
       burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
     }
+  } else if (o.type === 'eagle') {
+    // the roost: a rival's E swing is the melee siege on the objective. The
+    // own-team case can still land here through a stale swing lock, so the
+    // gate workTarget applies is re-checked before any damage.
+    const e = state.drop && state.drop.eagles[o.team];
+    if (!e || e.state !== 'down' || p.team === o.team) { if (near) SFX.deny(); return; }
+    hurtEagle(e, EAGLE_WORK_DMG, p);
+    if (near) SFX.chop();
   } else if (o.type === 'bush') {
     if (o.berries > 0) {
       o.berries = 0;

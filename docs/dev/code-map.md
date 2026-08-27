@@ -214,6 +214,6 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| the twin eagle rides, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `makeEagles`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `updateEagle`, `drawDropAir`, `drawEagle`, `renderDropUI` | `eagle drop` |
+| the twin eagle rides, the wing seats, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `makeEagles`, `seatPos`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `updateEagle`, `drawDropAir`, `drawEagle`, `renderDropUI` | `eagle drop` |
 | the dive past the line's end, the tree-shattering impact, and the grounded objective's life and death | `beginDive`, `findCrashPoint`, `eagleCrash`, `eagleBoomFx`, `hurtEagle`, `eagleFall`, `teamEagleDown` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |

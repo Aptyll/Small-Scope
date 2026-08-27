@@ -172,11 +172,15 @@ team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one 
 its income and spills the gold it was carrying, so a base's economy can be raided without ever
 touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
-**So is a rival's grounded eagle** — tested right after the robots, same team rule, through
-`hurtEagle` (the `eagle drop` banner in js/boot.js): a rival arrow within `EAGLE_BODY_R` of a
-`down` bird chips its `EAGLE_HP` pool, and at zero `eagleFall` takes the whole owning side out of
-the match (see [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
-[rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it.
+**So is a rival's grounded eagle** — tested before tile solidity (its own roost tiles are solid,
+and would otherwise eat the shot), same team rule, through `hurtEagle` (the `eagle drop` banner in
+js/boot.js): a rival arrow within `EAGLE_BODY_R` of a `down` bird chips its `EAGLE_HP` pool, a
+rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle branch (the roost tiles are
+`eagle` objects, a rival-only work target — `workTarget` reads the `team` they carry), and at
+zero `eagleFall` takes the whole owning side out of the match (see
+[Death is final](gameplay.md#death-is-final) and the eagle-drop section in
+[rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it; a friendly
+swing is refused.
 
 `die(p, src, cause)` empties the wallet **and the bag** the same way regardless of what happens
 next: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every carried

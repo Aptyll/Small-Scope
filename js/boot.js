@@ -24,14 +24,24 @@ const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the 
 const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
 const DROP_ALT = 56;        // screen px between the bird / a faller and its shadow
-const EAGLE_SCALE = 2;      // the bird is high above the ground: drawn at 2x
+const EAGLE_SCALE = 3;      // the bird is huge and high above the ground: drawn at 3x in flight
+const EAGLE_REST_SCALE = 2; // ...settling to 2x once it roosts (the dive walks 3 down to 2)
+const RIDER_SCALE = 2;      // the riders on its wings, and where a faller's shrink starts
 const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of the shared line
 const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
+const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the resting pose
 const EAGLE_HP = 320;       // the grounded objective's pool (~arrow damage x25)
-const EAGLE_BODY_R = 17;    // what a rival arrow tests against once the bird is down
+const EAGLE_BODY_R = 26;    // what a rival arrow tests against once the bird is down
+const EAGLE_WORK_DMG = 10;  // what one rival E swing chips off the roosting bird
+const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid (its hitbox on the grid)
 const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
 const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
+// where the five riders sit, in the bird's own frame (x along the heading,
+// y across the wings, unscaled sprite px): one on its back, two on the inner
+// wings, two out on the primaries. Seat 0 is the roster's first slot per team
+// - the human, on their own bird.
+const EAGLE_SEATS = [[-2, 0], [2, -11], [2, 11], [-7, -19], [-7, 19]];
 
 // the seed's line: two points on a ring just inside the forest, roughly
 // opposite each other. hash2 only - never rng(), which would reshuffle seeds.
@@ -60,20 +70,32 @@ function makeEagles() {
       x0: sx, y0: sy, x1: ex, y1: ey, x: sx, y: sy,
       t: 0, prog: 0, flap: team * 0.4,
       state: 'fly',                 // fly -> dive -> down (the objective) -> dead
-      diveT: 0, from: null, crash: null,
+      diveT: 0, from: null, crash: null, restT: 0,
       hp: EAGLE_HP, maxHp: EAGLE_HP, flash: 0, boomT: 0, smokeT: 0,
     };
   });
 }
 
+// a seat's world position on a bird right now: the seat offset rotated by the
+// heading, off the bird's centre
+function seatPos(e, si) {
+  const s = EAGLE_SEATS[si % EAGLE_SEATS.length];
+  const dx = s[0] * EAGLE_SCALE, dy = s[1] * EAGLE_SCALE;
+  const c = Math.cos(e.heading), sn = Math.sin(e.heading);
+  return { x: e.x + dx * c - dy * sn, y: e.y + dx * sn + dy * c };
+}
+
 function beginDrop() {
   PROFILE.addGame(); // one match played, counted as the eagles take off
   state.drop = { eagles: makeEagles() };
+  const seats = [0, 0]; // next free wing seat per team; slot 0 takes seat 0 on the red bird
   for (const p of players) {
     if (!p.active) continue;
     const e = state.drop.eagles[p.team];
     p.aboard = true; p.dropT = 0;
-    p.x = e.x0; p.y = e.y0;
+    p.seat = seats[p.team]++;
+    const sp = seatPos(e, p.seat);
+    p.x = sp.x; p.y = sp.y;
     // bots spread along the middle of the line; the human rides to the end unless they jump
     p.dropU = p.control === 'ai' ? 0.12 + 0.76 * hash2(p.id * 31 + 5, 9) : 1;
   }
@@ -99,7 +121,9 @@ function dropJump(p) {
   const d = state.drop.eagles[p.team];
   p.aboard = false;
   p.dropT = FALL_T;
-  p.x = d.x; p.y = d.y;
+  // the leap starts from the wing seat the rider was sitting on (p.x/p.y are
+  // already there - updateDrop keeps every rider glued to its seat), so the
+  // fall visibly begins at the wing; drawDropAir adds the hop off it
   if (p.control === 'ai') { // scatter bots off the line so they don't stack
     const off = (hash2(p.id * 7 + 1, 33) - 0.5) * 8 * TILE;
     p.x += -Math.sin(d.heading) * off;
@@ -155,7 +179,8 @@ function updateDrop(dt) {
     if (!p.active) continue;
     if (p.aboard) {
       const e = state.drop.eagles[p.team];
-      p.x = e.x; p.y = e.y;
+      const sp = seatPos(e, p.seat);
+      p.x = sp.x; p.y = sp.y;
       if (e.prog >= p.dropU) dropJump(p); // the end of the line drops the human too
     } else if (p.dropT > 0) {
       p.dropT -= dt;
@@ -196,6 +221,8 @@ function updateEagle(e, dt) {
       life: 0.3, maxLife: 0.3, color: '#f4f7ff', size: 1, grav: 0, alpha: 0.5,
     });
     if (u >= 1) eagleCrash(e);
+  } else if (e.state === 'down') {
+    e.restT += dt; // drives the wing-fold settle, then the breathing at rest
   } else if (e.state === 'dead') {
     // the wreck smoulders where the objective was lost
     e.smokeT -= dt;
@@ -247,6 +274,7 @@ function findCrashPoint(e) {
 // free fells would warp the economy at minute one.
 function eagleCrash(e) {
   e.state = 'down';
+  e.restT = 0;
   e.x = e.crash.x; e.y = e.crash.y;
   const ctx0 = Math.floor(e.x / TILE), cty0 = Math.floor(e.y / TILE);
   const R = Math.ceil(BOOM_STUMP_R);
@@ -261,11 +289,21 @@ function eagleCrash(e) {
     burst(ox, oy - 8, o.type === 'tree' ? '#2f5c4b' : '#6b5a48', 5, 60, 0.55, true);
     burst(ox, oy - 6, '#6b5a48', 4, 55, 0.5, true);
   }
+  // the roost's hitbox: `eagle` objects on the tiles under the bird - solid
+  // to walkers, a work target for rival E swings (their OBJECTS entry), and
+  // drawn by drawEagle, never the object pass. Anything the blast didn't
+  // clear (a rock) keeps its tile.
+  const TR = Math.ceil(EAGLE_TILE_R);
+  for (let dy = -TR; dy <= TR; dy++) for (let dx = -TR; dx <= TR; dx++) {
+    const tx = ctx0 + dx, ty = cty0 + dy;
+    if (!inWorld(tx, ty) || Math.hypot(dx, dy) > EAGLE_TILE_R) continue;
+    if (!objAt(tx, ty) && ground[idx(tx, ty)] !== 2) placeObj(tx, ty, 'eagle', { team: e.team });
+  }
   eagleBoomFx(e, 1);
   const near = Math.hypot(player.x - e.x, player.y - e.y);
   state.shake = Math.max(state.shake, near < 400 ? 9 : near < 1000 ? 5 : 3);
   SFX.boom();
-  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE IS DOWN', players.find((p) => p.team === e.team));
+  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE HAS LANDED', players.find((p) => p.team === e.team));
 }
 
 // the impact language, shared by the landing and the loss (k scales it up):
@@ -305,6 +343,15 @@ function hurtEagle(e, dmg, src) {
 function eagleFall(e, src) {
   e.state = 'dead';
   e.smokeT = 0;
+  // the wreck is flat and burned: its roost tiles open back up
+  const ctx0 = Math.floor(e.x / TILE), cty0 = Math.floor(e.y / TILE);
+  const TR = Math.ceil(EAGLE_TILE_R);
+  for (let dy = -TR; dy <= TR; dy++) for (let dx = -TR; dx <= TR; dx++) {
+    const tx = ctx0 + dx, ty = cty0 + dy;
+    if (!inWorld(tx, ty)) continue;
+    const o = objAt(tx, ty);
+    if (o && o.type === 'eagle' && o.team === e.team) objects[idx(tx, ty)] = null;
+  }
   eagleBoomFx(e, 1.7);
   const near = Math.hypot(player.x - e.x, player.y - e.y);
   state.shake = Math.max(state.shake, near < 500 ? 10 : 6);
@@ -335,15 +382,18 @@ function drawDropAir(ex, ey, now) {
   const d = state.drop;
   if (!d) return;
   for (const e of d.eagles) drawEagle(e, ex, ey, now);
-  const S = EAGLE_SCALE;
-  // fallers: shrink from the bird's scale to the ground's, shadow growing under them
+  // fallers: a hop off the wing, then the shrink from rider scale to the
+  // ground's, shadow growing under them. This is a WORLD pass, so the cull is
+  // against WV_*, not VIEW_* - the old VIEW_* bounds were half the zoomed-out
+  // frame, which is what made fallers on the far side of it vanish mid-air.
   for (const p of players) {
     if (!p.active || p.dropT <= 0) continue;
     const q = 1 - p.dropT / FALL_T;          // 0 just jumped .. 1 touching down
-    const alt = DROP_ALT * (1 - q * q);      // gravity: slow start, fast finish
-    const sc = S - (S - 1) * q;
+    const hop = Math.sin(Math.min(1, q * 4) * Math.PI) * 7; // the leap: up and off the wing first
+    const alt = DROP_ALT * (1 - q * q) + hop; // then gravity: slow start, fast finish
+    const sc = RIDER_SCALE - (RIDER_SCALE - 1) * q;
     const px = Math.round(p.x - ex), py = Math.round(p.y - ey);
-    if (px < -40 || py < -120 || px > VIEW_W + 40 || py > VIEW_H + 40) continue;
+    if (px < -40 || py < -DROP_ALT - 60 || px > WV_W + 40 || py > WV_H + 40) continue;
     const sw = Math.round(3 + 5 * q);
     ctx.fillStyle = 'rgba(40,60,100,' + (0.12 + 0.28 * q).toFixed(2) + ')';
     ctx.fillRect(px - sw, py - 1, sw * 2, 2);
@@ -363,7 +413,7 @@ function drawEagle(e, ex, ey, now) {
     const u = e.state === 'dive' ? Math.min(1, e.diveT / EAGLE_DIVE_T) : 0;
     const fall = u * u; // gravity: slow tip-over, hard finish
     const alt = DROP_ALT * (1 - fall);
-    const S = EAGLE_SCALE - 0.5 * fall;
+    const S = EAGLE_SCALE - (EAGLE_SCALE - EAGLE_REST_SCALE) * fall; // 3x down to the roost's 2x
     const spr = frames[[0, 1, 2, 1][Math.floor(e.flap * (7 + 6 * u)) % 4]]; // wingbeats quicken into the stoop
     const w = spr.width * S, h = spr.height * S;
     if (sx < -w - 40 || sy < -h - DROP_ALT - 40 || sx > WV_W + w + 40 || sy > WV_H + h + 40) return;
@@ -378,10 +428,16 @@ function drawEagle(e, ex, ey, now) {
     ctx.rotate(e.heading);
     ctx.drawImage(spr, -w / 2, -h / 2, w, h);
     ctx.restore();
-    // the local rider sits on its own bird's back (unrotated, so the face reads)
-    if (player.aboard && player.team === e.team) {
-      const ps = champSet(player).down[0];
-      ctx.drawImage(ps, sx - 16, sy + bob - 17, 32, 32);
+    // every rider on its wing seat, unrotated so the faces read; the local
+    // slot draws last so it is never under a teammate
+    const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
+    for (let pass = 0; pass < 2; pass++) for (const p of players) {
+      if (!p.active || !p.aboard || p.team !== e.team || (p === player) !== (pass === 1)) continue;
+      const st = EAGLE_SEATS[p.seat % EAGLE_SEATS.length];
+      const dx = st[0] * S, dy = st[1] * S;
+      const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + bob + Math.round(dx * hs + dy * hc);
+      const rs = 16 * RIDER_SCALE;
+      ctx.drawImage(champSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
     }
     // where a jump right now would land: a pulsing ring under the bird
     if (player.aboard && player.team === e.team && state.mode === 'drop') {
@@ -393,12 +449,17 @@ function drawEagle(e, ex, ey, now) {
       ctx.globalAlpha = 1;
     }
   } else {
-    // grounded: the objective (down) or the scorched silhouette it leaves (dead)
-    const S = 1.5;
-    const spr = frames[2]; // wings folded back
+    // grounded: the roosting objective (down) or the scorched silhouette it
+    // leaves (dead). The landing is a landing, not a wound - the bird folds
+    // its wings over EAGLE_SETTLE_T and then sits there breathing.
+    const S = EAGLE_REST_SCALE;
+    const fi = e.state === 'down' && e.restT < EAGLE_SETTLE_T
+      ? Math.min(2, Math.floor(e.restT / EAGLE_SETTLE_T * 3)) : 2;
+    const spr = frames[fi];
     const w = spr.width * S, h = spr.height * S;
     if (sx > -w - 70 && sy > -h - 70 && sx < WV_W + w + 70 && sy < WV_H + h + 70) {
       if (e.state === 'down') {
+        const breath = e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0;
         ctx.save();
         ctx.translate(sx + 3, sy + 4);
         ctx.rotate(e.heading);
@@ -407,7 +468,7 @@ function drawEagle(e, ex, ey, now) {
         ctx.restore();
         ctx.globalAlpha = 1;
         ctx.save();
-        ctx.translate(sx, sy);
+        ctx.translate(sx, sy + breath);
         ctx.rotate(e.heading);
         ctx.drawImage(spr, -w / 2, -h / 2, w, h);
         if (e.flash > 0) {
@@ -416,14 +477,16 @@ function drawEagle(e, ex, ey, now) {
           ctx.globalAlpha = 1;
         }
         ctx.restore();
-        // the pool, in team colour, once the bird has been touched
-        if (e.hp < e.maxHp) {
-          const bw = 30, bx = sx - bw / 2, by = sy - Math.round(h / 2) - 8;
-          ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
-          ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
-          ctx.fillStyle = TEAMS[e.team].mark;
-          ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
-        }
+        // the pool, in team colour, up from the moment it roosts - the bar IS
+        // the objective's introduction, so it never waits for a first hit.
+        // Anchored to the bird's rotated extent, not the unrotated box, so it
+        // hugs the sprite whatever way the dive left it pointing.
+        const vh = Math.abs(w / 2 * Math.sin(e.heading)) + Math.abs(h / 2 * Math.cos(e.heading));
+        const bw = 40, bx = sx - bw / 2, by = sy - Math.round(vh) - 7;
+        ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
+        ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
+        ctx.fillStyle = TEAMS[e.team].mark;
+        ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
       } else {
         ctx.save();
         ctx.translate(sx, sy);
@@ -435,14 +498,18 @@ function drawEagle(e, ex, ey, now) {
       }
     }
   }
-  // the impact shockwave: two rings racing out over the crater, then gone
+  // the impact shockwave: two rings racing out over the crater, then gone -
+  // squashed flat so they read as a blast wave along the ground, never as a
+  // halo circling the bird's head
   if (e.boomT > 0) {
     const q = 1 - e.boomT / BOOM_LIFE;
     ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(1, 0.55);
     ctx.strokeStyle = '#f4f7ff'; ctx.lineWidth = 2; ctx.globalAlpha = 0.7 * (1 - q);
-    ctx.beginPath(); ctx.arc(sx, sy, 8 + q * 64, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 10 + q * 78, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = TEAMS[e.team].mark; ctx.lineWidth = 1; ctx.globalAlpha = 0.5 * (1 - q);
-    ctx.beginPath(); ctx.arc(sx, sy, 4 + q * 42, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 5 + q * 52, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
     ctx.globalAlpha = 1;
   }

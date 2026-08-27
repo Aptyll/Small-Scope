@@ -199,6 +199,21 @@ function updatePlay(dt) {
       });
     }
     let dead = a.t > a.life;
+    if (!dead && state.drop) {
+      // the grounded eagles are the objectives: a rival's arrow chips the
+      // bird's pool the same way it would a unit's (friendly shafts pass
+      // over). Tested BEFORE tile solidity, or the roost's own hitbox tiles
+      // would eat the shot first.
+      for (const e of state.drop.eagles) {
+        if (e.state !== 'down' || a.team === e.team) continue;
+        if (Math.hypot(e.x - a.x, e.y - 4 - a.y) < EAGLE_BODY_R) {
+          hurtEagle(e, a.dmg, players[a.owner]);
+          if (a.ambush) ambushFx(a.x, a.y);
+          dead = true;
+          break;
+        }
+      }
+    }
     if (!dead && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
       dead = true;
       burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
@@ -223,19 +238,6 @@ function updatePlay(dt) {
         if (a.team === b.team || b.dead) continue;
         if (robotHit(b, a.x, a.y)) {
           hurtRobot(b, a.dmg, nx, ny, players[a.owner]);
-          if (a.ambush) ambushFx(a.x, a.y);
-          dead = true;
-          break;
-        }
-      }
-    }
-    if (!dead && state.drop) {
-      // the grounded eagles are the objectives: a rival's arrow chips the
-      // bird's pool the same way it would a unit (friendly shafts pass over)
-      for (const e of state.drop.eagles) {
-        if (e.state !== 'down' || a.team === e.team) continue;
-        if (Math.hypot(e.x - a.x, e.y - 4 - a.y) < EAGLE_BODY_R) {
-          hurtEagle(e, a.dmg, players[a.owner]);
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
           break;

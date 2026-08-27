@@ -35,8 +35,8 @@ colliding with them. [Momentum movement](gameplay.md#momentum-movement-players-o
 visual effect: everything that decides it can see a player goes through one function, and burial
 lives inside it. [Prone](gameplay.md#prone-under-the-snow).
 
-**E is the one verb for the world.** The same key harvests a tree, mines a rock, and breaks an
-enemy building. [Tools and the bow](gameplay.md#tools-and-the-bow).
+**E is the one verb for the world.** The same key harvests a tree, mines a rock, breaks an
+enemy building, and strikes a rival's grounded eagle. [Tools and the bow](gameplay.md#tools-and-the-bow).
 
 **Gold is the only currency, and gold is also XP.** No wood, no stone — one number earned many
 ways, each source with its own yield profile. Every payout levels you as a side effect.
