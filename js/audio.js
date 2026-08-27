@@ -279,6 +279,7 @@
     jump: { f: 'Jumping Off Eagle.mp3', loop: false, vol: 1, next: 'foxglove' },
     foxglove: { f: 'Foxglove Drop.mp3', loop: false, vol: 0.85 },
     victory: { f: 'Drop the Ice.mp3', loop: true, vol: 1 },
+    defeat: { f: 'Sleepy Game Save.mp3', loop: true, vol: 1 },
   };
   const els = {};      // key -> HTMLAudioElement, made on first play
   let curKey = null;   // what should be sounding; anything else is fading out

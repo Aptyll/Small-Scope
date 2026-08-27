@@ -1260,13 +1260,15 @@ through five minutes of a track.
 | `eagle` — FLYING ON EAGLE | `beginDrop()` | yes |
 | `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
 | `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |
-| `victory` — DROP THE ICE | `endMatch('won'\|'lost')` | yes |
+| `victory` — DROP THE ICE | `endMatch('won')` | yes |
+| `defeat` — SLEEPY GAME SAVE | `endMatch('lost')` | yes |
 
 The jump is a **hard cut**, not a crossfade (`{ out: 0.1, in: 0.05 }`): the ride's song is
 interrupted by the leap. From there the layer runs itself — `jump` reaches its end, its `ended`
 handler follows `TRACKS.next` into `foxglove`, and when *that* ends nothing follows it, so the
-match plays out in silence until an end screen. `endMatch` is gated on `'won'`/`'lost'`: a
-`'respawning'` overlay is not the end of anything and must not start the end-screen song.
+match plays out in silence until an end screen. `endMatch` is gated on `'won'`/`'lost'`, each with
+its own song (`victory` / `defeat`); a `'respawning'` overlay is not the end of anything and must
+not start either.
 `rerollWorld()` and `toLobby()` fade the layer out under their wipe; both reload the page, so the
 title track comes back from boot.
 

@@ -770,7 +770,7 @@ function endMatch(how) {
   state.end = how === 'won' || how === 'lost' ? endSnapshot() : null;
   if (how === 'won') { SFX.victory(); state.shake = Math.max(state.shake, 4); }
   // the end screen has a song of its own; a respawn timer is not the end of anything
-  if (how === 'won' || how === 'lost') SFX.music.play('victory', { in: 1.2 });
+  if (how === 'won' || how === 'lost') SFX.music.play(how === 'won' ? 'victory' : 'defeat', { in: 1.2 });
   player.input = makeInput(); // whatever was held dies with the slot
 }
 

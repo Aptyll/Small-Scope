@@ -18,9 +18,10 @@ function menuFrozen(i) { return i === 1 || i === 2; }
 const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 32;
 const MENU_Y0 = 92;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.83'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.84'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.84', 'A LOSS PLAYS ITS OWN SONG NOW - SLEEPY GAME SAVE, NOT THE VICTORY TRACK.'],
   ['1.83', 'THE PLAYER PANEL COUNTS WINS AND DAYS PLAYED NOW - A MATCH YOU WERE STANDING FOR AT THE END IS A WIN, AND EACH DAY YOU SET FOOT IN IS KEPT, NOT MATCHES STARTED AND A BEST DAY.'],
   ['1.82', 'THE PLAYER PANEL SAYS WHAT ITS NUMBERS MEAN - MATCHES, GOLD EARNED AND BEST DAY EACH GET A LABEL, A DOTTED LEADER AND A COMMA IN THE BIG TOTALS.'],
   ['1.81', 'GOLD PAYS ITSELF NOW - CHOPS, KILLS AND GENERATORS GO STRAIGHT INTO THE PURSE WITH THE +N POPUP AT THE SPOT, AND TREASURE CHESTS HIDE ALONG THE TREELINE WITH FREE GOLD AND A CARD INSIDE.'],
