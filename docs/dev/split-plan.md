@@ -15,7 +15,7 @@ the same commit as the work.
 - [x] Commit 6 — js/actions.js + js/ai.js + js/sim.js
 - [x] Commit 7 — js/draw-world.js + js/render.js
 - [x] Commit 8 — js/ui.js + js/panels.js
-- [ ] Commit 9 — js/menu.js + js/screens.js
+- [x] Commit 9 — js/menu.js + js/screens.js
 - [ ] Commit 10 — rename to boot.js + final docs sweep (deletes this file)
 
 ## Context
@@ -414,6 +414,11 @@ Three files, one commit — actions and ai have zero load-time statements; sim h
 - CLAUDE.md versioning rule now points at js/menu.js. architecture.md gets the note:
   "`softfall.reroll` is the only storage key touched outside profile.js; sessionStorage by design
   (write in menu.js, read in boot — survives the reload, not the tab)."
+- **Errata found executing this commit**: more unlisted load-time statements, all literal-only or
+  canvas.js-fed and F6-safe, moved verbatim — menu.js: `TITLE_PILLAR_DX`, `RULE_GOLD`/`RULE_FROST`,
+  `SEL_CARD_W`/`SEL_CARD_H`, the `PN_*` consts and `patchNotesCv` beside `patchPanelCv`;
+  screens.js: the `SPEC_*` consts, `rpOvx` beside `rpOv`, and the `WIN_*`/`DEF_*` art tables
+  (crown/icon grids, palettes, aurora bands, stat columns) — all plain literals.
 - **Noah verifies**: full title screen with dressing, patch tag opens the notes (this commit's
   entry on top), help panel, **reroll the world die** (page reloads into a new world — this
   exercises the cross-file sessionStorage pair), champion select → gear screen → lock in → eagle

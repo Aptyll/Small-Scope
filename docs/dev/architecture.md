@@ -34,7 +34,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
 | [js/ui.js](../../js/ui.js) | ~1260 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear widget, hud strip, card draft |
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
-| [js/game.js](../../js/game.js) | ~2800 | `DBG` + shared scope | everything else — menus, end screens, the replay, boot — as flat top-level code |
+| [js/menu.js](../../js/menu.js) | ~1200 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, champion select, the gear screen, `PATCH_TXT` |
+| [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |
+| [js/game.js](../../js/game.js) | ~490 | `DBG` + shared scope | the residual — the eagle drop and boot — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -126,10 +128,13 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~2800 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
-only by `// ------ name` banners — menus, end screens, the replay and boot in one scope. **Keep every
-banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
-grepping blind.
+~490 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+only by `// ------ name` banners — the eagle drop and boot, all that remains before the Commit 10
+rename to boot.js. **Keep every banner honest.** Find any function by its banner in
+[gamejs-map.md](gamejs-map.md) rather than grepping blind.
+
+`softfall.reroll` is the only storage key touched outside profile.js; sessionStorage by design
+(write in menu.js, read in boot — survives the reload, not the tab).
 
 Its only deliberate `window.*` export is `DBG`, the debug surface at the end of the file: live
 singletons plus the helpers that stage a scene without playing to it. Read the object literal

@@ -44,7 +44,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** (fifteen files so far plus the
+**flat top-level classic scripts sharing one global scope** (seventeen files so far plus the
 `game.js` residual; the split is in progress — [split-plan](docs/dev/split-plan.md)).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
@@ -59,14 +59,14 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
 `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is ~2800 lines of flat top-level code organized only by `// ------ name` banners.
+`game.js` is ~490 lines of flat top-level code organized only by `// ------ name` banners.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
 
 ## Versioning
 
-**Every commit pushed to main bumps the patch by 0.01** — `PATCH_TXT` in [js/game.js](js/game.js),
+**Every commit pushed to main bumps the patch by 0.01** — `PATCH_TXT` in [js/menu.js](js/menu.js),
 same commit, before the push; it prints bottom-right of the title screen, so a screenshot carries
 its build. The same commit tops `PATCH_NOTES` with **one sentence**: plain English, uppercase.
 
