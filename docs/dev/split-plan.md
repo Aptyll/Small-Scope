@@ -11,7 +11,7 @@ the same commit as the work.
 - [x] Commit 2 — js/core.js + js/canvas.js
 - [x] Commit 3 — js/player.js + js/input.js
 - [x] Commit 4 — js/world.js + js/nav.js
-- [ ] Commit 5 — js/wildlife.js + js/structures.js
+- [x] Commit 5 — js/wildlife.js + js/structures.js
 - [ ] Commit 6 — js/actions.js + js/ai.js + js/sim.js
 - [ ] Commit 7 — js/draw-world.js + js/render.js
 - [ ] Commit 8 — js/ui.js + js/panels.js
@@ -340,6 +340,10 @@ The mechanism-proving commit: every binding becomes global, nothing moves.
   Load-time: `RES_COLORS`, `FLAG_JOBS`, robot/turret const tables.
 - gamejs-map.md: wolves/birds get their own rows under wildlife.js (truer than the old
   cross-reference under animals).
+- **Errata found executing this commit**: `hurtStruct` and `destroyStructure` live at the TAIL
+  of the `actions` banner, not under `stump structures` as the old map row claimed — they stay
+  in game.js and ride to actions.js in Commit 6 (the map row is fixed). No unlisted load-time
+  statements: both new files' top-level code is const tables only.
 - **Noah verifies**: hunt a prey animal (it flees, drops meat), aggro a wolf near its den (it
   hunts you, leashes when you run), scare birds up, crack an ice hole and net a fish, build +
   upgrade a structure, watch a turret shoot, plant every flag type from the wheel and recall one.

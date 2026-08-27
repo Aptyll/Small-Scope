@@ -25,7 +25,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
 | [js/world.js](../../js/world.js) | ~430 | shared scope, no `window.*` export | the tile grid + objects, worldgen, and the landmarks with their own `lmRng` stream |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
-| [js/game.js](../../js/game.js) | ~10300 | `DBG` + shared scope | everything else — sim, render, UI, menus, boot — as flat top-level code |
+| [js/wildlife.js](../../js/wildlife.js) | ~570 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
+| [js/structures.js](../../js/structures.js) | ~1010 | shared scope, no `window.*` export | building/upgrading/wrecking, the per-type building sim, worker bots and flags |
+| [js/game.js](../../js/game.js) | ~8700 | `DBG` + shared scope | everything else — sim, render, UI, menus, boot — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -117,7 +119,7 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~10300 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+~8700 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
 only by `// ------ name` banners — sim, render, UI, menus and boot in one scope. **Keep every
 banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
 grepping blind.
