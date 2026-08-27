@@ -1003,8 +1003,8 @@ draws all three; `FLAG_JOBS`, in robots.js, holds the 7×7 icon grids as landmar
 ## Death is final
 
 ...unless your team's [Keep](multiplayer.md#the-keep) is still standing **and its eagle still
-breathes** (`teamEagleDown`, the eagle-drop banner in js/boot.js — a fallen objective makes every
-death on that side permanent), in which case it's a flat respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
+roosts** (`teamEagleDown`, the eagle-drop banner in js/boot.js — a driven-off objective makes
+every death on that side permanent), in which case it's a flat respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
 momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
 `die`): a credited killer pockets the victim's gold outright through `gainGold` — so a kill levels
 the killer, which is the bounty that makes taking the fight worth it — while an uncredited death

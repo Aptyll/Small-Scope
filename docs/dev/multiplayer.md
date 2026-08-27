@@ -178,11 +178,15 @@ js/boot.js): a rival arrow landing on **any roost tile** chips the bird's `EAGLE
 tiles are the one hit test walkers, arrows and E all share, so there is no corner an arrow can
 strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle
 branch (the roost tiles are `eagle` objects, a rival-only work target — `workTarget` reads the
-`team` they carry), and at
-zero `eagleFall` takes the whole owning side out of the match (see
+`team` they carry), and at zero the bird is **driven off**: `eagleFlee` lifts it away over the
+treeline and takes the whole owning side out of the match at liftoff (see
 [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
 [rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it; a friendly
-swing is refused.
+swing is refused. It is not helpless either: a rival lingering in `GUST_R` makes it rear
+(wings spread for `GUST_WIND_T` — the telegraph) and **gust**, throwing every rival in
+`GUST_BLAST_R` into a `GUST_STUN` tumble with no damage — the trigger resolves through
+`seenAt`, like every other watcher — and after `PREEN_DELAY` unhit it preens `PREEN_RATE`
+hp/s back.
 
 `die(p, src, cause)` empties the wallet **and the bag** the same way regardless of what happens
 next: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every carried
@@ -203,9 +207,9 @@ down. Every death (and every Keep's destruction) runs `checkLastStanding()`, whi
 as a win once no **rival team** is
 left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf` does, so the
 last *team* standing wins: a surviving teammate, or a Keep still waiting to respawn someone into,
-keeps a team in the match even at zero living players — **unless its eagle has fallen**:
-`teamInMatch` asks `teamEagleDown(team)` first, and a fallen eagle takes the side out whatever
-else it still holds (`eagleFall` in js/boot.js is what puts every slot down when it happens). **The match keeps simulating while you are
+keeps a team in the match even at zero living players — **unless its eagle has been driven off**:
+`teamInMatch` asks `teamEagleDown(team)` first, and a fled eagle takes the side out whatever
+else it still holds (`eagleFlee` in js/boot.js is what puts every slot down at liftoff). **The match keeps simulating while you are
 out** — `update()` runs `updatePlay` in both `play` and `dead` mode; only pause and the settings
 panel stop the world (the map does not). Full detail: [Death is final](gameplay.md#death-is-final).
 

@@ -530,6 +530,12 @@
     },
     eat() { if (smp('chew', { vol: 0.65, jitter: 0.1 })) return; tone(300, 0.05, 'triangle', 0.1); tone(260, 0.05, 'triangle', 0.1, 0, 0.07); },
     treeFall() { if (smp('timber', { vol: 0.75, jitter: 0.06 })) return; noise(0.35, 0.35, 400); tone(90, 0.3, 'triangle', 0.14, -30); },
+    // a wingbeat blast - the eagle's gust and its takeoff: the dodge whoosh
+    // slowed into a heavy buffet of air over a low push
+    gust() {
+      if (smp('whoosh', { vol: 0.85, rate: 0.55, jitter: 0.06, lp: 1600, dur: 0.9 })) return;
+      noise(0.3, 0.32, 500); tone(120, 0.22, 'triangle', 0.09, -55);
+    },
     // an eagle hitting the treeline: the timber sample dropped low with a
     // synth blast wave stacked under it (layered on purpose, not a fallback)
     boom() {

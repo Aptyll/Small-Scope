@@ -876,8 +876,8 @@ and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of
 burst. Only the human's landing changes mode: `play`, `applyZoom(0, true)` back to the player's
 own zoom centred on the landing, `shake`, and the landing intro above.
 
-**`state.drop` now outlives the whole match** — it never goes null, because the wrecks are the
-objectives. A bird's life is `fly → dive → down → dead` (`e.state`): at the end of its line
+**`state.drop` now outlives the whole match** — it never goes null, because the roosts are the
+objectives. A bird's life is `fly → dive → down → flee → gone` (`e.state`): at the end of its line
 `beginDive` throws any remaining rider, `findCrashPoint` walks 4–18 tiles further along the
 heading for the first spot whose 5×5 holds ≥6 trees (pure reads — no `rng()`, no `hash2` — so a
 seed always buries its birds in the same trees), and the stoop runs `EAGLE_DIVE_T` (1.4 s,
@@ -885,19 +885,31 @@ seed always buries its birds in the same trees), and the stoop runs `EAGLE_DIVE_
 within `BOOM_R` (2.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (3.6) to stumps —
 **paying no gold**, a crater of free fells would warp the economy at minute one — plants the
 **roost hitbox** (`eagle` objects on the open tiles within `EAGLE_TILE_R`, solid to walkers and a
-rival-only E target; `eagleFall` clears them again) and fires `eagleBoomFx` (snow + team-colour
+rival-only E target; `eagleFlee` clears them again at liftoff) and fires `eagleBoomFx` (snow + team-colour
 bursts, hanging feathers, a radial dust ring, two shockwave rings squashed flat over `BOOM_LIFE`
 so they read as a blast wave along the ground, never a halo), distance-scaled `state.shake`,
 `SFX.boom()` (the timber sample dropped low under a synth blast, layered on purpose) and a
 `HAS LANDED` feed headline — the landing is a landing, not a wound: the bird takes **no damage**
-from its own dive. The grounded bird is the team's **objective**: `EAGLE_HP` (320), chipped by
-rival arrows through `hurtEagle` (the sim.js arrow loop tests the roost tiles themselves —
-*before* tile solidity, which would eat the shot — so the arrow hitbox is exactly the collision
-box, corners included) and by rival E swings (`EAGLE_WORK_DMG` via `hitObject`'s eagle branch),
-and at zero `eagleFall` reruns the boom bigger, leaves a scorched
-smouldering silhouette, and puts the whole owning side down permanently (`die(p, null, 'eagle')` /
-`teamEagleDown`, which `die`, `updateRespawns` and `teamInMatch` all gate on — see
-[multiplayer.md](multiplayer.md#pvp)).
+from its own dive. The grounded bird is the team's **objective**, and its hp pool is its
+**nerve**: `EAGLE_HP` (320), spooked down by rival arrows through `hurtEagle` (the sim.js arrow
+loop tests the roost tiles themselves — *before* tile solidity, which would eat the shot — so the
+arrow hitbox is exactly the collision box, corners included) and by rival E swings
+(`EAGLE_WORK_DMG` via `hitObject`'s eagle branch). It is not helpless: a rival inside `GUST_R`
+(resolved through `seenAt`, like every watcher) makes it rear — wings thrown open for
+`GUST_WIND_T`, the whole telegraph — then `eagleGust` throws every rival in `GUST_BLAST_R` back at
+`GUST_KB` with a `GUST_STUN` tumble and `risePlayer` (wind strips the snow off a buried body), on
+a `GUST_CD` cooldown, dealing **no damage** — the objective punishes face-tanking, it never earns
+kills. Left unhit for `PREEN_DELAY` it **preens**, recovering `PREEN_RATE` hp/s — the refilling
+bar is the whole announcement, so chip damage must be pressed home. At zero nerve the bird is
+**driven off, not killed**: `eagleFlee` clears the roost tiles, blasts the takeoff downdraft
+(`eagleGustFx` writ large, `SFX.gust`), logs `WAS DRIVEN OFF`, and **ends the match right there at
+liftoff** — the owning side goes down permanently (`die(p, null, 'eagle')` / `teamEagleDown`,
+which `die`, `updateRespawns` and `teamInMatch` all gate on — see
+[multiplayer.md](multiplayer.md#pvp)), so the victory or defeat screen queues while the escape
+plays on under it (the sim keeps running in mode `dead`). The takeoff itself: over `FLEE_LIFT_T`
+the bird turns from wherever the dive left it pointing to `fleeTo` (away from the world's centre,
+shortest arc) while climbing; then it flies at `FLEE_SPD` until `FLEE_T`, when it is `gone` and
+draws nothing ever again.
 
 Drawing: `drawDropAir` (above the world, below lighting) runs `drawEagle` per bird — the
 `SPRITES.eagleShadow` silhouette `alt` px below and up to 10 px right of the body (`alt` is
@@ -915,8 +927,11 @@ copy under it read as a second bird — and folds its wings over `EAGLE_SETTLE_T
 frames as a settle animation), then **rests**, breathing a ±1 px bob, flashing via the baked
 all-white `SPRITES.eagleFlash` when hit (it is taller than the 64×64 `drawSpriteFlash` scratch),
 with its team-colour hp bar up **from the moment it roosts** — the bar is the objective's
-introduction, anchored to the bird's rotated extent; a `dead` one is the shadow silhouette alone
-under a smoke trickle. `renderDropUI` (mode `drop` only) draws
+introduction, anchored to the bird's rotated extent. A gust windup draws wings thrown open
+(frame 0) lifted 2 px: the spread IS the telegraph, no text. A `flee` bird climbs back out —
+scale and `alt` walk from the roost's numbers to the flight's over `FLEE_LIFT_T`, the shadow
+returning and diverging as the ground falls away, wingbeats at full panic — and fades over the
+last 1.4 s of `FLEE_T`; `gone` draws nothing. `renderDropUI` (mode `drop` only) draws
 the chart (`mapCv` at 1× when `VIEW_H ≥ 500`, else ½×, so pixels stay even) with **both lanes**
 inked dark under dashed team-colour lines, flown parts solid, end-of-line markers and bird
 diamonds in team colour (yours with the pulsing ring), landed rivals as team pips and your own red

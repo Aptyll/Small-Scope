@@ -16,8 +16,9 @@
 // rider never jumps, the end of the line jumps for them. state.drop outlives
 // mode 'drop' - and now the whole match: past the line's end each bird dives
 // into the treeline, blows a crater in the trees, and sits there as its
-// team's OBJECTIVE. Keep your eagle alive: when one falls (hurtEagle /
-// eagleFall) its whole side falls with it.
+// team's OBJECTIVE - guarding itself with a wing gust and calming back down
+// (preen regen) between scares. Keep its nerve up: at zero the bird is
+// DRIVEN OFF (hurtEagle / eagleFlee), and its whole side falls with it.
                             // the ride's framing is DROP_ZOOM (canvas banner): half scale, twice the view
 const EAGLE_SPD = 170;      // px/s along the route
 const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
@@ -30,9 +31,24 @@ const RIDER_SCALE = 2;      // the riders on its wings, and where a faller's shr
 const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of the shared line
 const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
 const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the resting pose
-const EAGLE_HP = 320;       // the grounded objective's pool (~arrow damage x25)
+const EAGLE_HP = 320;       // the grounded objective's nerve: hits spook it, at zero it flees
 const EAGLE_WORK_DMG = 10;  // what one rival E swing chips off the roosting bird
 const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid - the hitbox arrows AND walkers test
+// the wing gust: the bird's own defense. A rival inside GUST_R makes it rear
+// up - wings spread for GUST_WIND_T, the whole telegraph - then the buffet
+// throws every rival in GUST_BLAST_R into a tumble. No damage on purpose: the
+// objective punishes face-tanking, it never earns kills.
+const GUST_R = 44;          // px: how close a rival can stand before the bird rears
+const GUST_BLAST_R = 56;    // px: the buffet itself reaches a little further
+const GUST_WIND_T = 0.5;    // s of wings-spread windup before the blast
+const GUST_CD = 4;          // s between gusts
+const GUST_KB = 300;        // knockback impulse (px/s)
+const GUST_STUN = 0.7;      // s of tumble
+const PREEN_DELAY = 6;      // s unhit before the bird starts calming down...
+const PREEN_RATE = 2;       // ...recovering this much nerve per second
+const FLEE_LIFT_T = 1.1;    // s of takeoff: turn away, climb, downdraft
+const FLEE_T = 5.5;         // s total from liftoff to gone (fading over the last stretch)
+const FLEE_SPD = 220;       // px/s once airborne - faster than it arrived, it wants out
 const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
 const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
@@ -68,9 +84,11 @@ function makeEagles() {
       team, heading: h, len: r.len, dur: r.dur,
       x0: sx, y0: sy, x1: ex, y1: ey, x: sx, y: sy,
       t: 0, prog: 0, flap: team * 0.4,
-      state: 'fly',                 // fly -> dive -> down (the objective) -> dead
+      state: 'fly',                 // fly -> dive -> down (the objective) -> flee -> gone
       diveT: 0, from: null, crash: null, restT: 0,
-      hp: EAGLE_HP, maxHp: EAGLE_HP, flash: 0, boomT: 0, smokeT: 0,
+      hp: EAGLE_HP, maxHp: EAGLE_HP, flash: 0, boomT: 0,
+      gustCd: 0, windT: 0, hitT: 99,          // the wing gust and the calm-down clock
+      fleeT: 0, fleeFrom: 0, fleeTo: 0,       // the driven-off takeoff
     };
   });
 }
@@ -222,18 +240,88 @@ function updateEagle(e, dt) {
     if (u >= 1) eagleCrash(e);
   } else if (e.state === 'down') {
     e.restT += dt; // drives the wing-fold settle, then the breathing at rest
-  } else if (e.state === 'dead') {
-    // the wreck smoulders where the objective was lost
-    e.smokeT -= dt;
-    if (e.smokeT <= 0) {
-      e.smokeT = 0.3;
-      particles.push({
-        x: e.x + rand(-8, 8), y: e.y + rand(-5, 3),
-        vx: rand(-4, 4), vy: -rand(8, 16),
-        life: rand(0.8, 1.4), maxLife: 1.2, color: '#5a627a', size: 2, grav: -8, alpha: 0.4,
+    // preen: unbothered for PREEN_DELAY, the bird calms back down - the bar
+    // visibly refilling is the whole announcement, so chip damage must be
+    // pressed home or it evaporates
+    e.hitT += dt;
+    if (e.hitT > PREEN_DELAY && e.hp < e.maxHp) {
+      e.hp = Math.min(e.maxHp, e.hp + PREEN_RATE * dt);
+      if (rng() < dt * 2) particles.push({
+        x: e.x + rand(-10, 10), y: e.y + rand(-8, 2),
+        vx: rand(-3, 3), vy: -rand(6, 12),
+        life: 0.7, maxLife: 0.7, color: '#f6f8ff', size: 1, grav: -4, alpha: 0.6,
       });
     }
+    // the wing gust, once it has finished settling in
+    if (e.windT > 0) {
+      e.windT -= dt;
+      if (e.windT <= 0) eagleGust(e);
+    } else if (e.gustCd > 0) e.gustCd -= dt;
+    else if (e.restT > EAGLE_SETTLE_T) {
+      for (const q of players) {
+        if (!q.active || q.dead || inAir(q) || q.team === e.team) continue;
+        if (Math.hypot(q.x - e.x, q.y - e.y) < seenAt(q, GUST_R)) { e.windT = GUST_WIND_T; break; }
+      }
+    }
+  } else if (e.state === 'flee') {
+    e.fleeT += dt;
+    const u = Math.min(1, e.fleeT / FLEE_LIFT_T);
+    // the takeoff turn: from however the dive left it pointing, around to the
+    // nearest treeline (away from the world's centre), shortest way round
+    let turn = e.fleeTo - e.fleeFrom;
+    while (turn > Math.PI) turn -= Math.PI * 2;
+    while (turn < -Math.PI) turn += Math.PI * 2;
+    e.heading = e.fleeFrom + turn * u;
+    // downdraft while the wings are winning: snow blown out under the climb
+    if (u < 1 && rng() < dt * 20) {
+      const a = rng() * Math.PI * 2;
+      particles.push({
+        x: e.x + Math.cos(a) * 8, y: e.y + Math.sin(a) * 5,
+        vx: Math.cos(a) * rand(60, 110), vy: Math.sin(a) * rand(40, 70),
+        life: 0.4, maxLife: 0.4, color: '#eef4fb', size: 2, grav: 60,
+      });
+    }
+    if (u >= 1) {
+      e.x += Math.cos(e.heading) * FLEE_SPD * dt;
+      e.y += Math.sin(e.heading) * FLEE_SPD * dt;
+    }
+    if (e.fleeT >= FLEE_T) e.state = 'gone';
   }
+}
+
+// the buffet lands: every rival in the ring is thrown into a tumble and blown
+// out of the snow if they were under it. No damage - the tumble IS the price.
+function eagleGust(e) {
+  e.gustCd = GUST_CD;
+  eagleGustFx(e, 1);
+  if (nearPlayer(e.x, e.y)) SFX.gust();
+  for (const q of players) {
+    if (!q.active || q.dead || inAir(q) || q.team === e.team) continue;
+    const dx = q.x - e.x, dy = q.y - e.y;
+    const d = Math.hypot(dx, dy);
+    if (d > GUST_BLAST_R) continue;
+    const nx = d > 0 ? dx / d : 1, ny = d > 0 ? dy / d : 0;
+    q.kbx = nx * GUST_KB; q.kby = ny * GUST_KB;
+    stunUnit(q, GUST_STUN);
+    risePlayer(q); // wind strips the snow off a buried body
+    burst(q.x, q.y - 6, '#eef4fb', 6, 50, 0.4, true);
+  }
+}
+
+// the gust's language, shared with the takeoff (k scales it): a low ring of
+// blown snow and a flattened shockwave, feathers drifting up after
+function eagleGustFx(e, k) {
+  e.boomT = Math.min(BOOM_LIFE, BOOM_LIFE * 0.6 * k);
+  const n = Math.round(16 * k);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    particles.push({
+      x: e.x + Math.cos(a) * 8, y: e.y - 2 + Math.sin(a) * 5,
+      vx: Math.cos(a) * (80 + rng() * 40) * k, vy: Math.sin(a) * (50 + rng() * 25) * k,
+      life: 0.45, maxLife: 0.45, color: '#e8eef8', size: 2, grav: 55,
+    });
+  }
+  burst(e.x, e.y - 10, '#f6f8ff', Math.round(5 * k), 40, 0.9, true);
 }
 
 // the end of the line: whoever is still aboard is thrown, and the bird tips
@@ -330,22 +418,30 @@ function eagleBoomFx(e, k) {
 function hurtEagle(e, dmg, src, hx, hy) {
   if (e.state !== 'down') return;
   e.hp -= dmg;
+  e.hitT = 0; // frightened again: the calm-down clock starts over
   e.flash = 0.12;
   const px = hx === undefined ? e.x : hx, py = (hy === undefined ? e.y : hy) - 8;
   burst(px, py, '#f6f8ff', 5, 45, 0.5, true);
   burst(px, py, TEAMS[e.team].mark, 3, 40, 0.4);
   if (nearPlayer(e.x, e.y)) SFX.hurt();
-  if (e.hp <= 0) eagleFall(e, src);
+  if (e.hp <= 0) eagleFlee(e, src);
 }
 
-// the objective is lost: a blast bigger than the landing, and the whole side
-// falls with its bird - die() and teamInMatch() both read teamEagleDown, so
-// every slot goes down permanent and checkLastStanding ends the match for
-// whoever kept theirs.
-function eagleFall(e, src) {
-  e.state = 'dead';
-  e.smokeT = 0;
-  // the wreck is flat and burned: its roost tiles open back up
+// the objective's nerve breaks: the bird is DRIVEN OFF, not killed. It blasts
+// a takeoff downdraft, turns for the treeline and flies - and the match ends
+// right here, at liftoff: the whole side falls with its bird (die() and
+// teamInMatch() both read teamEagleDown), so checkLastStanding puts up the
+// victory or defeat screen while the takeoff plays on underneath it (the sim
+// keeps running in mode 'dead').
+function eagleFlee(e, src) {
+  e.state = 'flee';
+  e.fleeT = 0;
+  e.hp = 0;
+  e.windT = 0;
+  e.fleeFrom = e.heading;
+  const c = WORLD * TILE / 2;
+  e.fleeTo = Math.atan2(e.y - c, e.x - c); // away from the centre, out over the nearest treeline
+  // the talons leave the ground: its roost tiles open back up
   const ctx0 = Math.floor(e.x / TILE), cty0 = Math.floor(e.y / TILE);
   const TR = Math.ceil(EAGLE_TILE_R);
   for (let dy = -TR; dy <= TR; dy++) for (let dx = -TR; dx <= TR; dx++) {
@@ -354,11 +450,11 @@ function eagleFall(e, src) {
     const o = objAt(tx, ty);
     if (o && o.type === 'eagle' && o.team === e.team) objects[idx(tx, ty)] = null;
   }
-  eagleBoomFx(e, 1.7);
+  eagleGustFx(e, 2); // the takeoff downdraft: the gust's language writ large
   const near = Math.hypot(player.x - e.x, player.y - e.y);
-  state.shake = Math.max(state.shake, near < 500 ? 10 : 6);
-  SFX.boom();
-  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE HAS FALLEN', src || players.find((p) => p.team === e.team));
+  state.shake = Math.max(state.shake, near < 500 ? 7 : 4);
+  SFX.gust();
+  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE WAS DRIVEN OFF', src || players.find((p) => p.team === e.team));
   for (const p of players) {
     if (!p.active || p.team !== e.team) continue;
     if (!p.dead) die(p, null, 'eagle');
@@ -370,11 +466,11 @@ function eagleFall(e, src) {
   checkLastStanding();
 }
 
-// the objective test the death/respawn path asks (player.js): a fallen eagle
-// takes its team out of the match, Keep or no Keep
+// the objective test the death/respawn path asks (player.js): a driven-off
+// eagle takes its team out of the match, Keep or no Keep
 function teamEagleDown(team) {
   const e = state.drop && state.drop.eagles[team];
-  return !!e && e.state === 'dead';
+  return !!e && (e.state === 'flee' || e.state === 'gone');
 }
 
 // both birds, the rider and every faller, above the world and below the
@@ -450,49 +546,64 @@ function drawEagle(e, ex, ey, now) {
       ctx.beginPath(); ctx.arc(sx, sy + alt, 6 + ph * 12, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-  } else {
-    // grounded: the roosting objective (down) or the scorched silhouette it
-    // leaves (dead). The landing is a landing, not a wound - the bird folds
-    // its wings over EAGLE_SETTLE_T and then sits there breathing.
+  } else if (e.state === 'flee') {
+    // driven off: the climb out. Scale and altitude walk back up from the
+    // roost's to the flight's, the wings beat hard, and the bird fades out
+    // over the last stretch of its escape.
+    const u = Math.min(1, e.fleeT / FLEE_LIFT_T);
+    const alt = DROP_ALT * u;
+    const S = EAGLE_REST_SCALE + (EAGLE_SCALE - EAGLE_REST_SCALE) * u;
+    const spr = frames[[0, 1, 2, 1][Math.floor(e.flap * 13) % 4]]; // beating for its life
+    const w = spr.width * S, h = spr.height * S;
+    if (sx < -w - DROP_ALT - 40 || sy < -h - DROP_ALT - 40 || sx > WV_W + w + 40 || sy > WV_H + h + 40) return;
+    const fade = Math.min(1, Math.max(0, (FLEE_T - e.fleeT) / 1.4));
+    ctx.save();
+    ctx.translate(sx + Math.round(10 * u), sy + alt);
+    ctx.rotate(e.heading);
+    ctx.globalAlpha = 0.8 * u * fade; // the shadow returns as the ground falls away
+    ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.rotate(e.heading);
+    ctx.globalAlpha = fade;
+    ctx.drawImage(spr, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  } else if (e.state === 'down') {
+    // the roosting objective. The landing is a landing, not a wound - the
+    // bird folds its wings over EAGLE_SETTLE_T and sits there breathing;
+    // wings thrown back open (frame 0) are the gust's telegraph.
     const S = EAGLE_REST_SCALE;
-    const fi = e.state === 'down' && e.restT < EAGLE_SETTLE_T
-      ? Math.min(2, Math.floor(e.restT / EAGLE_SETTLE_T * 3)) : 2;
+    const winding = e.windT > 0;
+    const fi = e.restT < EAGLE_SETTLE_T
+      ? Math.min(2, Math.floor(e.restT / EAGLE_SETTLE_T * 3)) : (winding ? 0 : 2);
     const spr = frames[fi];
     const w = spr.width * S, h = spr.height * S;
     if (sx > -w - 70 && sy > -h - 70 && sx < WV_W + w + 70 && sy < WV_H + h + 70) {
-      if (e.state === 'down') {
-        // no cast shadow at rest: the bird is ON the ground, and a dark copy
-        // under it read as a second bird (the 'dead' scorch still uses one)
-        const breath = e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0;
-        ctx.save();
-        ctx.translate(sx, sy + breath);
-        ctx.rotate(e.heading);
-        ctx.drawImage(spr, -w / 2, -h / 2, w, h);
-        if (e.flash > 0) {
-          ctx.globalAlpha = Math.min(1, e.flash * 7);
-          ctx.drawImage(SPRITES.eagleFlash, -w / 2, -h / 2, w, h);
-          ctx.globalAlpha = 1;
-        }
-        ctx.restore();
-        // the pool, in team colour, up from the moment it roosts - the bar IS
-        // the objective's introduction, so it never waits for a first hit.
-        // Anchored to the bird's rotated extent, not the unrotated box, so it
-        // hugs the sprite whatever way the dive left it pointing.
-        const vh = Math.abs(w / 2 * Math.sin(e.heading)) + Math.abs(h / 2 * Math.cos(e.heading));
-        const bw = 40, bx = sx - bw / 2, by = sy - Math.round(vh) - 7;
-        ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
-        ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
-        ctx.fillStyle = TEAMS[e.team].mark;
-        ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
-      } else {
-        ctx.save();
-        ctx.translate(sx, sy);
-        ctx.rotate(e.heading);
-        ctx.globalAlpha = 0.55;
-        ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+      // no cast shadow at rest: the bird is ON the ground, and a dark copy
+      // under it read as a second bird
+      const breath = winding ? -2 : (e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0);
+      ctx.save();
+      ctx.translate(sx, sy + breath);
+      ctx.rotate(e.heading);
+      ctx.drawImage(spr, -w / 2, -h / 2, w, h);
+      if (e.flash > 0) {
+        ctx.globalAlpha = Math.min(1, e.flash * 7);
+        ctx.drawImage(SPRITES.eagleFlash, -w / 2, -h / 2, w, h);
         ctx.globalAlpha = 1;
-        ctx.restore();
       }
+      ctx.restore();
+      // the pool, in team colour, up from the moment it roosts - the bar IS
+      // the objective's introduction, so it never waits for a first hit.
+      // Anchored to the bird's rotated extent, not the unrotated box, so it
+      // hugs the sprite whatever way the dive left it pointing.
+      const vh = Math.abs(w / 2 * Math.sin(e.heading)) + Math.abs(h / 2 * Math.cos(e.heading));
+      const bw = 40, bx = sx - bw / 2, by = sy - Math.round(vh) - 7;
+      ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
+      ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
+      ctx.fillStyle = TEAMS[e.team].mark;
+      ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
     }
   }
   // the impact shockwave: two rings racing out over the crater, then gone -
@@ -703,7 +814,7 @@ window.DBG = {
   // the two objectives: read them, chip one, or fell one outright without a siege
   get eagles() { return state.drop && state.drop.eagles; },
   hurtEagle: (team, dmg, src) => { const e = state.drop.eagles[team]; hurtEagle(e, dmg == null ? 25 : dmg, src); return e; },
-  eagleFall: (team, src) => eagleFall(state.drop.eagles[team], src),
+  eagleFlee: (team, src) => eagleFlee(state.drop.eagles[team], src),
   teamEagleDown,
   get player() { return player; },
   get inv() { return player.inv; },
