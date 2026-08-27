@@ -37,6 +37,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 | the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
+| splitting game.js into files — the approved migration playbook | [docs/dev/split-plan.md](docs/dev/split-plan.md) |
 | which banner / function in game.js owns a thing | [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) |
 
 ## Architecture
