@@ -7,7 +7,7 @@ ever opening this page; everything here is reference.
 
 ## Four legacy IIFEs, one generated data file, and the flat game code
 
-[index.html](../../index.html) is 42 lines and loads them in a fixed order. There is no bundler,
+[index.html](../../index.html) loads them in a fixed order. There is no bundler,
 no module system and no import statement anywhere — **the files communicate only through
 globals, so each file's globals must exist before the next one loads.** Reordering the script
 tags breaks the build silently: a missing global is `undefined` at call time, not at parse time.
@@ -30,7 +30,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/actions.js](../../js/actions.js) | ~560 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
 | [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
-| [js/game.js](../../js/game.js) | ~7000 | `DBG` + shared scope | everything else — render, UI, menus, end screens, boot — as flat top-level code |
+| [js/draw-world.js](../../js/draw-world.js) | ~1080 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, lighting/weather/vignettes |
+| [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
+| [js/game.js](../../js/game.js) | ~4900 | `DBG` + shared scope | everything else — UI, panels, menus, end screens, boot — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -122,8 +124,8 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~7000 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
-only by `// ------ name` banners — render, UI, menus, end screens and boot in one scope. **Keep every
+~4900 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+only by `// ------ name` banners — UI, menus, panels, end screens and boot in one scope. **Keep every
 banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
 grepping blind.
 

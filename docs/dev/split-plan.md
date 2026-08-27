@@ -13,7 +13,7 @@ the same commit as the work.
 - [x] Commit 4 — js/world.js + js/nav.js
 - [x] Commit 5 — js/wildlife.js + js/structures.js
 - [x] Commit 6 — js/actions.js + js/ai.js + js/sim.js
-- [ ] Commit 7 — js/draw-world.js + js/render.js
+- [x] Commit 7 — js/draw-world.js + js/render.js
 - [ ] Commit 8 — js/ui.js + js/panels.js
 - [ ] Commit 9 — js/menu.js + js/screens.js
 - [ ] Commit 10 — rename to boot.js + final docs sweep (deletes this file)
@@ -376,6 +376,10 @@ Three files, one commit — actions and ai have zero load-time statements; sim h
   `HB_*`, `CUR_HOT`/`RETICLE`, `lastCssCursor`.
 - Note: `ctx` already lives in canvas.js; these files reference it bare — no edit needed, that's
   the mechanism working.
+- **Errata found executing this commit**: three load-time statements not on the list, all in the
+  entity draw banner and all literal-only initializers referencing nothing (F6-safe, moved
+  verbatim): `TUR_METAL`'s companion `TUR_RIM`, `FRAME_DX`, and `NET_FISH_AT` (declared *after*
+  `drawNet` uses it — legal, functions run at frame time).
 - **Noah verifies**: pure eyeball pass — walk at night near a brazier (warm glow), weather
   visible, health bars/name tags/level badges sit square over heads, cursor changes over
   tree/rock/water/enemy, `.` shows hitboxes then routes, everything pixel-crisp at all zooms.
