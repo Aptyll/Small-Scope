@@ -91,9 +91,9 @@ const state = {
     // the refusal rattle and the two planks' hover eases
     nameBuf: '', nameFirst: false, nameShake: 0, nameHover: [0, 0],
     moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
-    // the frozen plank: refusal shudder timer, per-knock crack seed, the
-    // struck point (plank-local) and the ice chips it sprays (screen-space)
-    iceT: 0, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
+    // frozen planks: refusal shudder timer, which plank was struck (menu index),
+    // per-knock crack seed, the struck point (plank-local) and the ice chips it sprays (screen-space)
+    iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
     // champion select: which screen the menu shows, its cross-fade, the
     // highlighted champion, per-card hover eases, swap pop, lock-in hold
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,

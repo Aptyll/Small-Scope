@@ -39,7 +39,10 @@
       name: '',        // '' until the first-launch prompt is answered
       named: false,    // has that prompt been answered at all (SKIP counts)
       dropped: false,  // has this profile ever jumped off the eagle - gates the first-flight countdown
-      stats: { games: 0, gold: 0, bestDay: 0 },
+      // wins = matches the local slot was standing for at the win
+      // (endMatch('won')); days = days begun (takeoff + each dawn still in).
+      // A save written as games/bestDay is a different pair and is not copied.
+      stats: { wins: 0, gold: 0, days: 0 },
       // null, not {} - game.js reads a null here as "nothing was ever saved"
       // and skips its own settings migration, which a bare {} would trigger
       settings: null,
@@ -108,8 +111,13 @@
         profile.named = !!s.named;
         profile.dropped = !!s.dropped;
         if (s.stats && typeof s.stats === 'object') {
+          // only the live keys. games/bestDay from PATCH 1.82 are not wins/days
+          // (matches started vs matches won; highest day vs days begun), so an
+          // old save keeps its gold and starts the new counters at zero
           for (const k in profile.stats) {
-            if (typeof s.stats[k] === 'number' && isFinite(s.stats[k])) profile.stats[k] = s.stats[k];
+            if (typeof s.stats[k] === 'number' && isFinite(s.stats[k])) {
+              profile.stats[k] = Math.max(0, Math.floor(s.stats[k]));
+            }
           }
         }
         if (s.settings && typeof s.settings === 'object') profile.settings = s.settings;
@@ -166,11 +174,12 @@
 
     // ---- stats ------------------------------------------------------------
     stats() { return profile.stats; },
-    addGame() { profile.stats.games++; scheduleSave(); },
+    addWin() { profile.stats.wins++; scheduleSave(); },
     addGold(n) { if (n > 0) { profile.stats.gold += n; scheduleSave(); } },
-    recordDay(d) {
-      if (d > profile.stats.bestDay) { profile.stats.bestDay = d; scheduleSave(); }
-    },
+    // one call per day the player sets foot in: day 1 as the eagles take off
+    // (js/boot.js beginDrop), every later day at its dawn (js/sim.js) - counted
+    // at the START of the day, so quitting mid-match keeps the days begun
+    addDay() { profile.stats.days++; scheduleSave(); },
 
     flush,
   };

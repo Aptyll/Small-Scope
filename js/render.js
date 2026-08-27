@@ -737,7 +737,7 @@ function cursorInfo() {
     if (m.screen === 'gear') return { kind: m.gearT >= 1 && gearScreenHit() ? 'hand' : 'arrow' };
     if (m.screen === 'select') return { kind: m.screenT >= 1 && m.gearT <= 0 && selectHit() >= 0 ? 'hand' : 'arrow' };
     if (!m.panel && (overNameTag() || overPatchTag())) return { kind: 'hand' }; // the two corner tags
-    if (!m.panel) { const h = menuHit(); if (h >= 0 && h !== MENU_FROZEN) return { kind: 'hand' }; } // the frozen plank isn't clickable, so no hand
+    if (!m.panel) { const h = menuHit(); if (h >= 0 && !menuFrozen(h)) return { kind: 'hand' }; } // a frozen plank isn't a way in, so no hand
     return { kind: 'arrow' };
   }
   if (state.mode === 'dead') return { kind: deadHit() >= 0 || specHit() ? 'hand' : 'arrow' };

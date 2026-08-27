@@ -136,7 +136,7 @@ function seatPos(e, si) {
 }
 
 function beginDrop() {
-  PROFILE.addGame(); // one match played, counted as the eagles take off
+  PROFILE.addDay(); // day 1 of the days-played stat: the clock starts with the eagle
   // a profile's first flight ever counts itself down and jumps for you -
   // reading the ride is a lot to ask of someone who has never seen it
   state.drop = { eagles: makeEagles(), firstFlight: !PROFILE.hasDropped() };

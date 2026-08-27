@@ -5,18 +5,23 @@
 // ------------------------------------------------------------ main menu
 // The title screen is a real menu over the living world: the camera drifts
 // around the interior while animals, fish and snow keep running, the items
-// (SINGLEPLAYER / MULTIPLAYER / TUTORIAL / SETTINGS / the reroll die) take
+// (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / SETTINGS / the reroll die) take
 // mouse or arrows+enter, and every mode change is a transition rather than a cut.
 const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
 const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
 const PANEL_SLIDE_T = 0.32;
-const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'TUTORIAL', 'SETTINGS'];
-const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
-const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
-const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-const PATCH_TXT = 'PATCH 1.82'; // printed bottom-right of the title screen; click it for the notes
+const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'SETTINGS'];
+// sealed under ice until they exist: inert to hover, keys and clicks. 1 and 2
+// are MULTIPLAYER and PRACTICE TOOL - SINGLEPLAYER leads, the sealed pair sits
+// as a quiet coming-soon block, SETTINGS is the live utility at the foot.
+function menuFrozen(i) { return i === 1 || i === 2; }
+const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 32;
+const MENU_Y0 = 92;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
+const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
+const PATCH_TXT = 'PATCH 1.83'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.83', 'THE PLAYER PANEL COUNTS WINS AND DAYS PLAYED NOW - A MATCH YOU WERE STANDING FOR AT THE END IS A WIN, AND EACH DAY YOU SET FOOT IN IS KEPT, NOT MATCHES STARTED AND A BEST DAY.'],
   ['1.82', 'THE PLAYER PANEL SAYS WHAT ITS NUMBERS MEAN - MATCHES, GOLD EARNED AND BEST DAY EACH GET A LABEL, A DOTTED LEADER AND A COMMA IN THE BIG TOTALS.'],
   ['1.81', 'GOLD PAYS ITSELF NOW - CHOPS, KILLS AND GENERATORS GO STRAIGHT INTO THE PURSE WITH THE +N POPUP AT THE SPOT, AND TREASURE CHESTS HIDE ALONG THE TREELINE WITH FREE GOLD AND A CARD INSIDE.'],
   ['1.80', 'THE EAGLE RIDE IS A TIGHT TEN SECONDS WITH A GOLD JUMP WINDOW OVER ITS LAST STRETCH - THE PATH IS DOTTED ACROSS THE SNOW, M RAISES THE MAP MID-FLIGHT, NOBODY IS DROPPED IN THE TREES, AND A FIRST FLIGHT COUNTS YOU DOWN AND JUMPS FOR YOU.'],
@@ -141,20 +146,25 @@ function menuSelect(i) {
   const N = MENU_ITEMS.length + 1;
   const dir = i >= m.sel ? 1 : -1;
   let n = ((i % N) + N) % N;
-  if (n === MENU_FROZEN) n = (((n + dir) % N) + N) % N; // the frozen plank refuses the selection
+  const start = n;
+  while (menuFrozen(n)) { // sealed planks refuse the selection; skip the whole iced block
+    n = (((n + dir) % N) + N) % N;
+    if (n === start) return;
+  }
   if (n === m.sel) return;
   m.sel = n;
   SFX.pickup();
 }
 
-// knocking on the frozen plank: it shudders, cracks flash from the struck
+// knocking on a frozen plank: it shudders, cracks flash from the struck
 // point and heal as it refreezes, and a spray of ice chips falls away
-function iceRefuse() {
+function iceRefuse(i) {
   const m = state.menu;
   if (m.iceT > 0.3) return; // still mid-shudder
   const { rects } = menuLayout();
-  const r = rects[MENU_FROZEN];
+  const r = rects[i];
   m.iceT = 0.45;
+  m.iceI = i;
   m.iceSeed = (m.iceSeed + 1) | 0;
   m.iceX = Math.max(4, Math.min(r.w - 4, mouse.x - r.x));
   m.iceY = Math.max(3, Math.min(r.h - 3, mouse.y - r.y));
@@ -172,10 +182,9 @@ function iceRefuse() {
 }
 
 function menuActivate(i) {
-  if (i === MENU_FROZEN) return; // solid ice - iceRefuse() is the only answer
+  if (menuFrozen(i)) return; // solid ice - iceRefuse() is the only answer
   SFX.unlock();
   if (i === 0) beginSelect();
-  else if (i === 2) openMenuPanel('help');
   else if (i === 3) openMenuPanel('settings');
   else if (i === MENU_ITEMS.length) rerollWorld();
 }
@@ -237,7 +246,7 @@ function menuClick() {
   if (overPatchTag()) { openMenuPanel('patch'); return; }
   const h = menuHit();
   if (h < 0) return;
-  if (h === MENU_FROZEN) { iceRefuse(); return; }
+  if (menuFrozen(h)) { iceRefuse(h); return; }
   m.sel = h;
   m.pressT = 0.12;
   menuActivate(h);
@@ -298,7 +307,7 @@ function updateTitle(dt) {
   if (m.moved) {
     m.moved = false;
     const h = menuHit();
-    if (h >= 0 && h !== MENU_FROZEN && h !== m.sel) m.sel = h;
+    if (h >= 0 && !menuFrozen(h) && h !== m.sel) m.sel = h;
   }
   // the first launch asks for a name once the title has finished arriving;
   // PROFILE.named() is what stops it coming back, and SKIP sets it too
@@ -309,10 +318,10 @@ function updateTitle(dt) {
     const nh = menuPanelReady() ? namePanelHit() : -1;
     for (let i = 0; i < 2; i++) m.nameHover[i] += ((nh === i ? 1 : 0) - m.nameHover[i]) * Math.min(1, dt * 14);
   }
-  // the frozen plank can't be selected, so its hover ease tracks the pointer instead
-  const iceHover = !m.panel && m.screen === 'menu' && menuHit() === MENU_FROZEN ? 1 : 0;
+  // a frozen plank can't be selected, so its hover ease tracks the pointer instead
+  const hit = !m.panel && m.screen === 'menu' ? menuHit() : -1;
   for (let i = 0; i <= MENU_ITEMS.length; i++) {
-    const target = i === MENU_FROZEN ? iceHover : m.sel === i ? 1 : 0;
+    const target = menuFrozen(i) ? (hit === i ? 1 : 0) : (m.sel === i ? 1 : 0);
     m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
   }
   // the refusal shudder heals and the ice chips fall
@@ -459,7 +468,7 @@ function drawMenuButton(r, label, hv, now, pressed, frozen) {
       }
       ctx.globalAlpha = a0;
     }
-    if (m.iceT > 0) {
+    if (m.iceT > 0 && m.iceI === r.i) {
       // dark fissures with the odd white glint, so they read against the pale glaze
       ctx.globalAlpha = a0 * Math.min(1, m.iceT / 0.45);
       for (let c = 0; c < 5; c++) {
@@ -506,12 +515,13 @@ function drawDie(x, y, hv, now) {
 // ---- title dressing -------------------------------------------------------
 // The cinematic frame around the menu: a tint that weighs on the edges and
 // leaves the centre clear, two stone pillars with burning braziers flanking
-// the menu column (their light is additive, like the world's lanterns), a
-// frosted slab that gathers the items into one column, gold rules with
-// diamond finials, and embers drifting up off the logo and the flames. All of
-// it is procedural - hash2() for the static grain, now for the flicker - and
-// every piece takes its alpha from the caller so it fades with the chrome.
-const TITLE_PILLAR_DX = 106; // pillar centres either side of the menu column
+// the menu column, a frosted slab that gathers the items into one column, a
+// gold rule with diamond finials under the logo, and embers drifting up off
+// the logo and the flames. All of it is procedural - hash2() for the static
+// grain, now for the flicker - and every piece takes its alpha from the
+// caller so it fades with the chrome.
+const TITLE_PILLAR_DX = 118; // pillar centres either side of the (wider) menu column
+const TITLE_PILLAR_W = 16;   // shaft width; sits just outside the slab so the frame scales with the planks
 
 function drawTitleBackdrop(tintA) {
   ctx.fillStyle = 'rgba(10,16,42,' + tintA.toFixed(3) + ')';
@@ -550,9 +560,9 @@ function drawGoldRule(cx, y, half, a, pal) {
 
 // a stone pillar: plinth, coursed shaft with a lit left edge and frost creeping
 // up from the base, a snow-capped capital and an iron brazier whose flame
-// flickers and throws warm light on whatever is near
+// flickers in place - the bowl and the embers are the whole tell, no halo
 function drawPillar(cx, top, bot, now, a) {
-  const w = 14, x = cx - 7, shaftTop = top + 7, shaftH = bot - shaftTop - 4;
+  const w = TITLE_PILLAR_W, x = cx - (w >> 1), shaftTop = top + 7, shaftH = bot - shaftTop - 4;
   ctx.globalAlpha = a;
   ctx.fillStyle = 'rgba(4,6,18,0.45)'; ctx.fillRect(x + 3, shaftTop + 2, w + 2, shaftH + 2);
   // shaft
@@ -597,16 +607,6 @@ function drawPillar(cx, top, bot, now, a) {
     const dx = i > 2 ? Math.round(Math.sin(fl * 1.3 + i * 1.7)) : 0;
     ctx.fillStyle = c; ctx.fillRect(cx - (ww >> 1) + dx, top - 3 - i, ww, 1);
   }
-  // warm light, additive like the lanterns in play
-  ctx.globalCompositeOperation = 'lighter';
-  const flick = 1 + Math.sin(now * 9 + cx) * 0.08;
-  const gr = 60 * flick, gy = top - 4;
-  const grd = ctx.createRadialGradient(cx, gy, 1, cx, gy, gr);
-  grd.addColorStop(0, 'rgba(255,170,80,' + (0.42 * a).toFixed(3) + ')');
-  grd.addColorStop(0.45, 'rgba(255,140,60,' + (0.14 * a).toFixed(3) + ')');
-  grd.addColorStop(1, 'rgba(255,120,40,0)');
-  ctx.fillStyle = grd; ctx.fillRect(cx - gr, gy - gr, gr * 2, gr * 2);
-  ctx.globalCompositeOperation = 'source-over';
 }
 
 // n embers rising from (ox, oy) across spread px, each on its own loop
@@ -1122,7 +1122,8 @@ function renderTitle(now) {
     drawEmbers(now, frameA * 0.9, cx - TITLE_PILLAR_DX, ptop - 6, 8, 6, 17);
     drawEmbers(now, frameA * 0.9, cx + TITLE_PILLAR_DX, ptop - 6, 8, 6, 43);
     const slabIn = easeOut((m.t - 0.2) / 0.45);
-    drawMenuSlab(cx - 78, rects[0].y - 14 + Math.round(out * 25), 156, last.y + last.h + 8 - rects[0].y + 14, slabIn * chromeA);
+    const slabW = MENU_BW + MENU_SLAB_PAD * 2;
+    drawMenuSlab(cx - (slabW >> 1), rects[0].y - 14 + Math.round(out * 25), slabW, last.y + last.h + 8 - rects[0].y + 14, slabIn * chromeA);
     ctx.globalAlpha = 1;
   }
 
@@ -1159,9 +1160,9 @@ function renderTitle(now) {
     const a = inT * (1 - out) * (1 - pan);
     if (a <= 0.005) continue;
     ctx.globalAlpha = a;
-    const rr = { x: r.x - Math.round((1 - inT) * 60), y: r.y + Math.round(out * 25), w: r.w, h: r.h };
-    // the refusal shudder rattles the frozen plank in place (x only, so its hashed rime holds still)
-    if (i === MENU_FROZEN && m.iceT > 0) rr.x += Math.round(Math.sin(now * 85) * 2.2 * (m.iceT / 0.45));
+    const rr = { x: r.x - Math.round((1 - inT) * 60), y: r.y + Math.round(out * 25), w: r.w, h: r.h, i };
+    // the refusal shudder rattles the struck frozen plank in place (x only, so its hashed rime holds still)
+    if (menuFrozen(i) && m.iceI === i && m.iceT > 0) rr.x += Math.round(Math.sin(now * 85) * 2.2 * (m.iceT / 0.45));
     const hv = m.hover[i];
     const pressed = m.sel === i && (m.pressT > 0 || (mouse.down && menuHit() === i));
     if (r.seed) {
@@ -1170,7 +1171,7 @@ function renderTitle(now) {
       drawPixelTextShadow(ctx, SEED_TXT, tx, ty, hv > 0.5 ? '#ffd95c' : '#9fb6d8', 'rgba(15,22,50,0.9)');
       drawDie(tx + pixelTextWidth(SEED_TXT) + 6, rr.y - lift, hv, now);
     } else {
-      drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed, i === MENU_FROZEN);
+      drawMenuButton(rr, MENU_ITEMS[i], hv, now, pressed, menuFrozen(i));
     }
     ctx.globalAlpha = 1;
   }
@@ -1183,11 +1184,10 @@ function renderTitle(now) {
   }
   ctx.globalAlpha = 1;
 
-  // footer hint
+  // footer: the two corner tags ride the same fade; no gold rule under them
   const fin = easeOut((m.t - 0.9) / 0.5) * (1 - out) * (1 - pan);
   if (fin > 0.005) {
     ctx.globalAlpha = fin;
-    drawGoldRule(cx, toy + 256, 52, fin);
     const pr = patchTagRect();
     const phot = !m.panel && overPatchTag();
     drawPixelTextShadow(ctx, PATCH_TXT, pr.x, pr.y, phot ? '#ffd95c' : '#5a6690', 'rgba(15,22,50,0.9)');

@@ -45,9 +45,10 @@ function update(dt) {
     if (state.time >= CYCLE) {
       state.time -= CYCLE;
       state.day++;
-      // the profile's best day: recorded as each dawn is reached, not at the
-      // end, so quitting to the lobby mid-match still keeps the day you made
-      if (!player.eliminated) PROFILE.recordDay(state.day);
+      // the profile's days played: each dawn the player is still in the match
+      // counts the day it opens (day 1 counted itself at takeoff), so quitting
+      // to the lobby mid-match still keeps the days begun
+      if (!player.eliminated) PROFILE.addDay();
       SFX.dawnChime();
       showMsg('DAY ' + state.day, 3);
       // carved ice holes freeze back over during the night; cracks heal too.

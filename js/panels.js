@@ -638,15 +638,15 @@ const NAME_SHAKE_T = 0.3; // the field's refusal: it rattles and flushes red
 // number right-aligned on the row with a dotted leader tying the pair across
 // the gap - bare icon-and-number proved unreadable to anyone but the author.
 // The quill is the edit affordance on the title-screen tag.
-const NAME_BIRD_ICON = [
-  '........', '........', '...oo...', 'oo.oo.oo',
-  '.oooooo.', '...oo...', '........', '........',
+const NAME_CROWN_ICON = [
+  '........', 'y..yy..y', 'y.yyyy.y', 'yyyyyyyy',
+  '.yyyyyy.', '........', '........', '........',
 ];
 const NAME_SUN_ICON = [
   '...yy...', '.y....y.', '..yyyy..', 'y.yyyy.y',
   'y.yyyy.y', '..yyyy..', '.y....y.', '...yy...',
 ];
-const NAME_ICON_PAL = { '.': null, o: '#cfe0ff', y: '#f2cc6a' };
+const NAME_ICON_PAL = { '.': null, y: '#f2cc6a' };
 const NAME_QUILL = ['....hh', '...hh.', '..hh..', '.hh...', 'th....', 't.....'];
 const NAME_QUILL_PAL = { '.': null, h: '#9fb6d8', t: '#f2cc6a' };
 const NAME_QUILL_HOT = { '.': null, h: '#ffd95c', t: '#fff1c2' };
@@ -779,11 +779,12 @@ function renderNamePanel(now, slide) {
   }
 
   // ---- the lifetime numbers --------------------------------------------
+  // WINS / GOLD EARNED / DAYS PLAYED - not matches started, not a best day
   const st = PROFILE.stats();
   const grand = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ','); // 12345 -> 12,345
-  const rows = [[NAME_BIRD_ICON, 'MATCHES', String(st.games), '#cfe0ff'],
+  const rows = [[NAME_CROWN_ICON, 'WINS', grand(st.wins), '#cfe0ff'],
     [null, 'GOLD EARNED', grand(st.gold), '#f2cc6a'],
-    [NAME_SUN_ICON, 'BEST DAY', String(st.bestDay), '#cfe0ff']];
+    [NAME_SUN_ICON, 'DAYS PLAYED', grand(st.days), '#cfe0ff']];
   for (let i = 0; i < rows.length; i++) {
     const ry = py + NAME_STAT_Y + i * NAME_STAT_P;
     const lx = px + NAME_FIELD.x;

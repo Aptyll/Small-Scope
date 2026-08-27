@@ -61,7 +61,7 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 ### profile.js
 
-The local player profile — display name, lifetime stats (`games`, `gold`, `bestDay`), the
+The local player profile — display name, lifetime stats (`wins`, `gold`, `days`), the
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
 eagle, gating the ride's first-flight countdown) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
@@ -78,9 +78,12 @@ file is a save file.
   characters, and a basic profanity list matched after the obvious digit-for-letter swaps are
   folded out. It returns `{ ok, name }` or `{ ok: false, why }`. A stored name that no longer
   passes is dropped at load and the first-launch prompt comes back for it.
-- **The stat calls coalesce.** `addGold` fires on every payout, so writes are batched behind an
-  800 ms timer and flushed on `pagehide` / `visibilitychange`; `setName` and `putSettings` write
-  through immediately.
+- **The stat calls coalesce.** `addGold` fires on every payout, `addWin` once per
+  `endMatch('won')`, `addDay` at eagle takeoff and at each dawn the local slot is still in, so
+  writes are batched behind an 800 ms timer and flushed on `pagehide` / `visibilitychange`;
+  `setName` and `putSettings` write through immediately. A save written with the old `games` /
+  `bestDay` pair keeps its gold and starts wins and days at zero — those were different
+  numbers, not a rename.
 
 The panel, the field and the title-screen tag are in panels.js, under the `player profile` banner.
 

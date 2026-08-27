@@ -745,10 +745,11 @@ function endSnapshot() {
 // the local slot leaves the match, one way or the other: the overlay takes
 // the screen (mode 'dead'), the sim runs on underneath it
 function endMatch(how) {
+  // count a win only the first time this match resolves as won - a second
+  // endMatch('won') (or a driver poking it) must not increment twice
+  const awardWin = how === 'won' && state.over !== 'won';
   state.over = how;
-  // day 1 never reaches the dawn that records itself, so the end of the match
-  // is the other half of the best-day stat
-  if (how === 'won' || how === 'lost') PROFILE.recordDay(state.day);
+  if (awardWin) PROFILE.addWin();
   state.mode = 'dead';
   state.deadView = 'menu';
   state.deadSel = 0;

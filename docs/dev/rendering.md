@@ -719,7 +719,7 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 `{ kind, mode, dim, frac, nock, dry, amb }`:
 
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
-  a widget; **hand** — over a main-menu item (`menuHit()`), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
+  a widget; **hand** — over a live main-menu item (`menuHit()`, frozen planks stay an arrow), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree), a live wheel segment, or a control inside the backpack
   widget (`gearHit()` / `bagHit()`), or a free skill-point square on the hud strip
   (`abHit()` — the gold strip of the bag stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
@@ -760,16 +760,20 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
 `state.menu`:
 
-- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / TUTORIAL / SETTINGS — MULTIPLAYER is
-  `MENU_FROZEN`: drawn sealed under an ice glaze by `drawMenuButton(..., frozen)`, never
-  selectable or activatable until multiplayer exists; arrow keys skip over it and the hand
-  cursor ignores it. Its `menu.hover` slot tracks the pointer instead of the selection and
-  drives a cold shimmer — pale rim, a sheen sweeping the glaze, frost breath — and clicking it
-  calls `iceRefuse()`: the plank rattles for `menu.iceT`, hairline cracks flash from the struck
-  point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it refreezes, and
-  `menu.shards` ice chips spray and fall, to `SFX.iceKnock`) plus the seed row (`SEED N` + an
+- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / SETTINGS —
+  `menuFrozen(i)` is true for MULTIPLAYER and PRACTICE TOOL: both drawn sealed under an ice
+  glaze by `drawMenuButton(..., frozen)`, never selectable or activatable until they exist;
+  arrow keys skip the whole iced block and the hand cursor ignores them. Each frozen plank's
+  `menu.hover` slot tracks the pointer instead of the selection and drives a cold shimmer —
+  pale rim, a sheen sweeping the glaze, frost breath — and clicking one calls `iceRefuse(i)`:
+  that plank rattles for `menu.iceT` (`menu.iceI` names which), hairline cracks flash from the
+  struck point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it
+  refreezes, and `menu.shards` ice chips spray and fall, to `SFX.iceKnock`. SINGLEPLAYER leads
+  the column as the one live way in; the sealed pair sits as a quiet coming-soon block;
+  SETTINGS is the live utility at the foot) plus the seed row (`SEED N` + an
   11×11 die) as one more selectable, stacked
-  `MENU_PITCH` apart from `MENU_Y0`; the slab and pillars size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
+  `MENU_PITCH` apart from `MENU_Y0`; the slab (`MENU_SLAB_PAD` past each side of `MENU_BW`) and
+  pillars (`TITLE_PILLAR_W`, `TITLE_PILLAR_DX`) size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
   (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
   when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.
   Up/Down/W/S move, Enter/Space activate, Esc/Backspace close a panel; `menuKey()` and
@@ -779,9 +783,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   caller so it fades with the chrome): `drawTitleBackdrop` replaces the flat tint with one that
   weighs on the top/bottom edges plus a corner vignette, leaving the centre clear; `drawPillar`
   draws the two stone pillars `TITLE_PILLAR_DX` either side of the column (coursed shaft, frost
-  at the base, snow-capped capital, an iron brazier whose flame flickers and throws an additive
-  warm light); `drawMenuSlab` is the translucent slab with gilt corner brackets behind the items;
-  `drawGoldRule` the gold rule with diamond finials under the logo (`SOFTFALL`, no subtitle), along the bottom and
+  at the base, snow-capped capital, an iron brazier whose flame flickers in the bowl — no
+  circular glow); `drawMenuSlab` is the translucent slab with gilt corner brackets behind the items;
+  `drawGoldRule` the gold rule with diamond finials under the logo (`SOFTFALL`, no subtitle) and
   under the select header; `drawEmbers` the sparks rising off the logo and the braziers. The logo
   gets a pulsing ember glow behind it and a 1px ice rim along its top edges. Pillars rise from
   below at boot and sink away with the items on play. `PATCH_TXT` prints bottom-right and the
@@ -803,7 +807,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   zero alpha underneath. SETTINGS is the existing panel via `renderSettings(now, { bare, slide })`
   (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
-  slab closes it. TUTORIAL is `helpPanelCv` (controls + the rules of the frostlands); PATCH
+  slab closes it. The help panel (`helpPanelCv`, controls + the rules of the frostlands) still
+  bakes, but PRACTICE TOOL is frozen so the title no longer opens it; PATCH
   NOTES is `patchPanelCv`, opened by clicking the `PATCH_TXT` tag bottom-right (`patchTagRect` /
   `overPatchTag`; the tag turns gold with an underline on hover): the frame is baked once, the
   entries (newest first, word-wrapped) into `patchNotesCv` as tall as they need, and render blits
@@ -816,8 +821,10 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   up, so letters are text rather than hotkeys. A character the name may not hold is simply never
   drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
   the field red instead of printing a reason. Under the rule, the three lifetime stats read as a
-  ledger — icon, labelled row (MATCHES / GOLD EARNED / BEST DAY, a deliberate text carve-out),
-  dotted leader, number right-aligned with a thousands comma. The first-launch variant is modal
+  ledger — icon, labelled row (WINS / GOLD EARNED / DAYS PLAYED, a deliberate text carve-out),
+  dotted leader, number right-aligned with a thousands comma. WINS is matches the local slot
+  was standing for when `endMatch('won')` fired; DAYS PLAYED is days begun (takeoff plus each
+  dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The first-launch variant is modal
   (an outside click does nothing) and its second plank reads SKIP — the default name — where an
   edit reads CANCEL.
   Any open panel ducks the logo to zero alpha.
