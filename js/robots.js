@@ -55,19 +55,16 @@ function hurtRobot(b, dmg, nx, ny, src) {
   if (b.hp <= 0) robotDies(b, src);
 }
 
-// The wreck. Whatever gold it was hauling spills where it fell (up to three
-// coins, so a full load reads as a pile), which is what makes shooting a
-// loaded worker on its way home worth the arrows.
+// The wreck. Whatever gold it was hauling goes to whoever downed it - the
+// final blow takes the cargo, which is what keeps shooting a loaded worker
+// on its way home worth the arrows. A wreck nobody caused eats its load.
 function robotDies(b, src) {
   b.dead = true;
   if (nearPlayer(b.x, b.y)) SFX.break_();
   burst(b.x, b.y - 4, '#98a1b0', 10, 50, 0.5, true);
   burst(b.x, b.y - 4, '#3b4150', 4, 35, 0.4);
   if (b.carry > 0) {
-    const coins = Math.min(3, b.carry);
-    for (let i = 0; i < coins; i++) {
-      spawnDrop(b.x, b.y, 'gold', Math.floor(b.carry / coins) + (i < b.carry % coins ? 1 : 0));
-    }
+    if (src && src.inv) awardGold(src, b.carry, b.x, b.y);
     b.carry = 0;
   }
   // a downed worker is not a downed slot: it makes the feed, never the kill count

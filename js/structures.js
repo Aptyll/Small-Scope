@@ -211,7 +211,7 @@ function startUpgrade(o, p) {
 
 function demolishStruct(o, p) {
   if (!ownsStruct(o, p || player)) { if ((p || player) === player) SFX.deny(); return; }
-  destroyStructure(o, true);
+  destroyStructure(o, true, p || player);
 }
 
 function removeStruct(o) {
@@ -407,14 +407,10 @@ function updateStructures(dt) {
       o.payT -= dt;
       if (o.payT <= 0) {
         o.payT = t.period;
-        let near = 0;
-        for (const d of drops) if (Math.hypot(d.x - ox, d.y - oy) < 24) near++;
-        if (near < 6) { // cap the AFK pile
-          spawnDrop(ox, oy - 2, 'gold', t.pay);
-          addFloater(ox, oy - 12, '+' + t.pay, RES_COLORS.gold);
-          burst(ox, oy - 6, '#c9d0e2', 2, 20, 0.3);
-          if (nearPlayer(ox, oy)) SFX.coin();
-        }
+        // passive income deposits straight into the owner's wallet - gold is
+        // never a physical drop, so there is no pile to collect or to cap
+        awardGold(players[o.owner], t.pay, ox, oy + 2);
+        burst(ox, oy - 6, '#c9d0e2', 2, 20, 0.3);
       }
     } else if (o.type === 'spawner') {
       // bots roll out one after another (4 s apart); a lost bot takes 12 s to replace

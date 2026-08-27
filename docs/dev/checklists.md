@@ -229,7 +229,8 @@ range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint
 `craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
 cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
 timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
-draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js),
+draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the chest
+count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 `WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
 `CHAMPS`, the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,

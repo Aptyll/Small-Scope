@@ -305,7 +305,7 @@ function updateAI(p, dt) {
     ai.buildT = 4; // nothing worth spending on nearby; look again shortly
   }
 
-  // 9. harvest: walk to a tree/rock/berry bush and hold E on it
+  // 9. harvest: walk to a tree/rock/berry bush/chest and hold E on it
   // (a stripped bush stops being work, so drop it the moment it empties)
   if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
     (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
@@ -314,7 +314,8 @@ function updateAI(p, dt) {
   if (!ai.tgt && ai.thinkT <= 0) {
     ai.thinkT = 0.6;
     ai.tgt = nearestObj(p.x, p.y, AI_FORAGE, (o) => o !== ai.avoid &&
-      (o.type === 'tree' || o.type === 'rock' || (o.type === 'bush' && o.berries > 0)) &&
+      (o.type === 'tree' || o.type === 'rock' || o.type === 'chest' ||
+        (o.type === 'bush' && o.berries > 0)) &&
       aiOpenSides(o.tx, o.ty) >= 1);
   }
   if (ai.tgt) {

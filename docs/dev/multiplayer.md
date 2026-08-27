@@ -100,8 +100,8 @@ same loadouts. Sprites live in `SPRITES.champ[c][team]` — same
 ## Hero levels
 
 League-style: every slot has `p.level` (1–`LEVEL_MAX` = 9) and `p.xp`, which is simply lifetime
-gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (drop pickups and robot
-deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
+gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (`awardGold` — the on-the-spot
+payout every source uses — and robot deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
 `levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 10, 25, 45, 70, 100, 135, 175,
 220 — the gap grows by 5 each level, ~220 gold to cap). Spending gold and dying never touch
 `xp`; level and xp are set in the constructor, not `reset()`, so they would survive a `reset`.
@@ -169,8 +169,8 @@ game — the bot brain, the wolf pack, both turret checks — resolves through i
 
 **A rival's worker bots are targets too** — they are tested straight after the players, on the same
 team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one costs the owner
-its income and spills the gold it was carrying, so a base's economy can be raided without ever
-touching the base; the feed says so, but a worker is never a kill on the scoreboard.
+its income and hands the gold it was carrying to whoever downed it, so a base's economy can be
+raided without ever touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
 **So is a rival's grounded eagle** — tested before tile solidity (its own roost tiles are solid,
 and would otherwise eat the shot), same team rule, through `hurtEagle` (the `eagle drop` banner in
@@ -190,7 +190,8 @@ swing is refused. It is not helpless either: a rival lingering in `GUST_R` makes
 hp/s back.
 
 `die(p, src, cause)` empties the wallet **and the bag** the same way regardless of what happens
-next: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every carried
+next: the killer pockets the gold via `awardGold`, an uncredited death's gold goes down with the
+body (gold is never a physical drop), and every carried
 stack always spills, one drop each (the standings rank lifetime `xp`, so they still show what the
 slot earned). What happens next depends on `teamHasLivingKeep(p.team)` **and**
 `teamEagleDown(p.team)` — see [The Keep](#the-keep) — either a flat, gold-free respawn timer

@@ -224,6 +224,8 @@ function render() {
       drawSpriteFlash(SPRITES.den, px + sh, py + 4, o.flash);
     } else if (o.type === 'rock') {
       drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
+    } else if (o.type === 'chest') {
+      drawSpriteFlash(CHEST_SPR, px + sh, py + TILE - CHEST_SPR.height, o.flash);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {

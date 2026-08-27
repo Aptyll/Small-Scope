@@ -24,9 +24,10 @@ anything that must stay stable per tile.
   so rivers gap naturally around them.
 - `objects` — flat `Array(WORLD*WORLD)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `deadTree`, `stump`, `rock`,
-  `bush`, `den`, `wall`, `turret`, `generator`, `spawner`, `part`. `deadTree` (a 3 hp snag, chopped like a
+  `bush`, `chest`, `den`, `wall`, `turret`, `generator`, `spawner`, `part`. `deadTree` (a 3 hp snag, chopped like a
   tree for `YIELD.deadTreeHit`/`deadTreeFall`, leaves a stump) and `den` (solid, inert scenery)
-  exist only inside [landmarks](#landmarks). `part` is the filler a multi-tile building leaves on
+  exist only inside [landmarks](#landmarks); `chest` is a
+  [treasure chest](#treasure-chests) standing where a border tree stood. `part` is the filler a multi-tile building leaves on
   every footprint tile but its anchor (`{ type: 'part', of: <building> }`): solid, coloured like its
   building on both maps, ignored by work swings, and resolved by `structOf()` for every "what building
   is here" read (right-click, cursor, wheel, orders).
@@ -51,10 +52,26 @@ anything that must stay stable per tile.
   seeds still generate the same world.
 - Every `tree` carries `rare` (boolean), set at worldgen from `treeRare(tx, ty)`: a `hash2`
   roll gives each tree a `TREE_RARE_CHANCE` (8%) shot at a **jackpot** — `YIELD.treeRare` extra
-  gold (as two coins, plus a `JACKPOT!` floater), paid by `hitObject()` only when the tree
-  actually falls, on top of the normal payout. Being a position hash rather than an `rng()`
+  gold (straight to the feller through `awardGold`, plus a `JACKPOT!` floater), paid by
+  `hitObject()` only when the tree actually falls, on top of the normal payout. Being a position hash rather than an `rng()`
   draw, the roll is the same whenever it is asked — `DBG.treeRare(tx, ty)` reports it for any
   tile, occupied or not.
+
+## Treasure chests
+
+`placeChests()` (the `world` banner, right above the landmarks) runs at boot after
+`placeLandmarks()`: it scans for **border trees on the forest's inner edge** (a `tree` with at
+least one cardinal neighbour of open snow — reachable with E from open ground) and swaps
+`CHEST_COUNT` (14) of them for `chest` objects, at least `CHEST_SPACING` (22) tiles apart.
+Selection rolls on its own `mulberry32(SEED ^ 0x43484553)` stream — the `lmRng` pattern — so it
+can never perturb the shared `rng` stream and terrain stays bit-identical for an existing seed
+(chests place after landmarks and touch only `objects`, never `ground`). A chest is solid, gold
+on both maps (its `mm`/`map` entry), and one free E press (`OPEN`, `needs: null`) springs it —
+`hitObject`'s chest branch pays `CHEST_GOLD_MIN`–`CHEST_GOLD_MAX` gold on the spot and drops one
+card rolled from `CHEST_ODDS` (all four constants beside `placeChests`). The tile empties with
+it, leaving a one-tile notch in the treeline where the cache was dug out. The sprite bakes in
+[draw-world.js](../../js/draw-world.js) (`CHEST_SPR`, top of the entity draw banner) rather than
+in the byte-fragile js/sprites.js.
 
 `renderGround()` pre-renders the *entire* 3712×3712 ground to one offscreen canvas at boot and
 the frame loop just blits the camera window out of it. It is a one-time cost — never call it per

@@ -208,7 +208,7 @@ trims the oldest past `SHAFT_MAX` (90). A shaft lives `SHAFT_LIFE` (30 s), is in
 isn't full claims it through `contest('shaft:' + i, …)`, exactly like a drop — so shooting at
 someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s loot step counts
 shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
-quiver as shafts around the body, the same way `spillInventory` spills the wallet.
+quiver as shafts around the body, the same way `spillInventory` spills the bag.
 
 Four indicators carry it, and none of them is a word:
 
@@ -480,8 +480,9 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
   then past it), the first it can route to; a leg that arrives or fails hands over to the next,
   and an animal with nowhere to run stops fleeing.
 
-Rabbits drop 1 berry plus `YIELD.rabbit` coins; deer drop `YIELD.deer` coins plus a `GOLD!`
-floater. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
+A kill pays its `YIELD` gold straight to whoever landed the final blow (`a.lastHit`, through
+`awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
+pickup. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
 to players, robots and each other except birds, which fly (see
 [Unit collisions](#unit-collisions)), and sprites are side-view only (`dir` is `left|right`).
 They are not shown on the minimap or world map.
@@ -550,23 +551,38 @@ rather than a different resource (the League model: one number, many ways to ear
 | deer | `deer` 3 coins × 6 → 18 | the big mobile target |
 | wolf | `wolf` 3 coins × 8 → 24 | the biggest kill, and it bites back |
 | bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
-| generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, capped at 6 uncollected |
+| generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, deposited to its owner |
+| chest | `CHEST_GOLD_MIN`–`MAX` (8–20) + a card | ~14 caches along the treeline, one free E press |
 
-Payouts are physical pickups: `spawnDrop(x, y, type, n)` takes the **value** of the drop
-(`d.n`, default 1) so a single coin can carry several gold — the pickup adds what it can (gold
-through `gainGold`, which is also XP — see [Hero levels](multiplayer.md#hero-levels); anything
-else through `bagAdd`) and floats that number in `RES_COLORS[type]`. **Whatever was taken comes
-off `d.n`, and the drop is only removed when `d.n` hits zero** — that is what lets a stack of 5
-berries half-fill a bag and leave 3 lying in the snow. A drop's `type` is `gold` or an `ITEMS`
-key; sources pay `gold` and `berry`, a caught fish goes straight into the bag (speared, or handed
-over by a [fish net](world.md#fish-nets) you are standing on), and death spills — and a wrecked
-net's contents — carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
+**Gold is never a physical drop.** Every source pays the earner on the spot through
+`awardGold(p, n, x, y)` (`players` banner, js/player.js, beside `gainGold` — which it wraps, so
+every payout is also XP, see [Hero levels](multiplayer.md#hero-levels)): the `+N` floater rises
+at the place the action happened (the tree, the kill, the wreck), and the local earner gets the
+coin blip. Who earns is always the actor: the swinger of the blow, the final-blow shooter of an
+animal or a loaded worker bot (its `b.carry` goes to whoever downed it), the breaker of an enemy
+building (the 50% wreck refund, same as a demolishing owner's), the killer of a player (the
+victim's whole wallet — an uncredited death takes its gold down with the body), and a
+generator's **owner**, into whose wallet each `pay` tick deposits directly. Robots still carry a
+single gold number (`b.carry`) and deposit at 8+ into their owner's wallet.
+
+**Treasure chests** are the free-money exception to earning it: `placeChests()`
+([world.md](world.md#treasure-chests)) swaps ~14 inner-edge border trees for chests, and one E
+press (`OPEN`, no tool gate) springs one — `CHEST_GOLD_MIN`–`CHEST_GOLD_MAX` gold straight to
+the purse plus one unopened card drop rolled from `CHEST_ODDS` (rarity odds beside the other
+chest constants in js/world.js). The chest's tile opens with it.
+
+Physical drops still exist for everything **carried**: `spawnDrop(x, y, type, n)` takes the
+value of the drop (`d.n`, default 1) and the pickup adds what fits through `bagAdd`, floating
+that number in `RES_COLORS[type]`. **Whatever was taken comes off `d.n`, and the drop is only
+removed when `d.n` hits zero** — that is what lets a stack of 5 berries half-fill a bag and
+leave 3 lying in the snow. A drop's `type` is always an `ITEMS` key now: sources pay `berry` and
+the card rarities, a caught fish goes straight into the bag (speared, or handed over by a
+[fish net](world.md#fish-nets) you are standing on), and death spills — and a wrecked net's
+contents — carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
 the **strip along the bottom of the backpack frame** (bottom right) — food from the left as icon
 + count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
 wallet and bag both —
-see [Death is final](#death-is-final). Robots carry a single gold
-number (`b.carry`) and deposit at 8+ into their **owner's** wallet (via `gainGold`, so robot
-income levels the owner too). Drops are neutral: they drift
+see [Death is final](#death-is-final). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
 (`canAfford`/`pay` also take the player whose wallet is meant) — except that a player with **no
 room** for a drop is neither magnetised by it nor a claimant, so a full bag hands the pickup to
@@ -804,8 +820,9 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
   friendly fire and kill credit for free — it just draws differently and flies at `BOLT_SPD` (250).
   `fireBolt` walks the spawn point out of the turret's own footprint first: turrets are solid
   tiles and bolts die on solid tiles, so a depressed barrel would otherwise shoot itself.
-  **Generator**: pays `tiers[tier].pay` gold every `period` seconds as one
-  coin drop at its base, capped at 6 uncollected drops nearby. **Bot bay** (`spawner`):
+  **Generator**: deposits `tiers[tier].pay` gold every `period` seconds straight into its
+  **owner's** wallet (`awardGold` — the `+N` floater rises at the generator, but there is
+  nothing to collect and no pile to cap). **Bot bay** (`spawner`):
   keeps `tiers[0].bots` (3) robots alive, rolling them out **one at a time** — the first 1 s after
   completion, then 4 s apart; a lost bot takes 12 s to replace (`respawnT`/`respawnTotal`).
   `makeRobot` spawns at `structMouth()` (the ring around the footprint if that is blocked) with an
@@ -823,13 +840,13 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
   wall (60 hp), ~10 s for a tier-3 one (300 hp), ~7.5 s for the bay (220 hp). It flashes and
   shakes the building like any other struck object, floats the damage, and shakes the camera for
   the local player. Damage is **contested** with everything else E does, since it runs inside
-  `swingHit`'s `contest('work:' + idx)`. At 0 hp it calls `destroyStructure(o, true)` — the wreck
-  pays out exactly like a demolition, so the rubble is loot for whoever is standing closest — and
+  `swingHit`'s `contest('work:' + idx)`. At 0 hp it calls `destroyStructure(o, true, p)` — the
+  wreck pays out exactly like a demolition, straight to the wrecker — and
   logs `<NAME> WRECKED A <TYPE>` to the event feed. Nothing else damages a building: arrows die
   on solid tiles without hurting them, and no AI or wildlife targets one.
-- Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), spawned as
-  that many separate 1-gold drops — 23 of them for a fully-upgraded wall. `demolishStruct()` →
-  `destroyStructure(o, true)` is the live path for that, reached from `runCmd` for the wheel's
+- Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), paid to the
+  demolisher on the spot through `awardGold` — 23 gold for a fully-upgraded wall. `demolishStruct()` →
+  `destroyStructure(o, true, p)` is the live path for that, reached from `runCmd` for the wheel's
   demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key. Demolishing (or
   losing) a Keep is **not** specially guarded beyond that — no confirmation dialog exists anywhere
   in this game — so stripping a team's only way back is a real, deliberate stake, not a bug.
@@ -849,7 +866,7 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
   outright if the Keep is destroyed mid-craft, no refund, the same as a turret's charge or a
   spawner's mid-roll bot. On completion it rolls a rarity against `tiers[tier].odds`
   (`rollCardRarity`, the shared runtime `rng()` — never `genWorld`'s stream) and `spawnDrop`s the
-  matching card at `structMouth()`, a neutral pickup like a generator's coin. Odds shift toward the
+  matching card at `structMouth()` as a neutral pickup. Odds shift toward the
   rare end at each tier (roughly White-heavy at tier 0 to a real shot at Gold by tier 2) — see the
   `STRUCTS.keep` table for the exact weights. The same over-the-roof progress bar construction
   already draws also covers a finished Keep's `craftT` countdown, in an icy blue instead of
@@ -867,8 +884,8 @@ bay** (`flagOf(b)`); with no flag it falls back to the original bay-centred gath
 nearest tree/rock within 8 tiles of the bay's mouth (`structMouth`, also where they deposit)
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
 `carry` gold count (same `YIELD` numbers as `hitObject`, tree-fall leaves a stump and pays the
-jackpot, minus the physical drops), and walk home to deposit into their owner's `inv.gold` with a
-floater at 8+ carried. A worker's `harvest()` handles **deadTree** too (rookery perches: quicker,
+jackpot — banked in the carry rather than paid on the spot), and walk home to deposit into their
+owner's `inv.gold` with a floater at 8+ carried. A worker's `harvest()` handles **deadTree** too (rookery perches: quicker,
 `YIELD.deadTree*`, and felling one calls `flushBirds`), because a flag can be planted on one.
 Robots drive on `navStep` ([Pathfinding](#pathfinding): reach 1 to a tree, rock or building,
 reach 0 to a body or home) and are solid to players and animals (see
@@ -899,8 +916,8 @@ of a body whose treads sit at `b.y + 4`), and `hurtRobot(b, dmg, nx, ny, src)` i
 point for damage — flash, knockback, a damage floater, a scrap-and-sparks burst, `SFX.hit`, and
 `robotDies` at zero. Only arrows reach it, and only from another team (friendly fire is off, as it
 is for players), so a bay's own side drives through its workers safely. `robotDies(b, src)`
-**spills whatever the worker was hauling** as up to three gold coins splitting `b.carry` — which is
-what makes shooting a loaded worker on its way home worth the arrows — and logs
+**hands whatever the worker was hauling to whoever downed it** (`awardGold` on `b.carry`) — which
+is what keeps shooting a loaded worker on its way home worth the arrows — and logs
 `<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed slot, so it never touches
 the kill count. `updateRobot`'s own `hp <= 0` check routes through the same function (with no
 `src`, so the wreck goes unclaimed). Turret bolts ride the arrow pipeline, so a turret's mark
@@ -1006,10 +1023,10 @@ draws all three; `FLAG_JOBS`, in robots.js, holds the 7×7 icon grids as landmar
 roosts** (`teamEagleDown`, the eagle-drop banner in js/boot.js — a driven-off objective makes
 every death on that side permanent), in which case it's a flat respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
 momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
-`die`): a credited killer pockets the victim's gold outright through `gainGold` — so a kill levels
+`die`): a credited killer pockets the victim's gold outright through `awardGold` — so a kill levels
 the killer, which is the bounty that makes taking the fight worth it — while an uncredited death
-(ice, wolves, or the killer already dead) spills it as up to 5 coins at the corpse. Any other `inv`
-key would spill as pickups split into up to 3 drops, the way a downed worker's carry does. **The
+(ice, wolves, or the killer already dead) takes its gold down with the body, because gold is never
+a physical drop. Any other `inv` key would spill as pickups split into up to 3 drops. **The
 backpack empties too**, one drop per stack — a stack is already the unit the bag counts in, so a
 killer whose own bag is full simply leaves them lying; this is also, for free, how an **unopened
 roguelike card drops on death** (see [Roguelike cards](#roguelike-cards)) — a picked card is
@@ -1211,8 +1228,8 @@ hold more than one cue — the footstep file is a whole walking loop, the coin r
 — so `dur` takes one hit off the front and rides a release ramp down over its last 40 ms rather
 than clicking off mid-waveform. A key with several files picks one at random per shot.
 
-New sampled cues beside the old synth ones: `coin()` (gold into the purse — a drop walked over, a
-kill bounty, a bot's deposit, a generator's payout) and `stash()` (something into the backpack)
+New sampled cues beside the old synth ones: `coin()` (gold into the purse — an `awardGold`
+payout, a bot's deposit) and `stash()` (something into the backpack)
 split off from `pickup()`, which stays the synth UI blip so menus keep an instant, identical
 click; `hammer()` (raising, upgrading or finishing a structure) splits off from `place()` the same
 way, with `building()` as its quieter, shorter sibling on a site's dust tick — it repeats for as

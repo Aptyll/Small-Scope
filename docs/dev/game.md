@@ -39,7 +39,8 @@ lives inside it. [Prone](gameplay.md#prone-under-the-snow).
 enemy building, and strikes a rival's grounded eagle. [Tools and the bow](gameplay.md#tools-and-the-bow).
 
 **Gold is the only currency, and gold is also XP.** No wood, no stone — one number earned many
-ways, each source with its own yield profile. Every payout levels you as a side effect.
+ways, each source with its own yield profile, and it pays itself: gold is never a pickup on the
+ground, every source pays the earner on the spot. Every payout levels you as a side effect.
 [Economy](gameplay.md#economy-one-currency), [Hero levels](multiplayer.md#hero-levels).
 
 **You carry a 10-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you

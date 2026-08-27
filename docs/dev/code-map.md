@@ -45,6 +45,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
+| the one on-the-spot gold payout every source uses (gold is never a drop) | `awardGold` | `players` (beside `gainGold`) |
 | the numbers a slot is made of: the slot count and teams, walk/roll/slide speeds, hero levels, and the two bow baselines a kit is written against | `MAX_PLAYER_SLOTS`, `TEAM_COUNT`, `PVP`, `PLAYER_SPEED`/`PLAYER_R`, `ICE_MAX`/`SLIDE_MIN`/`SLIDE_EXIT`/`TRAIL_MIN`/`SNOW_TRAIL_*`, `LEVEL_*`/`LVL_*`, `DODGE_*`, `BOW_CHARGE`/`BOW_NOCK` | `players` (above `CHAMPS`, which reads four of them at load time) |
 | the entity arrays and the local aliases | `animals`…`landmarks`, `players`, `player`, `inv` | `players` (the banner's tail) |
 | the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` |
@@ -69,6 +70,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the colour a tile's occupant paints on either map, over both tables | `objMapColor`, `treeMapPx`, `MM_UNKNOWN`, `MAP_TREE_*`/`MAP_BUSH_*` | `world` (its two readers: `updateMinimap` ui.js, `buildWorldMapImg` panels.js) |
 | does this tile block a walker | `isSolidTile` | `world` (it reads `STRUCTS` then `OBJECTS`, and names no type) |
 | is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt` | `world` (the two `*_ORDER` tables: `stump structures`, structures.js) |
+| treasure chests: where they take their trees, and what one pays | `placeChests`, `CHEST_COUNT`/`CHEST_SPACING`/`CHEST_GOLD_*`/`CHEST_ODDS` | `world` (opening: `hitObject`'s chest branch, actions.js; sprite: `CHEST_SPR`, draw-world.js) |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
 
 ## js/nav.js

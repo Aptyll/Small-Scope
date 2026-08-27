@@ -333,8 +333,8 @@ function updatePlay(dt) {
     // standing on one claims it - the contest decides who actually gets it.
     // A player with no room for it is neither magnetised nor a claimant, so a
     // full bag hands the pickup to whoever else is standing there instead of
-    // sitting on it; gold is a wallet number and never runs out of room.
-    const roomFor = (p) => d.type === 'gold' || bagRoom(p, d.type) > 0;
+    // sitting on it. (Gold never lies here - awardGold pays it on the spot.)
+    const roomFor = (p) => bagRoom(p, d.type) > 0;
     let near = null, pd = 1e9;
     for (const p of players) {
       if (!p.active || p.dead || inAir(p) || !roomFor(p)) continue;
@@ -353,16 +353,14 @@ function updatePlay(dt) {
       contest('drop:' + i, p, () => {
         const j = drops.indexOf(d);
         if (j < 0) return;
-        // gold always takes the whole coin; a carried thing takes only what
-        // fits. Either way what was taken comes OFF the drop, so a stack that
-        // only partly fits leaves its remainder lying there instead of being
-        // picked up forever.
-        const got = d.type === 'gold' ? d.n : bagAdd(p, d.type, d.n);
+        // a pickup takes only what fits, and what was taken comes OFF the
+        // drop, so a stack that only partly fits leaves its remainder lying
+        // there instead of being picked up forever.
+        const got = bagAdd(p, d.type, d.n);
         if (got > 0) {
-          if (d.type === 'gold') gainGold(p, got);
           d.n -= got;
           addFloater(p.x, p.y - 14, '+' + got, RES_COLORS[d.type]);
-          if (p === player) { if (d.type === 'gold') SFX.coin(); else SFX.stash(); }
+          if (p === player) SFX.stash();
         }
         if (d.n <= 0) drops.splice(j, 1); else d.t = 0;
       });

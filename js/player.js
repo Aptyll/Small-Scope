@@ -93,6 +93,16 @@ function gainGold(p, n) {
   if (p === player) PROFILE.addGold(n); // lifetime total, coalesced - see profile.js
   while (p.level < LEVEL_MAX && p.xp >= LEVEL_XP[p.level]) levelUp(p);
 }
+// Gold is never a physical drop: every source pays the earner on the spot
+// through this one wrapper - the wallet (via gainGold, so it levels too), the
+// '+N' popup at the place the action happened, and the coin blip for the
+// local earner. (x, y) is the tree, the kill, the wreck - not the player.
+function awardGold(p, n, x, y) {
+  if (!p || n <= 0) return;
+  gainGold(p, n);
+  addFloater(x, y - 14, '+' + n, RES_COLORS.gold);
+  if (p === player) SFX.coin();
+}
 function levelUp(p) {
   p.level++;
   p.skillPts++;
@@ -542,25 +552,23 @@ const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', t
 const KILL_VERB = { worker: 'CUT DOWN' };
 
 // Death empties the wallet AND the backpack. Gold goes to the credited
-// killer outright (through gainGold, so a kill also levels the killer - the
-// bounty is the point of taking the fight); with no killer to pay, it spills
-// as coins at the corpse instead. Everything carried always spills as
-// pickups, one per bag stack, because a stack is already the unit the bag
-// counts in - a killer with a full bag of their own simply leaves them lying.
-// Lifetime xp is untouched, and the standings rank on xp (scoreOf), so a
-// looted slot keeps the place it earned.
+// killer outright (through awardGold, so a kill also levels the killer - the
+// bounty is the point of taking the fight); with no killer to pay it goes
+// down with the body, because gold is never a physical drop. Everything
+// carried still spills as pickups, one per bag stack, because a stack is
+// already the unit the bag counts in - a killer with a full bag of their own
+// simply leaves them lying. Lifetime xp is untouched, and the standings rank
+// on xp (scoreOf), so a looted slot keeps the place it earned.
 function spillInventory(p, killer) {
   for (const k in p.inv) {
     const n = p.inv[k];
     p.inv[k] = 0;
     if (n <= 0) continue;
-    if (k === 'gold' && killer && !killer.dead) {
-      gainGold(killer, n);
-      addFloater(killer.x, killer.y - 14, '+' + n, RES_COLORS.gold);
-      if (killer === player) SFX.coin();
+    if (k === 'gold') {
+      if (killer && !killer.dead) awardGold(killer, n, killer.x, killer.y);
       continue;
     }
-    const parts = Math.min(k === 'gold' ? 5 : 3, n);
+    const parts = Math.min(3, n);
     const base = Math.floor(n / parts), rem = n % parts;
     for (let i = 0; i < parts; i++) spawnDrop(p.x, p.y - 4, k, base + (i < rem ? 1 : 0));
   }

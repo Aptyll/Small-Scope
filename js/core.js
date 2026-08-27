@@ -216,7 +216,8 @@ function burst(x, y, color, n, spd, life, grav) {
   }
 }
 
-// n = how much the pickup is worth (gold coins can carry several; food is always 1)
+// n = how much the pickup is worth. type is always an ITEMS key now (berry,
+// fish, a card) - gold is paid on the spot through awardGold, never dropped.
 function spawnDrop(x, y, type, n) {
   const a = rng() * Math.PI * 2;
   drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, n: n || 1, t: 0 });

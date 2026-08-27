@@ -240,7 +240,7 @@ function tackleObject(o, dmg, p) {
   o.hp -= dmg;
   addDmgFloater(c.x, c.y - 12, dmg);
   if (o.hp <= 0) {
-    destroyStructure(o, true);
+    destroyStructure(o, true, p);
     logEvent(p.name + ' WRECKED A ' + STRUCTS[o.type].name, p);
   }
 }
@@ -516,7 +516,7 @@ function hitObject(o, p) {
   if (o.type === 'tree') {
     o.hp--;
     if (near) SFX.chop();
-    spawnDrop(ox, oy, 'gold', YIELD.treeHit);
+    awardGold(p, YIELD.treeHit, ox, oy);
     burst(ox, oy - 10, '#eef4fb', 6, 40, 0.5, true);
     burst(ox, oy - 12, '#3f7a5c', 3, 30, 0.4, true);
     if (o.hp <= 0) {
@@ -527,13 +527,13 @@ function hitObject(o, p) {
         state.hints.stump = true;
         showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
       }
-      spawnDrop(ox, oy, 'gold', YIELD.treeFall + kitOf(p).harvest); // PACKMULE fattens the fell
+      awardGold(p, YIELD.treeFall + kitOf(p).harvest, ox, oy - 6); // PACKMULE fattens the fell
       burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
       burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
       if (o.rare) {
-        spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2); spawnDrop(ox, oy, 'gold', YIELD.treeRare / 2);
+        awardGold(p, YIELD.treeRare, ox, oy - 12);
         burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
-        addFloater(ox, oy - 18, 'JACKPOT!', '#f2cc6a');
+        addFloater(ox, oy - 32, 'JACKPOT!', '#f2cc6a');
         if (near) SFX.coin();
       }
     }
@@ -542,14 +542,14 @@ function hitObject(o, p) {
     // a perch scatters the flock that was sitting in it
     o.hp--;
     if (near) SFX.chop();
-    spawnDrop(ox, oy, 'gold', YIELD.deadTreeHit);
+    awardGold(p, YIELD.deadTreeHit, ox, oy);
     burst(ox, oy - 10, '#eef4fb', 5, 40, 0.5, true);
     burst(ox, oy - 12, '#6b5a48', 3, 30, 0.4, true);
     if (o.hp <= 0) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      spawnDrop(ox, oy, 'gold', YIELD.deadTreeFall + kitOf(p).harvest);
+      awardGold(p, YIELD.deadTreeFall + kitOf(p).harvest, ox, oy - 6);
       burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
       burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
       flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
@@ -557,13 +557,13 @@ function hitObject(o, p) {
   } else if (o.type === 'rock') {
     o.hp--;
     if (near) SFX.mine();
-    spawnDrop(ox, oy, 'gold', YIELD.rockHit);
+    awardGold(p, YIELD.rockHit, ox, oy);
     burst(ox, oy - 4, '#a8b0c4', 6, 45, 0.4, true);
     if (o.hp <= 0) {
       objects[idx(o.tx, o.ty)] = null;
       if (near) SFX.break_();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2); spawnDrop(ox, oy, 'gold', YIELD.rockBreak / 2 + kitOf(p).harvest);
+      awardGold(p, YIELD.rockBreak + kitOf(p).harvest, ox, oy - 6);
       burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
     }
   } else if (o.type === 'eagle') {
@@ -584,6 +584,21 @@ function hitObject(o, p) {
     } else if (near) {
       SFX.swing();
     }
+  } else if (o.type === 'chest') {
+    // a buried cache in the treeline (placeChests, js/world.js): one free E
+    // press springs it - gold straight into the purse, plus a card drop
+    // rolled from CHEST_ODDS. The tile opens with it, so a sprung chest
+    // leaves a gap in the forest wall where it stood.
+    objects[idx(o.tx, o.ty)] = null;
+    if (near) SFX.stash();
+    if (p === player) state.shake = Math.max(state.shake, 1.5);
+    awardGold(p, randi(CHEST_GOLD_MIN, CHEST_GOLD_MAX), ox, oy);
+    const rarity = rollCardRarity(CHEST_ODDS);
+    const key = cardKey(rarity);
+    spawnDrop(ox, oy, key, 1);
+    addFloater(ox, oy - 24, rarity.toUpperCase() + ' CARD', RES_COLORS[key]);
+    burst(ox, oy - 6, '#f2cc6a', 12, 55, 0.6, true);
+    burst(ox, oy - 6, '#8a6142', 8, 45, 0.5, true);
   } else if (STRUCTS[o.type]) {
     // reached from swingHit only for a building on ANOTHER team
     hurtStruct(o, STRUCT_HIT_DMG, p);
@@ -605,13 +620,15 @@ function hurtStruct(o, dmg, p) {
   if (p === player) state.shake = Math.max(state.shake, 1);
   if (o.hp <= 0) {
     const name = STRUCTS[o.type].name;
-    // the wreck pays out like a demolition: whoever is nearest picks the rubble up
-    destroyStructure(o, true);
+    // the wreck pays out like a demolition, straight to whoever broke it
+    destroyStructure(o, true, p);
     if (p) logEvent(p.name + ' WRECKED A ' + name, p);
   }
 }
 
-function destroyStructure(o, refund) {
+// `p` is who gets the refund gold - the demolishing owner or the wrecker.
+// With nobody to pay (refund true, p null) the rubble is just rubble.
+function destroyStructure(o, refund, p) {
   // a net going down tips its catch back out onto the ice - the fish in it
   // were never the owner's, and wrecking one should not delete them
   const spill = o.type === 'net' ? o.fish || 0 : 0;
@@ -622,10 +639,10 @@ function destroyStructure(o, refund) {
   if (nearPlayer(ox, oy)) SFX.break_();
   burst(ox, oy, '#8a6142', 10, 50, 0.5, true);
   burst(ox, oy, '#eef4fb', 6, 40, 0.5, true);
-  if (refund && STRUCTS[o.type]) {
-    // 50% of everything paid across tiers
+  if (refund && STRUCTS[o.type] && p) {
+    // 50% of everything paid across tiers, paid out on the spot
     const c = cumulativeCost(o.type, o.tier);
-    for (const k in c) for (let i = 0; i < Math.floor(c[k] / 2); i++) spawnDrop(ox, oy, k);
+    awardGold(p, Math.floor((c.gold || 0) / 2), ox, oy);
   }
   rebuildLights();
   // a Keep falling can itself be the elimination blow for a team that

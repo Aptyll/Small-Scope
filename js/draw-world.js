@@ -124,6 +124,32 @@ function repaintGround(tx, ty) {
 }
 
 // ------------------------------------------------------------ entity draw
+// The treasure chest's sprite bakes HERE, from its own grid - js/sprites.js
+// is byte-fragile (BOM, mangled-byte repair) and is never rewritten, so a
+// new scenery sprite bakes beside its draw pass instead. Snow-capped lid,
+// gold banding and lock: the same gold the payout floater speaks in.
+const CHEST_SPR = (() => {
+  const pal = { o: '#241a12', w: '#8a6142', W: '#a3794f', d: '#6b4a34', g: '#f2cc6a', G: '#c9a23f', s: '#eef4fb' };
+  const rows = [
+    '..oooooooooooo..',
+    '.osssssssssssso.',
+    '.oWwwwwwwwwwwWo.',
+    '.oWwwwddwwwwwWo.',
+    '.oggggggggggggo.',
+    '.owwwwwGGwwwwwo.',
+    '.owwwwwggwwwwwo.',
+    '.owwdwwwwwwdwwo.',
+    '.oddddddddddddo.',
+    '..oooooooooooo..',
+  ];
+  const c = document.createElement('canvas');
+  c.width = 16; c.height = rows.length;
+  const g = c.getContext('2d');
+  rows.forEach((r, y) => {
+    for (let x = 0; x < 16; x++) if (pal[r[x]]) { g.fillStyle = pal[r[x]]; g.fillRect(x, y, 1, 1); }
+  });
+  return c;
+})();
 // Spent arrows in the snow, drawn flat under everything that walks: a stub of
 // shaft on the bearing it came in on (the head is buried, so it starts at the
 // entry point and runs backwards), fletching in the shooter's team colour, a

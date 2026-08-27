@@ -826,6 +826,7 @@ SFX.setMuted(settings.muted);
 SFX.music.play('intro', { in: 1.5 });
 genWorld();
 placeLandmarks();  // worldgen's last pass, before the ground is baked
+placeChests();     // ...then the caches take their trees (objects only, no ground)
 spawnAnimals();
 spawnFish();
 stockLandmarks();  // wolves and birds go in once the world is standing

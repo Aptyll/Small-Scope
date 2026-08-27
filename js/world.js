@@ -29,6 +29,11 @@ const OBJECTS = {
   bush:     { solid: false, tool: 'axe',  needs: null,   verb: 'PICK', lift: 10,
               ready: (o) => o.berries > 0,
               mm: [88, 148, 108],  map: (o) => o.berries > 0 ? MAP_BUSH_RIPE : MAP_BUSH_BARE },
+  // a buried cache swapped in for an inner-edge border tree (placeChests):
+  // one free E press springs it - hitObject's chest branch pays the gold and
+  // rolls the card. Any tool opens it, so `needs` stays null.
+  chest:    { solid: true,  tool: 'axe',  needs: null,   verb: 'OPEN', lift: 12,
+              mm: [242, 204, 100], map: [206, 160, 70] },
   den:      { solid: true,  mm: [92, 86, 100],   map: [86, 80, 92] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
@@ -295,6 +300,36 @@ function genWorld() {
     if (free(tx, ty) && !nearSpawn(tx, ty) && Math.hypot(tx - cx, ty - cy) > CENTER_R + 3) {
       placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
     }
+  }
+}
+
+// Treasure chests: a handful of border trees swapped for buried caches,
+// always on the forest's inner edge so E can reach one from open ground.
+// Opening is hitObject's chest branch (js/actions.js); what one pays is the
+// three constants here. Placement rolls on its own seeded stream (the lmRng
+// pattern) AFTER genWorld and placeLandmarks have finished, so it can never
+// reshuffle the terrain or the landmarks a seed already produces.
+const CHEST_COUNT = 14;
+const CHEST_SPACING = 22;                       // min tiles between two chests
+const CHEST_GOLD_MIN = 8, CHEST_GOLD_MAX = 20;  // the free gold inside
+const CHEST_ODDS = { white: 0.55, green: 0.28, blue: 0.12, purple: 0.04, gold: 0.01 };
+function placeChests() {
+  const chRng = mulberry32((SEED ^ 0x43484553) >>> 0);
+  const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  const cands = [];
+  for (let ty = 1; ty < WORLD - 1; ty++) for (let tx = 1; tx < WORLD - 1; tx++) {
+    const o = objects[idx(tx, ty)];
+    if (!o || o.type !== 'tree') continue;
+    // the forest's inner edge: at least one cardinal neighbour is open snow
+    if (SIDES.some(([dx, dy]) => !objects[idx(tx + dx, ty + dy)] &&
+      ground[idx(tx + dx, ty + dy)] === 0)) cands.push({ tx, ty });
+  }
+  const placed = [];
+  for (let tries = 0; tries < 400 && placed.length < CHEST_COUNT; tries++) {
+    const c = cands[Math.floor(chRng() * cands.length)];
+    if (!c || placed.some((q) => Math.hypot(q.tx - c.tx, q.ty - c.ty) < CHEST_SPACING)) continue;
+    placed.push(c);
+    placeObj(c.tx, c.ty, 'chest', { hp: 1 });
   }
 }
 

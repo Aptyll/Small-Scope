@@ -404,37 +404,33 @@ function updatePrey(a, dt) {
   a.moving = moving;
 }
 
-// what a kill pays: one profile per kind, all of it out of the YIELD table.
-// A HUNTSMAN's kill (a.lastHit, stamped by the arrow loop) drops one extra
-// coin worth the bonus - the drop is neutral like the rest, but the hunter
-// is the one standing over it.
+// what a kill pays: one profile per kind, all of it out of the YIELD table,
+// straight into the wallet of whoever landed the final blow (a.lastHit,
+// stamped by hurtAnimal) - gold is never a physical drop. A HUNTSMAN's kill
+// pays its bonus on top of the same award; a kill nobody is left alive to
+// credit pays nobody.
 function animalDies(a) {
   a.dead = true;
   if (nearPlayer(a.x, a.y)) SFX.monsterDie(a.kind);
   const hunter = a.lastHit !== undefined ? players[a.lastHit] : null;
   const y = YIELD[a.kind];
   if (hunter && !hunter.dead && y && y.coins) {
-    const bonus = Math.ceil(y.coins * y.each * (kitOf(hunter).huntMul - 1));
-    if (bonus > 0) spawnDrop(a.x, a.y, 'gold', bonus);
+    const bonus = Math.max(0, Math.ceil(y.coins * y.each * (kitOf(hunter).huntMul - 1)));
+    awardGold(hunter, y.coins * y.each + bonus, a.x, a.y - (a.alt || 0));
   }
   if (a.kind === 'rabbit') {
     burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);
     burst(a.x, a.y - 3, '#c9d0e2', 6, 35, 0.4);
     spawnDrop(a.x, a.y, 'berry');
-    for (let i = 0; i < YIELD.rabbit.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.rabbit.each);
   } else if (a.kind === 'deer') {
     burst(a.x, a.y - 5, '#8a6847', 12, 50, 0.55);
     burst(a.x, a.y - 5, '#f2cc6a', 8, 45, 0.5);
-    for (let i = 0; i < YIELD.deer.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.deer.each);
-    addFloater(a.x, a.y - 14, 'GOLD!', '#f2cc6a');
   } else if (a.kind === 'wolf') {
     burst(a.x, a.y - 5, '#6f778c', 12, 50, 0.55);
     burst(a.x, a.y - 5, '#e04a54', 8, 45, 0.5);
-    for (let i = 0; i < YIELD.wolf.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.wolf.each);
-    addFloater(a.x, a.y - 16, 'WOLF DOWN', '#f2cc6a');
+    addFloater(a.x, a.y - 26, 'WOLF DOWN', '#f2cc6a');
   } else if (a.kind === 'bird') {
     burst(a.x, a.y - a.alt, '#cfd6e4', 9, 40, 0.5, true);
-    for (let i = 0; i < YIELD.bird.coins; i++) spawnDrop(a.x, a.y, 'gold', YIELD.bird.each);
     flushBirds(a.home, a); // the rest of the flock does not stay to watch
   }
 }
