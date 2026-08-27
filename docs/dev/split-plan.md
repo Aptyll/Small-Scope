@@ -10,7 +10,7 @@ the same commit as the work.
 - [x] Commit 1 — de-IIFE game.js in place
 - [x] Commit 2 — js/core.js + js/canvas.js
 - [x] Commit 3 — js/player.js + js/input.js
-- [ ] Commit 4 — js/world.js + js/nav.js
+- [x] Commit 4 — js/world.js + js/nav.js
 - [ ] Commit 5 — js/wildlife.js + js/structures.js
 - [ ] Commit 6 — js/actions.js + js/ai.js + js/sim.js
 - [ ] Commit 7 — js/draw-world.js + js/render.js
@@ -322,6 +322,10 @@ The mechanism-proving commit: every binding becomes global, nothing moves.
   array, `LANDMARKS` table, `lmRng` (from `SEED` → core.js).
 - SEP for **nav.js** (banners `movement & collision`, `pathfinding`). Load-time:
   `UNIT_MASS`/`BOUNCE`, `NAV_N = WORLD*WORLD` + four typed arrays (needs `WORLD` → core.js).
+- **Errata found executing this commit**: the world banner also declares `cx`/`cy` and fills
+  `ringPts` with a top-level for loop (same-file + core refs, F6-safe); `BOUNCE` is actually
+  `UNIT_BOUNCE`; the pathfinding banner also declares `let navGen` and the `heapN`/`heapF`
+  literals. All moved verbatim with their banners.
 - **Noah verifies**: reload `?seed=42` — the world must look **exactly** like it did yesterday
   (same river, same landmarks; this commit is the determinism-risk one). Walk into
   trees/rocks/water (solid), shove another unit (they separate), plant a worker flag across the

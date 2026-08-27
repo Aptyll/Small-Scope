@@ -4,8 +4,8 @@
 > files, one or two per commit. **The File column says where each banner lives NOW**; a row
 > with no note in that cell lives entirely in the named file.
 
-The game code is ~12600 lines of flat top-level code — core.js, canvas.js, player.js and
-input.js so far, the rest still [js/game.js](../../js/game.js) (~11000 lines) — with no internal module boundaries, organized
+The game code is ~12600 lines of flat top-level code — core.js, canvas.js, player.js,
+input.js, world.js and nav.js so far, the rest still [js/game.js](../../js/game.js) (~10300 lines) — with no internal module boundaries, organized
 only by banner comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -23,7 +23,7 @@ don't cite line numbers here, they go stale within a session.
 | world zoom: the pixel-exact rung, the eased scale, the world view, the two coordinate bridges | `ZOOM_*`, `kWant`/`kMin`/`kMax`/`zoomWantOf`, `zoomCur`, `WV_W`/`WV_H`, `sizeWorldView`, `wToSX`/`wToSY`, `mouseWX`/`mouseWY` | `canvas` | canvas.js |
 | the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` | game.js |
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | assigned by `relayout()` (core.js) on every resize | `canvas` | canvas.js |
-| determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` (`hash2`/`vnoise`: `ground prerender`; `treeRare`: `world`) | core.js (the rest: game.js) |
+| determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` (`hash2`/`vnoise`: `ground prerender`; `treeRare`: `world`) | core.js (`hash2`/`vnoise`: game.js; `treeRare`: world.js) |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` (`players`/`player` + the entity arrays: `players`) | core.js (`players`/`player` + the arrays: player.js) |
 | slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` | player.js |
 | the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` | player.js |
@@ -41,12 +41,12 @@ don't cite line numbers here, they go stale within a session.
 | the `.` overlay: hitboxes, the model centre column, and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `hbMid`, `HB_*` | `debug overlays` | game.js |
 | the `.` overlay's routes: waypoints + goal tile, a bird's perch line, a fish's heading arrow | `drawNavPaths`, `hbArrow` | `debug overlays` | game.js |
 | key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` | input.js |
-| worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` | game.js |
+| worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` | world.js |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` | game.js |
 | floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` | core.js |
 | the gold flare and crack an ambush arrow lands with | `ambushFx`, the `crit` flag on `addDmgFloater` | `helpers` | core.js |
-| tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` | game.js |
-| routes around obstacles: A*, the per-unit route follower, the stall/give-up signal | `findPath`, `walkable`, `navTo`, `navStep`, `navLineClear` | `pathfinding` | game.js |
+| tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` | nav.js |
+| routes around obstacles: A*, the per-unit route follower, the stall/give-up signal | `findPath`, `walkable`, `navTo`, `navStep`, `navLineClear` | `pathfinding` | nav.js |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` | game.js |
 | the roll as a hit: the sweep, the tackle, the stun every unit shares | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg`, `stunUnit` | `actions` › `the roll as a hit` | game.js |
 | going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` | game.js |
@@ -61,8 +61,8 @@ don't cite line numbers here, they go stale within a session.
 | fish shoal and ice holes | `updateFish`, `fishClear`, `fishWater`, `spawnFish` | `fish` | game.js |
 | where new fish come from, and why one is invisible until it is under the ice | `spawnEmerger`, `buildEmergeSites`, `fishVis`, `f.born`/`f.vis`, `FISH_MAX`/`FISH_MIN`, `state.fishT` | `fish` | game.js |
 | a fish net: the lure, the catch, handing the catch over, drawing it | `nearestNet`, `angDelta`, `updateStructures` (`net` branch), `drawNet`, `NET_*` | `fish` / `structures & robots` / `entity draw` | game.js |
-| is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt`, `STRUCT_ORDER`, `WATER_STRUCT_ORDER` | `world` (the two `*_ORDER` tables: `constants`) | game.js (tables: core.js) |
-| a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` | game.js |
+| is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt`, `STRUCT_ORDER`, `WATER_STRUCT_ORDER` | `world` (the two `*_ORDER` tables: `constants`) | world.js (tables: core.js) |
+| a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` | world.js |
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` | game.js |
 | shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `structures & robots` | game.js |
 | what a worker does this frame: the flag dispatch, the harvest tick, the melee | the tail of `updateRobot`, `engage`, `gather`, `holdAt` | `structures & robots` | game.js |
