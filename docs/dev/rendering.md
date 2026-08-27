@@ -159,8 +159,8 @@ sits here, not at the end of `render()`, so the strip holds no HUD, no dim and n
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 chart, jump prompt, timer) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays → `renderTitle` (the main menu, also during the play intro) → the end-of-match
-overlay (`renderDead`: the death dim and its planks, or `renderVictory` — see
-[The victory screen](#the-victory-screen)) →
+overlay (`renderDead`: the death dim and its planks, or `renderVictory` / `renderDefeat` — see
+[The end screens](#the-end-screens)) →
 `renderReplay` (the replay window, above both the death dim and the pause dim) →
 the event feed and the held-TAB scoreboard (deliberately **above** the death dim, see
 [Scoreboard and event feed](#scoreboard-and-event-feed)) →
@@ -542,38 +542,76 @@ so the same glyph reads on parchment, on snow and over forest.
   [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
   blotchy).
 
-## The victory screen
+## The end screens
 
-Winning gets a ceremony instead of a dim, in the `victory` banner. `renderVictory` draws it and
-`WIN_T` is the single timeline both it and the sound cues (`winCues`, called from `update`) read,
-clocked off `state.deadTimer`: white bloom → **VICTORY** dropping in a letter at a time (each
-landing white, then gold, kicking up snow) → the gold rule sweeping out → braziers, team banners,
-the two-tier dais and the champion at 5× rising → a crown falling onto its head → the four stat
-plates popping in with their numbers climbing from zero → the kit strip → the planks sliding up.
-`winLayout()` is the one source of those anchors (in the same 270-tall authored frame every other
-screen uses) and `deadLayout()` reads its `plankY`, so **KEEP PLAYING** / **LOBBY** sit under the
-tally. Any press before the last beat calls `winSkip()`, which jumps `state.deadTimer` to the end.
+A match ends on one of two full-frame ceremonies — `renderVictory` in the `victory` banner,
+`renderDefeat` in the `defeat` one — and they are deliberately **one composition drawn twice**:
+both read their anchors from `winLayout()` (in the same 270-tall authored frame every other screen
+uses), so DEFEAT sits exactly where VICTORY sat and the rule, the tally and the kit strip land in
+the same bands. `deadLayout()` reads the same `plankY`, so the planks sit under the tally on both.
 
-The screen owns the whole frame: `renderUI`, `renderEventLog` and `replayShowing` all bow out
-while `state.mode === 'dead' && state.over === 'won'` (the replay window sits exactly where the
-tally does). The held-TAB scoreboard and the info stack still draw over it.
+**When each is up.** A win goes straight to its screen (`endMatch('won')` → `state.over = 'won'`).
+A loss does **not**: an elimination only dims the play screen, because the match runs on underneath
+and you can sit and watch it, so a lost match ends when you stop watching — **LOBBY** on the death
+overlay opens the defeat screen (`openDefeat()`, `state.deadView = 'defeat'`) and that screen's own
+single **LOBBY** plank is the door out. A respawn-pending death's LOBBY still leaves directly:
+nothing has been lost yet. `endScreen()` is the one test for "a ceremony owns the frame" —
+`renderUI`, `renderEventLog` and `replayShowing` all bow out under it (the replay window sits
+exactly where the tally does); the held-TAB scoreboard and the info stack still draw over both.
+
+**The two timelines.** `WIN_T` and `DEF_T` name every beat, and the render pass and the sound cues
+(`winCues` / `defCues`, called from `update`) read one table each so they cannot drift apart. The
+win is clocked off `state.deadTimer`, already ticking since the body fell; the loss has
+`state.defeatT`, started when its view opens, which may be minutes later. Any press before the last
+beat calls `endSkip()`, which jumps the relevant clock to the end.
+
+- **Victory**: white bloom → **VICTORY** dropping in a letter at a time (each landing white, then
+  gold, kicking up snow) → the gold rule sweeping out → braziers, team banners, the two-tier dais
+  and the champion at 5× rising → a crown falling onto its head → four stat plates popping in with
+  their numbers climbing from zero → the kit strip → the planks sliding up.
+- **Defeat**: the same beats inverted. A colder, heavier wash → **DEFEAT** *falling* in a letter at
+  a time on an ease-**in** (it drops, it does not spring), flashing cold rather than white → a
+  **frost** rule (`drawGoldRule` takes a `pal`; `RULE_FROST`) → the stage *settling* rather than
+  rising: the braziers out (`drawDeadBrazier` — the same ironwork with ash on the rim and a thread
+  of smoke), a snow bank where the dais stood, the champion **prone and side-on** at the same 5×
+  lying in it, an arrow planted beside it where the crown would be → five stat plates → the kit
+  strip → one plank.
+
+**What they print** is one frozen object either way — `endSnapshot()` on `state.end`, taken in
+`endMatch` because the match keeps running underneath and a total that climbs behind a tally which
+already counted it reads as a bug. The four shared columns are gold / kills / level / clock; the
+loss puts its **placing** (`4/6`, off `place`/`of`) in front of them and names who did it under the
+rule (FELLED BY *name*, in the killer's team colour, off `p.downedBy` — or the `DEATH_CAUSE` line
+when the world did it). `drawEndTally` / `drawEndStatPlate` / `drawEndGear` / `drawEndPlanks` are
+the shared passes: each takes the ending's timeline and its accent pair (`WIN_ACCENT` gold,
+`DEF_ACCENT` frost), so one plate tallies both. `dy` on the planks slides them without moving the
+rects `deadHit()` tests, so a plank is only clickable once it has arrived. The fallen champion
+draws **no gear marks** — those sit on the standing body plan (see `drawPlayer`), which is why the
+kit strip below is where the kit is read on that screen.
 
 The art is procedural, in the title screen's idiom — `drawWinAurora` (three additive curtains of
 2 px strands across the top band), `drawWinRays` (stepped wedges walking out from behind the
-champion, blocks rather than an anti-aliased triangle), `drawWinMotes` (gold and snow falling
-from `hash2` alone, no array), `drawWinBanner`, `drawWinBrazier` (the title pillar's fire without
-the pillar) and `drawWinDais`. `stampGrid(rows, pal, x, y, s, rim)` paints a char grid at any cell
-size, the shape [sprites.js](../../js/sprites.js) authors in, for the crown and the two stat
-glyphs that never earned a baked sprite; the sprites it does use are the champion,
-`SPRITES.gearIcons`, `itemGold` and `itemBow`. `drawEndPlanks(now, dy)` is the plank pass both
-endings share — `dy` slides them without moving the rects `deadHit()` tests, so a plank is only
-clickable once it has arrived.
+champion, blocks rather than an anti-aliased triangle), `drawWinMotes` (gold and snow falling from
+`hash2` alone, no array; `cold` drops the sparks for the loss), `drawBlizzard` (wind streaks on the
+same no-array idiom, a second speed under the motes), `drawWinBanner`, `drawBrazierIron` +
+`drawWinBrazier` / `drawDeadBrazier`, `drawWinDais` and `drawDefeatDrift`. The drift's profile is a
+cosine under a flattening root: a plain cosine domes, and a dome leaves the ends of a body lying on
+it up in the air. It is drawn twice, once behind the body and once in front, so the champion lies
+**in** the snow rather than on a hill. `stampGrid(rows, pal, x, y, s, rim)` paints a char grid at
+any cell size, the shape [sprites.js](../../js/sprites.js) authors in, for the crown, the arrow and
+the stat glyphs (`WIN_ICONS`) that never earned a baked sprite; the sprites the screens do use are
+the champion, `SPRITES.gearIcons`, `itemGold` and `itemBow`.
+
+**The death dim** underneath is the third state, and it is not a ceremony: a wash, **YOU COLLAPSED
+IN THE SNOW** at 3× (2× on a view too narrow to hold it) in the upper band — it is the first thing
+to read and the match is still playing behind it, so it goes where an eye lands rather than over
+the body that fell — a second line saying whether this is permanent or a countdown, and two planks.
 
 ## Replay: the last four seconds
 
 The `replay` banner keeps a rolling four seconds of what was on screen and plays it back in the
 bottom-left corner while you are **dead** (the planks view, not while spectating, and never over
-[the victory screen](#the-victory-screen)) or **paused**.
+[the end screens](#the-end-screens)) or **paused**.
 It records pixels, not state, so it costs nothing to keep and re-renders nothing to play.
 
 **Why it is not drawn in the game canvas.** The window is `RP_W`×`RP_H` (160×90) *game* px, and a
@@ -645,7 +683,7 @@ cost, so a headless driver can check the resolution without playing to a death.
 Two readouts of the **match** rather than of the world, in the `scoreboard & log` banner. Both
 draw after the death overlay, so the dim never touches them — being down is exactly when you read
 them — and both duck under the map/settings panels. The feed also stands down over
-[the victory screen](#the-victory-screen); the scoreboard does not.
+[the end screens](#the-end-screens); the scoreboard does not.
 
 **The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
 newest along the bottom. It has that corner to itself now the gear row lives in the

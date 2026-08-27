@@ -25,7 +25,7 @@ don't cite line numbers here, they go stale within a session.
 | the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
 | ability ranks and skill points | `AB_RANK_MAX`, `AB_SKILL`, `abCanBuy`, `buySkill` | `players` › `gear` |
 | roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` |
-| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding` | `players` |
+| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding` | `radial wheel > damage & death` |
 | how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` |
 | the backpack + gear widget (bottom-right): its frame, the icon row, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag` | `UI` › `backpack and gear` |
 | the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` |
@@ -92,8 +92,9 @@ don't cite line numbers here, they go stale within a session.
 | the three sound dials, the speaker that mutes them, the grey-when-muted fill | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow` | `settings menu (ESC)` |
 | the songs, the sampled one-shots, the dials behind them | `SFX.music`, `TRACKS`, `SAMPLES`, `smp`, `trim`, `setAmbience` | [js/audio.js](../../js/audio.js) |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
-| the death/respawn overlay, spectating, back to the lobby, who the camera frames, the planks all three endings share | `endMatch`, `DEAD_ITEMS`, `viewPlayer`, `specNext`, `toLobby`, `renderDead`, `deadLayout`, `deadReady`, `drawEndPlanks` | `death & spectate` |
-| the victory screen: its timeline, its frozen numbers, its sound cues, its art | `WIN_T`, `winLayout`, `winSnapshot`, `winCues`, `winSkip`, `renderVictory`, `stampGrid`, `drawWinAurora`, `drawWinRays`, `drawWinMotes`, `drawWinBanner`, `drawWinBrazier`, `drawWinDais`, `drawWinStatPlate` | `victory` |
+| the death/respawn overlay, spectating, back to the lobby, who the camera frames, what an ending freezes, the planks every ending shares | `endMatch`, `endSnapshot`, `DEAD_ITEMS`, `deadItems`, `endScreen`, `viewPlayer`, `specNext`, `toLobby`, `openDefeat`, `renderDead`, `deadLayout`, `deadReady`, `endSkip`, `drawEndPlanks` | `death & spectate` (`endMatch`/`endSnapshot`: `radial wheel > damage & death`) |
+| the victory screen: its timeline, its sound cues, its art, and the passes both endings share | `WIN_T`, `winLayout`, `winCues`, `tallyCues`, `renderVictory`, `stampGrid`, `drawWinAurora`, `drawWinRays`, `drawWinMotes`, `drawWinBanner`, `drawBrazierIron`, `drawWinBrazier`, `drawWinDais`, `drawEndStatPlate`, `drawEndTally`, `drawEndGear` | `victory` |
+| the defeat screen: the loss's own summary, on the same anchors | `DEF_T`, `DEF_STATS`, `defCues`, `renderDefeat`, `drawBlizzard`, `drawDefeatDrift`, `drawDeadBrazier` | `defeat` |
 | the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |
 

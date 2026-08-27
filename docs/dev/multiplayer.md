@@ -182,8 +182,11 @@ takes the full death overlay with it (`endMatch('lost')`); a respawn-pending loc
 lighter `endMatch('respawning')` overlay instead — same `state.mode = 'dead'` machinery (so the
 4-second replay window, the TAB scoreboard and the dim all still work), just a countdown string
 and no permanent loss. Either way `state.mode = 'dead'` offers spectating a living rival through
-`viewPlayer()`/`specNext()`, or `toLobby()` back to the title. Every death (and every Keep's
-destruction) runs `checkLastStanding()`, which ends the match as a win once no **rival team** is
+`viewPlayer()`/`specNext()`, or the way out to the title — which for an **elimination** goes
+through [the defeat screen](rendering.md#the-end-screens) first (`openDefeat()`, and its own plank
+calls `toLobby()`), because a lost match ends when you stop watching it rather than when you go
+down. Every death (and every Keep's destruction) runs `checkLastStanding()`, which ends the match
+as a win once no **rival team** is
 left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf` does, so the
 last *team* standing wins: a surviving teammate, or a Keep still waiting to respawn someone into,
 keeps a team in the match even at zero living players. **The match keeps simulating while you are

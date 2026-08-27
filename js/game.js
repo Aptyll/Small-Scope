@@ -510,7 +510,10 @@
     // 'menu' (the planks) | 'spec' (following a living slot); spec: that slot's
     // id; sel + hover: the planks' keyboard pick and per-plank hover eases
     over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
-    win: null,     // a win freezes the numbers the victory screen prints: winSnapshot(), the victory banner
+    // a win or an elimination freezes the numbers its end screen prints
+    // (endSnapshot(), the victory banner); defeatT is the loss summary's own
+    // clock, started when that view opens rather than when the slot went down
+    end: null, defeatT: 0,
     msg: null, msgT: 0,
     hints: { stump: false, flag: false, hole: false },
     fishT: FISH_SPAWN_T, // countdown to the next fish swimming in (see updateFish)
@@ -938,6 +941,10 @@
       // cleared by reset() - an order outlives the hand that gave it.
       this.flag = null;
       this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns
+      // who put this slot down last, for the defeat screen's one line: a
+      // killer's name and team, or null with a DEATH_CAUSE key when the world
+      // did it. die() writes them, endSnapshot() freezes them, nothing else looks.
+      this.downedBy = null; this.downedTeam = 0; this.downedCause = null;
       this.respawnT = 0;                  // seconds left on an active respawn countdown
       this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
       this.kills = 0;                     // rivals downed; scoreboard only, survives death
@@ -4462,6 +4469,11 @@
     else if (c.kind === 'craft') startCraft(o, p);
   }
 
+  // ---- damage & death ------------------------------------------------------
+  // Nothing to do with the wheel above: a hit, what a hit spills, the split
+  // between a respawn timer and permanent elimination, and the overlay the
+  // local slot's ending puts up.
+
   // src: the player who dealt it (kill credit + the log line), null for the
   // world; cause: a DEATH_CAUSE key naming what the world did, when src is null
   function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
@@ -4541,6 +4553,9 @@
     // kill credit and the feed line: the killer's colours if there is one,
     // otherwise the victim's, since the victim is who the line is about
     const killer = src && src !== p ? src : null;
+    p.downedBy = killer ? killer.name : null;
+    p.downedTeam = killer ? killer.team : p.team;
+    p.downedCause = cause;
     spillInventory(p, killer);
     // the quiver spills where the body fell, same as the wallet: whatever was
     // still in it sticks in the snow for whoever cleans up the fight
@@ -4650,6 +4665,26 @@
     endMatch('won');
   }
 
+  // Both end screens print the same object, so there is one of these rather
+  // than one per ending: the four tally numbers, the champion it was played in,
+  // the kit it finished in, and the two facts only one of the screens uses
+  // (mates for the win's headline, place/by for the loss's).
+  function endSnapshot() {
+    // where the local slot finished: every slot still in the match outlasted
+    // it, so place is one past that count. A win is 1st by definition (the
+    // screen that prints place never sees a win, but the object shouldn't lie).
+    const left = players.filter((q) => q !== player && q.active && !q.eliminated).length;
+    return {
+      gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
+      team: player.team, champ: player.champ,
+      gear: player.gear.slice(), gearLv: player.gearLv.slice(),
+      // a teammate still standing means the TEAM won, and the headline says so
+      mates: players.filter((q) => q !== player && q.active && !q.dead && q.team === player.team).length,
+      place: player.eliminated ? left + 1 : 1, of: players.filter((q) => q.active).length,
+      by: player.downedBy, byTeam: player.downedTeam, cause: player.downedCause,
+    };
+  }
+
   // the local slot leaves the match, one way or the other: the overlay takes
   // the screen (mode 'dead'), the sim runs on underneath it
   function endMatch(how) {
@@ -4668,11 +4703,14 @@
     state.draft = null;
     state.flagAim = false;
     state.deadTimer = 0;
-    // a win freezes its numbers here, not in the render pass: the match runs on
-    // underneath (a generator can still pay out) and a total that climbs behind
-    // a tally which already counted it reads as a bug
-    state.win = how === 'won' ? winSnapshot() : null;
-    if (state.win) { SFX.victory(); state.shake = Math.max(state.shake, 4); }
+    state.defeatT = 0;
+    // an ENDING freezes its numbers here, not in the render pass: the match
+    // runs on underneath (a generator can still pay out, a rival can still
+    // fall) and a total that climbs behind a tally which already counted it
+    // reads as a bug. A loss's summary is opened minutes later, off the LOBBY
+    // plank, so this is the only moment its numbers are still true.
+    state.end = how === 'won' || how === 'lost' ? endSnapshot() : null;
+    if (how === 'won') { SFX.victory(); state.shake = Math.max(state.shake, 4); }
     // the end screen has a song of its own; a respawn timer is not the end of anything
     if (how === 'won' || how === 'lost') SFX.music.play('victory', { in: 1.2 });
     player.input = makeInput(); // whatever was held dies with the slot
@@ -5103,6 +5141,13 @@
       const was = state.deadTimer;
       state.deadTimer += dt; // the overlay's fade-in, and the victory screen's clock
       if (state.over === 'won') winCues(was, state.deadTimer);
+      // the defeat summary runs on a clock of its own - it opens off a plank,
+      // long after the death this overlay has been timing
+      if (state.deadView === 'defeat') {
+        const d0 = state.defeatT;
+        state.defeatT += dt;
+        defCues(d0, state.defeatT);
+      }
     }
 
     // the match runs on while the local player is down - other slots are still
@@ -6269,7 +6314,7 @@
     // both sit above the death dim: the feed and the standings are exactly what
     // you read while you are down. They duck under the map/settings panels.
     if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
-      !(state.mode === 'dead' && state.over === 'won') && // the victory screen owns the frame
+      !endScreen() && // a victory or defeat screen owns the whole frame
       (state.mode === 'play' || state.mode === 'dead')) renderEventLog();
     if (scoreboardOpen()) renderScoreboard();
     if (!window.DBG.hideUI) drawTags();
@@ -8118,9 +8163,9 @@
   function replayShowing() {
     if (!rpCount || window.DBG.hideUI || state.mapOpen || state.settingsOpen) return false;
     if (state.paused) return true;
-    // not over a win: the victory screen is a composition, and the window sits
-    // exactly where its tally does
-    return state.mode === 'dead' && state.over !== 'won' && state.deadView === 'menu' && deadReady();
+    // not over an end screen: both are compositions, and the window sits
+    // exactly where their tally does
+    return state.mode === 'dead' && !endScreen() && state.deadView === 'menu' && deadReady();
   }
 
   // px the event feed lifts to clear the window
@@ -9059,7 +9104,7 @@
 
   function renderUI(now) {
     if (state.mode === 'title' || state.mode === 'drop' || window.DBG.hideUI) return;
-    if (state.mode === 'dead' && state.over === 'won') return; // the victory screen owns the frame
+    if (endScreen()) return; // a victory or defeat screen owns the whole frame
 
     // title -> play: the HUD slides in over the last part of the intro - the
     // minimap from the top, the backpack from the right, the hud strip from
@@ -9960,9 +10005,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.58'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.59'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.59', 'LOSING ENDS ON A DEFEAT SCREEN NOW - LOBBY TAKES YOU TO YOUR PLACING, GOLD, KILLS, LEVEL, MATCH TIME AND THE KIT YOU WENT DOWN IN, AND THE LINE THAT SAYS YOU COLLAPSED IS TWICE THE SIZE AND UP WHERE YOU CAN READ IT AT A GLANCE.'],
     ['1.58', 'THE HEALTH PLATE AND THE NAME OVER YOUR HEAD BOTH SIT SQUARE WITH YOUR BODY NOW, AND THE STUN SLOT BESIDE THE BARS IS BACK TO APPEARING ONLY WHEN SOMETHING ACTUALLY STUNS YOU INSTEAD OF SITTING THERE EMPTY.'],
     ['1.57', 'THE NAME OVER A HEAD IS CENTRED ON THE BODY NOW AND STAYS THERE - IT USED TO HOP A PIXEL LEFT AND RIGHT AS YOU WALKED, BECAUSE THE HALF PIXEL AN ODD-WIDTH WORD CARRIES WAS BEING ROUNDED TOGETHER WITH THE CAMERA.'],
     ['1.56', 'THE HEALTH FRAME OVER YOUR HEAD SITS SQUARE WITH YOU NOW INSTEAD OF HANGING THREE PIXELS TO THE LEFT - THE STUN SLOT ON ITS RIGHT IS ALWAYS THERE, EMPTY UNTIL SOMETHING STUNS YOU - AND THE HITBOX KEY DRAWS A PINK LINE DOWN THE MIDDLE OF EVERY PLAYER ANIMAL ROBOT AND BUILDING SO YOU CAN SEE IT.'],
@@ -10450,18 +10496,24 @@
   }
 
   // a gold rule with diamond finials at both ends and an ember-set one in the middle
-  function drawGoldRule(cx, y, half, a) {
+  // pal is the four colours the rule is struck in - the bar, its lit middle,
+  // the end diamonds and the spark in the centre. It defaults to gold; the
+  // defeat screen passes RULE_FROST, so one rule serves both endings.
+  const RULE_GOLD = { bar: '#c89a3c', hi: '#ffd95c', gem: '#ffd95c', spark: '#ff8a3c' };
+  const RULE_FROST = { bar: '#4a5f96', hi: '#9fbde0', gem: '#cfe4f2', spark: '#e8f2ff' };
+  function drawGoldRule(cx, y, half, a, pal) {
+    const P = pal || RULE_GOLD;
     ctx.globalAlpha = a;
     const dia = (x, r, c) => {
       ctx.fillStyle = c;
       for (let d = -r; d <= r; d++) { const w = r - Math.abs(d); ctx.fillRect(x - w, y + d, w * 2 + 1, 1); }
     };
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - half, y + 1, half * 2 + 1, 1);
-    ctx.fillStyle = '#c89a3c'; ctx.fillRect(cx - half, y, half * 2 + 1, 1);
-    ctx.fillStyle = '#ffd95c'; ctx.fillRect(cx - 16, y, 33, 1);
-    for (const ex of [cx - half, cx + half]) { dia(ex, 2, '#0a0e23'); dia(ex, 1, '#ffd95c'); }
-    dia(cx, 3, '#0a0e23'); dia(cx, 2, '#c89a3c');
-    ctx.fillStyle = '#ff8a3c'; ctx.fillRect(cx, y, 1, 1);
+    ctx.fillStyle = P.bar; ctx.fillRect(cx - half, y, half * 2 + 1, 1);
+    ctx.fillStyle = P.hi; ctx.fillRect(cx - 16, y, 33, 1);
+    for (const ex of [cx - half, cx + half]) { dia(ex, 2, '#0a0e23'); dia(ex, 1, P.gem); }
+    dia(cx, 3, '#0a0e23'); dia(cx, 2, P.bar);
+    ctx.fillStyle = P.spark; ctx.fillRect(cx, y, 1, 1);
   }
 
   // a stone pillar: plinth, coursed shaft with a lit left edge and frost creeping
@@ -11139,7 +11191,11 @@
   // countdown instead of "OUT OF THE MATCH", see renderDead, and snaps back to
   // 'play' on its own once the timer clears - no plank needed for that); a win
   // hands the whole frame to the victory banner below and offers two of its
-  // own. SPECTATE follows a living slot through a
+  // own. LOBBY off an ELIMINATION does not leave: it hands the frame to the
+  // defeat banner - the loss's own summary, the mirror of the victory screen -
+  // and that screen's single plank is what leaves. A match you lost still ends
+  // on its numbers, and it ends when you are done watching rather than the
+  // instant you went down. SPECTATE follows a living slot through a
   // top-centre control: two pixel arrows around the name, clickable, the arrow
   // keys do the same, ESC comes back (no hint text: the arrows are the
   // explanation). LOBBY fades out and reloads into the title screen on the same seed. viewPlayer() is who the camera and minimap
@@ -11147,24 +11203,62 @@
   const DEAD_BW = 112, DEAD_BH = 20, DEAD_GAP = 12; // the title menu plank, side by side
   const DEAD_ITEMS = { lost: ['SPECTATE', 'LOBBY'], won: ['KEEP PLAYING', 'LOBBY'], respawning: ['SPECTATE', 'LOBBY'] };
 
+  // the planks on offer: the defeat summary has nothing left to offer but the
+  // door, so it is the one view whose items are its own rather than the ending's
+  function deadItems() {
+    return state.deadView === 'defeat' ? ['LOBBY'] : (DEAD_ITEMS[state.over] || DEAD_ITEMS.lost);
+  }
+
+  // a full-frame end screen is up: the HUD, the event feed and the replay
+  // window all bow out under one, because both are compositions and both put
+  // something exactly where those sit
+  function endScreen() {
+    return state.mode === 'dead' && (state.over === 'won' || state.deadView === 'defeat');
+  }
+
   function viewPlayer() {
     const q = state.spec >= 0 ? players[state.spec] : null;
     return q && q.active && !q.dead ? q : player;
   }
 
   function deadLayout() {
-    const items = DEAD_ITEMS[state.over] || DEAD_ITEMS.lost;
+    const items = deadItems();
     const w = items.length * DEAD_BW + (items.length - 1) * DEAD_GAP;
     const x0 = Math.round((VIEW_W - w) / 2);
-    // a win seats them at the foot of the victory screen, under the tally;
-    // a loss keeps the middle of the screen it always had
-    const y = state.over === 'won' ? winLayout().plankY : Math.round(VIEW_H / 2) + 10;
+    // both end screens seat them at the foot of the same composition, under
+    // the tally; the death dim keeps the middle of the screen it always had
+    const y = endScreen() ? winLayout().plankY : Math.round(VIEW_H / 2) + 10;
     return items.map((label, i) => ({ x: x0 + i * (DEAD_BW + DEAD_GAP), y, w: DEAD_BW, h: DEAD_BH, label }));
   }
 
   // the overlay has finished arriving and the planks are live: half a second
-  // for a death, the whole victory ceremony for a win (which can be skipped)
-  function deadReady() { return state.deadTimer >= (state.over === 'won' ? WIN_T.menu : 0.5); }
+  // for a death, the whole ceremony for either end screen (both skippable)
+  function deadReady() {
+    if (state.deadView === 'defeat') return state.defeatT >= DEF_T.menu;
+    return state.deadTimer >= (state.over === 'won' ? WIN_T.menu : 0.5);
+  }
+
+  // a press during either ceremony jumps to its end instead of being swallowed;
+  // true means it was consumed and the caller should do nothing else. The plain
+  // death dim has nothing to skip - it is half a second of fade, not a reward.
+  function endSkip() {
+    if (deadReady()) return false;
+    if (state.deadView === 'defeat') { state.defeatT = DEF_T.menu; SFX.pickup(); return true; }
+    if (state.over !== 'won') return false;
+    state.deadTimer = WIN_T.menu;
+    SFX.pickup();
+    return true;
+  }
+
+  // LOBBY on an elimination lands here first: the loss's summary, on its own
+  // clock (the death overlay's has been running since the body dropped)
+  function openDefeat() {
+    state.deadView = 'defeat';
+    state.defeatT = 0;
+    state.deadSel = 0;
+    state.deadHover = [0, 0];
+    state.shake = Math.max(state.shake, 2);
+  }
 
   // the spectate control, top centre: [<] NAME [>]. Arrow boxes are SPEC_AW
   // wide; the name plate between them is sized to the widest slot name so the
@@ -11187,9 +11281,10 @@
     return inR(L.left) ? -1 : inR(L.right) ? 1 : 0;
   }
 
-  // which plank is under the pointer (-1 for none); the overlay must have faded in
+  // which plank is under the pointer (-1 for none); the overlay must have faded
+  // in, and spectating has planks of its own (the two arrows) rather than these
   function deadHit() {
-    if (state.deadView !== 'menu' || !deadReady()) return -1;
+    if (state.deadView === 'spec' || !deadReady()) return -1;
     const rs = deadLayout();
     for (let i = 0; i < rs.length; i++) {
       const r = rs[i];
@@ -11201,7 +11296,10 @@
   function deadActivate(i) {
     const label = deadLayout()[i].label;
     SFX.place();
-    if (label === 'LOBBY') toLobby();
+    // the door out of an elimination goes through the summary once; the
+    // summary's own LOBBY (and every other ending's) actually leaves
+    if (label === 'LOBBY' && state.over === 'lost' && state.deadView !== 'defeat') openDefeat();
+    else if (label === 'LOBBY') toLobby();
     else if (label === 'SPECTATE') { state.deadView = 'spec'; state.spec = -1; specNext(1); }
     else if (label === 'KEEP PLAYING') { state.mode = 'play'; }
   }
@@ -11236,8 +11334,8 @@
       else if (k === 'arrowleft' || k === 'a') { specNext(-1); SFX.pickup(); }
       return;
     }
-    if (winSkip()) return;
-    if (state.deadTimer < 0.5) return;
+    if (endSkip()) return;
+    if (!deadReady()) return;
     const n = deadLayout().length;
     if (k === 'arrowleft' || k === 'a') { state.deadSel = (state.deadSel + n - 1) % n; SFX.pickup(); }
     else if (k === 'arrowright' || k === 'd') { state.deadSel = (state.deadSel + 1) % n; SFX.pickup(); }
@@ -11247,7 +11345,7 @@
   function deadClick() {
     if (state.fade) return;
     if (state.deadView === 'spec') { const d = specHit(); if (d) { specNext(d); SFX.pickup(); } return; }
-    if (winSkip()) return;
+    if (endSkip()) return;
     const h = deadHit();
     if (h >= 0) { state.deadSel = h; deadActivate(h); }
   }
@@ -11291,19 +11389,26 @@
       }
       return;
     }
+    if (state.deadView === 'defeat') { renderDefeat(now); return; } // the loss's own summary
     if (state.over === 'won') { renderVictory(now); return; } // a win gets a ceremony, not a dim
     const a = Math.min(0.75, state.deadTimer * 0.6);
     ctx.fillStyle = 'rgba(8,10,28,' + a + ')';
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     if (state.deadTimer < 0.5) return;
+    // The headline sits in the upper band, not over the middle of the screen:
+    // it is the first thing to read and the match is still playing underneath,
+    // so it goes where an eye lands rather than where the body fell. 3x, or 2x
+    // on a view too narrow to hold it (the run is 25 glyphs - 297px at 3x).
     const t = 'YOU COLLAPSED IN THE SNOW';
-    drawPixelTextShadow(ctx, t, (VIEW_W - pixelTextWidth(t, 2)) / 2, VIEW_H / 2 - 24, '#a8c4ff', '#0a0e23', 2);
+    const ts = pixelTextWidth(t, 3) <= VIEW_W - 20 ? 3 : 2;
+    const toy = Math.round((VIEW_H - 270) / 2);
+    drawPixelTextOutline(ctx, t, Math.round((VIEW_W - pixelTextWidth(t, ts)) / 2), toy + 34, '#cfe4f2', '#0a0e23', ts);
     // a respawn-pending death is not permanent - the second line says so,
     // with a live countdown, instead of claiming the match is over
     const t2 = state.over === 'respawning'
       ? 'RESPAWNING IN ' + Math.max(0, Math.ceil(player.respawnT)) + 's'
       : 'YOU ARE OUT OF THE MATCH';
-    drawPixelTextShadow(ctx, t2, (VIEW_W - pixelTextWidth(t2)) / 2, VIEW_H / 2 - 6, '#8f9cc4', '#0a0e23');
+    drawPixelTextOutline(ctx, t2, Math.round((VIEW_W - pixelTextWidth(t2, 2)) / 2), toy + 34 + ts * 5 + 8, '#8f9cc4', '#0a0e23', 2);
     drawEndPlanks(now, 0);
   }
 
@@ -11328,7 +11433,7 @@
   // staged rather than drawn. state.deadTimer - already ticking for the death
   // overlay - is the clock, and WIN_T names every beat, so the render pass and
   // the sound cues read one timeline and cannot drift apart. Any press before
-  // the last beat skips to it (winSkip): the reward is worth watching, never
+  // the last beat skips to it (endSkip): the reward is worth watching, never
   // twice. Everything here is procedural in the title screen's idiom (hash2 for
   // static grain, the frame clock for flicker); the only sprites are the
   // champion, the gear icons and the coin.
@@ -11371,41 +11476,30 @@
     { icon: 'time', roll: false, val: (w) => clockTxt(w.time) },
   ];
 
-  function winSnapshot() {
-    return {
-      gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
-      team: player.team, champ: player.champ,
-      gear: player.gear.slice(), gearLv: player.gearLv.slice(),
-      // a teammate still standing means the TEAM won, and the headline says so
-      mates: players.filter((q) => q !== player && q.active && !q.dead && q.team === player.team).length,
-    };
-  }
-
-  // the ceremony's sound track: every cue inside this tick's slice of the
-  // timeline fires once. A skip jumps state.deadTimer before update() reads it,
-  // so nothing in the skipped span plays.
-  function winCues(t0, t1) {
-    if (!state.win) return;
-    const at = (t) => t0 < t && t1 >= t;
-    if (at(WIN_T.crownLand)) { SFX.levelUp(); state.shake = Math.max(state.shake, 2.5); }
+  // A tally's sound track: every cue inside this tick's slice of the timeline
+  // fires once - a plate lands with a knock, and every climbing number blips as
+  // it goes. Shared, because the two tallies differ only in their timeline and
+  // their columns. A skip jumps the clock before update() reads it, so nothing
+  // in the skipped span plays.
+  function tallyCues(t0, t1, T, stats) {
     const TICK = 0.055;
-    for (let i = 0; i < WIN_STATS.length; i++) {
-      const s0 = WIN_T.stats + i * WIN_T.statStep;
-      if (at(s0)) SFX.place();
-      if (!WIN_STATS[i].roll) continue;
-      const a = Math.max(s0, Math.min(s0 + WIN_T.roll, t0));
-      const b = Math.max(s0, Math.min(s0 + WIN_T.roll, t1));
+    for (let i = 0; i < stats.length; i++) {
+      const s0 = T.stats + i * T.statStep;
+      if (t0 < s0 && t1 >= s0) SFX.place();
+      if (!stats[i].roll) continue;
+      const a = Math.max(s0, Math.min(s0 + T.roll, t0));
+      const b = Math.max(s0, Math.min(s0 + T.roll, t1));
       if (b > a && Math.floor((b - s0) / TICK) > Math.floor((a - s0) / TICK)) SFX.tally();
     }
   }
 
-  // a press during the ceremony jumps to its end instead of being swallowed;
-  // true means it was consumed and the caller should do nothing else
-  function winSkip() {
-    if (state.over !== 'won' || deadReady()) return false;
-    state.deadTimer = WIN_T.menu;
-    SFX.pickup();
-    return true;
+  // ...plus the one cue the tally does not own: the crown landing
+  function winCues(t0, t1) {
+    if (!state.end) return;
+    if (t0 < WIN_T.crownLand && t1 >= WIN_T.crownLand) {
+      SFX.levelUp(); state.shake = Math.max(state.shake, 2.5);
+    }
+    tallyCues(t0, t1, WIN_T, WIN_STATS);
   }
 
   // ---- the art -------------------------------------------------------------
@@ -11442,17 +11536,29 @@
     'ddddddddddddd',
   ];
   const WIN_CROWN_PAL = { '.': null, w: '#ffffff', g: '#f2cc6a', h: '#ffedb0', j: '#7ad4ff', d: '#b8912f' };
-  // the two stat glyphs with no sprite of their own: stacked chevrons for the
-  // hero level, a clock face for the match time (gold and the bow are sprites)
-  const WIN_LVL_ICON = [
-    '........', '...gg...', '..g..g..', '.g....g.',
-    '........', '...gg...', '..g..g..', '.g....g.',
-  ];
-  const WIN_TIME_ICON = [
-    '..oooo..', '.o....o.', 'o..h...o', 'o..h...o',
-    'o..hhh.o', 'o......o', '.o....o.', '..oooo..',
-  ];
+  // the stat glyphs with no sprite of their own: stacked chevrons for the hero
+  // level, a clock face for the match time, a podium for where a loss placed
+  // (gold and the bow are sprites). 'g' is the accent, 'o' the cold outline.
+  const WIN_ICONS = {
+    level: [
+      '........', '...gg...', '..g..g..', '.g....g.',
+      '........', '...gg...', '..g..g..', '.g....g.',
+    ],
+    time: [
+      '..oooo..', '.o....o.', 'o..h...o', 'o..h...o',
+      'o..hhh.o', 'o......o', '.o....o.', '..oooo..',
+    ],
+    place: [
+      '........', '...gg...', '...oo...', '.oo.oo..',
+      '.oo.oo.o', '.oo.oo.o', '.oo.oo.o', 'oooooooo',
+    ],
+  };
   const WIN_ICON_PAL = { '.': null, g: '#f2cc6a', o: '#cfe0ff', h: '#ffd95c' };
+  const DEF_ICON_PAL = { '.': null, g: '#9fbde0', o: '#8fa8d8', h: '#cfe4f2' };
+  // the accent each tally is struck in: the plate rule, its landed number, and
+  // the palette its stamped glyphs use
+  const WIN_ACCENT = { rule: '#c89a3c', txt: '#ffd95c', icon: WIN_ICON_PAL };
+  const DEF_ACCENT = { rule: '#4a5f96', txt: '#cfe4f2', icon: DEF_ICON_PAL };
 
   // the sky answers: three curtains across the top band, each a row of 2px
   // strands riding its own sine, length breathing along it. Additive, like
@@ -11503,15 +11609,17 @@
   }
 
   // gold and snow drifting down over everything: no state and no array, the
-  // same procedural loop the title's embers use, so a resize costs it nothing
-  function drawWinMotes(now, a, n) {
+  // same procedural loop the title's embers use, so a resize costs it nothing.
+  // cold drops the sparks out of the mix - a loss has nothing burning.
+  function drawWinMotes(now, a, n, cold) {
     const span = VIEW_H + 40;
     for (let i = 0; i < n; i++) {
       const h1 = hash2(i * 13 + 1, 57), h2 = hash2(i * 7 + 5, 113), h3 = hash2(i * 5 + 9, 191);
       const y = ((now * (10 + h1 * 26) + h2 * span) % span) - 20;
       const x = Math.round(h3 * (VIEW_W - 2) + Math.sin(now * (0.7 + h1) + i) * 5);
       ctx.globalAlpha = a * (0.45 + 0.5 * (0.5 + 0.5 * Math.sin(now * 3.1 + i * 2.3)));
-      ctx.fillStyle = h1 > 0.55 ? '#ffd95c' : h1 > 0.28 ? '#ff8a3c' : '#e8f2ff';
+      ctx.fillStyle = cold ? (h1 > 0.55 ? '#e8f2ff' : h1 > 0.28 ? '#b8cce6' : '#8fa8d8')
+        : h1 > 0.55 ? '#ffd95c' : h1 > 0.28 ? '#ff8a3c' : '#e8f2ff';
       ctx.fillRect(x, Math.round(y), h2 > 0.78 ? 2 : 1, h2 > 0.78 ? 2 : 1);
     }
     ctx.globalAlpha = 1;
@@ -11558,11 +11666,11 @@
     ctx.globalAlpha = 1;
   }
 
-  // a standing brazier: iron bowl on a stem, coals over the rim, a flickering
-  // ember stack and warm additive light - the title pillar's fire, freed from
-  // the pillar so it can flank the dais
-  function drawWinBrazier(cx, baseY, now, a) {
-    ctx.globalAlpha = a;
+  // The stand and the empty bowl - iron pan on a stem, the title pillar's
+  // brazier freed from the pillar so it can flank the dais. rim is the coals
+  // over its lip, the only thing a lit brazier and a dead one disagree on.
+  // Returns the bowl's top, which is what anything above it is measured from.
+  function drawBrazierIron(cx, baseY, rim) {
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - 2, baseY - 16, 4, 16); ctx.fillRect(cx - 7, baseY - 4, 14, 4);
     ctx.fillStyle = '#3a2a22'; ctx.fillRect(cx - 1, baseY - 15, 2, 13);
     ctx.fillStyle = '#5a4434'; ctx.fillRect(cx - 1, baseY - 15, 1, 13);
@@ -11573,7 +11681,14 @@
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(cx - 8, by, 16, 7); ctx.fillRect(cx - 5, by + 7, 10, 1);
     ctx.fillStyle = '#3a2a22'; ctx.fillRect(cx - 7, by + 1, 14, 5);
     ctx.fillStyle = '#5a4434'; ctx.fillRect(cx - 7, by + 1, 14, 1);
-    ctx.fillStyle = '#ff8a3c'; ctx.fillRect(cx - 5, by, 10, 1);
+    ctx.fillStyle = rim; ctx.fillRect(cx - 5, by, 10, 1);
+    return by;
+  }
+
+  // lit: a flickering ember stack over the coals, and warm additive light
+  function drawWinBrazier(cx, baseY, now, a) {
+    ctx.globalAlpha = a;
+    const by = drawBrazierIron(cx, baseY, '#ff8a3c');
     const fl = now * 11 + cx;
     const hgt = 5 + Math.round(Math.sin(fl) + Math.sin(fl * 0.37) * 0.8);
     const rows = [[8, '#ffe37a'], [8, '#ffd95c'], [6, '#ffb347'], [4, '#ff8a3c'], [4, '#ff6a30'], [2, '#ff4a28'], [2, '#ff4a28']];
@@ -11646,31 +11761,68 @@
 
   // one number: a chamfered plate, its icon on the left, the value at 2x. The
   // plate pops up as it arrives and the value climbs from zero behind it, the
-  // rule going gold on the frame it lands.
-  function drawWinStatPlate(r, st, ws, t, i) {
-    const s0 = WIN_T.stats + i * WIN_T.statStep;
+  // rule warming on the frame it lands. T is the ending's timeline and ac its
+  // accent pair, so the same plate tallies a win in gold and a loss in frost.
+  function drawEndStatPlate(r, st, ws, t, i, T, ac) {
+    const s0 = T.stats + i * T.statStep;
     if (t < s0) return;
     const pop = easeOut(Math.min(1, (t - s0) / 0.24));
     const y = r.y + Math.round((1 - pop) * 8);
-    const roll = Math.min(1, Math.max(0, (t - s0) / WIN_T.roll));
+    const roll = Math.min(1, Math.max(0, (t - s0) / T.roll));
     const txt = st.roll ? String(Math.round(Number(st.val(ws)) * roll)) : st.val(ws);
     const done = !st.roll || roll >= 1;
     ctx.globalAlpha = pop;
     ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(r.x + 2, r.y + 2, r.w, r.h);
     ctx.fillStyle = '#0a0e23'; chamRect(r.x, y, r.w, r.h);
     ctx.fillStyle = '#141c3c'; chamRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
-    ctx.fillStyle = done ? '#c89a3c' : '#35426e';
+    ctx.fillStyle = done ? ac.rule : '#35426e';
     ctx.fillRect(r.x + 2, y + 1, r.w - 4, 1); ctx.fillRect(r.x + 2, y + r.h - 2, r.w - 4, 1);
     const iy = y + ((r.h - 8) >> 1);
     if (st.icon === 'gold') ctx.drawImage(SPRITES.itemGold, r.x + 4, iy);
     else if (st.icon === 'kills') ctx.drawImage(SPRITES.itemBow, r.x + 4, iy);
-    else stampGrid(st.icon === 'level' ? WIN_LVL_ICON : WIN_TIME_ICON, WIN_ICON_PAL, r.x + 4, iy, 1);
-    drawPixelTextShadow(ctx, txt, r.x + 15, y + ((r.h - 10) >> 1), done ? '#ffd95c' : '#f4f7ff', '#0a0e23', 2);
+    else stampGrid(WIN_ICONS[st.icon], ac.icon, r.x + 4, iy, 1);
+    drawPixelTextShadow(ctx, txt, r.x + 15, y + ((r.h - 10) >> 1), done ? ac.txt : '#f4f7ff', '#0a0e23', 2);
     ctx.globalAlpha = 1;
   }
 
+  // the kit a match finished in, centred under the tally: one HUD cell per
+  // slot, at the material it reached, with the same buy pips the in-match row
+  // draws. A maxed slot rims in the ending's accent.
+  function drawEndGear(ws, y, a, ac) {
+    if (a <= 0) return;
+    ctx.globalAlpha = Math.min(1, a);
+    const gwAll = GEAR_SLOTS.length * BAG_CELL + (GEAR_SLOTS.length - 1) * BAG_GAP;
+    let gx = Math.round((VIEW_W - gwAll) / 2);
+    ctx.fillStyle = '#0a0e23'; chamRect(gx - 4, y - 3, gwAll + 8, BAG_CELL + 6);
+    ctx.fillStyle = '#141c3c'; chamRect(gx - 3, y - 2, gwAll + 6, BAG_CELL + 4);
+    for (let i = 0; i < GEAR_SLOTS.length; i++) {
+      const lv = ws.gearLv[i];
+      ctx.fillStyle = lv >= GEAR_LV_MAX ? ac.rule : '#35426e';
+      ctx.fillRect(gx, y, BAG_CELL, BAG_CELL);
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(gx + 1, y + 1, BAG_CELL - 2, BAG_CELL - 2);
+      for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // pips above the icon, as the HUD cell draws them
+        ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
+        ctx.fillRect(gx + 3 + k * 4, y + 2, 3, 2);
+      }
+      ctx.drawImage(SPRITES.gearIcons[i][ws.gear[i]][lv - 1], gx + 3, y + 5);
+      gx += BAG_CELL + BAG_GAP;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // the tally row: n plates of one width, centred, each on its own beat
+  function drawEndTally(stats, ws, t, y, T, ac) {
+    const pw = 15 + Math.max.apply(null, stats.map((st) => pixelTextWidth(st.val(ws), 2))) + 5;
+    let sx = Math.round((VIEW_W - (stats.length * pw + (stats.length - 1) * 6)) / 2);
+    for (let i = 0; i < stats.length; i++) {
+      drawEndStatPlate({ x: sx, y, w: pw, h: 18 }, stats[i], ws, t, i, T, ac);
+      sx += pw + 6;
+    }
+  }
+
   function renderVictory(now) {
-    const ws = state.win || (state.win = winSnapshot());
+    const ws = state.end || (state.end = endSnapshot());
     const t = state.deadTimer;
     const L = winLayout();
     const tm = TEAMS[ws.team];
@@ -11760,7 +11912,7 @@
 
     // the rule sweeps out of the middle, then the line that says who won
     if (t > WIN_T.rule) {
-      drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * easeOut(Math.min(1, (t - WIN_T.rule) / 0.4))), 1);
+      drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * easeOut(Math.min(1, (t - WIN_T.rule) / 0.4))), 1, RULE_GOLD);
       const sub = ws.mates > 0 ? tm.name + ' HOLDS THE FROSTLANDS' : 'LAST ONE STANDING';
       ctx.globalAlpha = Math.min(1, (t - WIN_T.rule) / 0.5);
       drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
@@ -11769,38 +11921,12 @@
     }
 
     // --- the tally ----------------------------------------------------------
-    const vals = WIN_STATS.map((st) => st.val(ws));
-    const pw = 15 + Math.max.apply(null, vals.map((v) => pixelTextWidth(v, 2))) + 5;
-    let sx = Math.round((VIEW_W - (WIN_STATS.length * pw + (WIN_STATS.length - 1) * 6)) / 2);
-    for (let i = 0; i < WIN_STATS.length; i++) {
-      drawWinStatPlate({ x: sx, y: L.statY, w: pw, h: 18 }, WIN_STATS[i], ws, t, i);
-      sx += pw + 6;
-    }
+    drawEndTally(WIN_STATS, ws, t, L.statY, WIN_T, WIN_ACCENT);
 
     // the kit it was won in: the four pieces at the material they reached,
     // carrying the same buy pips the in-match HUD row draws
-    const gt = (t - (WIN_T.stats + WIN_STATS.length * WIN_T.statStep)) / 0.3;
-    if (gt > 0) {
-      ctx.globalAlpha = Math.min(1, gt);
-      const gwAll = GEAR_SLOTS.length * BAG_CELL + (GEAR_SLOTS.length - 1) * BAG_GAP;
-      let gx = Math.round((VIEW_W - gwAll) / 2);
-      ctx.fillStyle = '#0a0e23'; chamRect(gx - 4, L.gearY - 3, gwAll + 8, BAG_CELL + 6);
-      ctx.fillStyle = '#141c3c'; chamRect(gx - 3, L.gearY - 2, gwAll + 6, BAG_CELL + 4);
-      for (let i = 0; i < GEAR_SLOTS.length; i++) {
-        const lv = ws.gearLv[i];
-        ctx.fillStyle = lv >= GEAR_LV_MAX ? '#c89a3c' : '#35426e';
-        ctx.fillRect(gx, L.gearY, BAG_CELL, BAG_CELL);
-        ctx.fillStyle = '#0f1632';
-        ctx.fillRect(gx + 1, L.gearY + 1, BAG_CELL - 2, BAG_CELL - 2);
-        for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // pips above the icon, as the HUD cell draws them
-          ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
-          ctx.fillRect(gx + 3 + k * 4, L.gearY + 2, 3, 2);
-        }
-        ctx.drawImage(SPRITES.gearIcons[i][ws.gear[i]][lv - 1], gx + 3, L.gearY + 5);
-        gx += BAG_CELL + BAG_GAP;
-      }
-      ctx.globalAlpha = 1;
-    }
+    drawEndGear(ws, L.gearY,
+      Math.min(1, (t - (WIN_T.stats + WIN_STATS.length * WIN_T.statStep)) / 0.3), WIN_ACCENT);
 
     // --- the planks, sliding up to land exactly on WIN_T.menu ---------------
     if (t > WIN_T.menu - WIN_SLIDE) {
@@ -11810,6 +11936,200 @@
       ctx.globalAlpha = 1;
     }
   }
+  // ------------------------------------------------------------ defeat
+  // The other end of the same ceremony. A death only DIMS the screen - the
+  // match plays on underneath and you can sit and watch it - so a lost match
+  // does not actually end until you stop watching, which is why LOBBY on an
+  // elimination lands here (deadActivate) and this screen's own plank is the
+  // door out. It is drawn on winLayout()'s anchors deliberately: DEFEAT sits
+  // exactly where VICTORY sat, the rule, the tally and the kit strip land in
+  // the same bands, and the two read as one pair rather than two designs.
+  // Everything else is the win inverted - the letters fall instead of
+  // dropping in, the rule is frost instead of gold, the braziers are out, no
+  // crown, and the champion is face down in the drift the dais stood on.
+  // state.defeatT is the clock: state.deadTimer has been running since the
+  // body fell, which may have been minutes ago.
+  const DEF_T = {
+    dim: 0.45,      // the cold wash has finished settling
+    title: 0.18, letter: 0.06, land: 0.34, // DEFEAT falls in a letter at a time
+    stage: 0.55,    // the drift, the dead braziers and the body settle in
+    rule: 0.95,     // the frost rule sweeps out of the middle
+    stats: 1.55, statStep: 0.16, roll: 0.5, // the tally, one plate at a time
+    menu: 2.70,     // the plank is up and the screen is live
+  };
+  const DEF_SLIDE = 0.32; // the plank's slide, finishing exactly on DEF_T.menu
+
+  // Where the local slot finished, and what it earned getting there: the four
+  // columns the win prints, with the placing in front of them. That number is
+  // the one thing a loss has to say that a win does not - "4/6" and not a word
+  // of it, because the podium glyph beside it is the label.
+  const DEF_STATS = [
+    { icon: 'place', roll: false, val: (w) => w.place + '/' + w.of },
+    { icon: 'gold', roll: true, val: (w) => String(w.gold) },
+    { icon: 'kills', roll: true, val: (w) => String(w.kills) },
+    { icon: 'level', roll: true, val: (w) => String(w.level) },
+    { icon: 'time', roll: false, val: (w) => clockTxt(w.time) },
+  ];
+
+  function defCues(t0, t1) {
+    if (!state.end) return;
+    tallyCues(t0, t1, DEF_T, DEF_STATS);
+  }
+
+  // ---- the art -------------------------------------------------------------
+  // Wind driving across the frame: streaks on their own lane at their own
+  // speed, wrapped by the modulo rather than tracked - the same no-array idiom
+  // as the motes. The motes fall through this, and two speeds is what makes it
+  // read as weather instead of as static.
+  function drawBlizzard(now, a) {
+    const span = VIEW_W + 80;
+    for (let i = 0; i < 52; i++) {
+      const h1 = hash2(i * 17 + 3, 41), h2 = hash2(i * 11 + 7, 89);
+      const y = Math.round(h1 * (VIEW_H + 16)) - 8;
+      const x = Math.round(((now * (60 + h2 * 150) + h1 * span) % span) - 50);
+      const len = 4 + Math.round(h2 * 12);
+      ctx.globalAlpha = a * (0.12 + h2 * 0.16);
+      ctx.fillStyle = '#cfe4f2';
+      ctx.fillRect(x, y, len, 1);
+      if (len > 8) ctx.fillRect(x + 3, y + 1, len - 5, 1); // a shallow slant, in two steps
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // A snow bank where the dais stood: near level across its middle and curving
+  // away at the two ends - a plain cosine domes, and a dome leaves the ends of
+  // a body lying on it up in the air, which is what the flattening root on the
+  // profile is for. Lit along its top three rows and speckled
+  // with the same hash the dais's cap uses. Drawn twice, once behind the body
+  // and once in front, so the body lies IN the snow instead of on a hill.
+  function drawDefeatDrift(cx, bot, hw, peak, a) {
+    ctx.globalAlpha = a;
+    for (let dx = -hw; dx <= hw; dx++) {
+      const h = Math.round(Math.pow(Math.cos((dx / hw) * Math.PI / 2), 0.45) * peak) +
+        (hash2(dx * 7 + 3, 19) > 0.72 ? 1 : 0);
+      const x = cx + dx, y = bot - h;
+      ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x, y, 1, 3);
+      ctx.fillStyle = '#dfe8f8'; ctx.fillRect(x, y + 3, 1, 2);
+      ctx.fillStyle = '#b8cce6'; ctx.fillRect(x, y + 5, 1, Math.max(0, h - 5));
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(x, y - 1, 1, 1); ctx.fillRect(x, bot, 1, 2);
+      if (hash2(dx * 5 + 11, 37) > 0.87) { ctx.fillStyle = '#ffffff'; ctx.fillRect(x, y - 1, 1, 1); }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // a brazier that has gone out: the win's ironwork with ash on the rim and a
+  // thread of smoke instead of a flame, and no light on anything near it
+  function drawDeadBrazier(cx, baseY, now, a) {
+    ctx.globalAlpha = a;
+    const by = drawBrazierIron(cx, baseY, '#3c4468');
+    ctx.fillStyle = '#5a6690'; ctx.fillRect(cx - 3, by - 1, 6, 1);
+    ctx.fillStyle = '#2a3560'; ctx.fillRect(cx - 1, by - 2, 3, 1);
+    for (let i = 0; i < 9; i++) { // the smoke, thinning as it climbs
+      const f = i / 9;
+      ctx.globalAlpha = a * 0.30 * (1 - f);
+      ctx.fillStyle = '#8fa8d8';
+      ctx.fillRect(Math.round(cx + Math.sin(now * 0.9 + i * 0.7) * (1 + f * 4)), by - 3 - i * 3, 1, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // an arrow planted where the body fell - what the crown is on the other
+  // screen, and the only thing on this one still standing up
+  const DEF_ARROW = [
+    '...s...', '..fsf..', '..fsf..', '..fsf..', '...s...',
+    '...s...', '...s...', '...s...', '...s...', '...s...',
+  ];
+  const DEF_ARROW_PAL = { '.': null, f: '#c8d4ee', s: '#8a6a44' };
+
+  function renderDefeat(now) {
+    const ws = state.end || (state.end = endSnapshot());
+    const t = state.defeatT;
+    const L = winLayout();
+    const dim = Math.min(1, t / DEF_T.dim);
+
+    // --- backdrop: a colder, heavier wash than the win's --------------------
+    ctx.fillStyle = 'rgba(5,8,20,' + (0.94 * dim).toFixed(3) + ')';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    drawBlizzard(now, dim);
+    const vg = ctx.createRadialGradient(L.cx, L.toy + 120, VIEW_H * 0.16, L.cx, L.toy + 120, VIEW_W * 0.58);
+    vg.addColorStop(0, 'rgba(3,5,16,0)');
+    vg.addColorStop(1, 'rgba(3,5,16,' + (0.92 * dim).toFixed(3) + ')');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    drawWinMotes(now, dim, 44, true);
+
+    // --- the stage: dead braziers, the drift, the body ----------------------
+    const rise = easeOut(Math.max(0, Math.min(1, (t - DEF_T.stage) / 0.6)));
+    if (rise > 0) {
+      const settle = Math.round((1 - rise) * 8); // it comes down into place, not up
+      drawDeadBrazier(L.cx - L.spread, L.daisY + 14, now, rise);
+      drawDeadBrazier(L.cx + L.spread, L.daisY + 14, now, rise);
+      drawDefeatDrift(L.cx - 6, L.daisY - 2 - settle, 70, 30, rise); // the bank behind
+      // The champion, face down and SIDE-ON: a body lying across the frame is
+      // the one pose that cannot be misread as standing. Same 5x and the same
+      // 80px box the winner rises in. No gear marks - those sit on the standing
+      // body plan (see drawPlayer), which is why the kit strip below is where
+      // the kit is read on this screen.
+      const bx = L.cx - 40, by = L.champY - 8 - settle;
+      ctx.globalAlpha = rise;
+      ctx.drawImage(SPRITES.champ[ws.champ][ws.team].prone.right[0], bx, by, 80, 80);
+      ctx.globalAlpha = 1;
+      // ...and the snow in FRONT of it, over the body's last few rows: the
+      // drift has already started taking it back
+      drawDefeatDrift(L.cx, L.daisY + 14 - settle, 92, 26, rise);
+      stampGrid(DEF_ARROW, DEF_ARROW_PAL, L.cx + 46, L.daisY - 42 - settle, 3, '#0a0e23');
+    }
+
+    // --- the headline: DEFEAT, one letter at a time, falling ----------------
+    const TXT = 'DEFEAT', S = 4;
+    const tw = pixelTextWidth(TXT, S);
+    const tx0 = Math.round((VIEW_W - tw) / 2);
+    for (let i = 0; i < TXT.length; i++) {
+      const lt = (t - DEF_T.title - i * DEF_T.letter) / DEF_T.land;
+      if (lt <= 0) continue;
+      const e = Math.min(1, lt) * Math.min(1, lt); // ease IN: it drops, it does not spring
+      const lx = tx0 + i * 4 * S;
+      const ly = L.titleY - Math.round((1 - e) * 12);
+      ctx.globalAlpha = Math.min(1, lt * 2);
+      // a cold flash on the beat it lands, steel from then on
+      drawPixelTextOutline(ctx, TXT[i], lx, ly, lt < 1.12 ? '#e8f2ff' : '#9fbde0', '#0a0e23', S);
+      ctx.globalAlpha = 1;
+      if (lt >= 1 && lt < 1.5) { // frost shaken loose, falling away
+        const fr = (lt - 1) / 0.5;
+        ctx.globalAlpha = 1 - fr;
+        ctx.fillStyle = '#cfe4f2';
+        for (let k = 0; k < 5; k++) {
+          const h = hash2(i * 7 + k, 23);
+          ctx.fillRect(Math.round(lx + h * 4 * S), Math.round(L.titleY + 5 * S + fr * 12), 1, 1);
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // the rule sweeps out, then the one line that says who did it
+    if (t > DEF_T.rule) {
+      const sweep = easeOut(Math.min(1, (t - DEF_T.rule) / 0.4));
+      drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * sweep), 1, RULE_FROST);
+      const sub = ws.by ? 'FELLED BY ' + ws.by : (DEATH_CAUSE[ws.cause] || 'WENT DOWN');
+      ctx.globalAlpha = Math.min(1, (t - DEF_T.rule) / 0.5);
+      drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
+        ws.by ? TEAMS[ws.byTeam].mark : '#8f9cc4', '#0a0e23');
+      ctx.globalAlpha = 1;
+    }
+
+    // --- the tally and the kit it was lost in -------------------------------
+    drawEndTally(DEF_STATS, ws, t, L.statY, DEF_T, DEF_ACCENT);
+    drawEndGear(ws, L.gearY,
+      Math.min(1, (t - (DEF_T.stats + DEF_STATS.length * DEF_T.statStep)) / 0.3), DEF_ACCENT);
+
+    // --- the plank, sliding up to land exactly on DEF_T.menu ----------------
+    if (t > DEF_T.menu - DEF_SLIDE) {
+      const e = easeOut(Math.min(1, (t - (DEF_T.menu - DEF_SLIDE)) / DEF_SLIDE));
+      ctx.globalAlpha = e;
+      drawEndPlanks(now, Math.round((1 - e) * 16));
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // ------------------------------------------------------------ eagle drop
   // Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle
   // along a seed-fixed line across the world (mode 'drop'). The view zooms out
@@ -12195,6 +12515,10 @@
     // hand a slot to an AI, a human, or nobody (a ghost at its camp)
     setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
     placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
+    // the two end screens: their timelines, the frozen numbers they print, and
+    // a way to open the loss summary without pressing its plank. Set
+    // state.defeatT / state.deadTimer to scrub either ceremony to a beat.
+    WIN_T, DEF_T, openDefeat, endSnapshot, endScreen, deadLayout, deadHit, deadActivate,
     // routes: the search itself, and showPaths = true draws every unit's live route
     findPath, walkable, navTo, showPaths: false,
     // hero levels: pay a slot gold (and XP) the way a pickup would
