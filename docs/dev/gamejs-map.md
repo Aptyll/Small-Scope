@@ -76,8 +76,8 @@ don't cite line numbers here, they go stale within a session.
 | render pass order | `render` | `render` |
 | pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` |
 | drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |
-| the stun tell: orbiting sparks, and the plate that carries them on a player's frame | `drawStunStars`, the overhead block inside `drawPlayer` | `entity draw` |
-| the overhead frame and the name over it: bar geometry, and centring odd-width text on a model | `drawHealthBar`, `centreTextX` | `entity draw` |
+| the stun tell: orbiting sparks, and the plate that carries them on a player's frame while it lasts | `drawStunStars`, the overhead block inside `drawPlayer` | `entity draw` |
+| the overhead frame and the name over it: where the stack sits, and centring odd-width text on a model | `FRAME_DX`, `drawHealthBar`, `centreTextX` | `entity draw` |
 | the turret's rotating gun, its bolts, its aim line and muzzle flash | `drawTurretHead`, `drawBolt`, `drawTurretFx`, `paintRimmed` | `entity draw` |
 | turret targeting, traverse and firing | `turretPivot`, `turretMark`, `turretSees`, `turretMuzzle`, `fireBolt` | `structures & robots` |
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel`, `drawWheelHub`, `drawWheelStick` | `selection, hints & wheel` |

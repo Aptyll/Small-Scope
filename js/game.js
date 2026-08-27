@@ -7245,6 +7245,17 @@
   // (hbMid) draws, so the overlay runs straight down the middle glyph.
   function centreTextX(sx, txt, scale) { return Math.round(sx) - (pixelTextWidth(txt, scale) >> 1); }
 
+  // How far right of the sprite's own centre the overhead stack is drawn. The
+  // frame is the 6 px level badge hard against the 16 px bar backing - 22 px in
+  // all - and it is the FRAME that has to be centred on the body, so the bars
+  // inside it sit three pixels right of the seam to leave the badge its room on
+  // the left. Centring the bars instead and letting the badge overhang put the
+  // whole plate three pixels off; the pink centre column under '.' (`hbMid`) is
+  // what both were measured against. The stun plate is deliberately NOT counted:
+  // it is a transient annex on the right, and sizing the resting frame around
+  // something that is usually absent is what made the plate lopsided before.
+  const FRAME_DX = 3;
+
   function drawPlayer(p, ex, ey, now) {
     const local = p === player;
     const lying = p.prone;
@@ -7335,13 +7346,16 @@
     // pose starts ~6 rows lower in the same 16x16 cell, and bars floating where
     // a head no longer is look broken
     const hy = py + (lying ? 6 : 0);
-    drawHealthBar(p.x - ex, hy - 7, p.hp, p.maxHp, 14);
+    // fx is the stack's own centre column - the body's, shifted by FRAME_DX so
+    // the frame straddles the sprite. Everything in the frame hangs off it.
+    const fx = Math.round(p.x - ex) + FRAME_DX;
+    drawHealthBar(p.x - ex + FRAME_DX, hy - 7, p.hp, p.maxHp, 14);
     // level badge: a 7x7 square sharing its right frame column with the bar
     // backing's left edge (one 1px frame everywhere, never a doubled wall), and
     // spanning the health bar and the stamina bar stacked (hy-8 .. hy-2). Same
     // backing / track colours as the bars.
     {
-      const bx = Math.round(p.x - ex) - 14, by = hy - 8;
+      const bx = fx - 14, by = hy - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx, by, 6, 7); // 6 wide: the 7th column is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
@@ -7362,7 +7376,7 @@
     // The track is painted one row taller than the fill so the gap between the two
     // bars is track grey, not frame colour - one clean outline around both.
     {
-      const bx = Math.round(p.x - ex) - 7, by = hy - 4;
+      const bx = fx - 7, by = hy - 4;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx - 1, by, 16, 3); // rows under the hp backing only - the backing is translucent, so overlapping it would paint a darker row
       ctx.fillStyle = '#3a3448';
@@ -7378,32 +7392,30 @@
       ctx.fillStyle = '#8ad8ff';
       ctx.fillRect(bx, by, Math.round(14 * frac), 2);
     }
-    // The stun plate: the mirror of the level badge on the other side of the
-    // frame - same backing, same track, sharing its left frame column with the
-    // health bar backing's right edge, so the stack still reads as one outline.
-    // The sparks say what the state is and the track drains from the bottom as
-    // the window runs out, which answers the only question a stun asks.
+    // stunned: the mirror of the level badge on the other side of the frame -
+    // same backing, same track, sharing its left frame column with the health
+    // bar backing's right edge, so the stack still reads as one outline. The
+    // sparks say what the state is and the track drains from the bottom as the
+    // window runs out, which answers the only question a stun asks.
     //
-    // It is drawn EMPTY when nothing is stunning, and that is the whole reason
-    // the frame is square with the body: the level badge is permanent, so a
-    // right-hand plate that only appeared during a stun left the resting frame
-    // 6 px longer on the left than on the right and reading three pixels off
-    // centre - see the pink centre column under '.' (drawHitboxes). With both
-    // plates always present the frame is 28 px spanning cx-14..cx+13, exactly
-    // centred on the sprite's own seam, and a stun lights a slot that was
-    // always there instead of shunting the bars sideways.
-    {
-      const bx = Math.round(p.x - ex) + 8, by = hy - 8;
+    // Nothing is drawn here while nothing is stunning - an empty plate parked
+    // over every head is a bar that is never a bar. That does mean the resting
+    // frame is only the level badge plus the bars, 22 px spanning cx-14..cx+7,
+    // sitting three pixels left of the sprite's own seam; turn the pink centre
+    // column on under '.' (drawHitboxes) and you can see it. Fixing that by
+    // shifting the badge and both bars 3 px right would take the BARS off the
+    // body to square up a badge, and the frame would still grow rightwards the
+    // moment a stun landed, so it is left as it is.
+    if (p.stunT > 0) {
+      const bx = fx + 8, by = hy - 8;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(bx, by, 6, 7); // 6 wide: the column to its left is the bar backing, already painted
       ctx.fillStyle = '#3a3448';
       ctx.fillRect(bx, by + 1, 5, 5);
-      if (p.stunT > 0) {
-        const h = Math.max(1, Math.round(5 * Math.min(1, p.stunT / Math.max(0.01, p.stunMax))));
-        ctx.fillStyle = '#b06a14'; // bright enough to read as a fill against the track, dim enough to sit under the sparks
-        ctx.fillRect(bx, by + 6 - h, 5, h);
-        drawStunStars(bx + 2, by + 3, p, 1.5, 1);
-      }
+      const h = Math.max(1, Math.round(5 * Math.min(1, p.stunT / Math.max(0.01, p.stunMax))));
+      ctx.fillStyle = '#b06a14'; // bright enough to read as a fill against the track, dim enough to sit under the sparks
+      ctx.fillRect(bx, by + 6 - h, 5, h);
+      drawStunStars(bx + 2, by + 3, p, 1.5, 1);
     }
     // bow draw meter: yellow while charging, turning hot orange the moment the
     // draw is full. Drawn for everyone - it is the tell that says a shot is
@@ -7421,7 +7433,7 @@
       const drawing = p.charging;
       const frac = drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
         : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, nockKit.nock);
-      const x = Math.round(p.x - ex) - 7, y = hy - 10;
+      const x = fx - 7, y = hy - 10;
       ctx.fillStyle = 'rgba(12,18,42,0.78)';
       ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
       ctx.fillStyle = '#3a3448';
@@ -9948,9 +9960,10 @@
   const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
   const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
   const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-  const PATCH_TXT = 'PATCH 1.57'; // printed bottom-right of the title screen; click it for the notes
+  const PATCH_TXT = 'PATCH 1.58'; // printed bottom-right of the title screen; click it for the notes
   // one sentence per patch, newest first - the biggest change only, in plain english
   const PATCH_NOTES = [
+    ['1.58', 'THE HEALTH PLATE AND THE NAME OVER YOUR HEAD BOTH SIT SQUARE WITH YOUR BODY NOW, AND THE STUN SLOT BESIDE THE BARS IS BACK TO APPEARING ONLY WHEN SOMETHING ACTUALLY STUNS YOU INSTEAD OF SITTING THERE EMPTY.'],
     ['1.57', 'THE NAME OVER A HEAD IS CENTRED ON THE BODY NOW AND STAYS THERE - IT USED TO HOP A PIXEL LEFT AND RIGHT AS YOU WALKED, BECAUSE THE HALF PIXEL AN ODD-WIDTH WORD CARRIES WAS BEING ROUNDED TOGETHER WITH THE CAMERA.'],
     ['1.56', 'THE HEALTH FRAME OVER YOUR HEAD SITS SQUARE WITH YOU NOW INSTEAD OF HANGING THREE PIXELS TO THE LEFT - THE STUN SLOT ON ITS RIGHT IS ALWAYS THERE, EMPTY UNTIL SOMETHING STUNS YOU - AND THE HITBOX KEY DRAWS A PINK LINE DOWN THE MIDDLE OF EVERY PLAYER ANIMAL ROBOT AND BUILDING SO YOU CAN SEE IT.'],
     ['1.55', 'YOU HAVE A NAME NOW - THE GAME ASKS FOR ONE THE FIRST TIME IT OPENS, IT SITS BOTTOM-LEFT OF THE TITLE SCREEN WITH A QUILL TO CHANGE IT, IT RIDES OVER YOUR HEAD IN THE MATCH THE WAY EVERY RIVAL NAME ALREADY DID, AND THE MATCHES GOLD AND DAYS BEHIND IT ARE KEPT.'],

@@ -363,17 +363,23 @@ frame — **every** slot, the local one included: the name is the profile's
 ([architecture.md](architecture.md#profilejs)), and yours is what the rest of the table reads over
 your head, so hiding it from you alone would make it the one label in the game you cannot check. The backings are translucent, so each plate paints only its own rows - no overlap.
 
-**The frame is square with the body, and that costs an empty plate.** Horizontally it is three
-pieces: a 6 px level plate, the 16 px bar backing, and a 6 px plate on the other side — 28 px
-spanning `cx-14 .. cx+13`, exactly centred on the seam a 16×16 sprite is centred on. The right
-plate holds the stun readout, but it is drawn **empty whenever nothing is stunning**, because the
-level plate is permanent: a right plate that only appeared during a stun left the resting frame
-6 px longer on the left and reading three pixels off centre, and shifting the bars to compensate
-would have made them jump sideways the moment a stun landed. An always-present slot lights up
-instead. Turn the [centre column](#the-centre-column-hbmid) on under `.` before changing any of
-those numbers.
+**The frame is centred on the body, and the bars pay for it (`FRAME_DX`).** Horizontally the frame
+is a 6 px level plate hard against the 16 px bar backing — 22 px — and it is the *frame* that has
+to straddle the sprite, not the bars inside it. So the whole stack is drawn `FRAME_DX` (3 px) right
+of the sprite's own centre: `fx = round(p.x - ex) + FRAME_DX` is the stack's centre column and
+everything in it hangs off that, giving `cx-11 .. cx+10`, exactly centred on the seam a 16×16
+sprite is centred on. Measured off the canvas: a 22-column run from −11 to +10, centre 0.
 
-**The name tag is centred by `centreTextX`, and that is not the same expression.** A glyph run is
+**The stun plate is deliberately not counted.** It is a transient annex sharing the bar backing's
+right edge (`fx+8 .. fx+13`), so a stun makes the frame 28 px and overhangs to the right until it
+clears. Sizing the resting frame around it is what made the plate lopsided in the first place —
+the level badge is permanent and the stun plate is not, so the geometry follows the permanent one.
+Drawing the stun plate **empty** at rest would square both states, but it parks a bar that is never
+a bar over every head, which is worse than the overhang. Turn the
+[centre column](#the-centre-column-hbmid) on under `.` before changing any of these numbers.
+
+**The name tag is centred by `centreTextX`, on the body and not on `fx`.** It is not part of the
+frame — it is a label on the model, so it takes the sprite's own centre. A glyph run is
 an **odd** number of pixels wide at scale 1 (`pixelTextWidth` is `4n - 1`), so unlike the frame it
 can never sit exactly on the seam — but it must at least sit on the same side of it every frame,
 and `round(p.x - ex - w / 2)` does not: the half pixel the odd width carries lands on top of the
@@ -385,8 +391,9 @@ pixels, `w >> 1`, which puts the run's **middle column** on `round(sx)` — the 
 for any text centred over a model; free-floating text (damage floaters, wheel labels) is not
 centred on anything and keeps its own maths.
 
-**Every other bar in the game is centred the same way, on its model.** `drawHealthBar(cxp, …)`
-centres an even-width bar on `cxp`, and every caller hands it a true centre: `a.x - ex` for an
+**Every other bar in the game is centred on its model directly** — none of them carries a badge, so
+none of them needs `FRAME_DX`. `drawHealthBar(cxp, …)` centres an even-width bar on `cxp`, and
+every caller hands it a true centre: `a.x - ex` for an
 animal (whose sprite is placed at `round(a.x - w/2 - ex)`), `b.x - ex` for a robot, and the centre
 of the **footprint** for a building — `sx + sh + (spr.width >> 1)`, which is where the sprite
 centres itself, `+ sh` so the readout rides the hit shudder with the thing it belongs to rather

@@ -424,7 +424,7 @@ None of them is a word:
   cast shadow would have done). Alpha is 1 for a rival, 0.85 for an ally and 0.66 for yourself, so
   **you can always see yourself under the snow** and nobody else can.
 - **The overhead furniture fades with the cover** (`drawPlayer`) — name tag, health bar, stamina
-  bar, both end plates, and the draw meter that says a shot is coming. A rival keeps none of it. The
+  bar, level badge, and the draw meter that says a shot is coming. A rival keeps none of it. The
   whole stack also drops 6 rows with the pose, since a prone body starts that much lower in the
   same 16×16 cell.
 - **The bury ring** (`drawBuryRing`, local slot only) — twelve marks on a ring in the snow that
