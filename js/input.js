@@ -21,7 +21,16 @@ window.addEventListener('keydown', (e) => {
   // screen's living world and of a spectated match as it is of your own feet
   if (e.key === '.') { settings.hitbox = settings.hitbox ? 0 : 2; saveSettings(); return; }
   if (state.mode === 'title') { menuKey(e); return; }
-  if (state.mode === 'drop') { if (e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') dropJump(player); return; }
+  if (state.mode === 'drop') {
+    // M raises the world map mid-flight, Esc puts it away; the map does not
+    // stop the sim, so the jump keys stay live under it. The lock inside
+    // dropJump refuses (and denies) a jump before the window - the repeat
+    // guard keeps a held Space from machine-gunning that deny.
+    if (e.key.toLowerCase() === 'm') { state.mapOpen = !state.mapOpen; return; }
+    if (e.key.toLowerCase() === 'escape') { state.mapOpen = false; return; }
+    if ((e.key === ' ' || e.key === 'Enter' || e.key.toLowerCase() === 'e') && !e.repeat) dropJump(player);
+    return;
+  }
   if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
   if (state.mode !== 'play') return;
   // edge-triggered intents go into the local player's input struct; the sim
@@ -107,7 +116,7 @@ canvas.addEventListener('mousedown', (e) => {
   }
   if (e.button !== 0) return;
   if (state.mode === 'title') { menuClick(); return; }
-  if (state.mode === 'drop') { SFX.unlock(); dropJump(player); return; }
+  if (state.mode === 'drop') { SFX.unlock(); if (!state.mapOpen) dropJump(player); return; }
   if (state.mode === 'dead') { SFX.unlock(); deadClick(); return; }
   if (state.mode !== 'play') return;
   if (state.wheel) { state.wheel = null; return; } // left-click while it is open: cancel

@@ -38,6 +38,7 @@
       v: 1,
       name: '',        // '' until the first-launch prompt is answered
       named: false,    // has that prompt been answered at all (SKIP counts)
+      dropped: false,  // has this profile ever jumped off the eagle - gates the first-flight countdown
       stats: { games: 0, gold: 0, bestDay: 0 },
       // null, not {} - game.js reads a null here as "nothing was ever saved"
       // and skips its own settings migration, which a bare {} would trigger
@@ -105,6 +106,7 @@
       if (s && typeof s === 'object') {
         if (typeof s.name === 'string') profile.name = s.name;
         profile.named = !!s.named;
+        profile.dropped = !!s.dropped;
         if (s.stats && typeof s.stats === 'object') {
           for (const k in profile.stats) {
             if (typeof s.stats[k] === 'number' && isFinite(s.stats[k])) profile.stats[k] = s.stats[k];
@@ -150,6 +152,12 @@
       profile.named = true;
       saveNow();
     },
+
+    // ---- first flight -------------------------------------------------------
+    // whether this profile has ever left the eagle: false means the next ride
+    // runs the PREPARE TO DROP countdown and jumps itself (js/boot.js)
+    hasDropped() { return !!profile.dropped; },
+    markDropped() { if (!profile.dropped) { profile.dropped = true; saveNow(); } },
 
     // ---- settings ---------------------------------------------------------
     // The live stored object, or null if this profile has never saved any.

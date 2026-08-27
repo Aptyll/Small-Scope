@@ -435,7 +435,8 @@ function render() {
   if (state.mode === 'play') drawFlagCursor();
   if (state.mode === 'play' && state.wheel) renderWheel(now);
 
-  if (state.mode === 'play' && state.mapOpen) renderWorldMap(now);
+  // the M map works mid-flight too: the ride's wider read lives here now
+  if ((state.mode === 'play' || state.mode === 'drop') && state.mapOpen) renderWorldMap(now);
   if (state.mode === 'play' && state.settingsOpen) renderSettings(now);
   if (state.mode === 'play' && state.draft) renderDraft(now);
   if (state.mode === 'title' || state.intro > 0) renderTitle(now);

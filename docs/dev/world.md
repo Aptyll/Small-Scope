@@ -75,7 +75,7 @@ feature — no map, chart or HUD code knows any landmark by name:
 
 | Field | Meaning |
 | --- | --- |
-| `name` | printed by the minimap (glyph only), the M map, the eagle's chart and the arrival toast |
+| `name` | printed by the minimap (glyph only), the M map and the arrival toast |
 | `tag` | the one-line personality under the name on the toast (`THE PACK HUNTS HERE`) |
 | `count` | how many worldgen scatters |
 | `r` | footprint radius in tiles: the keep-clear ring, the canvas `gen` draws in, and the radius `landmarkAt()` calls "here" |

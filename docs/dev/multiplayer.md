@@ -332,12 +332,16 @@ extend the ladder — a goal that is never dropped is a bot that stands still fo
 ## Where players start
 
 Nowhere, until they land: every active slot boards **its team's** eagle in `beginDrop()` — RED
-and BLUE fly the one line in opposite directions, so the two sides salt themselves along it from
-opposite ends — and gets its `spawn` from `landPlayer()`, the nearest open tile to where it
-jumped (AI slots jump at a hashed fraction of the line, the human where they press Space —
-drifting with WASD on the way down — or at the end of the line). That tile is what the bot brain
+and BLUE fly the one line (a fixed `EAGLE_FLIGHT_T` 10 s each) in opposite directions, so the two
+sides salt themselves along it from opposite ends — and gets its `spawn` from `landPlayer()`, the
+nearest open tile to where it jumped. Jumping only unlocks over the line's **last `DROP_LOCK_T`
+(4 s)**: AI slots jump at a hashed fraction of that window, the human where they press Space —
+drifting with WASD on the way down — or at the window's end, the last open ground before the
+treeline (nobody is ever force-dropped in the trees; a profile's first flight auto-drops itself at
+8 s behind a countdown). That tile is what the bot brain
 treats as "home". There are no spawn pockets, no starter rings, and no guaranteed resources near
-a landing — reading the chart during the ride is the whole point. `ringPts` (six points on a ring
+a landing — reading the ride (the dotted path over the snow, or M for the map) is the whole
+point. `ringPts` (six points on a ring
 `SPAWN_D` tiles from the centre — `RING_N` is frozen at 6, decoupled from the slot count) is the
 old camp ring, kept only because river spokes and the keep-clear rules in `genWorld()` are built
 on it.

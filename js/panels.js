@@ -325,10 +325,20 @@ function renderWorldMap(now) {
     drawPixelTextShadow(ctx, L.name, nx, ly + 3, '#3a2c1c', 'rgba(228,216,186,0.85)');
   }
 
-  // the downed eagles, the two objectives, as the same bird diamond the
-  // flight chart used - team colour on the parchment's dark ink
+  // the eagles as bird diamonds in team colour: the two roosted objectives,
+  // and mid-flight (the M map is the ride's chart) each bird on its own line,
+  // dashed across the parchment
   if (state.drop) for (const e of state.drop.eagles) {
-    if (e.state !== 'down') continue;
+    if (e.state === 'fly' || e.state === 'dive') {
+      ctx.save();
+      ctx.strokeStyle = TEAMS[e.team].mark;
+      ctx.setLineDash([3, 2]);
+      ctx.beginPath();
+      ctx.moveTo(MAP_X + (e.x0 / TILE) * MAP_S, MAP_Y + (e.y0 / TILE) * MAP_S);
+      ctx.lineTo(MAP_X + (e.x1 / TILE) * MAP_S, MAP_Y + (e.y1 / TILE) * MAP_S);
+      ctx.stroke();
+      ctx.restore();
+    } else if (e.state !== 'down') continue;
     const lx = MAP_X + Math.round((e.x / TILE) * MAP_S);
     const ly = MAP_Y + Math.round((e.y / TILE) * MAP_S);
     ctx.fillStyle = '#241a10';

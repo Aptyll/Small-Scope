@@ -1071,7 +1071,8 @@ your own marker cross it. Consequences worth knowing:
 - The replay ring keeps recording (`replayLive`) — the capture point is above the map's dim, so
   the banked frames are clean world frames. `replayShowing` still hides the *window* under the panel.
 - Dying with the map open is now possible; `endMatch` clears `state.mapOpen` (and
-  `state.bagOpen`), and M only toggles in `play` mode, so the chart cannot survive into the death
+  `state.bagOpen`), and M only toggles in `play` and `drop` modes (mid-flight it is the ride's
+  wide read; `landPlayer` closes it at touchdown), so the chart cannot survive into the death
   overlay.
 - The world keeps the zoom you were playing at. The panel is a fixed 308×226 and the canvas no
   longer shrinks when you zoom ([World zoom](rendering.md#world-zoom-and-the-two-pixel-spaces)),

@@ -185,15 +185,15 @@ how automatic the *build* wheel's sizing is.
 is the whole feature (see [world.md](world.md#landmarks) for the fields). The entry's shape:
 
 ```js
-shipwreck: { name, tag,           // what both maps, the chart and the arrival toast print
+shipwreck: { name, tag,           // what both maps and the arrival toast print
              count, r, surface,   // how many, footprint radius in tiles, 'snow' | 'ice'
              mark, icon,          // map ink; the glyph is [x,y,w,h] rects in a 7x7 box
              pop, repop,          // inhabitants kept alive, seconds between top-ups
              gen(L), spawnOne(L) } // stamp the objects (in worldgen); add one inhabitant (after)
 ```
 
-The abandoned mine, frozen fort, shipwreck and shop are meant to land here. Nothing in the maps, the
-drop chart or the HUD needs to learn about it. What *does* cost work: any **new object type** its
+The abandoned mine, frozen fort, shipwreck and shop are meant to land here. Nothing in the maps
+or the HUD needs to learn about it. What *does* cost work: any **new object type** its
 `gen` stamps (the checklist above), any **new kind of inhabitant** its `spawnOne` pushes into
 `animals` (a `kind` branch in `updateAnimal`, hp in `ANIMAL_HP`, a `HIT_PUFF` colour, a payout in
 `animalDies`, `UNIT_MASS` + `unitRadius` if it is solid, a hover box in `cursorInfo`, and — if it

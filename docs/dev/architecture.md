@@ -61,7 +61,9 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 ### profile.js
 
-The local player profile — display name, lifetime stats (`games`, `gold`, `bestDay`) and the
+The local player profile — display name, lifetime stats (`games`, `gold`, `bestDay`), the
+one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
+eagle, gating the ride's first-flight countdown) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
 is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the
