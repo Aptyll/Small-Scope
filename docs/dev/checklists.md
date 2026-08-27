@@ -227,6 +227,21 @@ the arrow speed/damage formulas in `fireArrow()`,
 `TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
 `update()`.
 
+**Moving code between js files** — the game files share one global scope
+([architecture.md](architecture.md#shared-global-scope)); during the split, follow
+[split-plan.md](split-plan.md)'s SEP to the letter, and after it these rules stand for any move.
+Move whole sections **verbatim** — no renames, no reformatting, no "while I'm here" fixes
+(intentional dead code stays; see Known drift). Cut banner-boundary to banner-boundary, re-located
+fresh with `grep -n "// ------" js/*.js`, never by remembered line numbers. Before committing:
+grep all files for duplicate top-level names (a duplicate `function` silently overwrites — the
+split's Gate A command in the plan); scan the moved code's **top-level statements** — every name a
+load-time statement references must live in a file loaded above it in index.html (runtime calls
+may point anywhere); put the new `<script>` tag at the file's layout-table position, never
+reordering existing tags; and update the docs in the same commit — the architecture.md file
+table, the gamejs-map.md File column, index.html's comment. Then the full browser pass off both
+the served URL and `file://`. Use a CRLF-preserving editor (the repo is CRLF; `sed -i` mangles it
+here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragile grids.
+
 ## Known drift
 
 - [README.md](../../README.md) is a storefront page (hero + mechanic shots in `docs/media/`), not a

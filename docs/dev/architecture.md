@@ -19,7 +19,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
-| [js/game.js](../../js/game.js) | ~12600 | `DBG` + shared scope | everything else — worldgen, sim, render, UI — as flat top-level code |
+| [js/core.js](../../js/core.js) | ~450 | shared scope, no `window.*` export | the base layer: tuning constants, the seeded rng, `state`/`settings`, the fx/economy helpers |
+| [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
+| [js/game.js](../../js/game.js) | ~11900 | `DBG` + shared scope | everything else — worldgen, sim, render, UI — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -111,7 +113,7 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~12600 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+~11900 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
 only by `// ------ name` banners — worldgen, sim, render and UI in one scope. **Keep every
 banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
 grepping blind.
@@ -123,7 +125,8 @@ for the current API — it is deliberately the whole external surface, and
 
 ## State
 
-All game state lives in module-scope singletons inside game.js:
+All game state lives in top-level singletons shared across the game files — `state` and
+`settings` in core.js, the rest still in game.js:
 
 - **`state`** — the match: tick, day/time, darkness, mode, overlays (`state.draft`, `state.msg`).
 - **`settings`** — the player's dials, persisted **under the profile** (`PROFILE.putSettings`).

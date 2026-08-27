@@ -37,6 +37,11 @@
      is opened straight off the disk. Must load before audio.js. -->
 <script src="js/sfxdata.js"></script>
 <script src="js/audio.js"></script>
+<!-- The game code: flat classic scripts sharing one global scope (split in progress,
+     docs/dev/split-plan.md). A file may reference names from any file at runtime, but its
+     top-level (load-time) statements may only reference names from files loaded above it. -->
+<script src="js/core.js"></script>
+<script src="js/canvas.js"></script>
 <script src="js/game.js"></script>
 </body>
 </html>

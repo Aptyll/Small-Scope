@@ -59,7 +59,7 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
 `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is ~12600 lines of flat top-level code organized only by `// ------ name` banners.
+`game.js` is ~11900 lines of flat top-level code organized only by `// ------ name` banners.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).

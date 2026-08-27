@@ -8,7 +8,7 @@ the same commit as the work.
 ## Status
 
 - [x] Commit 1 — de-IIFE game.js in place
-- [ ] Commit 2 — js/core.js + js/canvas.js
+- [x] Commit 2 — js/core.js + js/canvas.js
 - [ ] Commit 3 — js/player.js + js/input.js
 - [ ] Commit 4 — js/world.js + js/nav.js
 - [ ] Commit 5 — js/wildlife.js + js/structures.js
@@ -276,6 +276,13 @@ The mechanism-proving commit: every binding becomes global, nothing moves.
     layout `let` declarations (~443–471) in the original, and today's code only works because that
     call doesn't touch them. Verbatim order preserves this; do not "tidy" declaration order.
 - gamejs-map.md: add the **File** column now (moved rows `core.js`/`canvas.js`, rest `game.js`).
+- **Errata found executing this commit** (facts, verified against the source): the entity arrays
+  (`animals`…`landmarks`) are NOT in the `state` banner — they sit at the tail of the `players`
+  banner, so they ride to player.js in Commit 3, not core.js. `keys`/`mouse` are the first two
+  declarations of the `input` banner, not the `state` banner — they ride to input.js in Commit 3
+  (their initializers read `VIEW_W`/`VIEW_H` from core.js: legal, loaded above). Neither has any
+  load-time reader, so the load-order rule holds either way. Also `DBG.warp` is `(tx, ty, p)` in
+  tile coords, not `(p, x, y)` as Gate C's spot-check writes it.
 - checklists.md: add a "moving code between js files" checklist mirroring SEP + Gates (strict
   directive; verbatim; Gate A; load-time deps; tag position; doc rows; full gate; never rewrite
   sprites.js).
