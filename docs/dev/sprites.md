@@ -47,8 +47,13 @@ array with the canvas. The game's snow cover reads it to size the mound to the p
 ([rendering.md](rendering.md#snow-over-a-body)) — which means editing a prone grid updates the
 cover for free, and there is no canvas readback anywhere in the feature.
 
-**Team colours are palette swaps of those same grids.** `TEAM_SKINS` (four presets, also exported
-as `SPRITES.teams` so the game code can read the names and marker colours) drives three baked sets:
+**Team colours are palette swaps of those same grids.** `TEAM_SKINS` (two presets, RED and BLUE,
+also exported as `SPRITES.teams` so the game code can read the names and marker colours) drives
+four baked sets — the three below plus `eagleTeam[team]`: the drop eagle's three flap frames with
+the torso band (the rows the head sits in, which hold still across the frames) re-lettered by
+`armorize()` to plate/helm chars and baked in team colour, so the armour recolours only pixels
+the bird already has and the silhouette is untouched (`eagleFlash` is the same trick in all
+white, for the downed objective's hit flash):
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to

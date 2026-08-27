@@ -4,15 +4,20 @@
 // order, window.DBG and the requestAnimationFrame loop.
 
 // ------------------------------------------------------------ eagle drop
-// Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle
-// along a seed-fixed line across the world (mode 'drop'). The view zooms out
-// to DROP_ZOOM, a chart in the corner shows the line and the bird, and the
-// rider jumps with Space/Enter/E/click (AI slots jump at their own hashed
-// fraction of the route). A jumper free-falls for FALL_T onto the nearest
-// open tile, which becomes its spawn tile (the bot brain's home); the human's landing snaps the
-// view back to the player's own zoom and runs the HUD slide-in. If the rider never jumps,
-// the end of the line jumps for them. state.drop outlives mode 'drop' - the
-// eagle keeps flying (and dropping bots) until it is off the map.
+// Nobody spawns in a camp: after LOCK IN each TEAM rides its own armoured
+// eagle - RED and BLUE fly the one seed-fixed line in opposite directions,
+// each keeping EAGLE_LANE to its own right so the pass mid-route is a clean
+// fly-by (mode 'drop'). The view zooms out to DROP_ZOOM, a chart in the
+// corner shows the line and both birds, and a rider jumps with
+// Space/Enter/E/click (AI slots jump at their own hashed fraction of the
+// route). A jumper free-falls for FALL_T onto the nearest open tile, which
+// becomes its spawn tile (the bot brain's home); the human's landing snaps
+// the view back to the player's own zoom and runs the HUD slide-in. If the
+// rider never jumps, the end of the line jumps for them. state.drop outlives
+// mode 'drop' - and now the whole match: past the line's end each bird dives
+// into the treeline, blows a crater in the trees, and sits there as its
+// team's OBJECTIVE. Keep your eagle alive: when one falls (hurtEagle /
+// eagleFall) its whole side falls with it.
                             // the ride's framing is DROP_ZOOM (canvas banner): half scale, twice the view
 const EAGLE_SPD = 170;      // px/s along the route
 const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
@@ -20,6 +25,13 @@ const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
 const DROP_ALT = 56;        // screen px between the bird / a faller and its shadow
 const EAGLE_SCALE = 2;      // the bird is high above the ground: drawn at 2x
+const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of the shared line
+const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
+const EAGLE_HP = 320;       // the grounded objective's pool (~arrow damage x25)
+const EAGLE_BODY_R = 17;    // what a rival arrow tests against once the bird is down
+const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
+const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
+const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
 
 // the seed's line: two points on a ring just inside the forest, roughly
 // opposite each other. hash2 only - never rng(), which would reshuffle seeds.
@@ -33,14 +45,35 @@ function makeEagleRoute() {
   return { x0, y0, x1, y1, len, dur: len / EAGLE_SPD, heading: Math.atan2(y1 - y0, x1 - x0) };
 }
 
-function beginDrop() {
-  PROFILE.addGame(); // one match played, counted as the eagle takes off
+// two birds on the one line, flying it opposite ways: team 0 start-to-end,
+// team 1 end-to-start, each shifted EAGLE_LANE along its own right-hand
+// perpendicular so they pass beside each other instead of head-on.
+function makeEagles() {
   const r = makeEagleRoute();
-  state.drop = Object.assign({ t: 0, x: r.x0, y: r.y0, prog: 0, flap: 0 }, r);
+  return [0, 1].map((team) => {
+    const h = team === 0 ? r.heading : r.heading + Math.PI;
+    const rx = -Math.sin(h) * EAGLE_LANE, ry = Math.cos(h) * EAGLE_LANE; // the bird's own right
+    const sx = (team === 0 ? r.x0 : r.x1) + rx, sy = (team === 0 ? r.y0 : r.y1) + ry;
+    const ex = (team === 0 ? r.x1 : r.x0) + rx, ey = (team === 0 ? r.y1 : r.y0) + ry;
+    return {
+      team, heading: h, len: r.len, dur: r.dur,
+      x0: sx, y0: sy, x1: ex, y1: ey, x: sx, y: sy,
+      t: 0, prog: 0, flap: team * 0.4,
+      state: 'fly',                 // fly -> dive -> down (the objective) -> dead
+      diveT: 0, from: null, crash: null,
+      hp: EAGLE_HP, maxHp: EAGLE_HP, flash: 0, boomT: 0, smokeT: 0,
+    };
+  });
+}
+
+function beginDrop() {
+  PROFILE.addGame(); // one match played, counted as the eagles take off
+  state.drop = { eagles: makeEagles() };
   for (const p of players) {
     if (!p.active) continue;
+    const e = state.drop.eagles[p.team];
     p.aboard = true; p.dropT = 0;
-    p.x = r.x0; p.y = r.y0;
+    p.x = e.x0; p.y = e.y0;
     // bots spread along the middle of the line; the human rides to the end unless they jump
     p.dropU = p.control === 'ai' ? 0.12 + 0.76 * hash2(p.id * 31 + 5, 9) : 1;
   }
@@ -63,7 +96,7 @@ function beginDrop() {
 // off the bird: fall straight down from where it is right now
 function dropJump(p) {
   if (!p.aboard || !state.drop) return;
-  const d = state.drop;
+  const d = state.drop.eagles[p.team];
   p.aboard = false;
   p.dropT = FALL_T;
   p.x = d.x; p.y = d.y;
@@ -117,17 +150,13 @@ function landPlayer(p) {
 }
 
 function updateDrop(dt) {
-  const d = state.drop;
-  d.t += dt; d.flap += dt;
-  const dist = EAGLE_SPD * d.t;
-  d.prog = Math.min(1, dist / d.len);
-  d.x = d.x0 + Math.cos(d.heading) * dist;
-  d.y = d.y0 + Math.sin(d.heading) * dist;
+  for (const e of state.drop.eagles) updateEagle(e, dt);
   for (const p of players) {
     if (!p.active) continue;
     if (p.aboard) {
-      p.x = d.x; p.y = d.y;
-      if (d.prog >= p.dropU) dropJump(p); // the end of the line drops the human too
+      const e = state.drop.eagles[p.team];
+      p.x = e.x; p.y = e.y;
+      if (e.prog >= p.dropU) dropJump(p); // the end of the line drops the human too
     } else if (p.dropT > 0) {
       p.dropT -= dt;
       // steer the fall: the input axis drifts the landing point
@@ -139,47 +168,174 @@ function updateDrop(dt) {
       if (p.dropT <= 0) landPlayer(p);
     }
   }
-  // everyone is off and the bird has cleared the map: done
-  if (d.prog >= 1 && dist > d.len + 60 * TILE && !players.some((p) => p.active && inAir(p))) state.drop = null;
 }
 
-// the bird, its rider and every faller, above the world and below the
-// lighting. Shadows sit DROP_ALT below (and a little right of) each body.
+// one bird's whole life: the flight, the dive past the line's end, and the
+// grounded objective it becomes. state.drop never goes null - the wrecks ARE
+// the match now.
+function updateEagle(e, dt) {
+  e.flap += dt;
+  if (e.flash > 0) e.flash -= dt;
+  if (e.boomT > 0) e.boomT -= dt;
+  if (e.state === 'fly') {
+    e.t += dt;
+    const dist = Math.min(EAGLE_SPD * e.t, e.len);
+    e.prog = Math.min(1, dist / e.len);
+    e.x = e.x0 + Math.cos(e.heading) * dist;
+    e.y = e.y0 + Math.sin(e.heading) * dist;
+    if (e.prog >= 1) beginDive(e);
+  } else if (e.state === 'dive') {
+    e.diveT += dt;
+    const u = Math.min(1, e.diveT / EAGLE_DIVE_T);
+    e.x = e.from.x + (e.crash.x - e.from.x) * u;
+    e.y = e.from.y + (e.crash.y - e.from.y) * u;
+    // speed motes stream off the stoop
+    particles.push({
+      x: e.x - Math.cos(e.heading) * rand(14, 26), y: e.y - Math.sin(e.heading) * rand(14, 26),
+      vx: -Math.cos(e.heading) * 30, vy: -Math.sin(e.heading) * 30,
+      life: 0.3, maxLife: 0.3, color: '#f4f7ff', size: 1, grav: 0, alpha: 0.5,
+    });
+    if (u >= 1) eagleCrash(e);
+  } else if (e.state === 'dead') {
+    // the wreck smoulders where the objective was lost
+    e.smokeT -= dt;
+    if (e.smokeT <= 0) {
+      e.smokeT = 0.3;
+      particles.push({
+        x: e.x + rand(-8, 8), y: e.y + rand(-5, 3),
+        vx: rand(-4, 4), vy: -rand(8, 16),
+        life: rand(0.8, 1.4), maxLife: 1.2, color: '#5a627a', size: 2, grav: -8, alpha: 0.4,
+      });
+    }
+  }
+}
+
+// the end of the line: whoever is still aboard is thrown, and the bird tips
+// over into its dive toward the nearest standing forest past the line's end
+function beginDive(e) {
+  for (const p of players) if (p.active && p.aboard && p.team === e.team) dropJump(p);
+  e.state = 'dive';
+  e.from = { x: e.x, y: e.y };
+  e.crash = findCrashPoint(e);
+  e.diveT = 0;
+}
+
+// walk out past the line's end looking for a patch of trees: the first spot
+// whose 5x5 holds a handful of them takes the impact. Pure reads - no rng(),
+// no hash2 - so the same seed buries the same bird in the same trees.
+function findCrashPoint(e) {
+  const hx = Math.cos(e.heading), hy = Math.sin(e.heading);
+  for (let step = 4; step <= 18; step++) {
+    const tx = Math.floor((e.x + hx * step * TILE) / TILE);
+    const ty = Math.floor((e.y + hy * step * TILE) / TILE);
+    if (tx < 4 || ty < 4 || tx >= WORLD - 4 || ty >= WORLD - 4) break;
+    let trees = 0;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const o = inWorld(tx + dx, ty + dy) && objAt(tx + dx, ty + dy);
+      if (o && (o.type === 'tree' || o.type === 'deadTree')) trees++;
+    }
+    if (trees >= 6) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+  }
+  const tx = Math.max(4, Math.min(WORLD - 5, Math.floor((e.x + hx * 8 * TILE) / TILE)));
+  const ty = Math.max(4, Math.min(WORLD - 5, Math.floor((e.y + hy * 8 * TILE) / TILE)));
+  return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+}
+
+// impact: the near trees are blown apart outright, the ring beyond snapped to
+// stumps, and the bird is DOWN - a grounded objective with an hp pool its
+// team keeps alive from here on. The blast pays no gold: a crater full of
+// free fells would warp the economy at minute one.
+function eagleCrash(e) {
+  e.state = 'down';
+  e.x = e.crash.x; e.y = e.crash.y;
+  const ctx0 = Math.floor(e.x / TILE), cty0 = Math.floor(e.y / TILE);
+  const R = Math.ceil(BOOM_STUMP_R);
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+    const tx = ctx0 + dx, ty = cty0 + dy;
+    if (!inWorld(tx, ty) || Math.hypot(dx, dy) > BOOM_STUMP_R) continue;
+    const o = objAt(tx, ty);
+    if (!o || (o.type !== 'tree' && o.type !== 'deadTree')) continue;
+    const ox = tx * TILE + 8, oy = ty * TILE + 8;
+    objects[idx(tx, ty)] = Math.hypot(dx, dy) <= BOOM_R ? null : { type: 'stump', tx, ty, flash: 0, shake: 0 };
+    burst(ox, oy - 8, '#eef4fb', 8, 70, 0.6, true);
+    burst(ox, oy - 8, o.type === 'tree' ? '#2f5c4b' : '#6b5a48', 5, 60, 0.55, true);
+    burst(ox, oy - 6, '#6b5a48', 4, 55, 0.5, true);
+  }
+  eagleBoomFx(e, 1);
+  const near = Math.hypot(player.x - e.x, player.y - e.y);
+  state.shake = Math.max(state.shake, near < 400 ? 9 : near < 1000 ? 5 : 3);
+  SFX.boom();
+  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE IS DOWN', players.find((p) => p.team === e.team));
+}
+
+// the impact language, shared by the landing and the loss (k scales it up):
+// snow thrown high, the team's colours in it, feathers left hanging, and a
+// low dust ring rolling out along the ground under the shockwave rings.
+function eagleBoomFx(e, k) {
+  e.boomT = BOOM_LIFE;
+  burst(e.x, e.y - 6, '#f4f7ff', Math.round(26 * k), 110 * k, 0.7, true);
+  burst(e.x, e.y - 6, TEAMS[e.team].mark, Math.round(14 * k), 90 * k, 0.6);
+  burst(e.x, e.y - 12, '#f6f8ff', Math.round(10 * k), 40, 1.1, true);
+  const n = Math.round(26 * k);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    particles.push({
+      x: e.x + Math.cos(a) * 6, y: e.y - 2 + Math.sin(a) * 4,
+      vx: Math.cos(a) * (70 + rng() * 50) * k, vy: Math.sin(a) * (44 + rng() * 30) * k,
+      life: 0.55, maxLife: 0.55, color: '#dfe7f4', size: 2, grav: 60,
+    });
+  }
+}
+
+// a rival's arrow into the grounded bird (the sim.js arrow loop calls this)
+function hurtEagle(e, dmg, src) {
+  if (e.state !== 'down') return;
+  e.hp -= dmg;
+  e.flash = 0.12;
+  burst(e.x, e.y - 8, '#f6f8ff', 5, 45, 0.5, true);
+  burst(e.x, e.y - 8, TEAMS[e.team].mark, 3, 40, 0.4);
+  if (nearPlayer(e.x, e.y)) SFX.hurt();
+  if (e.hp <= 0) eagleFall(e, src);
+}
+
+// the objective is lost: a blast bigger than the landing, and the whole side
+// falls with its bird - die() and teamInMatch() both read teamEagleDown, so
+// every slot goes down permanent and checkLastStanding ends the match for
+// whoever kept theirs.
+function eagleFall(e, src) {
+  e.state = 'dead';
+  e.smokeT = 0;
+  eagleBoomFx(e, 1.7);
+  const near = Math.hypot(player.x - e.x, player.y - e.y);
+  state.shake = Math.max(state.shake, near < 500 ? 10 : 6);
+  SFX.boom();
+  logEvent('THE ' + TEAMS[e.team].name + ' EAGLE HAS FALLEN', src || players.find((p) => p.team === e.team));
+  for (const p of players) {
+    if (!p.active || p.team !== e.team) continue;
+    if (!p.dead) die(p, null, 'eagle');
+    else if (!p.eliminated) {
+      p.eliminated = true;
+      if (p === player) endMatch('lost');
+    }
+  }
+  checkLastStanding();
+}
+
+// the objective test the death/respawn path asks (player.js): a fallen eagle
+// takes its team out of the match, Keep or no Keep
+function teamEagleDown(team) {
+  const e = state.drop && state.drop.eagles[team];
+  return !!e && e.state === 'dead';
+}
+
+// both birds, the rider and every faller, above the world and below the
+// lighting. Shadows sit `alt` below (and a little right of) each body,
+// converging as a dive comes down.
 function drawDropAir(ex, ey, now) {
   const d = state.drop;
   if (!d) return;
+  for (const e of d.eagles) drawEagle(e, ex, ey, now);
   const S = EAGLE_SCALE;
-  const frames = SPRITES.eagle;
-  const spr = frames[[0, 1, 2, 1][Math.floor(d.flap * 7) % 4]];
-  const w = spr.width * S, h = spr.height * S;
-  const sx = Math.round(d.x - ex), sy = Math.round(d.y - ey);
-  if (sx > -w && sy > -h - DROP_ALT && sx < WV_W + w && sy < WV_H + h) {
-    const bob = Math.round(Math.sin(now * 2.4) * 3);
-    ctx.save();
-    ctx.translate(sx + 10, sy + DROP_ALT);
-    ctx.rotate(d.heading);
-    ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
-    ctx.restore();
-    ctx.save();
-    ctx.translate(sx, sy + bob);
-    ctx.rotate(d.heading);
-    ctx.drawImage(spr, -w / 2, -h / 2, w, h);
-    ctx.restore();
-    // the local rider sits on its back (unrotated, so the face reads)
-    if (player.aboard) {
-      const ps = champSet(player).down[0];
-      ctx.drawImage(ps, sx - 16, sy + bob - 17, 32, 32);
-    }
-    // where a jump right now would land: a pulsing ring under the bird
-    if (player.aboard && state.mode === 'drop') {
-      const ph = (now * 1.2) % 1;
-      ctx.globalAlpha = 0.8 - ph * 0.6;
-      ctx.strokeStyle = '#ffd95c';
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(sx, sy + DROP_ALT, 6 + ph * 12, 0, Math.PI * 2); ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-  }
   // fallers: shrink from the bird's scale to the ground's, shadow growing under them
   for (const p of players) {
     if (!p.active || p.dropT <= 0) continue;
@@ -197,7 +353,102 @@ function drawDropAir(ex, ey, now) {
   }
 }
 
-// the ride's HUD: chart with the line and the bird, the jump prompt and timer
+// one bird in its team's armour, whatever its state. In the air the sprite
+// sits at (x, y) with the shadow `alt` px below it; the dive walks that gap
+// to zero so shadow and bird meet exactly at the crash point.
+function drawEagle(e, ex, ey, now) {
+  const frames = SPRITES.eagleTeam[e.team];
+  const sx = Math.round(e.x - ex), sy = Math.round(e.y - ey);
+  if (e.state === 'fly' || e.state === 'dive') {
+    const u = e.state === 'dive' ? Math.min(1, e.diveT / EAGLE_DIVE_T) : 0;
+    const fall = u * u; // gravity: slow tip-over, hard finish
+    const alt = DROP_ALT * (1 - fall);
+    const S = EAGLE_SCALE - 0.5 * fall;
+    const spr = frames[[0, 1, 2, 1][Math.floor(e.flap * (7 + 6 * u)) % 4]]; // wingbeats quicken into the stoop
+    const w = spr.width * S, h = spr.height * S;
+    if (sx < -w - 40 || sy < -h - DROP_ALT - 40 || sx > WV_W + w + 40 || sy > WV_H + h + 40) return;
+    const bob = e.state === 'fly' ? Math.round(Math.sin(now * 2.4 + e.team * 2.1) * 3) : 0;
+    ctx.save();
+    ctx.translate(sx + Math.round(10 * (1 - fall)), sy + alt);
+    ctx.rotate(e.heading);
+    ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    ctx.save();
+    ctx.translate(sx, sy + bob);
+    ctx.rotate(e.heading);
+    ctx.drawImage(spr, -w / 2, -h / 2, w, h);
+    ctx.restore();
+    // the local rider sits on its own bird's back (unrotated, so the face reads)
+    if (player.aboard && player.team === e.team) {
+      const ps = champSet(player).down[0];
+      ctx.drawImage(ps, sx - 16, sy + bob - 17, 32, 32);
+    }
+    // where a jump right now would land: a pulsing ring under the bird
+    if (player.aboard && player.team === e.team && state.mode === 'drop') {
+      const ph = (now * 1.2) % 1;
+      ctx.globalAlpha = 0.8 - ph * 0.6;
+      ctx.strokeStyle = '#ffd95c';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sx, sy + alt, 6 + ph * 12, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  } else {
+    // grounded: the objective (down) or the scorched silhouette it leaves (dead)
+    const S = 1.5;
+    const spr = frames[2]; // wings folded back
+    const w = spr.width * S, h = spr.height * S;
+    if (sx > -w - 70 && sy > -h - 70 && sx < WV_W + w + 70 && sy < WV_H + h + 70) {
+      if (e.state === 'down') {
+        ctx.save();
+        ctx.translate(sx + 3, sy + 4);
+        ctx.rotate(e.heading);
+        ctx.globalAlpha = 0.8;
+        ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(e.heading);
+        ctx.drawImage(spr, -w / 2, -h / 2, w, h);
+        if (e.flash > 0) {
+          ctx.globalAlpha = Math.min(1, e.flash * 7);
+          ctx.drawImage(SPRITES.eagleFlash, -w / 2, -h / 2, w, h);
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
+        // the pool, in team colour, once the bird has been touched
+        if (e.hp < e.maxHp) {
+          const bw = 30, bx = sx - bw / 2, by = sy - Math.round(h / 2) - 8;
+          ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 1, bw + 2, 5);
+          ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
+          ctx.fillStyle = TEAMS[e.team].mark;
+          ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
+        }
+      } else {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(e.heading);
+        ctx.globalAlpha = 0.55;
+        ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
+    }
+  }
+  // the impact shockwave: two rings racing out over the crater, then gone
+  if (e.boomT > 0) {
+    const q = 1 - e.boomT / BOOM_LIFE;
+    ctx.save();
+    ctx.strokeStyle = '#f4f7ff'; ctx.lineWidth = 2; ctx.globalAlpha = 0.7 * (1 - q);
+    ctx.beginPath(); ctx.arc(sx, sy, 8 + q * 64, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = TEAMS[e.team].mark; ctx.lineWidth = 1; ctx.globalAlpha = 0.5 * (1 - q);
+    ctx.beginPath(); ctx.arc(sx, sy, 4 + q * 42, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// the ride's HUD: chart with the line and both birds, the jump prompt and timer
 function renderDropUI(now) {
   const d = state.drop;
   if (!d || window.DBG.hideUI) return;
@@ -212,22 +463,26 @@ function renderDropUI(now) {
   ctx.fillStyle = '#241a10';
   ctx.fillRect(cx0 - 1, cy0 - 1, cs + 2, cs + 2);
   ctx.drawImage(mapCv, cx0, cy0, cs, cs);
-  const title = "THE EAGLE'S LINE";
+  const title = "THE EAGLES' LINE";
   drawPixelTextOutline(ctx, title, Math.round(cx0 + (cs - pixelTextWidth(title, ts)) / 2), cy0 - 3 - 7 * ts,
     '#ffd95c', '#0f1632', ts);
-  // the line, dashed, the flown part solid
+  // each bird's lane, dashed in its team colour, the flown part solid
   const mx = (x) => cx0 + (x / TILE) * k, my = (y) => cy0 + (y / TILE) * k;
   ctx.save();
-  ctx.lineWidth = 3;                      // dark ink under the line so it reads on parchment and forest alike
+  ctx.lineWidth = 3;                      // dark ink under the lines so they read on parchment and forest alike
   ctx.strokeStyle = 'rgba(36,26,16,0.7)';
-  ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x1), my(d.y1)); ctx.stroke();
+  for (const e of d.eagles) {
+    ctx.beginPath(); ctx.moveTo(mx(e.x0), my(e.y0)); ctx.lineTo(mx(e.x1), my(e.y1)); ctx.stroke();
+  }
   ctx.lineWidth = 1;
-  ctx.setLineDash([3, 2]);
-  ctx.strokeStyle = '#ffd95c';
-  ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x1), my(d.y1)); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle = '#fff3c0';
-  ctx.beginPath(); ctx.moveTo(mx(d.x0), my(d.y0)); ctx.lineTo(mx(d.x), my(d.y)); ctx.stroke();
+  for (const e of d.eagles) {
+    ctx.setLineDash([3, 2]);
+    ctx.strokeStyle = TEAMS[e.team].mark;
+    ctx.beginPath(); ctx.moveTo(mx(e.x0), my(e.y0)); ctx.lineTo(mx(e.x1), my(e.y1)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#fff3c0';
+    ctx.beginPath(); ctx.moveTo(mx(e.x0), my(e.y0)); ctx.lineTo(mx(e.x), my(e.y)); ctx.stroke();
+  }
   ctx.restore();
   // the named places - the whole point of reading the chart on the way in.
   // Names only at full scale; at half scale they would sit on top of each other.
@@ -240,9 +495,11 @@ function renderDropUI(now) {
     drawPixelTextOutline(ctx, L.name, nx, Math.round(ly + 2), '#f4f7ff', '#0f1632');
   }
 
-  // the end of the line: where the bird drops whoever is still aboard
-  ctx.fillStyle = '#241a10'; ctx.fillRect(Math.round(mx(d.x1)) - 2, Math.round(my(d.y1)) - 2, 5, 5);
-  ctx.fillStyle = '#ffd95c'; ctx.fillRect(Math.round(mx(d.x1)) - 1, Math.round(my(d.y1)) - 1, 3, 3);
+  // the ends of the line: where each bird drops whoever is still aboard
+  for (const e of d.eagles) {
+    ctx.fillStyle = '#241a10'; ctx.fillRect(Math.round(mx(e.x1)) - 2, Math.round(my(e.y1)) - 2, 5, 5);
+    ctx.fillStyle = TEAMS[e.team].mark; ctx.fillRect(Math.round(mx(e.x1)) - 1, Math.round(my(e.y1)) - 1, 3, 3);
+  }
   // landed rivals, in team colour
   for (const p of players) {
     if (p === player || !p.active || inAir(p)) continue;
@@ -250,17 +507,21 @@ function renderDropUI(now) {
     ctx.fillStyle = '#241a10'; ctx.fillRect(px - 2, py - 2, 5, 5);
     ctx.fillStyle = TEAMS[p.team].mark; ctx.fillRect(px - 1, py - 1, 3, 3);
   }
-  // the bird: white diamond with a pulsing ring; your landing once you have jumped
-  const bx = Math.round(mx(d.x)), by = Math.round(my(d.y));
-  const ph = (now * 0.9) % 1;
-  ctx.globalAlpha = (1 - ph) * 0.6;
-  ctx.strokeStyle = '#f4f7ff';
-  ctx.beginPath(); ctx.arc(bx, by, 2 + ph * 6, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#241a10';
-  ctx.fillRect(bx - 3, by - 1, 7, 3); ctx.fillRect(bx - 1, by - 3, 3, 7);
-  ctx.fillStyle = '#f4f7ff';
-  ctx.fillRect(bx - 2, by, 5, 1); ctx.fillRect(bx, by - 2, 1, 5);
+  // the birds: team diamonds, yours with a pulsing ring; your landing once you have jumped
+  for (const e of d.eagles) {
+    const bx = Math.round(mx(e.x)), by = Math.round(my(e.y));
+    if (e.team === player.team) {
+      const ph = (now * 0.9) % 1;
+      ctx.globalAlpha = (1 - ph) * 0.6;
+      ctx.strokeStyle = '#f4f7ff';
+      ctx.beginPath(); ctx.arc(bx, by, 2 + ph * 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = '#241a10';
+    ctx.fillRect(bx - 3, by - 1, 7, 3); ctx.fillRect(bx - 1, by - 3, 3, 7);
+    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillRect(bx - 2, by, 5, 1); ctx.fillRect(bx, by - 2, 1, 5);
+  }
   if (!player.aboard) {
     const px = Math.round(mx(player.x)), py = Math.round(my(player.y));
     ctx.fillStyle = '#241a10';
@@ -277,15 +538,16 @@ function renderDropUI(now) {
     ctx.globalAlpha = pulse;
     drawPixelTextOutline(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#ffd95c', '#0f1632', ts);
     ctx.globalAlpha = 1;
-    // time left on the line
-    const left = Math.max(0, d.dur - d.t);
+    // time left on your own bird's line
+    const me = d.eagles[player.team];
+    const left = Math.max(0, me.dur - me.t);
     const bw = 60 * ts, bh = 3 * ts, bxx = cxm - bw / 2, byy = 19 * ts;
     ctx.fillStyle = 'rgba(12,18,42,0.78)';
     ctx.fillRect(bxx - 1, byy - 1, bw + 2, bh + 2);
     ctx.fillStyle = '#3a3448';
     ctx.fillRect(bxx, byy, bw, bh);
     ctx.fillStyle = left < 3 ? '#ff6a5a' : '#f4f7ff';
-    ctx.fillRect(bxx, byy, Math.round(bw * (1 - d.prog)), bh);
+    ctx.fillRect(bxx, byy, Math.round(bw * (1 - me.prog)), bh);
     const t2 = Math.ceil(left) + 'S';
     drawPixelTextOutline(ctx, t2, bxx + bw + 4 * ts, byy - ts, '#cfe0ff', '#0f1632', ts);
     const t3 = 'THE EAGLE DROPS YOU AT THE END OF ITS LINE';
@@ -372,8 +634,13 @@ window.DBG = {
   setNock: (t, p) => { (p || player).nockT = t; },
   // multiplayer slots: every slot, the local one, and the teams table
   players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
-  // the eagle drop: the live flight record, force a jump, or fly the route from scratch
-  get drop() { return state.drop; }, beginDrop, dropJump: (p) => dropJump(p || player), landPlayer, makeEagleRoute, inAir,
+  // the eagle drop: the live flight records, force a jump, or fly the route from scratch
+  get drop() { return state.drop; }, beginDrop, dropJump: (p) => dropJump(p || player), landPlayer, makeEagleRoute, makeEagles, inAir,
+  // the two objectives: read them, chip one, or fell one outright without a siege
+  get eagles() { return state.drop && state.drop.eagles; },
+  hurtEagle: (team, dmg, src) => { const e = state.drop.eagles[team]; hurtEagle(e, dmg == null ? 25 : dmg, src); return e; },
+  eagleFall: (team, src) => eagleFall(state.drop.eagles[team], src),
+  teamEagleDown,
   get player() { return player; },
   get inv() { return player.inv; },
   // the backpack: the item table, the slot array, and add/take/count without

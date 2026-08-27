@@ -1,12 +1,13 @@
 # Player slots, teams and AI
 
-Softfall is a free-for-all. Every combatant — the local human, the AI fills, and eventually a
-network peer — is a `Player` in the module-scope `players` array, and they all run the same code.
-Read this before adding an ability, an input, or anything a player can do to the world.
+Softfall is a two-sided team battle, RED vs BLUE. Every combatant — the local human, the AI
+fills, and eventually a network peer — is a `Player` in the module-scope `players` array, and they
+all run the same code. Read this before adding an ability, an input, or anything a player can do
+to the world.
 
 ## The slot model
 
-`MAX_PLAYER_SLOTS` (6) slots are created once at boot by `initPlayers()`. Each slot is one of:
+`MAX_PLAYER_SLOTS` (10) slots are created once at boot by `initPlayers()`. Each slot is one of:
 
 - `control: 'human'` — driven by keyboard/mouse. Today exactly one slot is human: **slot 0, this
   session's player**. `player` and `inv` point at it (and only at it) for the camera, HUD, cursor,
@@ -125,11 +126,11 @@ slot (default local) the way a pickup would, which is how to stage a level.
 
 ## Teams and colours
 
-Four presets live in `SPRITES.teams` (`TEAM_SKINS` in [js/sprites.js](../../js/sprites.js)):
-**EMBER** (the original red/teal look), **FROST**, **PINE**, **DUSK**. A slot's team is
-`slot % TEAM_COUNT`, so with 6 slots the last two double up with slots 0 and 1 — teammates, not
-rivals. The team table is the only place a team colour is written down; the game code reads it
-back as `TEAMS` for name tags, map markers and death bursts.
+Two presets live in `SPRITES.teams` (`TEAM_SKINS` in [js/sprites.js](../../js/sprites.js)):
+**RED** (the original red/teal look, once called EMBER) and **BLUE** (once FROST). A slot's team
+is `slot % TEAM_COUNT` (2), so the ten slots alternate into five a side. The team table is the
+only place a team colour is written down; the game code reads it back as `TEAMS` for name tags,
+map markers, death bursts and the eagles' armour.
 
 A team colour drives both **characters** and **buildings**:
 
@@ -145,10 +146,10 @@ Structures carry `owner` (slot id) and `team`, set by `placeStruct()`. `ownsStru
 manage wheel, upgrades and demolition; the right-click handler and `cursorInfo()` only offer the
 hammer over a stump (neutral) or your own building.
 
-Six slots over four presets means **teammates share a colour**, so anything that names one player
-in text takes a second axis: `playerTint(p)` returns a per-slot shade of that team's palette
-(`trim`, `hatL`, `trimD`, `hat` by `floor(id / TEAM_COUNT)`). The team colour stays the
-background, the tint is the ink — see the
+Five slots per colour means **teammates share it**, so anything that names one player in text
+takes a second axis: `playerTint(p)` returns a per-slot shade of that team's palette (`trim`,
+`hatL`, `trimD`, `hat` by `floor(id / TEAM_COUNT) % 4` — the fifth teammate reuses the first
+shade). The team colour stays the background, the tint is the ink — see the
 [scoreboard and event feed](rendering.md#scoreboard-and-event-feed).
 
 ## PvP
@@ -171,12 +172,19 @@ team rule, through `hurtRobot` (see [Robots](gameplay.md#robots)). Shooting one 
 its income and spills the gold it was carrying, so a base's economy can be raided without ever
 touching the base; the feed says so, but a worker is never a kill on the scoreboard.
 
+**So is a rival's grounded eagle** — tested right after the robots, same team rule, through
+`hurtEagle` (the `eagle drop` banner in js/boot.js): a rival arrow within `EAGLE_BODY_R` of a
+`down` bird chips its `EAGLE_HP` pool, and at zero `eagleFall` takes the whole owning side out of
+the match (see [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
+[rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it.
+
 `die(p, src, cause)` empties the wallet **and the bag** the same way regardless of what happens
 next: the killer pockets the gold via `gainGold`, an uncredited death spills it, and every carried
 stack always spills, one drop each (the standings rank lifetime `xp`, so they still show what the
-slot earned). What happens next depends on `teamHasLivingKeep(p.team)` — see
-[The Keep](#the-keep) — either a flat, gold-free respawn timer (`p.respawnT`, ticked by
-`updateRespawns`) or, with no Keep, `p.eliminated = true`, today's exact permanent path;
+slot earned). What happens next depends on `teamHasLivingKeep(p.team)` **and**
+`teamEagleDown(p.team)` — see [The Keep](#the-keep) — either a flat, gold-free respawn timer
+(`p.respawnT`, ticked by `updateRespawns`; only with a living Keep *and* a living eagle) or
+`p.eliminated = true`, the permanent path;
 `updatePlayer` just zeroes a dead slot's intents either way. Only the local slot's **elimination**
 takes the full death overlay with it (`endMatch('lost')`); a respawn-pending local death gets the
 lighter `endMatch('respawning')` overlay instead — same `state.mode = 'dead'` machinery (so the
@@ -189,7 +197,9 @@ down. Every death (and every Keep's destruction) runs `checkLastStanding()`, whi
 as a win once no **rival team** is
 left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf` does, so the
 last *team* standing wins: a surviving teammate, or a Keep still waiting to respawn someone into,
-keeps a team in the match even at zero living players. **The match keeps simulating while you are
+keeps a team in the match even at zero living players — **unless its eagle has fallen**:
+`teamInMatch` asks `teamEagleDown(team)` first, and a fallen eagle takes the side out whatever
+else it still holds (`eagleFall` in js/boot.js is what puts every slot down when it happens). **The match keeps simulating while you are
 out** — `update()` runs `updatePlay` in both `play` and `dead` mode; only pause and the settings
 panel stop the world (the map does not). Full detail: [Death is final](gameplay.md#death-is-final).
 
@@ -310,12 +320,13 @@ extend the ladder — a goal that is never dropped is a bot that stands still fo
 
 ## Where players start
 
-Nowhere, until they land: every active slot boards the eagle in `beginDrop()` and gets its
-`spawn` from `landPlayer()` — the nearest open tile to where it jumped (AI slots jump at a hashed
-fraction of the line, the human where they press Space — drifting with WASD on the way down — or at
-the end of the line). That tile is
-what the bot brain treats as "home". There are no
-spawn pockets, no starter rings, and no guaranteed resources near a landing — reading the
-chart during the ride is the whole point. `ringPts` (six points on a ring `SPAWN_D` tiles from
-the centre) is the old camp ring, kept only because river spokes and the keep-clear rules in
-`genWorld()` are built on it.
+Nowhere, until they land: every active slot boards **its team's** eagle in `beginDrop()` — RED
+and BLUE fly the one line in opposite directions, so the two sides salt themselves along it from
+opposite ends — and gets its `spawn` from `landPlayer()`, the nearest open tile to where it
+jumped (AI slots jump at a hashed fraction of the line, the human where they press Space —
+drifting with WASD on the way down — or at the end of the line). That tile is what the bot brain
+treats as "home". There are no spawn pockets, no starter rings, and no guaranteed resources near
+a landing — reading the chart during the ride is the whole point. `ringPts` (six points on a ring
+`SPAWN_D` tiles from the centre — `RING_N` is frozen at 6, decoupled from the slot count) is the
+old camp ring, kept only because river spokes and the keep-clear rules in `genWorld()` are built
+on it.

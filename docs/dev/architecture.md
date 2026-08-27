@@ -169,7 +169,7 @@ All game state lives in top-level singletons shared across the game files — `s
 
 - **`state`** — the match: tick, day/time, darkness, mode, overlays (`state.draft`, `state.msg`).
 - **`settings`** — the player's dials, persisted **under the profile** (`PROFILE.putSettings`).
-- **`players`** — the six slots. `player` and `inv` are aliases for **the local slot only**
+- **`players`** — the ten slots. `player` and `inv` are aliases for **the local slot only**
   (slot 0) and its gold-only wallet; carried goods are `player.bag`. See
   [multiplayer.md](multiplayer.md#the-slot-model).
 

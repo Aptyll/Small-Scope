@@ -229,6 +229,19 @@ function updatePlay(dt) {
         }
       }
     }
+    if (!dead && state.drop) {
+      // the grounded eagles are the objectives: a rival's arrow chips the
+      // bird's pool the same way it would a unit (friendly shafts pass over)
+      for (const e of state.drop.eagles) {
+        if (e.state !== 'down' || a.team === e.team) continue;
+        if (Math.hypot(e.x - a.x, e.y - 4 - a.y) < EAGLE_BODY_R) {
+          hurtEagle(e, a.dmg, players[a.owner]);
+          if (a.ambush) ambushFx(a.x, a.y);
+          dead = true;
+          break;
+        }
+      }
+    }
     if (!dead) {
       for (const an of animals) {
         if (animalHit(an, a.x, a.y)) {

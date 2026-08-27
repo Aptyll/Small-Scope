@@ -434,6 +434,18 @@ function renderMinimap(now) {
     if (Math.hypot(dx, dy) > MM_R - 2) continue;
     drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[q.team].mark);
   }
+  // the downed eagles: both objectives, always on the disc - keeping yours
+  // alive (and finding theirs) is the match
+  if (state.drop) for (const e of state.drop.eagles) {
+    if (e.state !== 'down') continue;
+    const dx = (e.x / TILE - ptx) * s, dy = (e.y / TILE - pty) * s;
+    if (Math.hypot(dx, dy) > MM_R - 2) continue;
+    const gx = Math.round(MM_CX + dx), gy = Math.round(MM_CY + dy);
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(gx - 3, gy - 1, 7, 3); ctx.fillRect(gx - 1, gy - 3, 3, 7);
+    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillRect(gx - 2, gy, 5, 1); ctx.fillRect(gx, gy - 2, 1, 5);
+  }
   // named places, glyph only - a name would not fit inside the disc (the
   // world map and the arrival toast are where they are read by name)
   for (const L of landmarks) {

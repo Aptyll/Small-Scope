@@ -1002,8 +1002,9 @@ draws all three; `FLAG_JOBS`, in robots.js, holds the 7×7 icon grids as landmar
 
 ## Death is final
 
-...unless your team's [Keep](multiplayer.md#the-keep) is still standing, in which case it's a flat
-respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
+...unless your team's [Keep](multiplayer.md#the-keep) is still standing **and its eagle still
+breathes** (`teamEagleDown`, the eagle-drop banner in js/boot.js — a fallen objective makes every
+death on that side permanent), in which case it's a flat respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
 momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
 `die`): a credited killer pockets the victim's gold outright through `gainGold` — so a kill levels
 the killer, which is the bounty that makes taking the fight worth it — while an uncredited death
@@ -1018,9 +1019,9 @@ is already in the drop draw pass). The standings are unaffected because `scoreOf
 `xp`, not the purse, so a looted slot keeps the place it earned. `die` also credits the kill (and
 heals the killer if their kit carries `killHeal`, off a card) and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then checks
-`teamHasLivingKeep(p.team)`: with one, `p.respawnT` starts counting down (`updateRespawns`, see
-[The Keep](multiplayer.md#the-keep) for the whole respawn path); with none, `p.eliminated = true`,
-today's original permanent path. Either way `checkLastStanding()` asks whether every **rival team**
+`teamHasLivingKeep(p.team)` and `teamEagleDown(p.team)`: with a Keep and a living eagle,
+`p.respawnT` starts counting down (`updateRespawns`, see [The Keep](multiplayer.md#the-keep) for
+the whole respawn path); otherwise `p.eliminated = true`, the permanent path. Either way `checkLastStanding()` asks whether every **rival team**
 is now gone, which ends the match as a win — full detail in
 [The Keep](multiplayer.md#the-keep), since that's now a team-level, not a per-player, question.
 

@@ -2011,24 +2011,18 @@
   ];
 
   // ---------------------------------------------------------------- teams
-  // Four team presets. A team's colour drives its CHARACTERS (coat, hat, trim)
-  // and its BUILDINGS (fittings + glow accent, painted over the tier material)
-  // so a base and its owner read as one side at a glance. game.js reads the
-  // names/markers back out of SPRITES.teams - this table is the only place the
-  // team palette is written down.
+  // Two team presets, RED vs BLUE. A team's colour drives its CHARACTERS
+  // (coat, hat, trim), its BUILDINGS (fittings + glow accent, painted over the
+  // tier material) and its EAGLE's armour, so a side reads as one side at a
+  // glance. The game code reads the names/markers back out of SPRITES.teams -
+  // this table is the only place the team palette is written down.
   const TEAM_SKINS = [
-    { name: 'EMBER', mark: '#df7358', // slot 0 - the original red/teal look
+    { name: 'RED', mark: '#e05548', // slot 0 - the original red/teal look
       coat: '#c9524e', coatL: '#df7358', coatD: '#96393f', hat: '#3e8c81', hatL: '#58ab98',
       trim: '#f6ecd4', trimD: '#d9c5a0', fit: '#5a3340', fitL: '#8c4f52', glow: '#ff9440' },
-    { name: 'FROST', mark: '#6aa8e8',
+    { name: 'BLUE', mark: '#6aa8e8',
       coat: '#3f6fb0', coatL: '#5e93d8', coatD: '#2b4d7d', hat: '#cfe4f2', hatL: '#f4faff',
       trim: '#e8f2fb', trimD: '#bcd0e4', fit: '#2a3a56', fitL: '#4c6a94', glow: '#8fd8ff' },
-    { name: 'PINE', mark: '#6ec27a',
-      coat: '#3f8a55', coatL: '#5fb073', coatD: '#2b6039', hat: '#c9a24e', hatL: '#e8c471',
-      trim: '#eef4e4', trimD: '#c6d0b4', fit: '#2c4434', fitL: '#4e7458', glow: '#9ce87a' },
-    { name: 'DUSK', mark: '#a97fd8',
-      coat: '#6d4a9c', coatL: '#8f68c4', coatD: '#4b3070', hat: '#d8c46a', hatL: '#f2e08f',
-      trim: '#efe6fb', trimD: '#c4b6d8', fit: '#3a2c52', fitL: '#5e4a80', glow: '#d8a8ff' },
   ];
   const teamPlayerPal = (t) => Object.assign({}, PPAL, {
     r: t.coat, R: t.coatL, d: t.coatD, t: t.hat, T: t.hatL, m: t.trim, M: t.trimD,
@@ -2252,6 +2246,18 @@
     '................................',
   ];
 
+  // Team armour as a pure palette swap: the torso band - the rows the head
+  // sits in, which hold still across the flap frames (only the wings move) -
+  // is re-lettered to plate (P/p) and helm (H) and baked in team colour.
+  // Armour only recolours pixels the bird already has, so the silhouette is
+  // untouched and the plating follows the body's contours exactly.
+  const armorize = (grid) => grid.map((row) => row.includes('c')
+    ? row.replace(/w/g, 'P').replace(/W/g, 'p').replace(/c/g, 'H')
+    : row);
+  const eagleTeamPal = (t) => Object.assign({}, EGPAL, { P: t.coatL, p: t.coatD, H: t.mark });
+  // an all-white body for the downed bird's hit flash (it is taller than the
+  // 64x64 drawSpriteFlash scratch, so it gets a baked silhouette instead)
+  const EGFLASH = Object.keys(EGPAL).reduce((o, k) => (o[k] = k === '.' ? null : '#f4f7ff', o), {});
 
   // ---------------------------------------------------------------- wolf
   // The wolf den's pack: a low-slung side-view predator, amber-eyed, in the
@@ -2460,6 +2466,10 @@
     },
     imp: [bake(imp1, IPAL), bake(imp2, IPAL)],
     eagle: [bake(eagleSpread, EGPAL), bake(eagleMid, EGPAL), bake(eagleBack, EGPAL)],
+    // eagleTeam[team] - the same three flap frames in that team's armour
+    eagleTeam: TEAM_SKINS.map((t) => [bake(armorize(eagleSpread), eagleTeamPal(t)),
+      bake(armorize(eagleMid), eagleTeamPal(t)), bake(armorize(eagleBack), eagleTeamPal(t))]),
+    eagleFlash: bake(eagleBack, EGFLASH), // the downed pose, all white, for the hit flash
     eagleShadow: bake(eagleSpread, EGSHADOW),
     wall: [bake(wall, WPAL), bake(wall, WPAL_STONE), bake(wall, WPAL_GOLD)],
     turret: [bake(turret, WPAL), bake(turret, WPAL_STONE), bake(turret, WPAL_GOLD)],

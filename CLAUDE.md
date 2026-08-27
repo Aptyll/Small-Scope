@@ -1,8 +1,9 @@
 # CLAUDE.md
 
-Softfall: a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map. Six
-slots over four teams, dropped in by eagle; a team's Keep is its way back, and last team standing
-wins. **Read [docs/dev/game.md](docs/dev/game.md) before proposing a feature or judging whether
+Softfall: a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map. Ten
+slots over two teams — RED vs BLUE, five a side — each side dropped in by its own armoured eagle,
+which crashes into the treeline and becomes that team's objective; a team's Keep is its way back,
+its downed eagle is its life, and last team standing wins. **Read [docs/dev/game.md](docs/dev/game.md) before proposing a feature or judging whether
 one fits** — that is the design in one page. This file is only the rules.
 
 ## Commands

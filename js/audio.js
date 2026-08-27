@@ -530,6 +530,13 @@
     },
     eat() { if (smp('chew', { vol: 0.65, jitter: 0.1 })) return; tone(300, 0.05, 'triangle', 0.1); tone(260, 0.05, 'triangle', 0.1, 0, 0.07); },
     treeFall() { if (smp('timber', { vol: 0.75, jitter: 0.06 })) return; noise(0.35, 0.35, 400); tone(90, 0.3, 'triangle', 0.14, -30); },
+    // an eagle hitting the treeline: the timber sample dropped low with a
+    // synth blast wave stacked under it (layered on purpose, not a fallback)
+    boom() {
+      smp('timber', { vol: 0.9, rate: 0.55, jitter: 0.04 });
+      noise(0.5, 0.5, 320); noise(0.2, 0.4, 1100);
+      tone(58, 0.5, 'triangle', 0.2, -26); tone(40, 0.75, 'sine', 0.16, -10);
+    },
     nightSting() {
       tone(196, 1.2, 'triangle', 0.09, -20);
       tone(147, 1.4, 'triangle', 0.08, -15, 0.15);

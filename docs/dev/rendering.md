@@ -855,32 +855,59 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 ## Eagle drop (mode `drop`)
 
 Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGame`/`DBG.beginDrop`)
-puts every active slot aboard (`p.aboard`), builds `state.drop` from `makeEagleRoute()` — two
-points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
-`hash2` so the line is the seed's — bakes the chart once (`buildWorldMapImg` into `mapCv`), sets
-mode `drop`, snaps the world zoom to `DROP_ZOOM` around its centre and starts the menu exit. The bird
-flies the line at `EAGLE_SPD` (170 px/s, ~13–15 s); `updateDrop` (called from `updatePlay`, so
-pause stops it) moves it, carries everyone aboard with it, jumps each AI slot at its hashed
-`p.dropU` (0.12–0.88 of the line, scattered ±4 tiles off it) and the human at the end if they
-never pressed Space/Enter/E/click (`dropJump`). A jumper free-falls for `FALL_T` (1.3 s), steering
-with WASD/arrows at `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the
-movement axis alive in mode `drop` while zeroing everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object and no
-water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow burst.
-Only the human's landing changes mode: `play`, `applyZoom(0, true)` back to the player's own zoom centred on the
-landing, `shake`, and the landing intro above. `state.drop` outlives the mode: the eagle keeps
-flying (and dropping bots) until it is 60 tiles past the line's end with nobody in the air.
+puts every active slot aboard **its team's bird** (`p.aboard`) and builds
+`state.drop = { eagles: [red, blue] }` via `makeEagles()`: one base line from `makeEagleRoute()` —
+two points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
+`hash2` so the line is the seed's — flown in **opposite directions**, each bird shifted
+`EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass is a fly-by,
+~5 tiles apart, never a collision. `beginDrop` also bakes the chart once (`buildWorldMapImg` into
+`mapCv`), sets mode `drop`, snaps the world zoom to `DROP_ZOOM` around its centre and starts the
+menu exit. Each bird flies its line at `EAGLE_SPD` (170 px/s, ~13–15 s); `updateDrop` (called from
+`updatePlay`, so pause stops it) runs `updateEagle` per bird, carries everyone aboard with their
+own bird, jumps each AI slot at its hashed `p.dropU` (0.12–0.88 of the line, scattered ±4 tiles
+off it) and the human at the end if they never pressed Space/Enter/E/click (`dropJump`). A jumper
+free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at `DRIFT_SPD` (130 px/s, ~10 tiles
+over the fall) — `sampleHumanInput` keeps the movement axis alive in mode `drop` while zeroing
+everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object
+and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow
+burst. Only the human's landing changes mode: `play`, `applyZoom(0, true)` back to the player's
+own zoom centred on the landing, `shake`, and the landing intro above.
 
-Drawing: `drawDropAir` (above the world, below lighting) draws the `SPRITES.eagleShadow`
-silhouette `DROP_ALT` (56 px) below and 10 px right of the bird, the bird itself (`SPRITES.eagle`
-cycling spread → mid → back → mid, rotated to its heading, at `EAGLE_SCALE` 2× because it is
-high up, bobbing 3 px), the local rider unrotated on its back, a pulsing gold landing ring under
-the bird while the human is still aboard, and every faller shrinking from 2× to 1× along
-`alt = DROP_ALT·(1 − q²)` with a widening shadow. `renderDropUI` (mode `drop` only) draws the
-chart (`mapCv` at 1× when `VIEW_H ≥ 500`, else ½×, so pixels stay even) with the line inked dark
-under a dashed gold line, the flown part solid, the end-of-line marker, the bird as a white
-diamond with a pulsing ring, landed rivals as team pips and your own red diamond once you have
-jumped; top centre the pulsing `SPACE - JUMP` prompt with a draining time-left bar (red under
-3 s) and seconds, or `WASD - DRIFT` while falling. Text scale follows the view (2× when tall).
+**`state.drop` now outlives the whole match** — it never goes null, because the wrecks are the
+objectives. A bird's life is `fly → dive → down → dead` (`e.state`): at the end of its line
+`beginDive` throws any remaining rider, `findCrashPoint` walks 4–18 tiles further along the
+heading for the first spot whose 5×5 holds ≥6 trees (pure reads — no `rng()`, no `hash2` — so a
+seed always buries its birds in the same trees), and the stoop runs `EAGLE_DIVE_T` (1.4 s,
+`u²`-eased, wingbeats quickening, speed motes streaming). `eagleCrash` then clears every tree
+within `BOOM_R` (2.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (3.6) to stumps —
+**paying no gold**, a crater of free fells would warp the economy at minute one — and fires
+`eagleBoomFx` (snow + team-colour bursts, hanging feathers, a radial dust ring, two expanding
+shockwave rings over `BOOM_LIFE`), distance-scaled `state.shake`, `SFX.boom()` (the timber sample
+dropped low under a synth blast, layered on purpose) and a feed headline. The grounded bird is the
+team's **objective**: `EAGLE_HP` (320), chipped by rival arrows through `hurtEagle` (the sim.js
+arrow loop tests `EAGLE_BODY_R` after the robots), and at zero `eagleFall` reruns the boom bigger,
+leaves a scorched smouldering silhouette, and puts the whole owning side down permanently
+(`die(p, null, 'eagle')` / `teamEagleDown`, which `die`, `updateRespawns` and `teamInMatch` all
+gate on — see [multiplayer.md](multiplayer.md#pvp)).
+
+Drawing: `drawDropAir` (above the world, below lighting) runs `drawEagle` per bird — the
+`SPRITES.eagleShadow` silhouette `alt` px below and up to 10 px right of the body (`alt` is
+`DROP_ALT` 56 px in flight, converging to 0 down the dive so shadow and bird meet at the crash
+point), the bird itself in its team's armour (`SPRITES.eagleTeam[team]` cycling spread → mid →
+back → mid, rotated to its heading, at `EAGLE_SCALE` 2× shrinking to 1.4× down the dive, bobbing
+3 px in level flight), the local rider unrotated on its own bird's back, and a pulsing gold
+landing ring under that bird while the human is aboard — then every faller shrinking from 2× to 1×
+along `alt = DROP_ALT·(1 − q²)` with a widening shadow. A `down` bird draws wings-folded
+(frame 2) at 1.5×, flashing via the baked all-white `SPRITES.eagleFlash` when hit (it is taller
+than the 64×64 `drawSpriteFlash` scratch), with a team-colour hp bar above once touched; a `dead`
+one is the shadow silhouette alone under a smoke trickle. `renderDropUI` (mode `drop` only) draws
+the chart (`mapCv` at 1× when `VIEW_H ≥ 500`, else ½×, so pixels stay even) with **both lanes**
+inked dark under dashed team-colour lines, flown parts solid, end-of-line markers and bird
+diamonds in team colour (yours with the pulsing ring), landed rivals as team pips and your own red
+diamond once you have jumped; top centre the pulsing `SPACE - JUMP` prompt with a draining
+time-left bar (red under 3 s) and seconds off **your** bird's clock, or `WASD - DRIFT` while
+falling. Text scale follows the view (2× when tall). Once `down`, both objectives are marked on
+the minimap disc and the M map as the same bird diamond in team colour.
 
 Airborne slots (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
 drops, wildlife scares, `enemyOf`, the y-sorted draws, the minimap and the M map.

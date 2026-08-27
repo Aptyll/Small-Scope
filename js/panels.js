@@ -325,6 +325,18 @@ function renderWorldMap(now) {
     drawPixelTextShadow(ctx, L.name, nx, ly + 3, '#3a2c1c', 'rgba(228,216,186,0.85)');
   }
 
+  // the downed eagles, the two objectives, as the same bird diamond the
+  // flight chart used - team colour on the parchment's dark ink
+  if (state.drop) for (const e of state.drop.eagles) {
+    if (e.state !== 'down') continue;
+    const lx = MAP_X + Math.round((e.x / TILE) * MAP_S);
+    const ly = MAP_Y + Math.round((e.y / TILE) * MAP_S);
+    ctx.fillStyle = '#241a10';
+    ctx.fillRect(lx - 3, ly - 1, 7, 3); ctx.fillRect(lx - 1, ly - 3, 3, 7);
+    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillRect(lx - 2, ly, 5, 1); ctx.fillRect(lx, ly - 2, 1, 5);
+  }
+
   // the other slots, inked in their team colour
   for (const p of players) {
     if (p === player || !p.active || p.dead || inAir(p)) continue;

@@ -9,11 +9,12 @@ anything that must stay stable per tile.
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world. The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
-  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is one point
-  per player slot, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre at
-  the treeline — the old spawn camps. Nobody starts there any more (players land from the eagle,
+  (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is `RING_N`
+  (6) points, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre at
+  the treeline — the old spawn camps. Nobody starts there any more (players land from the eagles,
   see [multiplayer.md](multiplayer.md#where-players-start)) and no pocket is carved, but the river
-  spokes and the keep-clear rules still hang off them, so `MAX_PLAYER_SLOTS` still shapes worldgen.
+  spokes and the keep-clear rules still hang off them — which is exactly why `RING_N` is frozen at
+  six instead of tracking `MAX_PLAYER_SLOTS`: the roster growing to ten must not reshape terrain.
 - `ground` — `Uint8Array(WORLD²)`: `0` snow, `1` ice, `2` open-water hole (runtime-only, see
   [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
   [Momentum movement](gameplay.md#momentum-movement-players-only)), and worldgen carves it as a travel

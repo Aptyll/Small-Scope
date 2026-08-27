@@ -157,10 +157,13 @@ const cx = WORLD / 2, cy = WORLD / 2;
 // treeline). These were the spawn camps before the eagle drop; they still
 // anchor the river spokes and the keep-clear rules so existing seeds keep
 // their terrain. Nobody starts here any more - every slot lands from the eagle.
+// RING_N is frozen at six ON PURPOSE: it stopped tracking the slot count when
+// the roster grew to ten, because player count must never reshape the terrain.
 const SPAWN_D = WORLD / 2 - 55;
+const RING_N = 6;
 const ringPts = [];
-for (let i = 0; i < MAX_PLAYER_SLOTS; i++) {
-  const a = -Math.PI / 2 + (i / MAX_PLAYER_SLOTS) * Math.PI * 2;
+for (let i = 0; i < RING_N; i++) {
+  const a = -Math.PI / 2 + (i / RING_N) * Math.PI * 2;
   ringPts.push({
     tx: Math.round(cx + Math.cos(a) * SPAWN_D),
     ty: Math.round(cy + Math.sin(a) * SPAWN_D),

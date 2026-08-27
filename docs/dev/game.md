@@ -4,16 +4,17 @@ The design in one page: the shape of a match and the handful of ideas every syst
 Read this before proposing a feature or judging whether one fits — the *how* of each pillar is in
 the deep doc it links to. Nothing here is an invariant; [CLAUDE.md](../../CLAUDE.md) carries those.
 
-**Softfall is a browser canvas 2D top-down pixel-art cozy survival free-for-all on a winter map.**
-Cozy and free-for-all at once is the whole tension: the snowfield is quiet, the trees are pretty,
-and five other people are on it.
+**Softfall is a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map.**
+Cozy and a war at once is the whole tension: the snowfield is quiet, the trees are pretty, and
+nine other people are on it.
 
 ## A match
 
-Six slots in `players` — **slot 0 is you, the rest are AI** — across **four teams**, so with six
-slots the last two double up as teammates rather than rivals. Everyone picks one of **two
-champions** (WREN the Ranger, SKADI the Skater) and is **dropped in by eagle**; nobody starts at a
-spawn camp. **Last team standing wins.**
+Ten slots in `players` — **slot 0 is you, the rest are AI** — across **two teams of five, RED vs
+BLUE** (slots alternate). Everyone picks one of **two champions** (WREN the Ranger, SKADI the
+Skater) and is **dropped in by their team's armoured eagle** — the two birds fly the one line in
+opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of its line each
+eagle dives into the treeline and becomes its team's **objective**. **Last team standing wins.**
 
 The world is 232 tiles of 16 px — a 3712×3712 px snowfield with a forest border and an open
 interior threaded by frozen lakes and rivers. See [world.md](world.md#the-tile-world).
@@ -47,6 +48,12 @@ ways, each source with its own yield profile. Every payout levels you as a side 
 
 **Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
 gear page is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
+
+**Your eagle is your life.** The bird that carried the team in crashes into a patch of trees at
+the end of its line and sits there, armoured in team colour, as a grounded hp pool. When it falls,
+its whole side falls with it — the second, symmetric way to win a match, and the reason both teams
+always have somewhere worth walking to. [Eagle drop](rendering.md#eagle-drop-mode-drop),
+[Death is final](gameplay.md#death-is-final).
 
 **A team's Keep is its way back.** No living Keep means **permadeath**, which is what makes a base
 worth defending and worth attacking. The Keep also crafts **rarity-rolled roguelike cards**, drafted

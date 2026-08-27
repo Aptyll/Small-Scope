@@ -10,14 +10,14 @@
 // and eventually a network peer are only different in who fills that struct.
 // Sim code takes a `p` argument; `player` (the local slot) is for the camera,
 // HUD, cursor and audio only.
-const TEAMS = SPRITES.teams; // 4 colour presets, baked into the sprites
+const TEAMS = SPRITES.teams; // the 2 colour presets (RED, BLUE), baked into the sprites
 
 // Player slots. Every combatant in the match - the local human, the AI fills,
 // and (later) network peers - is a Player in `players`, so anything written
 // for "the player" is automatically something every slot can do. Only the
 // camera, HUD and cursor address one specific slot (`player`, the local one).
-const MAX_PLAYER_SLOTS = 6;
-const TEAM_COUNT = 4;      // colour presets; slots past the 4th double up (slot % TEAM_COUNT)
+const MAX_PLAYER_SLOTS = 10; // five a side
+const TEAM_COUNT = 2;      // RED vs BLUE; slots alternate (slot % TEAM_COUNT)
 const PVP = true;          // arrows hit players on another team (friendly fire is off)
 const PLAYER_SPEED = 72;
 const PLAYER_R = 4.5;
@@ -104,9 +104,9 @@ function levelUp(p) {
   if (p === player) SFX.levelUp();
 }
 function champSet(p) { return SPRITES.champ[p.champ][p.team]; }
-// Slots past the fourth double up on a team colour, so text that names one
-// player (the scoreboard, the event log) also needs a per-slot shade of that
-// team's palette - the team colour stays the background, this is the ink.
+// Five slots share each team colour, so text that names one player (the
+// scoreboard, the event log) also needs a per-slot shade of that team's
+// palette - the team colour stays the background, this is the ink.
 function playerTint(p) {
   const t = TEAMS[p.team];
   return [t.trim, t.hatL, t.trimD, t.hat][Math.floor(p.id / TEAM_COUNT) % 4];
@@ -536,7 +536,7 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
 }
 
 // what the log says when nobody gets the credit
-const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID' };
+const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID', eagle: 'FELL WITH THE EAGLE' };
 // ...and what the line says when there IS credit but no arrow: `cause` is
 // read for the verb too, so a worker's axe doesn't get written up as a shot
 const KILL_VERB = { worker: 'CUT DOWN' };
@@ -622,7 +622,9 @@ function die(p, src, cause) {
   }
   logEvent(killer ? killer.name + ' ' + (KILL_VERB[cause] || 'SHOT') + ' ' + p.name
     : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
-  if (teamHasLivingKeep(p.team)) p.respawnT = RESPAWN_TIME;
+  // a Keep is only a way back while the team's eagle still breathes - a side
+  // whose objective has fallen is out, however its slots go down after that
+  if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) p.respawnT = RESPAWN_TIME;
   else p.eliminated = true;
   if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
   else {
@@ -643,7 +645,7 @@ function updateRespawns(dt) {
     // the Keep may have fallen mid-timer - re-check rather than cutting the
     // wait short the instant it dies, so a rival can't get credit for
     // eliminating a team faster than the timer promises
-    if (teamHasLivingKeep(p.team)) respawnPlayer(p);
+    if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) respawnPlayer(p);
     else {
       p.eliminated = true;
       if (p === player) endMatch('lost');
@@ -682,6 +684,7 @@ function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.d
 // OR a living Keep (see teamHasLivingKeep): a wiped team a Keep is still
 // waiting to respawn into hasn't lost either.
 function teamInMatch(team) {
+  if (teamEagleDown(team)) return false; // the objective: a fallen eagle takes its whole side out
   if (teamHasLivingKeep(team)) return true;
   return players.some((q) => q.active && q.team === team && !q.eliminated);
 }
