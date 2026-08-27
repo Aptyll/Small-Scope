@@ -50,6 +50,8 @@ const FLEE_LIFT_T = 1.1;    // s of takeoff: turn away, climb, downdraft
 const FLEE_T = 5.5;         // s total from liftoff to gone (fading over the last stretch)
 const FLEE_SPD = 220;       // px/s once airborne - faster than it arrived, it wants out
 const EAGLE_CINE_T = 3.2;   // s the camera holds the takeoff before the end screens queue
+const RUFFLE_T = 0.45;      // s of the resting idle's wing shuffle (frame 1 only - a full
+                            // spread is the gust telegraph, and the idle must never wear it)
 const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
 const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
@@ -89,6 +91,7 @@ function makeEagles() {
       diveT: 0, from: null, crash: null, restT: 0,
       hp: EAGLE_HP, maxHp: EAGLE_HP, flash: 0, boomT: 0,
       gustCd: 0, windT: 0, hitT: 99,          // the wing gust and the calm-down clock
+      idleT: 3 + team * 2, ruffleT: 0,        // the resting idle: seconds to the next wing shuffle (offset so the birds never sync)
       fleeT: 0, fleeFrom: 0, fleeTo: 0,       // the driven-off takeoff
     };
   });
@@ -261,6 +264,22 @@ function updateEagle(e, dt) {
         vx: rand(-3, 3), vy: -rand(6, 12),
         life: 0.7, maxLife: 0.7, color: '#f6f8ff', size: 1, grav: -4, alpha: 0.6,
       });
+    }
+    // the resting idle: every few seconds the bird shuffles its wings and a
+    // little snow settles off them - alive between scares, never mistakable
+    // for the gust telegraph (drawEagle keeps the shuffle off the spread frame)
+    if (e.ruffleT > 0) e.ruffleT -= dt;
+    else if (e.restT > EAGLE_SETTLE_T && e.windT <= 0) {
+      e.idleT -= dt;
+      if (e.idleT <= 0) {
+        e.idleT = rand(3.5, 7);
+        e.ruffleT = RUFFLE_T;
+        for (let i = 0; i < 3; i++) particles.push({
+          x: e.x + rand(-14, 14), y: e.y + rand(-9, 3),
+          vx: rand(-8, 8), vy: rand(4, 14),
+          life: 0.5, maxLife: 0.5, color: '#eef4fb', size: 1, grav: 40, alpha: 0.7,
+        });
+      }
     }
     // the wing gust, once it has finished settling in
     if (e.windT > 0) {
@@ -595,14 +614,17 @@ function drawEagle(e, ex, ey, now) {
     // wings thrown back open (frame 0) are the gust's telegraph.
     const S = EAGLE_REST_SCALE;
     const winding = e.windT > 0;
+    // the idle's wing shuffle rides the MID frame only, in the middle beats
+    // of RUFFLE_T (fold - shuffle - fold): the full spread stays the gust's
+    const ruffling = !winding && e.ruffleT > RUFFLE_T * 0.25 && e.ruffleT < RUFFLE_T * 0.75;
     const fi = e.restT < EAGLE_SETTLE_T
-      ? Math.min(2, Math.floor(e.restT / EAGLE_SETTLE_T * 3)) : (winding ? 0 : 2);
+      ? Math.min(2, Math.floor(e.restT / EAGLE_SETTLE_T * 3)) : (winding ? 0 : (ruffling ? 1 : 2));
     const spr = frames[fi];
     const w = spr.width * S, h = spr.height * S;
     if (sx > -w - 70 && sy > -h - 70 && sx < WV_W + w + 70 && sy < WV_H + h + 70) {
       // no cast shadow at rest: the bird is ON the ground, and a dark copy
       // under it read as a second bird
-      const breath = winding ? -2 : (e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0);
+      const breath = winding ? -2 : (ruffling ? -1 : (e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0));
       ctx.save();
       ctx.translate(sx, sy + breath);
       ctx.rotate(e.heading);

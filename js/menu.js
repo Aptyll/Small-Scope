@@ -14,9 +14,10 @@ const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'TUTORIAL', 'SETTINGS'];
 const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
 const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
 const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-const PATCH_TXT = 'PATCH 1.78'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.79'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.79', 'A ROOSTING EAGLE IDLES NOW - EVERY FEW SECONDS IT SHUFFLES ITS WINGS AND SHAKES A LITTLE SNOW LOOSE BETWEEN BREATHS.'],
   ['1.78', 'THE DRIVEN-OFF CEREMONY - WHEN AN EAGLE BREAKS, EVERY CAMERA PANS OVER TO WATCH IT FLY AWAY, AND ONLY THEN DO THE VICTORY AND DEFEAT SCREENS RISE.'],
   ['1.77', 'THE EAGLE FIGHTS BACK AND IS DRIVEN OFF, NOT KILLED - A WING GUST THROWS ANYONE CROWDING IT, IT CALMS BACK DOWN BETWEEN SCARES, AND AT ZERO NERVE IT FLIES AWAY AND TAKES ITS TEAM WITH IT.'],
   ['1.76', 'ARROWS NOW DAMAGE A ROOSTING EAGLE ANYWHERE ON ITS HITBOX - THE CORNERS OF THE ROOST USED TO SWALLOW THE SHOT WITHOUT A SCRATCH.'],
