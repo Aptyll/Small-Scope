@@ -459,14 +459,9 @@ function drawEagle(e, ex, ey, now) {
     const w = spr.width * S, h = spr.height * S;
     if (sx > -w - 70 && sy > -h - 70 && sx < WV_W + w + 70 && sy < WV_H + h + 70) {
       if (e.state === 'down') {
+        // no cast shadow at rest: the bird is ON the ground, and a dark copy
+        // under it read as a second bird (the 'dead' scorch still uses one)
         const breath = e.restT >= EAGLE_SETTLE_T ? Math.round(Math.sin(now * 1.5 + e.team * 2.1)) : 0;
-        ctx.save();
-        ctx.translate(sx + 3, sy + 4);
-        ctx.rotate(e.heading);
-        ctx.globalAlpha = 0.8;
-        ctx.drawImage(SPRITES.eagleShadow, -w / 2, -h / 2, w, h);
-        ctx.restore();
-        ctx.globalAlpha = 1;
         ctx.save();
         ctx.translate(sx, sy + breath);
         ctx.rotate(e.heading);

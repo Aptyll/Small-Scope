@@ -14,9 +14,10 @@ const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'TUTORIAL', 'SETTINGS'];
 const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
 const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
 const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-const PATCH_TXT = 'PATCH 1.74'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.75'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.75', 'A ROOSTING EAGLE NO LONGER CASTS A SHADOW - THE BIRD IS ON THE GROUND, AND THE DARK COPY UNDER IT READ AS A SECOND BIRD.'],
   ['1.74', 'THE EAGLES ARE BIGGER, CARRY THEIR WHOLE TEAM ON THEIR WINGS, AND ROOST SOLID AFTER THE DIVE - HEALTH BAR UP, STRIKEABLE WITH ARROWS OR E.'],
   ['1.73', 'RED VERSUS BLUE, FIVE A SIDE - EACH TEAM RIDES ITS OWN ARMOURED EAGLE, WHICH DIVES INTO THE TREELINE AT THE END OF ITS LINE AND MUST BE KEPT ALIVE.'],
   ['1.72', 'HOUSEKEEPING ONLY - THE WORKER BOTS AND THEIR FLAG MOVED INTO A FILE OF THEIR OWN, AND NO FILE THAT DECIDES ANYTHING DRAWS ANYTHING ANY MORE.'],

@@ -909,8 +909,9 @@ under the human's own bird while they are aboard — then every faller: a `sin` 
 over the first quarter of the fall, then the shrink from `RIDER_SCALE` to 1× along
 `alt = DROP_ALT·(1 − q²)` with a widening shadow. The faller cull is against `WV_*`, the world
 pass rule — it was `VIEW_*` once, which is exactly why fallers in the far half of the zoomed-out
-frame used to vanish mid-air. A `down` bird folds its wings over `EAGLE_SETTLE_T` (the three
-frames as a settle animation) and then **rests**, breathing a ±1 px bob, flashing via the baked
+frame used to vanish mid-air. A `down` bird casts **no shadow** — it is on the ground, and a dark
+copy under it read as a second bird — and folds its wings over `EAGLE_SETTLE_T` (the three
+frames as a settle animation), then **rests**, breathing a ±1 px bob, flashing via the baked
 all-white `SPRITES.eagleFlash` when hit (it is taller than the 64×64 `drawSpriteFlash` scratch),
 with its team-colour hp bar up **from the moment it roosts** — the bar is the objective's
 introduction, anchored to the bird's rotated extent; a `dead` one is the shadow silhouette alone
