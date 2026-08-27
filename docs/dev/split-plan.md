@@ -9,7 +9,7 @@ the same commit as the work.
 
 - [x] Commit 1 — de-IIFE game.js in place
 - [x] Commit 2 — js/core.js + js/canvas.js
-- [ ] Commit 3 — js/player.js + js/input.js
+- [x] Commit 3 — js/player.js + js/input.js
 - [ ] Commit 4 — js/world.js + js/nav.js
 - [ ] Commit 5 — js/wildlife.js + js/structures.js
 - [ ] Commit 6 — js/actions.js + js/ai.js + js/sim.js
@@ -305,6 +305,12 @@ The mechanism-proving commit: every binding becomes global, nothing moves.
   (`keys`/`mouse` themselves live in the state banner → core.js). Listeners only call into other
   files at event time (runtime) → registering at load is unchanged behavior.
 - gamejs-map.md: damage & death becomes a player.js row, noted "was under radial wheel".
+- **Errata found executing this commit**: one load-time statement not on the list — the
+  `for (const r of CARD_RARITIES) CARD_TYPE_RARITY[cardKey(r)] = r;` loop in the players banner
+  (same-file references only, so F6-safe). The input banner registers **eleven** listeners, not
+  ten (keydown, keyup, blur, canvas mousemove/mouseleave, document mouseleave, mousedown,
+  mouseup, contextmenu, auxclick, wheel). The players banner also declares `ARROW_PX` alongside
+  the entity arrays, and `players`/`player`/`inv` themselves.
 - **Noah verifies**: start a match and touch every input once — WASD, mouse aim + fire, wheel
   zoom, E on a tree and a rock, space dodge, roll into an enemy, TAB scoreboard, F3, bag
   click-and-drag, `.` overlay. Then get killed on purpose: death screen appears, respawn timer

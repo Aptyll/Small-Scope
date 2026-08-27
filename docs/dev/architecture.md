@@ -21,7 +21,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
 | [js/core.js](../../js/core.js) | ~450 | shared scope, no `window.*` export | the base layer: tuning constants, the seeded rng, `state`/`settings`, the fx/economy helpers |
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
-| [js/game.js](../../js/game.js) | ~11900 | `DBG` + shared scope | everything else — worldgen, sim, render, UI — as flat top-level code |
+| [js/player.js](../../js/player.js) | ~720 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
+| [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
+| [js/game.js](../../js/game.js) | ~11000 | `DBG` + shared scope | everything else — worldgen, sim, render, UI — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -126,7 +128,7 @@ for the current API — it is deliberately the whole external surface, and
 ## State
 
 All game state lives in top-level singletons shared across the game files — `state` and
-`settings` in core.js, the rest still in game.js:
+`settings` in core.js, `players`/`player`/`inv` and the entity arrays in player.js:
 
 - **`state`** — the match: tick, day/time, darkness, mode, overlays (`state.draft`, `state.msg`).
 - **`settings`** — the player's dials, persisted **under the profile** (`PROFILE.putSettings`).

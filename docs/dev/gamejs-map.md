@@ -4,8 +4,8 @@
 > files, one or two per commit. **The File column says where each banner lives NOW**; a row
 > with no note in that cell lives entirely in the named file.
 
-The game code is ~12600 lines of flat top-level code — core.js and canvas.js so far, the
-rest still [js/game.js](../../js/game.js) (~11900 lines) — with no internal module boundaries, organized
+The game code is ~12600 lines of flat top-level code — core.js, canvas.js, player.js and
+input.js so far, the rest still [js/game.js](../../js/game.js) (~11000 lines) — with no internal module boundaries, organized
 only by banner comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -19,19 +19,19 @@ don't cite line numbers here, they go stale within a session.
 | tuning numbers (yields, reach, momentum caps, draw time) | `YIELD`, `WORK_REACH`, `ICE_MAX`, `BOW_CHARGE` | `constants` | core.js |
 | the prone tuning block (crawl speed, bury time, sight cut, sniff floor, crit) | `PRONE_SPEED`, `PRONE_BURY`, `PRONE_CUT`, `PRONE_SNIFF`, `AMBUSH_MUL` | `constants` | core.js |
 | what a roll hits for, how long it stuns, and when a wall becomes a tackle | `ROLL_HIT_R`, `ROLL_FAST`, `ROLL_DMG`, `ROLL_STUN`, `TACKLE_STUN`, `TACKLE_SELF`, `TACKLE_MIN` | `constants` | core.js |
-| resolution, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` (`relayout`: `state`  still the resize pair) | canvas.js (`relayout`: core.js) |
+| resolution, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` (`relayout`: `state` — still the resize pair) | canvas.js (`relayout`: core.js) |
 | world zoom: the pixel-exact rung, the eased scale, the world view, the two coordinate bridges | `ZOOM_*`, `kWant`/`kMin`/`kMax`/`zoomWantOf`, `zoomCur`, `WV_W`/`WV_H`, `sizeWorldView`, `wToSX`/`wToSY`, `mouseWX`/`mouseWY` | `canvas` | canvas.js |
 | the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` | game.js |
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | assigned by `relayout()` (core.js) on every resize | `canvas` | canvas.js |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` (`hash2`/`vnoise`: `ground prerender`; `treeRare`: `world`) | core.js (the rest: game.js) |
-| the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` (`players`/`player` + the entity arrays: `players`) | core.js (`players` banner: game.js) |
-| slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` | game.js |
-| the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` | game.js |
-| the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` | game.js |
-| ability ranks and skill points | `AB_RANK_MAX`, `AB_SKILL`, `abCanBuy`, `buySkill` | `players` › `gear` | game.js |
-| roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` | game.js |
-| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding` | `radial wheel > damage & death` | game.js |
-| how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` | game.js |
+| the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` (`players`/`player` + the entity arrays: `players`) | core.js (`players`/`player` + the arrays: player.js) |
+| slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` | player.js |
+| the item table and the backpack model: count, room, add, take | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake` | `players` › `inventory` | player.js |
+| the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` | player.js |
+| ability ranks and skill points | `AB_RANK_MAX`, `AB_SKILL`, `abCanBuy`, `buySkill` | `players` › `gear` | player.js |
+| roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` | player.js |
+| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding` | `damage & death` (was under `radial wheel`) | player.js |
+| how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` | player.js |
 | the backpack + gear widget (bottom-right): its frame, the icon row, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag` | `UI` › `backpack and gear` | game.js |
 | the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` | game.js |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` | game.js |
@@ -40,7 +40,7 @@ don't cite line numbers here, they go stale within a session.
 | the F3 readout: fps, coords, seed | `drawTags` | `render` | game.js |
 | the `.` overlay: hitboxes, the model centre column, and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `hbMid`, `HB_*` | `debug overlays` | game.js |
 | the `.` overlay's routes: waypoints + goal tile, a bird's perch line, a fish's heading arrow | `drawNavPaths`, `hbArrow` | `debug overlays` | game.js |
-| key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` | game.js |
+| key/mouse handlers, the zoom wheel | the `addEventListener` block, `sampleHumanInput` | `input` | input.js |
 | worldgen, rivers, forest border | `genWorld`, `carveRiver`, `borderDepth` | `world` | game.js |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround` | `ground prerender` | game.js |
 | floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` | core.js |
@@ -97,7 +97,7 @@ don't cite line numbers here, they go stale within a session.
 | the three sound dials, the speaker that mutes them, the grey-when-muted fill | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow` | `settings menu (ESC)` | game.js |
 | the songs, the sampled one-shots, the dials behind them | `SFX.music`, `TRACKS`, `SAMPLES`, `smp`, `trim`, `setAmbience` | [js/audio.js](../../js/audio.js) | audio.js |
 | the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` | game.js |
-| the death/respawn overlay, spectating, back to the lobby, who the camera frames, what an ending freezes, the planks every ending shares | `endMatch`, `endSnapshot`, `DEAD_ITEMS`, `deadItems`, `endScreen`, `viewPlayer`, `specNext`, `toLobby`, `openDefeat`, `renderDead`, `deadLayout`, `deadReady`, `endSkip`, `drawEndPlanks` | `death & spectate` (`endMatch`/`endSnapshot`: `radial wheel > damage & death`) | game.js |
+| the death/respawn overlay, spectating, back to the lobby, who the camera frames, what an ending freezes, the planks every ending shares | `endMatch`, `endSnapshot`, `DEAD_ITEMS`, `deadItems`, `endScreen`, `viewPlayer`, `specNext`, `toLobby`, `openDefeat`, `renderDead`, `deadLayout`, `deadReady`, `endSkip`, `drawEndPlanks` | `death & spectate` (`endMatch`/`endSnapshot`: `damage & death`, player.js) | game.js |
 | the victory screen: its timeline, its sound cues, its art, and the passes both endings share | `WIN_T`, `winLayout`, `winCues`, `tallyCues`, `renderVictory`, `stampGrid`, `drawWinAurora`, `drawWinRays`, `drawWinMotes`, `drawWinBanner`, `drawBrazierIron`, `drawWinBrazier`, `drawWinDais`, `drawEndStatPlate`, `drawEndTally`, `drawEndGear` | `victory` | game.js |
 | the defeat screen: the loss's own summary, on the same anchors | `DEF_T`, `DEF_STATS`, `defCues`, `renderDefeat`, `drawBlizzard`, `drawDefeatDrift`, `drawDeadBrazier` | `defeat` | game.js |
 | the eagle ride, jumping, free fall, landing, the drop chart, the zoomed-out view | `makeEagleRoute`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `drawDropAir`, `renderDropUI` | `eagle drop` | game.js |
