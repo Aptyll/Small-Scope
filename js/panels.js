@@ -257,26 +257,8 @@ function buildWorldMapImg() {
       const o = structOf(objects[i]); // resolves a multi-tile building's 'part' fillers to the anchor
       const h = hash2(tx * 7 + 13, ty * 11 + 5);
       let r, g, b;
-      if (o && o.type === 'tree') {
-        const up = ty > 0 ? objects[i - WORLD] : o;
-        if (!up || up.type !== 'tree') { r = 116; g = 144; b = 104; } // lit canopy rim
-        else if (h > 0.86) { r = 44; g = 66; b = 50; }                // deep shade
-        else if (h > 0.45) { r = 60; g = 88; b = 64; }
-        else { r = 74; g = 102; b = 74; }
-      }
-      else if (o && o.type === 'deadTree') { r = 150; g = 132; b = 108; }
-      else if (o && o.type === 'den') { r = 86; g = 80; b = 92; }
-      else if (o && o.type === 'rock') { r = 104; g = 108; b = 118; }
-      else if (o && o.type === 'bush') {
-        if (o.berries > 0) { r = 170; g = 72; b = 80; } else { r = 118; g = 128; b = 98; }
-      }
-      else if (o && o.type === 'stump') { r = 172; g = 138; b = 92; }
-      else if (o && o.type === 'wall') { r = 112; g = 78; b = 46; }
-      else if (o && o.type === 'turret') { r = 150; g = 96; b = 70; }
-      else if (o && o.type === 'generator') { r = 96; g = 130; b = 150; }
-      else if (o && o.type === 'spawner') { r = 128; g = 104; b = 160; }
-      else if (o && o.type === 'net') { r = 118; g = 156; b = 176; }
-      else if (o && o.type === 'keep') { r = 196; g = 70; b = 70; }
+      const c = o && objMapColor(o, 'map', i, h);
+      if (c) { r = c[0]; g = c[1]; b = c[2]; }
       else if (ground[i] === 2) { r = 44; g = 74; b = 104; } // carved water hole
       else if (ground[i] === 1) {
         // inked pond with darker shoreline

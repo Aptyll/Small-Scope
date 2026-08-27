@@ -1,7 +1,8 @@
 'use strict';
-// Every combatant in the match: the Player class and its slots, champions and
-// kits, gear, cards, the input struct, contested orders, the entity arrays -
-// and the damage & death lifecycle those slots live and die by.
+// Every combatant in the match: the numbers a slot is made of, the Player
+// class and its slots, champions and kits, gear, cards, the input struct,
+// contested orders, the entity arrays - and the damage & death lifecycle
+// those slots live and die by.
 // ------------------------------------------------------------ players
 // Every slot in the match is a Player. They all carry identical state and are
 // all driven from the same `input` struct, so a feature written for "the
@@ -10,6 +11,49 @@
 // Sim code takes a `p` argument; `player` (the local slot) is for the camera,
 // HUD, cursor and audio only.
 const TEAMS = SPRITES.teams; // 4 colour presets, baked into the sprites
+
+// Player slots. Every combatant in the match - the local human, the AI fills,
+// and (later) network peers - is a Player in `players`, so anything written
+// for "the player" is automatically something every slot can do. Only the
+// camera, HUD and cursor address one specific slot (`player`, the local one).
+const MAX_PLAYER_SLOTS = 6;
+const TEAM_COUNT = 4;      // colour presets; slots past the 4th double up (slot % TEAM_COUNT)
+const PVP = true;          // arrows hit players on another team (friendly fire is off)
+const PLAYER_SPEED = 72;
+const PLAYER_R = 4.5;
+
+// momentum (player-only): input accelerates vx/vy, the surface underfoot sets
+// friction and speed caps. Walking on snow is tuned to feel like the old fixed
+// PLAYER_SPEED; everything faster than that is earned via ice, dodges, or sliding.
+const ICE_MAX = 150;      // ice speed cap (~2x walk); holding a direction pumps toward it
+const SLIDE_MIN = 85;     // shift-slide only engages above this speed...
+const SLIDE_EXIT = 55;    // ...and drops out below this one (hysteresis)
+const TRAIL_MIN = 110;    // sliding faster than this carves the snow trail
+const SNOW_TRAIL_LIFE = 3.5; // snow groove lifetime (ice scratches keep the 9s footprint life)
+const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
+
+// Hero levels (League-style, max 9). XP is lifetime gold earned (gainGold), never spent
+// or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
+// the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
+// every arrow, applied on top of the champion kit.
+const LEVEL_MAX = 9;
+const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220];
+const LVL_HP = 6;
+const LVL_DMG = 1;
+
+// The dodge roll as an ability: how long it lasts, how hard it throws you,
+// and how many charges refill how fast. What a roll HITS on the way through
+// is the ROLL_/TACKLE_ block in js/actions.js.
+const DODGE_T = 0.28;     // roll duration (s)
+const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
+const DODGE_CHARGES = 2;
+const DODGE_CD = 3.5;     // seconds to refill one charge
+
+// The two bow numbers a champion kit is expressed against - CHAMPS below
+// reads both at load time, which is why they sit here and the rest of the
+// bow (the quiver, the shafts, the trail) is in js/actions.js.
+const BOW_CHARGE = 0.9;   // seconds to a full draw
+const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
 // ---- champions ----------------------------------------------------------
 // Every slot plays one of these. A champion is a look (SPRITES.champ[c]) plus

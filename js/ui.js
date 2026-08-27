@@ -138,14 +138,13 @@ function drawWorkHint(ox, oy) {
   if (!t || !t.near) return;
   const st = t.o && structOf(t.o);
   const isStruct = !!(st && STRUCTS[st.type]);
-  const tall = t.o && (t.o.type === 'tree' || t.o.type === 'deadTree');
-  const verb = !t.o ? 'CRACK ICE' : isStruct ? 'BREAK' : tall ? 'CHOP' :
-    t.o.type === 'bush' ? 'PICK' : 'MINE';
-  // sit above the sprite: trees reach 8px above their tile, short objects start 6px
-  // below. A building is drawn up from its footprint's bottom edge and can be taller
-  // than its tiles, so clear its own sprite instead of its tile row.
+  const d = t.o && OBJECTS[t.o.type];
+  const verb = !t.o ? 'CRACK ICE' : isStruct ? 'BREAK' : (d && d.verb) || 'MINE';
+  // sit above the sprite: the entry's `lift` is 20 for the two that reach 8px above
+  // their tile and 10 for the short ones. A building is drawn up from its footprint's
+  // bottom edge and can be taller than its tiles, so clear its own sprite instead.
   const lift = isStruct ? structSprite(st).height - structH(st.type) * TILE + 12 :
-    t.o ? (tall ? 20 : 10) : 8;
+    t.o ? ((d && d.lift) || 10) : 8;
   // a multi-tile building takes the prompt on its centre, not the tile you aimed at
   const hx = isStruct ? (st.tx + structW(st.type) / 2) * TILE : t.tx * TILE + 8;
   const hty = isStruct ? st.ty * TILE : t.ty * TILE;
@@ -348,18 +347,8 @@ function updateMinimap() {
     let r, g, b;
     const o = structOf(objects[i]); // resolves a multi-tile building's 'part' fillers to the anchor
     if (o) {
-      if (o.type === 'tree') { r = 52; g = 100; b = 82; }
-      else if (o.type === 'deadTree') { r = 138; g = 128; b = 116; }
-      else if (o.type === 'den') { r = 92; g = 86; b = 100; }
-      else if (o.type === 'rock') { r = 122; g = 131; b = 153; }
-      else if (o.type === 'bush') { r = 88; g = 148; b = 108; }
-      else if (o.type === 'wall') { r = 163; g = 121; b = 79; }
-      else if (o.type === 'turret') { r = 196; g = 120; b = 86; }
-      else if (o.type === 'generator') { r = 120; g = 180; b = 196; }
-      else if (o.type === 'spawner') { r = 170; g = 140; b = 220; }
-      else if (o.type === 'net') { r = 150; g = 186; b = 200; }
-      else if (o.type === 'keep') { r = 224; g = 96; b = 96; }
-      else { r = 188; g = 200; b = 218; } // stump
+      const c = objMapColor(o, 'mm') || MM_UNKNOWN;
+      r = c[0]; g = c[1]; b = c[2];
     } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
     else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
     else { r = 205; g = 216; b = 232; } // snow

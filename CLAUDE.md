@@ -58,6 +58,11 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
 `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
 
+A feature's **tuning constants live in the file that owns the feature**, above the code that reads
+them; `core.js` keeps only the numbers with no one owner. A const is invisible to files that load
+before its own, so anything read at *load time* must be declared no later:
+[architecture](docs/dev/architecture.md#the-game-files-corejs--bootjs).
+
 The game code is organized only by `// ------ name` banners inside its eighteen files.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
@@ -127,7 +132,9 @@ If not, it lives in `docs/dev/*.md` beside the code it protects.
   through `placeStruct`/`destroyStructure` so the registry and lights stay in sync. A building with
   `w`/`h` in `STRUCTS` (the bot bay, 3×2) fills its other tiles with `part` objects pointing at the
   anchor — **read one off a tile with `structOf(objAt(...))`**, create/remove only via
-  `createStruct`/`removeStruct`.
+  `createStruct`/`removeStruct`. **What a type *is* — solid, which tool, the E verb, each map's
+  colour — is its `OBJECTS` entry (scenery) or its `STRUCTS` entry (buildings), never a type name
+  in an `if`;** generic code asks the table: [checklists](docs/dev/checklists.md#common-changes).
 
 ## Keeping the docs current
 

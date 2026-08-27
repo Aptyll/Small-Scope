@@ -9,18 +9,73 @@ function idx(tx, ty) { return ty * WORLD + tx; }
 function inWorld(tx, ty) { return tx >= 0 && ty >= 0 && tx < WORLD && ty < WORLD; }
 function objAt(tx, ty) { return inWorld(tx, ty) ? objects[idx(tx, ty)] : null; }
 
+// Every scenery object that can stand on a tile, and everything generic code
+// needs to know about one without naming its type: whether it blocks a walker,
+// which tool E reaches for (`tool`) and which one a swing must already be
+// holding (`needs`, null = any), the verb the key prompt prints and how far
+// above the tile it sits, and the colour each of the two maps paints it.
+// Buildings are NOT in here - they are STRUCTS entries carrying the same
+// mm/map fields, and every site below asks that table first. Adding a scenery
+// type is one entry here, plus its draw branch in render() and what a swing
+// does to it in hitObject(): checklists.md#common-changes.
+const OBJECTS = {
+  tree:     { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 20,
+              mm: [52, 100, 82],   map: treeMapPx },
+  deadTree: { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 20,
+              mm: [138, 128, 116], map: [150, 132, 108] },
+  rock:     { solid: true,  tool: 'pick', needs: 'pick', verb: 'MINE', lift: 10,
+              mm: [122, 131, 153], map: [104, 108, 118] },
+  // a picked bush is still a bush: `ready` is what decides whether E offers it
+  bush:     { solid: false, tool: 'axe',  needs: null,   verb: 'PICK', lift: 10,
+              ready: (o) => o.berries > 0,
+              mm: [88, 148, 108],  map: (o) => o.berries > 0 ? MAP_BUSH_RIPE : MAP_BUSH_BARE },
+  den:      { solid: true,  mm: [92, 86, 100],   map: [86, 80, 92] },
+  stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
+  // a multi-tile building's filler tiles: solid, and structOf() has resolved
+  // them to their anchor long before either map sees one
+  part:     { solid: true },
+};
+// The two entries whose map colour is not a constant. Both return one of a
+// handful of shared arrays rather than a fresh one: buildWorldMapImg walks
+// every tile in the world on every frame the map is open.
+const MAP_BUSH_RIPE = [170, 72, 80], MAP_BUSH_BARE = [118, 128, 98];
+const MAP_TREE_RIM = [116, 144, 104], MAP_TREE_DEEP = [44, 66, 50],
+      MAP_TREE_MID = [60, 88, 64], MAP_TREE_LIT = [74, 102, 74];
+// a canopy on the parchment: a lit rim wherever the tile above is not another
+// tree, and one of three hash-picked shades of shade under one that is
+function treeMapPx(o, i, h) {
+  const up = i >= WORLD ? objects[i - WORLD] : o;
+  if (!up || up.type !== 'tree') return MAP_TREE_RIM;
+  if (h > 0.86) return MAP_TREE_DEEP;
+  if (h > 0.45) return MAP_TREE_MID;
+  return MAP_TREE_LIT;
+}
+
+// The colour whatever stands on a tile paints on a map: `mm` for the minimap
+// disc, `map` for the parchment world map. One lookup across both tables, so
+// neither map carries a list of type names and a new type is coloured by its
+// own entry alone. null = nothing here has that colour, and the caller paints
+// the ground underneath instead.
+function objMapColor(o, field, i, h) {
+  const d = OBJECTS[o.type] || STRUCTS[o.type];
+  const c = d && d[field];
+  return typeof c === 'function' ? c(o, i, h) : (c || null);
+}
+// what the minimap paints an object whose entry has no `mm` at all
+const MM_UNKNOWN = [188, 200, 218];
+
 function isSolidTile(tx, ty) {
   if (!inWorld(tx, ty)) return true;
   const o = objects[idx(tx, ty)];
   if (!o) return false;
-  // any STRUCTS entry (wall/turret/generator/spawner/keep/...) is solid for
-  // free, plus scenery and a multi-tile building's non-anchor filler tiles -
-  // a future structure type never needs this list touched again. A `water`
-  // building (the fish net) is the exception: it lies flat on the surface and
-  // is walked over, not into.
+  // Two tables, no list: any STRUCTS entry (wall/turret/generator/spawner/
+  // keep/...) is solid for free, and everything else answers from its OBJECTS
+  // entry - so neither a new building nor a new kind of scenery ever needs
+  // this function touched. A `water` building (the fish net) is the one
+  // exception: it lies flat on the surface and is walked over, not into.
   if (STRUCTS[o.type]) return !STRUCTS[o.type].water;
-  return o.type === 'tree' || o.type === 'deadTree' ||
-    o.type === 'rock' || o.type === 'den' || o.type === 'part';
+  const d = OBJECTS[o.type];
+  return !!(d && d.solid);
 }
 
 // the fish net on a tile, if one stands there - the single read that says
@@ -111,6 +166,8 @@ for (let i = 0; i < MAX_PLAYER_SLOTS; i++) {
     ty: Math.round(cy + Math.sin(a) * SPAWN_D),
   });
 }
+
+const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
 
 // depth of the forest boundary at a given tile: smooth irregular inner edge,
 // always solid from the world edge inward (variation eats into the interior)

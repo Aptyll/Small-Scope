@@ -1,9 +1,69 @@
 'use strict';
-// What a player does: click/E/space resolved - tools and harvesting, the roll
-// as a hit, prone, the quiver, and one blow against anything built.
+// What a player does: click/E/space resolved - the tools and what they
+// harvest, the bow's quiver and its spent shafts, the roll as a hit, prone,
+// and one blow against anything built, each with its own tuning above it.
 // ------------------------------------------------------------ actions
 // Every action takes the player performing it, so the local human, an AI fill
 // and a future network peer all reach the world through the same calls.
+
+// the three infinite tools. Not player-selectable: the bow is always in hand
+// and E auto-swaps to the axe / pick for whatever is under the cursor
+const TOOLS = [
+  { key: 'bow',  name: 'BOW',     icon: 'itemBow' },
+  { key: 'axe',  name: 'AXE',     icon: 'itemAxe' },
+  { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
+];
+const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
+const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
+// The quiver: arrows are a resource, not an infinite stream. A shot spends one
+// and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
+// sets its own rhythm); an empty quiver fletches one back every QUIVER_REGEN,
+// and every arrow that ends its flight sticks in the snow to be pulled out
+// again. Fletching alone is the floor - retrieval is how a good shot stays armed.
+const QUIVER_MAX = 6;     // arrows carried
+const QUIVER_REGEN = 2.4; // seconds to fletch one arrow back (only ticks below max)
+const SHAFT_LIFE = 30;    // seconds a spent arrow stays stuck in the snow
+const SHAFT_R = 10;       // px: walk this close to pull one out
+const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
+const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
+const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
+const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
+const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
+const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
+const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
+const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
+const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
+
+// The roll as a weapon. A dash goes *through* anything small - rabbits,
+// wolves, robots, other slots - swiping each of them once per roll and
+// leaving them seeing stars; anything too big to go through (a deer, a tree,
+// a rock, a building) is a tackle instead, which hurts and stuns both sides
+// and ends the roll where it hit. Everything scales off the speed the roll is
+// actually carrying, so a dash launched out of an ice slide lands far harder
+// than one off a standing start - which is the whole reason to chain them.
+const ROLL_HIT_R = 7;      // px of roll body, added to the target's own radius
+const ROLL_FAST = 340;     // px/s the scaling tops out at (a dash off ice)
+const ROLL_DMG = [5, 16];  // damage at the champion's own dodgeSpeed .. ROLL_FAST
+const ROLL_STUN = [0.5, 1.1];    // s the victim is out for, over the same range
+const TACKLE_STUN = [0.35, 0.8]; // ...and what a tackler gives themselves
+const TACKLE_SELF = 0.55;  // share of a tackle's damage the roller eats
+const TACKLE_MIN = 120;    // px/s driven into the blocked axis before a wall is a tackle, not a graze
+const ROLL_KB = 90;        // px/s shove out of a roll hit
+
+// Prone: lie down in the snow, pull it over yourself, and be almost - not
+// quite - invisible. Free, and paid for entirely in speed: the burrow only
+// builds while you are lying perfectly still, and the crawl that carries you
+// anywhere is under a third of a walk. `p.hide` (0..1) is the whole state,
+// and every watcher in the game reads it through seenAt().
+const PRONE_SPEED = 20;   // px/s belly crawl (a walk is PLAYER_SPEED, 72)
+const PRONE_BURY = 1.5;   // s of lying still to go from flat on the snow to under it
+const PRONE_RISE = 0.34;  // s of getting back up: 45% walk speed, and no cover left
+const PRONE_ENTER = 14;   // px/s: above this you are still moving, and cannot drop
+const PRONE_CUT = 0.86;   // fraction full cover takes off every sight range
+const PRONE_MOVE = 0.5;   // ...of which a crawling mound keeps. Hold still to vanish
+const PRONE_SNIFF = 22;   // px: nothing hides at arm's length, whatever it is under
+const PRONE_MAP = 0.55;   // cover past this drops a rival off both maps (a crawler never reaches it)
+const AMBUSH_MUL = 2.5;   // damage on the shot loosed out of full cover
 
 // left click is the bow, always: the press only records the intent
 function clickAction(p) {
@@ -24,9 +84,12 @@ function workTarget(p) {
     // target only for the other team; you take your own down from the wheel instead
     const st = structOf(o);
     if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) t = TOOL_AXE; }
-    else if (o.type === 'tree' || o.type === 'deadTree') t = TOOL_AXE;
-    else if (o.type === 'rock') t = TOOL_PICK;
-    else if (o.type === 'bush' && o.berries > 0) t = TOOL_AXE;
+    else {
+      // scenery answers from its OBJECTS entry: `tool` is what E reaches for,
+      // and `ready` (the bush's berries) is what decides it is worth reaching
+      const d = OBJECTS[o.type];
+      if (d && d.tool && (!d.ready || d.ready(o))) t = d.tool === 'pick' ? TOOL_PICK : TOOL_AXE;
+    }
   } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
   if (t < 0) return null;
   // tile-based, not a radius: only the ring of tiles around the one you stand on
@@ -437,12 +500,12 @@ function hitObject(o, p) {
   p = p || player;
   const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
   const near = nearPlayer(ox, oy); // remote players' work must not spam the mix
-  // hard tool gating: the wrong tool bounces off instead of harvesting
+  // hard tool gating: an object with a `needs` bounces off anything else
   const k = TOOLS[p.tool].key;
-  if (((o.type === 'tree' || o.type === 'deadTree') && k !== 'axe') ||
-      (o.type === 'rock' && k !== 'pick')) {
+  const d = OBJECTS[o.type];
+  if (d && d.needs && k !== d.needs) {
     if (near) SFX.deny();
-    addFloater(ox, oy - 14, o.type === 'rock' ? 'NEEDS PICKAXE' : 'NEEDS AXE', '#9fb6d8');
+    addFloater(ox, oy - 14, d.needs === 'pick' ? 'NEEDS PICKAXE' : 'NEEDS AXE', '#9fb6d8');
     return;
   }
   o.flash = 0.1;

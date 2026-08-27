@@ -100,12 +100,21 @@ that preserve the described structure.
 
 ## Common changes
 
-**Adding an object type** — touch all of: `isSolidTile()` (if it blocks), `hitObject()` (what a
-swing does to it — including which tool is allowed, see the gating block at its top), the flat
-pass or the `draws` y-sort in `render()`, `updateMinimap()`'s colour table,
-`buildWorldMapImg()`'s colour table, `rebuildLights()` if it glows, and `workTarget()` if E
-should work it (that one line also gives it the cursor's lock ring). The two map colour
-tables are the easy ones to forget — a missing entry silently draws as a stump.
+**Adding an object type** — one `OBJECTS` entry in [js/world.js](../../js/world.js) is most of
+it: `solid` (does it block a walker), `tool` (what E reaches for) and `ready` (whether it is worth
+reaching *right now* — the bush's berries), `needs` (the tool a swing must already be holding,
+null = any), `verb` and `lift` (the E key prompt), and `mm`/`map` (the colour each of the two maps
+paints it — an `[r, g, b]`, or a `(o, i, h)` function when it is not a constant, as the tree's
+canopy and the bush's berries are not). `isSolidTile()`, `workTarget()`, `hitObject()`'s tool
+gate, `drawWorkHint()`, `updateMinimap()` and `buildWorldMapImg()` all read that one entry and
+need no edit — none of them names a type any more.
+
+What is still per-type and has to be written by hand: the sprite branch in the flat pass or the
+`draws` y-sort in `render()` (the draw *order* is one ordered function on purpose — see
+[rendering.md](rendering.md)), what a swing actually **does** to it in `hitObject()` (its
+particles, its sounds, what it leaves behind), and `rebuildLights()` if it glows. A **building**
+is not an object type: it is a `STRUCTS` entry in [js/structures.js](../../js/structures.js),
+which carries the same `mm`/`map` pair and gets solidity, both maps and the E prompt for free.
 
 **Adding a carried item** — one `ITEMS` entry (`icon`, `stack`) is the storage half: the bag,
 the drop pickup, the death spill and the refusal tell are all generic over that table. What is
@@ -218,11 +227,11 @@ range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint
 `craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
 cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
 timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
-draw-3 rule, the `YIELD` table (every gold
-payout), `WORK_REACH`, `BOW_CHARGE`, and the
-momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in the constants banner,
-the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
-the slot count (`MAX_PLAYER_SLOTS`) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
+draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js),
+`WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
+momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
+`CHAMPS`, the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
+the slot count (`MAX_PLAYER_SLOTS`, js/player.js) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
 the arrow speed/damage formulas in `fireArrow()`,
 `TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
 `update()`.

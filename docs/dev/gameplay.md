@@ -15,8 +15,9 @@ model, the input struct, teams, bots and how two players' orders are resolved.
 ## Momentum movement (players only)
 
 A player moves on a real velocity (`p.vx/vy`): `p.input.mx/my` accelerates, and the surface
-underfoot sets friction and speed caps. All the tuning constants live in the constants banner
-(`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) and the per-surface rates inline in
+underfoot sets friction and speed caps. All the tuning constants live in the `players` banner of
+[js/player.js](../../js/player.js) (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`, above
+`CHAMPS`, whose kits are written against them) and the per-surface rates inline in
 `updatePlayer()`'s movement block, which every slot runs. **Momentum is deliberately players-only**
 — animals, robots, and knockback still use the old direct-move idiom.
 
@@ -535,7 +536,8 @@ while everything you *carry* lives in `p.bag`, the slot array described in
 [Inventory and the backpack](#inventory-and-the-backpack). (`inv` is an alias for the local
 slot's wallet.) **Gold is the only resource** — there is no wood or stone —
 and berries/fish are consumables (Q/F heals), never spent on anything. The whole economy is the
-`YIELD` table in the constants banner, which gives every source a different **yield profile**
+`YIELD` table in the constants banner of [js/core.js](../../js/core.js) - the one tuning table
+with no single owner - which gives every source a different **yield profile**
 rather than a different resource (the League model: one number, many ways to earn it):
 
 | Source | Pays | Profile |

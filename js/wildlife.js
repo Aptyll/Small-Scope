@@ -1,6 +1,7 @@
 'use strict';
 // Everything wild: prey and the shared animal lifecycle, the fish under the
-// ice, the wolf pack and the rookery's flock.
+// ice and the holes cut down to them, the wolf pack and the rookery's flock -
+// each with its own tuning above it.
 // ------------------------------------------------------------ animals
 // Rabbits and deer are the passive half (updatePrey); wolves and birds are
 // the inhabitants of the two landmarks (updateWolf / updateBird), and go in
@@ -84,6 +85,21 @@ function spawnAnimals() {
 }
 
 // ------------------------------------------------------------ fish
+// ice fishing: the pickaxe opens holes in bare ice, fish swim underneath
+const ICE_HOLE_HITS = 2;   // pickaxe hits to break through
+const HOLE_FALL_DMG = 15;  // falling into open water hurts
+const HOLE_FALL_T = 1.1;   // seconds floundering before climbing back out
+const FISH_CATCH_R = 16;   // bow-fishing: fish must be this close under the player
+const FISH_MARGIN = 6;     // body clearance from snow: soft-steered away, hard-clamped
+// The shoal is a live population, not a nightly reset: it is fished down by
+// spears and nets and refilled by a trickle of new fish swimming in from
+// under the snow - the deep water no hole ever reaches (see spawnEmerger).
+const FISH_MAX = 30;       // cap: the boot shoal, and the ceiling the trickle fills to
+const FISH_MIN = 10;       // floor: below it the trickle runs at FISH_SPAWN_FAST instead
+const FISH_SPAWN_FAST = 4; // ...and while it is under FISH_MIN
+const FISH_EMERGE_SPD = 7; // px/s an unborn fish creeps out from under the shore
+const FISH_EMERGE_MAX = 14; // seconds before an emerger that never found water is dropped
+
 // passive swimmers that live under the frozen water, visible as silhouettes
 // through the ice; the bow spears one when it's right under the player
 // `born` is the whole two-state life of a fish. A born fish is the one the
@@ -422,6 +438,19 @@ function animalDies(a) {
     flushBirds(a.home, a); // the rest of the flock does not stay to watch
   }
 }
+
+// landmark inhabitants (the places themselves are the LANDMARKS table in
+// the landmarks banner). Wolves are the only thing in the world that hunts
+// a player; birds are the only thing that flies.
+const WOLF_SIGHT = 96;     // px a wolf notices a player at (x1.75 at full dark)
+const WOLF_LEASH = 190;    // px from its den a wolf will chase, and no further
+const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a slide
+const WOLF_BITE_R = 13;    // px reach of a bite
+const WOLF_BITE_DMG = 9;
+const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
+const BIRD_FLUSH = 34;     // px: a player this close puts the whole rookery up
+const BIRD_SPD = 112;      // px/s in flight
+const BIRD_ALT = 15;       // px a perched bird sits above its tile; flight climbs past it
 
 // ------------------------------------------------------------ wolves
 // A wolf holds station at its den and wakes when a player comes inside its

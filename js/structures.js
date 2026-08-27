@@ -1,8 +1,70 @@
 'use strict';
-// Everything built: placing/upgrading/wrecking stump structures, the per-type
-// building sim (turrets, generators, bays, nets, keeps), worker bots and the
-// one flag per player that orders them.
+// Everything built: the STRUCTS table every buildable is an entry in,
+// placing/upgrading/wrecking stump structures, the per-type building sim
+// (turrets, generators, bays, nets, keeps), worker bots and the one flag per
+// player that orders them.
 // ------------------------------------------------------------ stump structures
+// Stump-built structures: right-click a stump, pick from the radial wheel.
+// tiers[0] is what the wheel builds; tiers[1]/[2] cost/buildT are the upgrade
+// price and (already shortened) upgrade construction time. `mm` and `map` are
+// the two map colours, the same pair OBJECTS carries for scenery - both maps
+// read whichever of the two tables holds the tile's type, so a new building
+// is coloured by its entry here and nothing else.
+const STRUCTS = {
+  wall: { name: 'WALL', mm: [163, 121, 79], map: [112, 78, 46], tiers: [
+    { cost: { gold: 5 },  hp: 60,  buildT: 4   },
+    { cost: { gold: 12 }, hp: 140, buildT: 2.4 },
+    { cost: { gold: 30 }, hp: 300, buildT: 2.4 },
+  ]},
+  // traverse = rad/s the head swings; aim = seconds held on target before it fires
+  turret: { name: 'TURRET', mm: [196, 120, 86], map: [150, 96, 70], tiers: [
+    { cost: { gold: 10 }, hp: 50,  buildT: 8,   range: 60, dmg: 6,  rate: 1.0,  traverse: 2.2, aim: 0.55 },
+    { cost: { gold: 25 }, hp: 90,  buildT: 4.8, range: 76, dmg: 9,  rate: 0.8,  traverse: 3.0, aim: 0.45 },
+    { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65, traverse: 3.8, aim: 0.35 },
+  ]},
+  generator: { name: 'GENERATOR', mm: [120, 180, 196], map: [96, 130, 150], tiers: [
+    { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 10 },
+    { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 2, period: 10 },
+    { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 4, period: 10 },
+  ]},
+  // the bot bay is the one big build: a single tier on a 3x2 tile footprint
+  // (w/h - see footprint()/findSite()), its three bots rolling out one by one
+  spawner: { name: 'BOT BAY', w: 3, h: 2, mm: [170, 140, 220], map: [128, 104, 160], tiers: [
+    { cost: { gold: 45 }, hp: 220, buildT: 16, bots: 3, botHp: 24 },
+  ]},
+  // The fish net: the one building that goes on water instead of a stump.
+  // `water: true` is the whole difference, and every site reads that flag
+  // rather than the type name - it builds on an open hole (placeStruct),
+  // never freezes over while it stands (the dawn refreeze), and is not solid
+  // (isSolidTile), because walking onto it is how anyone - owner or not -
+  // takes the catch out of it.
+  net: { name: 'FISH NET', water: true, mm: [150, 186, 200], map: [118, 156, 176], tiers: [
+    { cost: { gold: 8 }, hp: 45, buildT: 5 },
+  ]},
+  // the team's Keep: a 2x2 singleton (see teamHasLivingKeep) that a downed
+  // teammate respawns at (see updateRespawns) and that crafts roguelike
+  // cards (see startCraft/updateStructures' keep branch) - "queue card" pays
+  // craftCost and runs craftT, independent of the buildT/upgrade timer.
+  // odds is the rarity table a completed craft rolls against (see CARDS).
+  keep: { name: 'KEEP', w: 2, h: 2, mm: [224, 96, 96], map: [196, 70, 70], tiers: [
+    { cost: { gold: 60 },  hp: 260, buildT: 22, craftCost: 40, craftT: 20,
+      odds: { white: .55, green: .28, blue: .13, purple: .035, gold: .005 } },
+    { cost: { gold: 130 }, hp: 400, buildT: 13, craftCost: 40, craftT: 20,
+      odds: { white: .35, green: .32, blue: .22, purple: .09,  gold: .02  } },
+    { cost: { gold: 220 }, hp: 560, buildT: 13, craftCost: 40, craftT: 20,
+      odds: { white: .18, green: .27, blue: .30, purple: .18,  gold: .07  } },
+  ]},
+};
+const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner', 'keep']; // stump wheel: 5 even wedges
+const WATER_STRUCT_ORDER = ['net']; // open-hole wheel: one wedge, the whole circle
+
+// fish nets: a building laid over an open hole that fishes it on its own
+const NET_CAP = 3;         // fish a net holds before it stops catching
+const NET_R = 9;           // px from the net's centre a fish is caught at
+const NET_LURE = 44;       // ...and px it draws fish gently toward
+const NET_CATCH_T = 2.2;   // seconds between catches, so a net fills visibly
+const NET_TAKE_T = 0.3;    // seconds between fish handed to whoever stands on it
+
 function cumulativeCost(type, tier) {
   const total = {};
   for (let t = 0; t <= tier; t++) {
@@ -181,6 +243,15 @@ const RES_COLORS = {
 function nearPlayer(x, y, r) { return !!player && Math.hypot(player.x - x, player.y - y) < (r || 180); }
 
 // ---- turret gunnery ------------------------------------------------------
+// turret gunnery. The head is NOT baked into the sprite (see js/sprites.js) - it
+// is rasterised at the live angle, pivoting on sprite-local (16, 14).
+const TUR_PIVOT_Y = -4;   // px: the pivot, relative to the anchor tile's top edge
+const TUR_BARREL = 16;    // px from pivot to muzzle
+const TUR_LOCK = 0.14;    // rad: inside this of the mark, the shot starts charging
+const TUR_MZ = 0.09;      // muzzle flash duration
+const BOLT_SPD = 250;     // px/s
+const BOLT_LIFE = 1.1;
+
 // The head pivots above the tile, so every bearing, range and sight line is
 // measured from there rather than from the footprint's centre.
 function turretPivot(o) { return { x: (o.tx + 0.5) * TILE, y: o.ty * TILE + TUR_PIVOT_Y }; }
@@ -707,6 +778,19 @@ function updateRobot(b, dt) {
 }
 
 // ------------------------------------------------------------ worker flags
+// The worker flag: one order marker per player, and everything the workers
+// reading it are allowed to do. See the `worker flags` banner.
+const FLAG_BASE_R = 9;     // tiles: ground this close to an ENEMY building is a march order, not a path
+const FLAG_HARVEST_R = 7;  // tiles a harvest flag spreads outward over once its own tile is cut
+const FLAG_SIEGE_R = 14;   // tiles a siege flag rolls on to the next enemy building inside
+const FLAG_PATH_W = 1;     // corridor half-width in tiles: 1 = a three-tile lane
+const ROBOT_DMG = 5;       // one worker swing, against a unit or a building
+const ROBOT_ATK_CD = 1.1;  // seconds between those swings
+const ROBOT_REACH = 15;    // px from a worker's body to what its axe can reach
+const ROBOT_AGGRO = 70;    // px a worker on any flag notices a foe inside
+const ROBOT_LEASH = 90;    // px a worker on a *defensive* flag will leave its post to swing
+const ROBOT_MAD = 6;       // seconds a struck worker stays angry at whoever hit it
+
 // ONE marker per player, planted with the middle mouse button, that every
 // worker bot that player owns reads as its standing order. What the flag is
 // STANDING ON is the order - there is no menu and no mode: a tree or a rock

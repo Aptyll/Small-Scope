@@ -14,9 +14,10 @@ const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'TUTORIAL', 'SETTINGS'];
 const MENU_FROZEN = 1; // multiplayer is sealed under ice until it exists: inert to hover, keys and clicks
 const MENU_BW = 112, MENU_BH = 20, MENU_PITCH = 26;
 const MENU_Y0 = 100;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
-const PATCH_TXT = 'PATCH 1.70'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.71'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.71', 'HOUSEKEEPING ONLY - THE TUNING NUMBERS FOR EACH FEATURE NOW SIT BESIDE THE CODE THAT READS THEM, AND ONE TABLE SAYS WHAT EVERY TREE, ROCK AND BUSH IS.'],
   ['1.70', 'HOUSEKEEPING ONLY - THE SPLIT IS FINISHED: EIGHTEEN FILES, THE LAST ONE RENAMED TO BOOT.JS, THE PLAYBOOK RETIRED, AND NOTHING IN THE GAME CHANGED.'],
   ['1.69', 'HOUSEKEEPING ONLY - THE TITLE SCREEN AND EVERY ENDING MOVED INTO FILES OF THEIR OWN, EVERY LINE UNCHANGED, AND NOTHING IN THE GAME CHANGED.'],
   ['1.68', 'HOUSEKEEPING ONLY - THE HUD AND THE FOUR PANELS MOVED INTO FILES OF THEIR OWN, EVERY LINE UNCHANGED, AND NOTHING IN THE GAME CHANGED.'],

@@ -19,15 +19,15 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
-| [js/core.js](../../js/core.js) | ~450 | shared scope, no `window.*` export | the base layer: tuning constants, the seeded rng, `state`/`settings`, the fx/economy helpers |
+| [js/core.js](../../js/core.js) | ~250 | shared scope, no `window.*` export | the base layer: the numbers with no one owner (grid, view, day cycle, `YIELD`), the seeded rng, `state`/`settings`, the fx/economy helpers |
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
-| [js/player.js](../../js/player.js) | ~720 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
+| [js/player.js](../../js/player.js) | ~760 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
-| [js/world.js](../../js/world.js) | ~430 | shared scope, no `window.*` export | the tile grid + objects, worldgen, and the landmarks with their own `lmRng` stream |
+| [js/world.js](../../js/world.js) | ~470 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, and the landmarks with their own `lmRng` stream |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
-| [js/wildlife.js](../../js/wildlife.js) | ~570 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
-| [js/structures.js](../../js/structures.js) | ~1010 | shared scope, no `window.*` export | building/upgrading/wrecking, the per-type building sim, worker bots and flags |
-| [js/actions.js](../../js/actions.js) | ~560 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
+| [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
+| [js/structures.js](../../js/structures.js) | ~1090 | shared scope, no `window.*` export | building/upgrading/wrecking, the per-type building sim, worker bots and flags |
+| [js/actions.js](../../js/actions.js) | ~620 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
 | [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
 | [js/draw-world.js](../../js/draw-world.js) | ~1080 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, lighting/weather/vignettes |
@@ -132,6 +132,21 @@ Eighteen files of flat top-level code (see [Shared global scope](#shared-global-
 organized only by `// ------ name` banners.
 **Keep every banner honest.** Find any function by its banner in [code-map.md](code-map.md)
 rather than grepping blind.
+
+**A feature's tuning constants live in the file that owns the feature**, directly above the code
+that reads them — `WOLF_*` in wildlife.js, `TUR_*` in structures.js, `PRONE_*` in actions.js. Only
+the numbers with no one owner stay in core.js: `TILE`/`WORLD`, the view size, the day cycle, and
+the `YIELD` economy table that three files read. Adding a number for a feature means adding it
+beside that feature, never here.
+
+The one rule that constrains a move: **a const is only visible to a file that loads after the one
+declaring it**, so anything read at *load time* — an object literal, a top-level loop, a `const`
+initialised from another — has to be declared no later than that. Reads inside a function are
+free, because every function in the game runs long after the last script tag. Two constants sit
+where they do only because of this: `FISH_SPAWN_T` (core.js, because `state`'s literal reads it)
+and `BOW_CHARGE`/`BOW_NOCK`/`DODGE_SPEED`/`SLIDE_MIN` (player.js, because the `CHAMPS` table
+does). Each one says so in a comment; if you move a block and the console shows a
+`ReferenceError` naming a constant on load, this is why.
 
 `softfall.reroll` is the only storage key touched outside profile.js; sessionStorage by design
 (write in menu.js, read in boot.js — survives the reload, not the tab).
