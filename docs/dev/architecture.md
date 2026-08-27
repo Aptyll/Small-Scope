@@ -5,7 +5,7 @@ Read this before adding a file, moving a function between files, or wondering wh
 came from. The rules that survive in [CLAUDE.md](../../CLAUDE.md) are the ones you break without
 ever opening this page; everything here is reference.
 
-## Five IIFEs plus one generated data file
+## Four legacy IIFEs, one generated data file, and the flat game code
 
 [index.html](../../index.html) is 42 lines and loads them in a fixed order. There is no bundler,
 no module system and no import statement anywhere — **the files communicate only through
@@ -19,9 +19,27 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
-| [js/game.js](../../js/game.js) | ~12000 | `DBG` | everything else — worldgen, sim, render, UI |
+| [js/game.js](../../js/game.js) | ~12600 | `DBG` + shared scope | everything else — worldgen, sim, render, UI — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
+
+### Shared global scope
+
+The game code is **not** wrapped in an IIFE (it was, until the split began — tag `pre-split`).
+It is flat top-level code in classic scripts: a top-level `function` declaration becomes a
+`window` property, and a top-level `let`/`const` becomes a global lexical binding visible **as a
+bare identifier** to every classic script loaded after it. That is the whole splitting mechanism
+— sections move between files verbatim and bare identifiers keep resolving, with no export
+lists and no namespace. ES modules are off the table because `file://` must keep working. The
+split's playbook, gates and current status: [split-plan.md](split-plan.md).
+
+- **Load-order rule**: a file may reference names from any file at runtime, but its top-level
+  (load-time) statements may only reference names from files loaded above it.
+- **Collision behavior**: a `let`/`const` declared in two files throws a `SyntaxError` at load
+  (loud, good); a `function` declared in two files silently overwrites (silent, bad) — which is
+  why the split's Gate A greps for duplicate top-level names before every commit.
+- **Performance**: splitting changes nothing at runtime — same total parse, same JIT. The split
+  is for maintainability, a sim/render seam, and files a session can load whole.
 
 ### profile.js
 
@@ -93,13 +111,14 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-One ~12000-line IIFE organized only by `// ------ name` banners — worldgen, sim, render and UI in
-one scope. **Keep every banner honest.** Find any function by its banner in
-[gamejs-map.md](gamejs-map.md) rather than grepping blind.
+~12600 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+only by `// ------ name` banners — worldgen, sim, render and UI in one scope. **Keep every
+banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
+grepping blind.
 
-Its only export is `DBG`, the debug surface at the end of the file: live singletons plus the
-helpers that stage a scene without playing to it. Read the object literal for the current API —
-it is deliberately the whole external surface, and
+Its only deliberate `window.*` export is `DBG`, the debug surface at the end of the file: live
+singletons plus the helpers that stage a scene without playing to it. Read the object literal
+for the current API — it is deliberately the whole external surface, and
 [checklists.md](checklists.md#verifying-a-change) covers the non-obvious members.
 
 ## State

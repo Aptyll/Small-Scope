@@ -42,10 +42,13 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 ## Architecture
 
-Five IIFEs plus one generated data file — `profile.js`, `font.js`, `sprites.js`, the generated
-`sfxdata.js`, `audio.js`, `game.js` — loaded in that fixed order by [index.html](index.html) and
-communicating **only through globals**, so each file's globals must exist before the next loads.
-What each one exposes: [architecture](docs/dev/architecture.md).
+Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
+`audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
+**flat top-level classic scripts sharing one global scope** (today that is all of `game.js`; a
+split into eighteen files is in progress — [split-plan](docs/dev/split-plan.md)).
+[index.html](index.html) loads them in a fixed order and they communicate **only through
+globals**, so each file's globals must exist before the next loads. The file table and the
+shared-scope mechanism: [architecture](docs/dev/architecture.md).
 
 **`js/profile.js` is the only file that touches `localStorage`** — the local player profile (name,
 lifetime stats, and the settings that live under it). Everything else goes through `PROFILE`, so
@@ -56,9 +59,9 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
 `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is one ~12000-line IIFE organized only by `// ------ name` banners. **Keep every banner
-honest**, and find any function by its banner in [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) —
-read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
+`game.js` is ~12600 lines of flat top-level code organized only by `// ------ name` banners.
+**Keep every banner honest**, and find any function by its banner in
+[docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
 
 ## Versioning

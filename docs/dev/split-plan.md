@@ -7,7 +7,7 @@ the same commit as the work.
 
 ## Status
 
-- [ ] Commit 1 — de-IIFE game.js in place
+- [x] Commit 1 — de-IIFE game.js in place
 - [ ] Commit 2 — js/core.js + js/canvas.js
 - [ ] Commit 3 — js/player.js + js/input.js
 - [ ] Commit 4 — js/world.js + js/nav.js

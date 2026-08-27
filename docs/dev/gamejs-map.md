@@ -1,7 +1,12 @@
 # Where things live in game.js
 
-`game.js` is one ~12000-line IIFE with no internal module boundaries, organized only by banner
-comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
+> **Split in progress** ([split-plan.md](split-plan.md)) — game.js is being cut into eighteen
+> files, one or two per commit. The **File** column (added when the first sections move out)
+> says where each banner lives NOW; until then, every banner below is still in
+> [js/game.js](../../js/game.js).
+
+`game.js` is ~12600 lines of flat top-level code with no internal module boundaries, organized
+only by banner comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
 the new banner to the table below.
