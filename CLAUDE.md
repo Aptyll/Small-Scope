@@ -83,8 +83,8 @@ team, a plank that lifts on hover — not "CLICK OR ARROWS TO SWAP", not "PLAYER
 control must read as what it does by its shape and its hover state alone, and if you catch
 yourself writing a hint sentence, build the affordance instead. Text is for names, numbers,
 headlines (a death, a landmark) and three deliberate carve-outs: **keybind indicators** (`'ESC
-BACK'`, a "1" in a slot's corner), the **settings panel**'s labelled rows, and **first-run
-onboarding** (the two `showMsg` teaching lines). Anything else that wants words is a design bug.
+BACK'`, a "1" in a slot's corner), the **settings and PLAYER panels**' labelled rows, and
+**first-run onboarding** (the two `showMsg` teaching lines). Anything else that wants words is a design bug.
 
 ## Hard rules
 

@@ -815,8 +815,11 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   keyboard**: the `keydown` handler routes to `nameKey()` before its own shortcuts while it is
   up, so letters are text rather than hotkeys. A character the name may not hold is simply never
   drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
-  the field red instead of printing a reason. The first-launch variant is modal (an outside click
-  does nothing) and its second plank reads SKIP — the default name — where an edit reads CANCEL.
+  the field red instead of printing a reason. Under the rule, the three lifetime stats read as a
+  ledger — icon, labelled row (MATCHES / GOLD EARNED / BEST DAY, a deliberate text carve-out),
+  dotted leader, number right-aligned with a thousands comma. The first-launch variant is modal
+  (an outside click does nothing) and its second plank reads SKIP — the default name — where an
+  edit reads CANCEL.
   Any open panel ducks the logo to zero alpha.
 - **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
   over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on

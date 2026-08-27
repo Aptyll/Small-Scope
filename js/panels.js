@@ -634,9 +634,10 @@ const NAME_PLANK_Y = 176;
 const NAME_BW = 88, NAME_BH = 20, NAME_GAP = 12;
 const NAME_SHAKE_T = 0.3; // the field's refusal: it rattles and flushes red
 
-// The three stats wear icons and no labels, the way the victory tally does:
-// the eagle that starts every match, the coin, and the sun for the day you
-// reached. The quill is the edit affordance on the title-screen tag.
+// The three stats read as a ledger: an icon, a plain-English label, and the
+// number right-aligned on the row with a dotted leader tying the pair across
+// the gap - bare icon-and-number proved unreadable to anyone but the author.
+// The quill is the edit affordance on the title-screen tag.
 const NAME_BIRD_ICON = [
   '........', '........', '...oo...', 'oo.oo.oo',
   '.oooooo.', '...oo...', '........', '........',
@@ -779,14 +780,22 @@ function renderNamePanel(now, slide) {
 
   // ---- the lifetime numbers --------------------------------------------
   const st = PROFILE.stats();
-  const rows = [[NAME_BIRD_ICON, String(st.games), '#cfe0ff'],
-    [null, String(st.gold), '#f2cc6a'], [NAME_SUN_ICON, String(st.bestDay), '#cfe0ff']];
+  const grand = (n) => String(n).replace(/\B(?=(\d{3})+$)/g, ','); // 12345 -> 12,345
+  const rows = [[NAME_BIRD_ICON, 'MATCHES', String(st.games), '#cfe0ff'],
+    [null, 'GOLD EARNED', grand(st.gold), '#f2cc6a'],
+    [NAME_SUN_ICON, 'BEST DAY', String(st.bestDay), '#cfe0ff']];
   for (let i = 0; i < rows.length; i++) {
     const ry = py + NAME_STAT_Y + i * NAME_STAT_P;
-    const ix = px + 84;
-    if (rows[i][0]) stampGrid(rows[i][0], NAME_ICON_PAL, ix, ry + 1, 1);
-    else ctx.drawImage(SPRITES.itemGold, ix, ry + 1);
-    drawPixelTextShadow(ctx, rows[i][1], ix + 16, ry, rows[i][2], '#0a0e23', 2);
+    const lx = px + NAME_FIELD.x;
+    if (rows[i][0]) stampGrid(rows[i][0], NAME_ICON_PAL, lx, ry + 1, 1);
+    else ctx.drawImage(SPRITES.itemGold, lx, ry + 1);
+    drawPixelTextShadow(ctx, rows[i][1], lx + 13, ry + 3, '#7a8bb8', 'rgba(8,12,28,0.9)');
+    const nx = px + SET_W - NAME_FIELD.x - pixelTextWidth(rows[i][2], 2);
+    drawPixelTextShadow(ctx, rows[i][2], nx, ry, rows[i][3], '#0a0e23', 2);
+    ctx.fillStyle = '#2c3a68'; // the leader: dots from the label to its number
+    for (let dx = lx + 13 + pixelTextWidth(rows[i][1]) + 6; dx < nx - 6; dx += 4) {
+      ctx.fillRect(dx, ry + 7, 2, 1);
+    }
   }
 
   // ---- the two planks ---------------------------------------------------
