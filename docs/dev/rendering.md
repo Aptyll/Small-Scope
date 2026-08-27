@@ -891,9 +891,10 @@ so they read as a blast wave along the ground, never a halo), distance-scaled `s
 `SFX.boom()` (the timber sample dropped low under a synth blast, layered on purpose) and a
 `HAS LANDED` feed headline — the landing is a landing, not a wound: the bird takes **no damage**
 from its own dive. The grounded bird is the team's **objective**: `EAGLE_HP` (320), chipped by
-rival arrows through `hurtEagle` (the sim.js arrow loop tests `EAGLE_BODY_R` *before* tile
-solidity, or the roost tiles would eat the shot) and by rival E swings (`EAGLE_WORK_DMG` via
-`hitObject`'s eagle branch), and at zero `eagleFall` reruns the boom bigger, leaves a scorched
+rival arrows through `hurtEagle` (the sim.js arrow loop tests the roost tiles themselves —
+*before* tile solidity, which would eat the shot — so the arrow hitbox is exactly the collision
+box, corners included) and by rival E swings (`EAGLE_WORK_DMG` via `hitObject`'s eagle branch),
+and at zero `eagleFall` reruns the boom bigger, leaves a scorched
 smouldering silhouette, and puts the whole owning side down permanently (`die(p, null, 'eagle')` /
 `teamEagleDown`, which `die`, `updateRespawns` and `teamInMatch` all gate on — see
 [multiplayer.md](multiplayer.md#pvp)).

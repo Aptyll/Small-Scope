@@ -200,17 +200,18 @@ function updatePlay(dt) {
     }
     let dead = a.t > a.life;
     if (!dead && state.drop) {
-      // the grounded eagles are the objectives: a rival's arrow chips the
-      // bird's pool the same way it would a unit's (friendly shafts pass
-      // over). Tested BEFORE tile solidity, or the roost's own hitbox tiles
-      // would eat the shot first.
-      for (const e of state.drop.eagles) {
-        if (e.state !== 'down' || a.team === e.team) continue;
-        if (Math.hypot(e.x - a.x, e.y - 4 - a.y) < EAGLE_BODY_R) {
-          hurtEagle(e, a.dmg, players[a.owner]);
+      // the grounded eagles are the objectives: the roost's own hitbox tiles
+      // ARE the hit test, so anywhere a walker collides, an arrow damages -
+      // a radius around the bird's centre missed the block's corners. Tested
+      // BEFORE tile solidity, which would eat the shot; a friendly arrow
+      // falls through to it and sticks (shafts pass to no one for free).
+      const atx = Math.floor(a.x / TILE), aty = Math.floor(a.y / TILE);
+      if (inWorld(atx, aty)) {
+        const o = objects[idx(atx, aty)];
+        if (o && o.type === 'eagle' && o.team !== a.team) {
+          hurtEagle(state.drop.eagles[o.team], a.dmg, players[a.owner], a.x, a.y);
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
-          break;
         }
       }
     }

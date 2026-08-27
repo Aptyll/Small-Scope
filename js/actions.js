@@ -572,7 +572,7 @@ function hitObject(o, p) {
     // gate workTarget applies is re-checked before any damage.
     const e = state.drop && state.drop.eagles[o.team];
     if (!e || e.state !== 'down' || p.team === o.team) { if (near) SFX.deny(); return; }
-    hurtEagle(e, EAGLE_WORK_DMG, p);
+    hurtEagle(e, EAGLE_WORK_DMG, p, ox, oy); // the puff lands on the struck tile
     if (near) SFX.chop();
   } else if (o.type === 'bush') {
     if (o.berries > 0) {

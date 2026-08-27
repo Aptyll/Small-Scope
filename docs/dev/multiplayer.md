@@ -174,9 +174,11 @@ touching the base; the feed says so, but a worker is never a kill on the scorebo
 
 **So is a rival's grounded eagle** — tested before tile solidity (its own roost tiles are solid,
 and would otherwise eat the shot), same team rule, through `hurtEagle` (the `eagle drop` banner in
-js/boot.js): a rival arrow within `EAGLE_BODY_R` of a `down` bird chips its `EAGLE_HP` pool, a
-rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle branch (the roost tiles are
-`eagle` objects, a rival-only work target — `workTarget` reads the `team` they carry), and at
+js/boot.js): a rival arrow landing on **any roost tile** chips the bird's `EAGLE_HP` pool — the
+tiles are the one hit test walkers, arrows and E all share, so there is no corner an arrow can
+strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle
+branch (the roost tiles are `eagle` objects, a rival-only work target — `workTarget` reads the
+`team` they carry), and at
 zero `eagleFall` takes the whole owning side out of the match (see
 [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
 [rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it; a friendly

@@ -31,9 +31,8 @@ const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of t
 const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
 const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the resting pose
 const EAGLE_HP = 320;       // the grounded objective's pool (~arrow damage x25)
-const EAGLE_BODY_R = 26;    // what a rival arrow tests against once the bird is down
 const EAGLE_WORK_DMG = 10;  // what one rival E swing chips off the roosting bird
-const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid (its hitbox on the grid)
+const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid - the hitbox arrows AND walkers test
 const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
 const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
@@ -325,13 +324,16 @@ function eagleBoomFx(e, k) {
   }
 }
 
-// a rival's arrow into the grounded bird (the sim.js arrow loop calls this)
-function hurtEagle(e, dmg, src) {
+// a rival's arrow or E swing into the grounded bird. hx/hy is where the hit
+// landed (an arrow into a wingtip puffs at the wingtip, not the body's centre);
+// callers with no better point omit them.
+function hurtEagle(e, dmg, src, hx, hy) {
   if (e.state !== 'down') return;
   e.hp -= dmg;
   e.flash = 0.12;
-  burst(e.x, e.y - 8, '#f6f8ff', 5, 45, 0.5, true);
-  burst(e.x, e.y - 8, TEAMS[e.team].mark, 3, 40, 0.4);
+  const px = hx === undefined ? e.x : hx, py = (hy === undefined ? e.y : hy) - 8;
+  burst(px, py, '#f6f8ff', 5, 45, 0.5, true);
+  burst(px, py, TEAMS[e.team].mark, 3, 40, 0.4);
   if (nearPlayer(e.x, e.y)) SFX.hurt();
   if (e.hp <= 0) eagleFall(e, src);
 }
