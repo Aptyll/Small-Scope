@@ -8,7 +8,7 @@ code you should not "clean up".
 The rule is in [CLAUDE.md](../../CLAUDE.md): look at the running game, don't re-read the code and
 declare victory. The three affordances:
 
-- **`window.DBG`** (end of [js/game.js](../../js/game.js)) — read the object literal for the
+- **`window.DBG`** (end of [js/boot.js](../../js/boot.js)) — read the object literal for the
   current surface; it is the whole external API. The non-obvious members: `step(dt, n)` runs `n`
   fixed-`dt` update ticks and one render, `freeze = true` stops the rAF loop so stepping is
   deterministic (it halts `render()` too, so the canvas holds the last frame — set the value you
@@ -80,7 +80,7 @@ there for two rounds while every served check passed.
   speaker's plate, so a driver can click a dial through the real pointer instead of guessing at
   the 14 px pitch.
 
-A page that loads the same four scripts, stages through `DBG` and POSTs the canvas is enough to
+A page that loads the same script set as index.html, stages through `DBG` and POSTs the canvas is enough to
 drive the whole game from a headless browser; keep such a rig out of the repo (or delete it when
 you are done) so `index.html` stays the only entry point.
 
@@ -228,17 +228,17 @@ the arrow speed/damage formulas in `fireArrow()`,
 `update()`.
 
 **Moving code between js files** — the game files share one global scope
-([architecture.md](architecture.md#shared-global-scope)); during the split, follow
-[split-plan.md](split-plan.md)'s SEP to the letter, and after it these rules stand for any move.
+([architecture.md](architecture.md#shared-global-scope)); these rules stand for any move.
 Move whole sections **verbatim** — no renames, no reformatting, no "while I'm here" fixes
 (intentional dead code stays; see Known drift). Cut banner-boundary to banner-boundary, re-located
 fresh with `grep -n "// ------" js/*.js`, never by remembered line numbers. Before committing:
-grep all files for duplicate top-level names (a duplicate `function` silently overwrites — the
-split's Gate A command in the plan); scan the moved code's **top-level statements** — every name a
+grep all files for duplicate top-level names (a duplicate `function` silently overwrites:
+`grep -hE '^(async )?function |^(const|let|class) ' js/*.js | sed -E 's/^(async )?(function|const|let|class) ([A-Za-z0-9_$]+).*/\3/' | sort | uniq -d`
+must print nothing); scan the moved code's **top-level statements** — every name a
 load-time statement references must live in a file loaded above it in index.html (runtime calls
-may point anywhere); put the new `<script>` tag at the file's layout-table position, never
-reordering existing tags; and update the docs in the same commit — the architecture.md file
-table, the gamejs-map.md File column, index.html's comment. Then the full browser pass off both
+may point anywhere); never reorder existing `<script>` tags; and update the docs in the same
+commit — the architecture.md file table, code-map.md's sections, index.html's comment. Then the
+full browser pass off both
 the served URL and `file://`. Use a CRLF-preserving editor (the repo is CRLF; `sed -i` mangles it
 here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragile grids.
 

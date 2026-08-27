@@ -1,5 +1,7 @@
 // Softfall - a cozy winter survival game.
 'use strict';
+// The last file to load: the eagle drop that opens every match, the boot
+// order, window.DBG and the requestAnimationFrame loop.
 
 // ------------------------------------------------------------ eagle drop
 // Nobody spawns in a camp: after LOCK IN every slot rides a great white eagle

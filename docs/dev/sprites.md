@@ -17,7 +17,7 @@ baked into `teamBuild[team].icon.keep`. The
 **bot bay** (`spawner`) is the one big sprite: a single-tier 48×38 grid (`bay`, `BAYPAL`) on a 3×2
 tile footprint — steel plates under a flat two-row snow cap, a team-painted lintel band (`L`/`T`/`t`
 via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols
-14–33, rows 13–35, floor row 36 — `drawBayOverlay` in game.js clips to it). Its 16×16 wheel glyph is
+14–33, rows 13–35, floor row 36 — `drawBayOverlay` in draw-world.js clips to it). Its 16×16 wheel glyph is
 a separate grid, `bayIcon`, exported as `teamBuild[team].icon.spawner`; the old 16×16 `spawner` grid
 is still baked as the flat `SPRITES.spawner` but unreferenced. The
 construction stages are one shared `scaffold` set (`[posts, frame, lattice-overlay]`, `SCPAL`),
@@ -48,7 +48,7 @@ array with the canvas. The game's snow cover reads it to size the mound to the p
 cover for free, and there is no canvas readback anywhere in the feature.
 
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (four presets, also exported
-as `SPRITES.teams` so game.js can read the names and marker colours) drives three baked sets:
+as `SPRITES.teams` so the game code can read the names and marker colours) drives three baked sets:
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to
@@ -71,7 +71,7 @@ has to a single gear icon.
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not
-baked at all: `drawTurretHead()` in game.js rasterises them pixel by pixel at the live bearing and
+baked at all: `drawTurretHead()` in draw-world.js rasterises them pixel by pixel at the live bearing and
 dilates the result into a 1px dark rim, exactly as the arrows do, because a baked grid would lock
 the gun to one angle. The pivot is sprite-local **(16, 14)**, just above the collar. Two knock-ons:
 the sprite is wider than its one-tile footprint, so the draw pass centres it (`sx` in the structure

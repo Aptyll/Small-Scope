@@ -66,7 +66,7 @@ runtime ground change.
 
 Named points of interest scattered through the open interior, each with its own personality — the
 thing a player is choosing between while the eagle is still in the air. They live in the
-`landmarks` banner of [game.js](../../js/game.js) and in the module-scope `landmarks` array
+`landmarks` banner of [world.js](../../js/world.js) and in the module-scope `landmarks` array
 (`{ key, spec, name, tag, tx, ty, r, repopT }` per placed site).
 
 **One entry in `LANDMARKS` is one kind of place**, and that entry plus its generator is the whole

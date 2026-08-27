@@ -731,7 +731,7 @@ see [Fish nets](world.md#fish-nets).
 construction, and the last tier (`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear)
 are the two gold sinks (a Keep's card craft is a third, gated behind building one first).
 
-Mechanics, all in `game.js`:
+Mechanics (the wheel in [ui.js](../../js/ui.js), the orders in [structures.js](../../js/structures.js)):
 
 - `state.wheel` (`{kind:'build'|'manage', tx, ty, seg, ax, ay}`) is the open wheel; ESC/M/settings/death
   close it, a left-click cancels it, and the game **keeps running** — opening the
@@ -915,8 +915,8 @@ hauler it always was — see [Worker flags](#worker-flags) for why the anger is 
 **One order marker per player, planted with the middle mouse button, that every worker bot that
 player owns reads as its standing order.** Two players on one team have one flag each; the crew a
 flag commands is `b.owner === p.id`, i.e. everyone out of the bays that player built. The whole
-system is the `worker flags` banner in [game.js](../../js/game.js), plus the dispatch at the tail
-of `updateRobot()`.
+system is the `worker flags` banner in [structures.js](../../js/structures.js), plus the dispatch
+at the tail of `updateRobot()`.
 
 **What the flag is standing on IS the order.** There is no menu and no mode. `flagResolve(p, tx, ty)`
 is the one function that decides, and both the cursor preview and `plantFlag` read it, so what the

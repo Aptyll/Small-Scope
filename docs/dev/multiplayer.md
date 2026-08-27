@@ -128,8 +128,8 @@ slot (default local) the way a pickup would, which is how to stage a level.
 Four presets live in `SPRITES.teams` (`TEAM_SKINS` in [js/sprites.js](../../js/sprites.js)):
 **EMBER** (the original red/teal look), **FROST**, **PINE**, **DUSK**. A slot's team is
 `slot % TEAM_COUNT`, so with 6 slots the last two double up with slots 0 and 1 — teammates, not
-rivals. The team table is the only place a team colour is written down; game.js reads it back as
-`TEAMS` for name tags, map markers and death bursts.
+rivals. The team table is the only place a team colour is written down; the game code reads it
+back as `TEAMS` for name tags, map markers and death bursts.
 
 A team colour drives both **characters** and **buildings**:
 

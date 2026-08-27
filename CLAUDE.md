@@ -19,7 +19,7 @@ screenshot sink and headless driving. No package manager, dependencies, tests or
 `js/*.js` file and reloading is the whole dev loop, and the baker's output is committed.
 
 **Verify changes in the browser, not by re-reading code.** `window.DBG` (end of
-[js/game.js](js/game.js)) exposes the live singletons and stages a scene without playing to it,
+[js/boot.js](js/boot.js)) exposes the live singletons and stages a scene without playing to it,
 `?seed=N` pins the world, `POST /shot` ([tools/serve.js](tools/serve.js#L14)) sinks the canvas to
 `shot.png`, and **`.`** toggles hitboxes and routes: [checklists](docs/dev/checklists.md#verifying-a-change).
 
@@ -37,15 +37,14 @@ Read the relevant one **before** working in that area — they carry the detail 
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 | the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
-| splitting game.js into files — the approved migration playbook | [docs/dev/split-plan.md](docs/dev/split-plan.md) |
-| which banner / function in game.js owns a thing | [docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) |
+| which banner / function in which js file owns a thing | [docs/dev/code-map.md](docs/dev/code-map.md) |
 
 ## Architecture
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** (seventeen files so far plus the
-`game.js` residual; the split is in progress — [split-plan](docs/dev/split-plan.md)).
+**flat top-level classic scripts sharing one global scope** — eighteen files, `core.js` through
+`boot.js` (the tag `pre-split` keeps the one-file history).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
 shared-scope mechanism: [architecture](docs/dev/architecture.md).
@@ -59,9 +58,9 @@ All game state lives in module-scope singletons — `state`, `settings`, `player
 point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
 `animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
 
-`game.js` is ~490 lines of flat top-level code organized only by `// ------ name` banners.
+The game code is organized only by `// ------ name` banners inside its eighteen files.
 **Keep every banner honest**, and find any function by its banner in
-[docs/dev/gamejs-map.md](docs/dev/gamejs-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
+[docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).
 
 ## Versioning

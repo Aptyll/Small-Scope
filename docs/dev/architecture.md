@@ -36,7 +36,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
 | [js/menu.js](../../js/menu.js) | ~1200 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, champion select, the gear screen, `PATCH_TXT` |
 | [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |
-| [js/game.js](../../js/game.js) | ~490 | `DBG` + shared scope | the residual — the eagle drop and boot — as flat top-level code |
+| [js/boot.js](../../js/boot.js) | ~490 | `DBG` + shared scope | the last file to load: the eagle drop, the boot order, `window.DBG`, the rAF loop |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -46,9 +46,9 @@ The game code is **not** wrapped in an IIFE (it was, until the split began — t
 It is flat top-level code in classic scripts: a top-level `function` declaration becomes a
 `window` property, and a top-level `let`/`const` becomes a global lexical binding visible **as a
 bare identifier** to every classic script loaded after it. That is the whole splitting mechanism
-— sections move between files verbatim and bare identifiers keep resolving, with no export
+— sections moved between files verbatim and bare identifiers kept resolving, with no export
 lists and no namespace. ES modules are off the table because `file://` must keep working. The
-split's playbook, gates and current status: [split-plan.md](split-plan.md).
+split is complete; the tag `pre-split` keeps the one-file history.
 
 - **Load-order rule**: a file may reference names from any file at runtime, but its top-level
   (load-time) statements may only reference names from files loaded above it.
@@ -64,7 +64,7 @@ The local player profile — display name, lifetime stats (`games`, `gold`, `bes
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
 is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the
-local profile into a server account without touching game.js.
+local profile into a server account without touching the game code.
 There are no accounts, no passwords and no sign-in, and nothing here is authoritative — a save
 file is a save file.
 
@@ -126,17 +126,17 @@ under every sampled cue, one-shot samples decoded out of `SFXDATA`, and `SFX.mus
 `audio/music/` through one `HTMLAudioElement` per track. Master / MUSIC / SOUNDS dials, the cue
 list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
-### game.js
+### The game files (core.js … boot.js)
 
-~490 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
-only by `// ------ name` banners — the eagle drop and boot, all that remains before the Commit 10
-rename to boot.js. **Keep every banner honest.** Find any function by its banner in
-[gamejs-map.md](gamejs-map.md) rather than grepping blind.
+Eighteen files of flat top-level code (see [Shared global scope](#shared-global-scope)), each
+organized only by `// ------ name` banners.
+**Keep every banner honest.** Find any function by its banner in [code-map.md](code-map.md)
+rather than grepping blind.
 
 `softfall.reroll` is the only storage key touched outside profile.js; sessionStorage by design
-(write in menu.js, read in boot — survives the reload, not the tab).
+(write in menu.js, read in boot.js — survives the reload, not the tab).
 
-Its only deliberate `window.*` export is `DBG`, the debug surface at the end of the file: live
+Their only deliberate `window.*` export is `DBG`, the debug surface at the end of boot.js: live
 singletons plus the helpers that stage a scene without playing to it. Read the object literal
 for the current API — it is deliberately the whole external surface, and
 [checklists.md](checklists.md#verifying-a-change) covers the non-obvious members.
