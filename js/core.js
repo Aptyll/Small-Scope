@@ -80,7 +80,7 @@ const state = {
   wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
   // middle button HELD: the worker-flag preview is up and the release plants
   // it. Nothing about the flag is on screen unless this is true - see the
-  // `worker flags` banner for why the preview is a gesture and not a mode.
+  // `worker flags` banner (js/robots.js) for why the preview is a gesture.
   flagAim: false,
   // main menu (mode === 'title'): keyboard selection, per-item hover eases,
   // the open sub-panel ('settings' | 'help' | 'patch' | 'name' | null) and its slide progress

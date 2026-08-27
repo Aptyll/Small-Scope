@@ -470,13 +470,3 @@ function updateLandmarks(dt) {
   }
 }
 
-// a landmark's glyph, centred on x,y: a rim pass so it reads on parchment,
-// snow and forest alike, then the ink
-function drawLandmarkIcon(g, L, x, y, col, rim) {
-  const x0 = Math.round(x) - 3, y0 = Math.round(y) - 3;
-  g.fillStyle = rim || '#241a10';
-  for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx - 1, y0 + ry - 1, rw + 2, rh + 2);
-  g.fillStyle = col || L.spec.mark;
-  for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx, y0 + ry, rw, rh);
-}
-

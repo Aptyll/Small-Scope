@@ -26,11 +26,12 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/world.js](../../js/world.js) | ~470 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, and the landmarks with their own `lmRng` stream |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
-| [js/structures.js](../../js/structures.js) | ~1090 | shared scope, no `window.*` export | building/upgrading/wrecking, the per-type building sim, worker bots and flags |
+| [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |
+| [js/robots.js](../../js/robots.js) | ~520 | shared scope, no `window.*` export | the worker bots a bay rolls out, and the one flag per player whose tile is their standing order |
 | [js/actions.js](../../js/actions.js) | ~620 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
 | [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
-| [js/draw-world.js](../../js/draw-world.js) | ~1080 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, lighting/weather/vignettes |
+| [js/draw-world.js](../../js/draw-world.js) | ~1160 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, the flag and landmark glyphs, lighting/weather/vignettes |
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
 | [js/ui.js](../../js/ui.js) | ~1260 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear widget, hud strip, card draft |
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
@@ -128,10 +129,15 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### The game files (core.js … boot.js)
 
-Eighteen files of flat top-level code (see [Shared global scope](#shared-global-scope)), each
+Nineteen files of flat top-level code (see [Shared global scope](#shared-global-scope)), each
 organized only by `// ------ name` banners.
 **Keep every banner honest.** Find any function by its banner in [code-map.md](code-map.md)
 rather than grepping blind.
+
+**A file that decides things does not also draw them.** Every one of the sim files - core, player,
+input, world, nav, wildlife, structures, robots, actions, ai, sim - contains zero canvas calls;
+the pixels for what they own live in draw-world.js, render.js, ui.js and panels.js. canvas.js is
+the exception that proves it: it owns the buffers themselves.
 
 **A feature's tuning constants live in the file that owns the feature**, directly above the code
 that reads them — `WOLF_*` in wildlife.js, `TUR_*` in structures.js, `PRONE_*` in actions.js. Only

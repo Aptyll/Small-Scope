@@ -43,7 +43,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** — eighteen files, `core.js` through
+**flat top-level classic scripts sharing one global scope** — nineteen files, `core.js` through
 `boot.js` (the tag `pre-split` keeps the one-file history).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
@@ -63,7 +63,7 @@ them; `core.js` keeps only the numbers with no one owner. A const is invisible t
 before its own, so anything read at *load time* must be declared no later:
 [architecture](docs/dev/architecture.md#the-game-files-corejs--bootjs).
 
-The game code is organized only by `// ------ name` banners inside its eighteen files.
+The game code is organized only by `// ------ name` banners inside its nineteen files.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
 [checklists](docs/dev/checklists.md#common-changes).

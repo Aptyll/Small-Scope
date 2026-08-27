@@ -1,7 +1,8 @@
 'use strict';
 // The world's pixels: the prerendered ground and its runtime repaints, every
-// entity's sprite pass - players, wildlife, robots, buildings, spent arrows -
-// and the lighting, warm glows, weather and vignettes over it all.
+// entity's sprite pass - players, wildlife, robots, buildings, spent arrows,
+// worker flags - and the lighting, warm glows, weather and vignettes over it
+// all. Nothing here decides anything; it only draws what the sim settled.
 // ------------------------------------------------------------ ground prerender
 const groundCv = document.createElement('canvas');
 groundCv.width = WORLD * TILE; groundCv.height = WORLD * TILE;
@@ -484,7 +485,7 @@ function drawRobot(b, ex, ey) {
   ctx.fillRect(bx + 1, Math.round(b.y + 3 - ey), 10, 2);
 
   // one swing animation, two jobs: the harvest tick, or - on an attack flag -
-  // the same axe aimed at whatever b.atkAim points to (see `worker flags`)
+  // the same axe aimed at whatever b.atkAim points to (`worker flags`, robots.js)
   let tdx = 0, tdy = 0, working = false, icon = null, prog = 0;
   if (b.atkAim) {
     tdx = b.atkAim.x - b.x; tdy = b.atkAim.y - b.y;
@@ -523,6 +524,89 @@ function drawRobot(b, ex, ey) {
 
   drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8);
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
+}
+
+// ---- the landmark glyph both maps and the drop chart stamp ----------------
+// a landmark's glyph, centred on x,y: a rim pass so it reads on parchment,
+// snow and forest alike, then the ink
+function drawLandmarkIcon(g, L, x, y, col, rim) {
+  const x0 = Math.round(x) - 3, y0 = Math.round(y) - 3;
+  g.fillStyle = rim || '#241a10';
+  for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx - 1, y0 + ry - 1, rw + 2, rh + 2);
+  g.fillStyle = col || L.spec.mark;
+  for (const [rx, ry, rw, rh] of L.spec.icon) g.fillRect(x0 + rx, y0 + ry, rw, rh);
+}
+
+// ---- what a flag looks like ---------------------------------------------
+// the job glyph, 7x7 about (x, y), stamped with the 1px dark rim a landmark's
+// icon uses so it reads on snow, on parchment and on team cloth alike
+function drawFlagIcon(g, job, x, y, col, rim) {
+  const spec = FLAG_JOBS[job];
+  if (!spec) return;
+  const x0 = Math.round(x) - 3, y0 = Math.round(y) - 3;
+  g.fillStyle = rim || '#0f1632';
+  for (const [rx, ry, rw, rh] of spec.icon) g.fillRect(x0 + rx - 1, y0 + ry - 1, rw + 2, rh + 2);
+  g.fillStyle = col || spec.col;
+  for (const [rx, ry, rw, rh] of spec.icon) g.fillRect(x0 + rx, y0 + ry, rw, rh);
+}
+// the small marker - a pole and a pennant, (x, y) is its FOOT. Both maps and
+// the pick-up cursor draw the same one, so a flag is the same shape whatever
+// it is standing on.
+function drawFlagPennant(g, x, y, col, rim) {
+  const px = Math.round(x), py = Math.round(y);
+  const rects = [[px, py - 7, 1, 8], [px + 1, py - 7, 4, 3]];
+  g.fillStyle = rim || '#0f1632';
+  for (const [rx, ry, rw, rh] of rects) g.fillRect(rx - 1, ry - 1, rw + 2, rh + 2);
+  g.fillStyle = col;
+  for (const [rx, ry, rw, rh] of rects) g.fillRect(rx, ry, rw, rh);
+}
+// The planted flag itself, in the world pass (y-sorted with the entities): a
+// pole at the tile's centre and a dark banner on it carrying the SAME job
+// icon the cursor previewed, inked in the team's colour - so what the crew
+// was told, and who told them, both read from across the field. Dark cloth
+// and a bright glyph, not the other way round: at nine pixels square a solid
+// colour with a hole punched in it is a blob, and the glyph is the message.
+function drawFlag(q, ex, ey, now) {
+  const f = q.flag;
+  const bx = Math.round(f.tx * TILE + 8 - ex), by = Math.round((f.ty + 1) * TILE - 2 - ey);
+  const col = TEAMS[q.team].mark;
+  ctx.fillStyle = 'rgba(110,130,170,0.35)';
+  ctx.fillRect(bx - 3, by - 1, 7, 2);
+  ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 21, 3, 21);
+  ctx.fillStyle = '#c9d0e2'; ctx.fillRect(bx, by - 20, 1, 19);
+  ctx.fillStyle = col; ctx.fillRect(bx - 1, by - 4, 3, 3); // a team-coloured collar at the foot
+  const w = Math.round(Math.sin(now * 2.4 + f.tx)); // 1px of flutter
+  ctx.fillStyle = '#0f1632';
+  ctx.fillRect(bx + w, by - 21, 13, 11);
+  ctx.fillStyle = '#141c3c';
+  ctx.fillRect(bx + 1 + w, by - 20, 11, 9);
+  drawFlagIcon(ctx, f.job, bx + 6 + w, by - 16, col, '#141c3c');
+}
+// the target tile, in the world pass: drawSelection's four corner brackets,
+// dark rim first so they read on snow. Steady, not pulsing - the E bracket
+// breathes to catch an eye that is not looking, and this one is only on
+// screen because a hand is already holding it there.
+function drawFlagAim(ox, oy) {
+  if (state.mapOpen) return;
+  const t = flagTarget();
+  if (!t) return;
+  const bx = t.tx * TILE - ox, by = t.ty * TILE - oy;
+  const corners = (c, px, py) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(px, py, 3, 1); ctx.fillRect(px, py, 1, 3);
+    ctx.fillRect(px + TILE - 3, py, 3, 1); ctx.fillRect(px + TILE - 1, py, 1, 3);
+    ctx.fillRect(px, py + TILE - 1, 3, 1); ctx.fillRect(px, py + TILE - 3, 1, 3);
+    ctx.fillRect(px + TILE - 3, py + TILE - 1, 3, 1); ctx.fillRect(px + TILE - 1, py + TILE - 3, 1, 3);
+  };
+  corners('rgba(15,22,50,0.9)', bx + 1, by + 1);
+  corners(t.col, bx, by);
+}
+// ...and the order itself riding the pointer, clear of the reticle's ticks
+function drawFlagCursor() {
+  const t = flagTarget();
+  if (!t) return;
+  if (t.lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[player.team].mark);
+  else drawFlagIcon(ctx, t.job, mouse.x + 12, mouse.y + 9, t.col);
 }
 
 // every player draws through here - the local one, the AI fills, network

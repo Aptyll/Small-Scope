@@ -366,7 +366,7 @@ class Player {
     this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one
     this.cards = [];                    // picked roguelike cards, {rarity,id} - like gear, survives a respawn
     // the one order marker this slot commands its workers with (middle click,
-    // see the `worker flags` banner): null, or { tx, ty, job, unit }. NOT
+    // see the `worker flags` banner in js/robots.js): null, or { tx, ty, job, unit }. NOT
     // cleared by reset() - an order outlives the hand that gave it.
     this.flag = null;
     this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns

@@ -595,6 +595,10 @@ function bagStripRect() {
   const f = bagFrameRect();
   return { x: f.x + 1, y: f.y + f.h - 1 - BAG_STRIP, w: f.w - 2, h: BAG_STRIP };
 }
+// the pointer is over HUD that owns its own clicks, not over the world
+function overHud(x, y) {
+  return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!abHit(x, y) || overMinimap();
+}
 // What the pointer is on: { kind: 'btn' } (the pack) | { kind: 'cell', i }
 // (a grid slot) | { kind: 'frame' } (anywhere else inside, swallowed and
 // otherwise inert) | null. GEAR cells are NOT reported here - gearHit owns

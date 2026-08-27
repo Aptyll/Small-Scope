@@ -1,6 +1,6 @@
 # Where things live in the game code
 
-The game code is ~12600 lines of flat top-level code across eighteen files sharing one global
+The game code is ~12600 lines of flat top-level code across nineteen files sharing one global
 scope ([architecture.md](architecture.md) has the file table and the load order), organized
 inside each file only by banner comments of the form `// ------ name`. **Keep every banner
 honest** — one that has drifted from what sits under it is worse than no banner, because it sends
@@ -99,17 +99,23 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | build, upgrade, demolish, refunds, the one-Keep-per-team gate, the card craft queue | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost`, `teamHasLivingKeep`, `startCraft`, `rollCardRarity` | `stump structures` |
 | every buildable: its tiers, costs, HP, footprint, and the two colours the maps paint it | `STRUCTS`, `STRUCT_ORDER`, `WATER_STRUCT_ORDER` | `stump structures` (scenery carries the same `mm`/`map` pair: `OBJECTS`, world.js) |
 | the fish net's tuning: what it holds, what it lures, how fast it catches and hands over | `NET_CAP`, `NET_R`, `NET_LURE`, `NET_CATCH_T`, `NET_TAKE_T` | `stump structures` (beside `STRUCTS`, whose `net` entry it belongs to) |
-| tuning: the turret's pivot and barrel, its lock window, its bolts | `TUR_PIVOT_Y`, `TUR_BARREL`, `TUR_LOCK`, `TUR_MZ`, `BOLT_SPD`, `BOLT_LIFE` | `structures & robots` › `turret gunnery` |
+| tuning: the turret's pivot and barrel, its lock window, its bolts | `TUR_PIVOT_Y`, `TUR_BARREL`, `TUR_LOCK`, `TUR_MZ`, `BOLT_SPD`, `BOLT_LIFE` | `the building sim` › `turret gunnery` |
+| construction ticks, generators, the bay rolling a bot out, the Keep's craft | `updateStructures` | `the building sim` |
+| turret targeting, traverse and firing | `turretPivot`, `turretMark`, `turretSees`, `turretMuzzle`, `fireBolt` | `the building sim` › `turret gunnery` |
+
+## js/robots.js
+
+| Looking for | Start at | Banner |
+| --- | --- | --- |
 | tuning: what a worker swing hits for, how far a flag spreads, what counts as an enemy doorstep | `ROBOT_DMG`, `ROBOT_ATK_CD`, `ROBOT_REACH`, `ROBOT_AGGRO`, `ROBOT_LEASH`, `ROBOT_MAD`, `FLAG_BASE_R`, `FLAG_HARVEST_R`, `FLAG_SIEGE_R`, `FLAG_PATH_W` | `worker flags` |
-| construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` |
-| shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `structures & robots` |
-| what a worker does this frame: the flag dispatch, the harvest tick, the melee | the tail of `updateRobot`, `engage`, `gather`, `holdAt` | `structures & robots` |
-| turret targeting, traverse and firing | `turretPivot`, `turretMark`, `turretSees`, `turretMuzzle`, `fireBolt` | `structures & robots` |
+| a bot leaving the bay's mouth, and the frame it spends deciding | `makeRobot`, `updateRobot` (`updateStructures` rolls them out: `the building sim`, structures.js) | `workers` |
+| shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `workers` |
+| what a worker does this frame: the flag dispatch, the harvest tick, the melee | the tail of `updateRobot`, `engage`, `gather`, `holdAt` | `workers` |
 | the worker flag: what a tile orders, planting/moving/lifting it, whose crew reads it | `FLAG_JOBS`, `FLAG_ATTACK`, `flagResolve`, `plantFlag`, `clearFlag`, `flagRecall`, `flagOf` | `worker flags` |
 | the lane a PATH flag asks for, and who has already claimed a tile in it | `flagCorridor`, `flagPathTarget`, `objTaken` | `worker flags` |
-| a worker's attack: who is a valid mark, where the axe lands, the blow itself | `robotFoeUnit`, `enemyStructNear`, `foeAlive`, `foePoint`, `robotStrike`, `ROBOT_*` | `worker flags` |
-| drawing a flag: the job glyph, the map pennant, the planted banner | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `FLAG_MINE`/`FLAG_FOE` | `worker flags` |
-| the held-press preview: what it is aiming at, the tile brackets, the pointer glyph | `state.flagAim`, `flagTarget`, `drawFlagAim`, `drawFlagCursor`, `hasWorkers`, `overHud` | `worker flags` |
+| a worker's attack: who is a valid mark, where the axe lands, the blow itself | `robotFoeUnit`, `enemyStructNear`, `foeAlive`, `foePoint`, `robotStrike`, `ROBOT_*` | `worker flags` › `a worker's simple attack` |
+| who can be ordered, and what the held press is aiming at right now | `hasWorkers`, `state.flagAim`, `flagTarget` | `worker flags` (its tail; `overHud`: `UI`, ui.js) |
+| what a flag LOOKS like - all five draw functions | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `drawFlagAim`, `drawFlagCursor` | not here: `entity draw` › `what a flag looks like`, draw-world.js |
 
 ## js/actions.js
 
@@ -144,6 +150,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround`, `hash2`, `vnoise` | `ground prerender` |
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
 | drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |
+| the landmark glyph both maps and the drop chart stamp | `drawLandmarkIcon` | `entity draw` › `the landmark glyph` (its `LANDMARKS` spec: `landmarks`, world.js) |
+| what a worker flag looks like: the job glyph, the map pennant, the planted banner, and the held-press preview's two halves | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `drawFlagAim`, `drawFlagCursor` | `entity draw` › `what a flag looks like` (what they read, `flagTarget`/`FLAG_JOBS`: `worker flags`, robots.js) |
 | the snow over a buried body, its row spans, and the bury meter | `drawSnowCover`, `poseBounds`, `poseSpans`, `drawBuryRing` | `entity draw` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the stun tell: orbiting sparks, and the plate that carries them on a player's frame while it lasts | `drawStunStars`, the overhead block inside `drawPlayer` | `entity draw` |
@@ -168,6 +176,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | radial menu geometry and hit math | `wheelSpan`, `wheelAng`, `wheelOptions`, `wheelLayout`, `resolveWheel` | `radial wheel` |
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel`, `drawWheelHub`, `drawWheelStick` | `selection, hints & wheel` |
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` (the disc's per-tile colour comes from `objMapColor(o, 'mm')`: `world`, world.js) |
+| is the pointer over HUD that owns its own clicks, rather than over the world | `overHud` | `UI` (its callers are input.js's middle-button handlers and `flagTarget`, robots.js) |
 | the backpack + gear widget (bottom-right): its frame, the icon row, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag` | `UI` › `backpack and gear` |
 | the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
