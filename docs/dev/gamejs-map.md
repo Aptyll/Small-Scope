@@ -4,8 +4,8 @@
 > files, one or two per commit. **The File column says where each banner lives NOW**; a row
 > with no note in that cell lives entirely in the named file.
 
-The game code is ~12600 lines of flat top-level code — core.js, canvas.js, player.js,
-input.js, world.js, nav.js, wildlife.js and structures.js so far, the rest still [js/game.js](../../js/game.js) (~8700 lines) — with no internal module boundaries, organized
+The game code is ~12600 lines of flat top-level code — eleven files so far (core, canvas,
+player, input, world, nav, wildlife, structures, actions, ai, sim), the rest still [js/game.js](../../js/game.js) (~7000 lines) — with no internal module boundaries, organized
 only by banner comments of the form `// ------ name`. **Keep every banner honest** — one that has drifted from
 what sits under it is worse than no banner, because it sends future sessions to the wrong 600
 lines. If a section grows past ~250 lines or picks up a second responsibility, split it and add
@@ -21,7 +21,7 @@ don't cite line numbers here, they go stale within a session.
 | what a roll hits for, how long it stuns, and when a wall becomes a tackle | `ROLL_HIT_R`, `ROLL_FAST`, `ROLL_DMG`, `ROLL_STUN`, `TACKLE_STUN`, `TACKLE_SELF`, `TACKLE_MIN` | `constants` | core.js |
 | resolution, pillarbox frame | `fitCanvas`, `relayout`, `renderBars` | `canvas` (`relayout`: `state` — still the resize pair) | canvas.js (`relayout`: core.js) |
 | world zoom: the pixel-exact rung, the eased scale, the world view, the two coordinate bridges | `ZOOM_*`, `kWant`/`kMin`/`kMax`/`zoomWantOf`, `zoomCur`, `WV_W`/`WV_H`, `sizeWorldView`, `wToSX`/`wToSY`, `mouseWX`/`mouseWY` | `canvas` | canvas.js |
-| the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` | game.js |
+| the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` | sim.js |
 | panel + minimap layout anchors (`PANEL_*`, `SET_*`, `ROW_*`, `MM_*`) | assigned by `relayout()` (core.js) on every resize | `canvas` | canvas.js |
 | determinism, per-tile stable rolls | `mulberry32`, `hash2`, `vnoise`, `treeRare` | `rng` (`hash2`/`vnoise`: `ground prerender`; `treeRare`: `world`) | core.js (`hash2`/`vnoise`: game.js; `treeRare`: world.js) |
 | the singletons and entity arrays | `state`, `settings`, `players`, `player` | `state` (`players`/`player` + the entity arrays: `players`) | core.js (`players`/`player` + the arrays: player.js) |
@@ -47,10 +47,10 @@ don't cite line numbers here, they go stale within a session.
 | the gold flare and crack an ambush arrow lands with | `ambushFx`, the `crit` flag on `addDmgFloater` | `helpers` | core.js |
 | tile collision, entity movement, unit-vs-unit solidity | `moveEntity`, `isSolidTile`, `separateUnits` | `movement & collision` | nav.js |
 | routes around obstacles: A*, the per-unit route follower, the stall/give-up signal | `findPath`, `walkable`, `navTo`, `navStep`, `navLineClear` | `pathfinding` | nav.js |
-| what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` | game.js |
-| the roll as a hit: the sweep, the tackle, the stun every unit shares | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg`, `stunUnit` | `actions` › `the roll as a hit` | game.js |
-| going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` | game.js |
-| the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` | game.js |
+| what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `fireArrow`, `hitObject`, `crackIce` | `actions` | actions.js |
+| the roll as a hit: the sweep, the tackle, the stun every unit shares | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg`, `stunUnit` | `actions` › `the roll as a hit` | actions.js |
+| going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` | actions.js |
+| the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` | actions.js |
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` | game.js |
 | the snow over a buried body, its row spans, and the bury meter | `drawSnowCover`, `poseBounds`, `poseSpans`, `drawBuryRing` | `entity draw` | game.js |
 | the hud strip (bottom-centre): four ability slots over the xp bar, upgrade squares | `AB_CELL`/`hudStripRect`/`abHit`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` | game.js |
@@ -68,7 +68,7 @@ don't cite line numbers here, they go stale within a session.
 | construction ticks, generators, robot jobs | `updateStructures`, `updateRobot` | `structures & robots` | structures.js |
 | shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `structures & robots` | structures.js |
 | what a worker does this frame: the flag dispatch, the harvest tick, the melee | the tail of `updateRobot`, `engage`, `gather`, `holdAt` | `structures & robots` | structures.js |
-| one blow against a building on another team (E swing and worker axe alike) | `hurtStruct`, `STRUCT_HIT_DMG` | `actions` (its tail, beside `destroyStructure`) | game.js |
+| one blow against a building on another team (E swing and worker axe alike) | `hurtStruct`, `STRUCT_HIT_DMG` | `actions` (its tail, beside `destroyStructure`) | actions.js |
 | the worker flag: what a tile orders, planting/moving/lifting it, whose crew reads it | `FLAG_JOBS`, `FLAG_ATTACK`, `flagResolve`, `plantFlag`, `clearFlag`, `flagRecall`, `flagOf` | `worker flags` | structures.js |
 | the lane a PATH flag asks for, and who has already claimed a tile in it | `flagCorridor`, `flagPathTarget`, `objTaken` | `worker flags` | structures.js |
 | a worker's attack: who is a valid mark, where the axe lands, the blow itself | `robotFoeUnit`, `enemyStructNear`, `foeAlive`, `foePoint`, `robotStrike`, `ROBOT_*` | `worker flags` | structures.js |
@@ -76,10 +76,10 @@ don't cite line numbers here, they go stale within a session.
 | the held-press preview: what it is aiming at, the tile brackets, the pointer glyph | `state.flagAim`, `flagTarget`, `drawFlagAim`, `drawFlagCursor`, `hasWorkers`, `overHud` | `worker flags` | structures.js |
 | tuning: what a worker swing hits for, how far a flag spreads, what counts as an enemy doorstep | `ROBOT_DMG`, `ROBOT_ATK_CD`, `ROBOT_REACH`, `ROBOT_AGGRO`, `ROBOT_LEASH`, `ROBOT_MAD`, `FLAG_BASE_R`, `FLAG_HARVEST_R`, `FLAG_SIEGE_R`, `FLAG_PATH_W` | `constants` | core.js |
 | radial menu geometry and hit math | `wheelSpan`, `wheelAng`, `wheelOptions`, `wheelLayout`, `resolveWheel` | `radial wheel` | game.js |
-| what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` | game.js |
-| the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` | game.js |
-| particles, floaters, footprints, drops, world-space snow flakes | `updateFx`, `makeFlake`, `fitFlakes` | `fx updates` | game.js |
-| the belly-crawl drag furrow: emitted in `updatePlayer`, drawn as the `f.k === 3` branch | `footprints`, `p.trailD` | `update` / `render` | game.js |
+| what a bot slot decides to do this frame | `updateAI`, `aiLineClear`, `aiOpenSides` | `ai` | ai.js |
+| the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` | sim.js |
+| particles, floaters, footprints, drops, world-space snow flakes | `updateFx`, `makeFlake`, `fitFlakes` | `fx updates` | sim.js |
+| the belly-crawl drag furrow: emitted in `updatePlayer`, drawn as the `f.k === 3` branch | `footprints`, `p.trailD` | `update` / `render` | sim.js / game.js |
 | render pass order | `render` | `render` | game.js |
 | pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` | game.js |
 | drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` | game.js |

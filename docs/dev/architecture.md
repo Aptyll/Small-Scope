@@ -27,7 +27,10 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
 | [js/wildlife.js](../../js/wildlife.js) | ~570 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~1010 | shared scope, no `window.*` export | building/upgrading/wrecking, the per-type building sim, worker bots and flags |
-| [js/game.js](../../js/game.js) | ~8700 | `DBG` + shared scope | everything else — sim, render, UI, menus, boot — as flat top-level code |
+| [js/actions.js](../../js/actions.js) | ~560 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
+| [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
+| [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
+| [js/game.js](../../js/game.js) | ~7000 | `DBG` + shared scope | everything else — render, UI, menus, end screens, boot — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -119,8 +122,8 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~8700 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
-only by `// ------ name` banners — sim, render, UI, menus and boot in one scope. **Keep every
+~7000 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+only by `// ------ name` banners — render, UI, menus, end screens and boot in one scope. **Keep every
 banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
 grepping blind.
 

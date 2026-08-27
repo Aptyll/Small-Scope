@@ -12,7 +12,7 @@ the same commit as the work.
 - [x] Commit 3 — js/player.js + js/input.js
 - [x] Commit 4 — js/world.js + js/nav.js
 - [x] Commit 5 — js/wildlife.js + js/structures.js
-- [ ] Commit 6 — js/actions.js + js/ai.js + js/sim.js
+- [x] Commit 6 — js/actions.js + js/ai.js + js/sim.js
 - [ ] Commit 7 — js/draw-world.js + js/render.js
 - [ ] Commit 8 — js/ui.js + js/panels.js
 - [ ] Commit 9 — js/menu.js + js/screens.js
@@ -354,6 +354,14 @@ Three files, one commit — actions and ai have zero load-time statements; sim h
 (from `SEED`) and the `flakes` array.
 
 - SEP ×3 per the layout table (`actions`; `ai`; `update` + `fx updates`).
+- **Errata found executing this commit**: the update banner opens with `let camX = 0, camY = 0`
+  (the camera globals — unlisted load-time literals). Much more important: the fx banner's
+  `for (let i = 0; i < 70; i++) flakes.push(makeFlake(rng));` is a load-time loop that
+  **consumes 420 draws from the shared rng stream** — the survey's "only the three mulberry32
+  seedings call functions at load" was wrong. It is safe only because no other load-time
+  statement draws from `rng` (genWorld runs at boot, after all files), so the stream offset
+  genWorld sees is unchanged — verified by the ground-hash gate. Any future move of that loop,
+  or any new load-time `rng()` call, is a determinism hazard.
 - **Noah verifies**: chop, mine, fish, shoot, dry-fire with an empty quiver, dodge-roll, tackle,
   go prone in snow and ambush something. Then idle and *watch the bots* for two minutes: they
   gather, build, and fight each other like before. Let day turn to night and back (snowfall,
