@@ -213,7 +213,9 @@ function sampleHumanInput(p) {
     p.fireArmed = false;
     return;
   }
-  if (state.mode !== 'play' || state.paused || state.settingsOpen) {
+  // state.eagleCine: the driven-off ceremony has the camera - hands off the
+  // controls until the screens come up, exactly as pause zeroes them
+  if (state.mode !== 'play' || state.paused || state.settingsOpen || state.eagleCine) {
     inp.mx = inp.my = 0;
     inp.fire = inp.work = inp.slide = false;
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;

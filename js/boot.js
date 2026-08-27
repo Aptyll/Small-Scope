@@ -49,6 +49,7 @@ const PREEN_RATE = 2;       // ...recovering this much nerve per second
 const FLEE_LIFT_T = 1.1;    // s of takeoff: turn away, climb, downdraft
 const FLEE_T = 5.5;         // s total from liftoff to gone (fading over the last stretch)
 const FLEE_SPD = 220;       // px/s once airborne - faster than it arrived, it wants out
+const EAGLE_CINE_T = 3.2;   // s the camera holds the takeoff before the end screens queue
 const BOOM_R = 2.6;         // tiles of trees the impact clears outright...
 const BOOM_STUMP_R = 3.6;   // ...and the ring beyond snapped to stumps
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
@@ -191,6 +192,15 @@ function landPlayer(p) {
 }
 
 function updateDrop(dt) {
+  // the driven-off ceremony: hold on the takeoff, then let the screens come
+  const cine = state.eagleCine;
+  if (cine) {
+    cine.t += dt;
+    if (cine.t >= EAGLE_CINE_T) {
+      state.eagleCine = null; // cleared first, so the resolve's endMatch path runs clean
+      eagleFleeResolve(state.drop.eagles[cine.team], cine.srcId >= 0 ? players[cine.srcId] : null);
+    }
+  }
   for (const e of state.drop.eagles) updateEagle(e, dt);
   for (const p of players) {
     if (!p.active) continue;
@@ -416,7 +426,7 @@ function eagleBoomFx(e, k) {
 // landed (an arrow into a wingtip puffs at the wingtip, not the body's centre);
 // callers with no better point omit them.
 function hurtEagle(e, dmg, src, hx, hy) {
-  if (e.state !== 'down') return;
+  if (e.state !== 'down' || state.eagleCine) return; // the ceremony has the match: no second flee under it
   e.hp -= dmg;
   e.hitT = 0; // frightened again: the calm-down clock starts over
   e.flash = 0.12;
@@ -428,11 +438,12 @@ function hurtEagle(e, dmg, src, hx, hy) {
 }
 
 // the objective's nerve breaks: the bird is DRIVEN OFF, not killed. It blasts
-// a takeoff downdraft, turns for the treeline and flies - and the match ends
-// right here, at liftoff: the whole side falls with its bird (die() and
-// teamInMatch() both read teamEagleDown), so checkLastStanding puts up the
-// victory or defeat screen while the takeoff plays on underneath it (the sim
-// keeps running in mode 'dead').
+// a takeoff downdraft, turns for the treeline and flies - and liftoff starts
+// the DRIVEN-OFF CEREMONY (state.eagleCine): every camera glides to this bird
+// (the camera banner in js/sim.js), the local controls go dead (input.js),
+// and the takeoff plays for EAGLE_CINE_T before eagleFleeResolve puts the
+// side down and queues the victory or defeat screen. League-style: watch the
+// nexus fall, then read the word.
 function eagleFlee(e, src) {
   e.state = 'flee';
   e.fleeT = 0;
@@ -455,6 +466,14 @@ function eagleFlee(e, src) {
   state.shake = Math.max(state.shake, near < 500 ? 7 : 4);
   SFX.gust();
   logEvent('THE ' + TEAMS[e.team].name + ' EAGLE WAS DRIVEN OFF', src || players.find((p) => p.team === e.team));
+  state.eagleCine = { team: e.team, t: 0, srcId: src ? src.id : -1 };
+}
+
+// the ceremony's last beat, EAGLE_CINE_T after liftoff (updateDrop ticks it):
+// the whole side falls with its bird - die() and teamInMatch() both read
+// teamEagleDown - and checkLastStanding queues the victory or defeat screen
+// while the escape keeps flying underneath it (the sim runs on in mode 'dead').
+function eagleFleeResolve(e, src) {
   for (const p of players) {
     if (!p.active || p.team !== e.team) continue;
     if (!p.dead) die(p, null, 'eagle');

@@ -708,7 +708,9 @@ function rivalTeamsInMatch(p) {
 // together - a Keep still standing, or a teammate mid-respawn-timer, keeps
 // a team in it - so this is the last TEAM standing, not the last player.
 function checkLastStanding() {
-  if (state.over || player.eliminated || rivalTeamsInMatch(player) > 0) return;
+  // state.eagleCine: the driven-off ceremony is playing - the screens wait
+  // for it (eagleFleeResolve re-runs this once the camera has had its moment)
+  if (state.over || state.eagleCine || player.eliminated || rivalTeamsInMatch(player) > 0) return;
   endMatch('won');
 }
 

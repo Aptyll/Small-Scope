@@ -52,8 +52,8 @@ gear page is a menu, and a piece levels through four materials. [Gear](gameplay.
 **Your eagle is your life.** The bird that carried the team in crashes into a patch of trees at
 the end of its line and roosts there, armoured in team colour. Its hp pool is its **nerve**:
 hits spook it, it calms back down between scares, it defends its own ground with a wing gust —
-and when its nerve breaks it is **driven off**, not killed: it flies away, and its whole side
-falls with it on the spot. The second, symmetric way to win a match, and the reason both teams
+and when its nerve breaks it is **driven off**, not killed: every camera pans to watch it fly
+away, and its whole side falls with it as it goes. The second, symmetric way to win a match, and the reason both teams
 always have somewhere worth walking to. [Eagle drop](rendering.md#eagle-drop-mode-drop),
 [Death is final](gameplay.md#death-is-final).
 

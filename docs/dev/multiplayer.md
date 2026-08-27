@@ -179,7 +179,8 @@ tiles are the one hit test walkers, arrows and E all share, so there is no corne
 strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle
 branch (the roost tiles are `eagle` objects, a rival-only work target — `workTarget` reads the
 `team` they carry), and at zero the bird is **driven off**: `eagleFlee` lifts it away over the
-treeline and takes the whole owning side out of the match at liftoff (see
+treeline while every camera pans to watch (`state.eagleCine`, the driven-off ceremony), and
+`EAGLE_CINE_T` later `eagleFleeResolve` takes the whole owning side out of the match (see
 [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
 [rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it; a friendly
 swing is refused. It is not helpless either: a rival lingering in `GUST_R` makes it rear

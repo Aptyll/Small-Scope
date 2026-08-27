@@ -119,6 +119,17 @@ function update(dt) {
       camX += (tx - camX) * Math.min(1, dt * 9);
       camY += (ty - camY) * Math.min(1, dt * 9);
     }
+  } else if (state.drop && (state.eagleCine ||
+      (state.mode === 'dead' && state.drop.eagles.some((q) => q.state === 'flee')))) {
+    // the match is decided: every eye goes to the bird that broke. The camera
+    // glides over and holds it centred while the takeoff plays out - the end
+    // screens wait for it (eagleFleeResolve, js/boot.js), then rise over the
+    // escape still flying underneath. League-style. Only KEEP PLAYING (mode
+    // back to 'play' with no ceremony) hands the camera back early.
+    const ec = state.eagleCine ? state.drop.eagles[state.eagleCine.team]
+      : state.drop.eagles.find((q) => q.state === 'flee');
+    camX += (ec.x - WV_W / 2 - camX) * Math.min(1, dt * 3.5);
+    camY += (ec.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
   } else {
     const vp = viewPlayer();
     const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre

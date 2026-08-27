@@ -901,15 +901,19 @@ arrow hitbox is exactly the collision box, corners included) and by rival E swin
 a `GUST_CD` cooldown, dealing **no damage** — the objective punishes face-tanking, it never earns
 kills. Left unhit for `PREEN_DELAY` it **preens**, recovering `PREEN_RATE` hp/s — the refilling
 bar is the whole announcement, so chip damage must be pressed home. At zero nerve the bird is
-**driven off, not killed**: `eagleFlee` clears the roost tiles, blasts the takeoff downdraft
-(`eagleGustFx` writ large, `SFX.gust`), logs `WAS DRIVEN OFF`, and **ends the match right there at
-liftoff** — the owning side goes down permanently (`die(p, null, 'eagle')` / `teamEagleDown`,
-which `die`, `updateRespawns` and `teamInMatch` all gate on — see
-[multiplayer.md](multiplayer.md#pvp)), so the victory or defeat screen queues while the escape
-plays on under it (the sim keeps running in mode `dead`). The takeoff itself: over `FLEE_LIFT_T`
-the bird turns from wherever the dive left it pointing to `fleeTo` (away from the world's centre,
-shortest arc) while climbing; then it flies at `FLEE_SPD` until `FLEE_T`, when it is `gone` and
-draws nothing ever again.
+**driven off, not killed**, and liftoff starts the **driven-off ceremony**, League-style:
+`eagleFlee` clears the roost tiles, blasts the takeoff downdraft (`eagleGustFx` writ large,
+`SFX.gust`), logs `WAS DRIVEN OFF` and sets `state.eagleCine` — the camera (its banner in
+js/sim.js) glides to the fleeing bird and holds it centred, `sampleHumanInput` zeroes the local
+controls exactly as pause does, `hurtEagle` refuses a second flee, and `checkLastStanding` waits.
+`EAGLE_CINE_T` (3.2 s) after liftoff, `eagleFleeResolve` (ticked from `updateDrop`) puts the
+owning side down permanently (`die(p, null, 'eagle')` / `teamEagleDown`, which `die`,
+`updateRespawns` and `teamInMatch` all gate on — see [multiplayer.md](multiplayer.md#pvp)) and the
+victory or defeat screen rises **over the escape still flying underneath** — the camera stays on
+the bird through mode `dead` and only KEEP PLAYING (back to mode `play`) takes it back early. The
+takeoff itself: over `FLEE_LIFT_T` the bird turns from wherever the dive left it pointing to
+`fleeTo` (away from the world's centre, shortest arc) while climbing; then it flies at `FLEE_SPD`
+until `FLEE_T`, when it is `gone` and draws nothing ever again.
 
 Drawing: `drawDropAir` (above the world, below lighting) runs `drawEagle` per bird — the
 `SPRITES.eagleShadow` silhouette `alt` px below and up to 10 px right of the body (`alt` is
