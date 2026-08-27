@@ -32,7 +32,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
 | [js/draw-world.js](../../js/draw-world.js) | ~1080 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, lighting/weather/vignettes |
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
-| [js/game.js](../../js/game.js) | ~4900 | `DBG` + shared scope | everything else — UI, panels, menus, end screens, boot — as flat top-level code |
+| [js/ui.js](../../js/ui.js) | ~1260 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear widget, hud strip, card draft |
+| [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
+| [js/game.js](../../js/game.js) | ~2800 | `DBG` + shared scope | everything else — menus, end screens, the replay, boot — as flat top-level code |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -75,7 +77,7 @@ file is a save file.
   800 ms timer and flushed on `pagehide` / `visibilitychange`; `setName` and `putSettings` write
   through immediately.
 
-The panel, the field and the title-screen tag are in game.js, under the `player profile` banner.
+The panel, the field and the title-screen tag are in panels.js, under the `player profile` banner.
 
 ### font.js
 
@@ -124,8 +126,8 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### game.js
 
-~4900 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
-only by `// ------ name` banners — UI, menus, panels, end screens and boot in one scope. **Keep every
+~2800 lines of flat top-level code (see [Shared global scope](#shared-global-scope)) organized
+only by `// ------ name` banners — menus, end screens, the replay and boot in one scope. **Keep every
 banner honest.** Find any function by its banner in [gamejs-map.md](gamejs-map.md) rather than
 grepping blind.
 

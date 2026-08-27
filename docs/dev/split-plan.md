@@ -14,7 +14,7 @@ the same commit as the work.
 - [x] Commit 5 — js/wildlife.js + js/structures.js
 - [x] Commit 6 — js/actions.js + js/ai.js + js/sim.js
 - [x] Commit 7 — js/draw-world.js + js/render.js
-- [ ] Commit 8 — js/ui.js + js/panels.js
+- [x] Commit 8 — js/ui.js + js/panels.js
 - [ ] Commit 9 — js/menu.js + js/screens.js
 - [ ] Commit 10 — rename to boot.js + final docs sweep (deletes this file)
 
@@ -392,6 +392,13 @@ Three files, one commit — actions and ai have zero load-time statements; sim h
 - SEP for **panels.js** (banners `scoreboard & log`, `world map (M)`, `settings menu (ESC)`,
   `player profile`). Load-time: `EVENT_*`/`SB_*`/`NAME_*` consts, `events` array,
   mapCv/panelCv/setPanelCv/namePanelCv creation (need canvas.js consts → loaded), `dragSlider`.
+- **Errata found executing this commit**: more unlisted load-time statements, all literal-only or
+  same-file and F6-safe, moved verbatim — ui.js: `ALIVE_ICON`/`ALIVE_ICON_W`, `let bagFlash`,
+  the `DRAFT_*` consts, `AB_PAL`/`AB_ICONS`, the `let abLvSeen/abLvFlash/abChSeen/abChFlash`
+  flash-state row (plain lets, not the Maps/Sets the survey guessed), and `mmViewCtx` beside
+  `mmView`; panels.js: `LOG_LEVEL`, and `mapCtx`/`mapImg` beside `mapCv`. Also the radial wheel
+  and `selection, hints & wheel` banners are adjacent in the residual, so ui.js's first cut is
+  one contiguous span with `replay` left behind between it and `UI`.
 - **Noah verifies**: HUD strip, XP bar, minimap ping, bag open/stash/drop, the four gear cells, a
   card draft, radial wheel, TAB scoreboard, M map, ESC settings — drag a slider, mute, change a
   setting, reload: **the setting stuck** (PROFILE round-trip). Open the name panel, edit the name,
