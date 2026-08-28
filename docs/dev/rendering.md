@@ -270,25 +270,126 @@ pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush o
 | --- | --- | --- |
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
-| bottom left | the event feed | `renderEventLog` |
-| bottom centre | four ability slots over the xp bar, flush to the bottom; a plus-square perches on the frame to spend a skill point | `drawHudStrip` |
-| bottom right | the backpack **and** the gear row: one frame — five icons, the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
+| bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
+| bottom centre | the four weapon slots over a quiver/dodge rail and the xp bar, flush to the bottom; a held slot key raises that tool's bit column out of it | `drawHudStrip`, `drawBitColumn` |
+| bottom right | the backpack **and** both upgrade rows: one frame — the gear row, the ability row and the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
+
+### The hover tooltip
+
+One panel, bottom left, saying what the pointer is on — and the fourth deliberate carve-out from
+show-don't-label, recorded as such in [CLAUDE.md](../../CLAUDE.md#ui-rule-show-dont-label). What
+earns it: a tool's rate of fire against a bit's weight is a **comparison of numbers**, and no shape
+compares numbers. It is a carve-out and not a licence — every well still has to read at a glance
+with the panel shut, which is what the tier plates, the bit pips and the cooldown wipes are for.
+
+It is bottom **left** because that is the corner the pointer is furthest from while it hovers the
+backpack, the weapon strip or a tech node, so the panel never sits under the hand reading it.
+
+**`tipAt(mx, my)` is the only source**, and it asks the same hit-testers, in the same order, that
+the mousedown handler does — gear, then the bit column, then the weapon strip, then the backpack —
+so what the panel describes and what a click would do can never be two different things. A live
+drag outranks all of them: whatever is on the cursor describes itself. It answers in two modes
+only, `play` and `title` (the tech tree); every other mode returns null.
+
+`tipResolve()` runs **once per frame in `render()`, before `renderUI`**, because the event feed
+lays itself out around the result: `renderEventLog` steps up by `tipLift()` exactly as it already
+does for the replay window. Resolving it later would put the feed a frame behind the panel.
+
+A descriptor is `{ title, tcol, kind, rows: [[label, value, col]], notes: [[text, col]], icon,
+plate, rim }` and `drawTooltip` is the only thing that knows how to paint one: the icon on its own
+**tier plate**, the name in that tier's ink, the kind under it, then label/value rows with a dotted
+leader between them — the PLAYER panel's ledger, which is where that pattern already lives — and
+free lines under those. The panel sizes itself to its widest line (capped at `TIP_MAXW`), so a
+short tooltip is a short panel.
+
+The builders, one per kind: `tipTool` (rate of fire, bit slots, max weight, then the loaded bits in
+**firing order** with `>` on the one up next), `tipBit` (damage, weight, speed, lifespan, flight —
+then only the flags that are *true*, because four rows of NO would drown the three that matter),
+`tipStack` (food, cards), `tipGear`, `tipAbility`, and `tipTech`, which strips the "what is loaded
+in it" half and adds the node's price and state instead.
+
+### The tech tree screen
+
+`m.screen = 'tech'`, entered from the main menu's TECH TREE plank and eased in on its own `techT`
+(the chrome ducks under it the way it does under champion select). The `TECH` table already
+carries the only edge in the graph, and it lays out as seven lineages of at most three, so the
+page is a **7×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
+from a node to the one it opens.
+
+Three node states, told apart by **light** rather than by a label: *done* is lit, wearing its full
+tier plate with a green corner tick; *open* is the same plate gone quiet with its price in gold
+pips beneath it and a pulsing rim when it is affordable; *locked* is nearly out. A blue pip in the
+corner is `PROFILE.techSeen` — "you have held one of these" — the only thing on the page that is
+about you rather than about the tree. Edges go gold once the node they leave is researched, with a
+bead running the wire so a live branch reads as live.
+
+Nothing on the page is written down but the three tier names and the research total: a node's
+identity, its stats, its price and why it is locked are all read through the **tooltip** any hover
+raises, which is a large part of why that panel exists. `techHit` is shared by the hover, the click
+and the tooltip, so the three can never point at different nodes.
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom: four ability wells on top, a gold xp bar along the bottom (lifetime gold, left-to-right, no level number — that lives on the overhead badge). The bar has a dark silhouette and a frost rim so it reads against the plate. While `p.skillPts` is free and that ability is below `AB_RANK_MAX` (3) a plus-square perches on the plate's top rim — drawn after the frame, so the border does not wrap it — and is a button (`abHit` / `buySkill` through `input.cmd {kind:'skill'}`). It is gone the moment a point cannot land there. Rank is three pips on the well itself. The plate swallows clicks so the bow never fires through it. A point lands at level 1 and on every `levelUp`.
+`drawHudStrip` is one plate, flush to the bottom, and it is the **weapon**: four tool wells on
+top, a thin rail under them, then a gold xp bar along the bottom (lifetime gold, left-to-right, no
+level number — that lives on the overhead badge). The bar has a dark silhouette and a frost rim so
+it reads against the plate. The plate swallows clicks so nothing fires through it.
+
+A tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
+is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
+tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
+highlight across the top tier's plate). The **selected** slot is the one with the lit rim, lifted
+a pixel; a selected tool that cannot answer the button goes red instead, which is the old dry-bow
+tell. Along the top inner edge sits one **pip per bit cell** in that bit's own colour: filled is a
+bit, hollow is a free cell, the bright one is what the next press fires, and red is a bit this
+tool is not strong enough to throw. And the **cooldown wipe** covers the whole well for exactly
+`toolRof`, so the rate of fire is the shape of the wipe rather than a number.
+
+The rail carries the two numbers a firefight is read off and nothing else: shafts left in the
+quiver on the left with the arrow that spends them, dodge charges as pips on the right.
+
+The **upgrade** half of this strip — the four ability wells and the plus that spends a skill point
+— moved into the backpack, under the gear row: both rows are "buy the next level of this", one
+with gold and one with skill points, so they belong stacked in one grid rather than split across
+two corners. See the ability row below.
+
+### The bit column
+
+Holding a weapon slot's own key past `TOOL_HOLD_T` raises that tool's bit cells out of it, bottom
+to top, joined to the well by a 1 px spine so the stack reads as coming *out* of the slot rather
+than floating over it. Cell 0 is at the bottom because it fires first; a gold caret on the left
+edge marks what the next press fires and climbs as the tool cycles. A cell carries the bit's
+**weight** as pips along its bottom — gold while this tool can throw it, red when it cannot — and
+a modifier, which has no weight, gets a colour bar instead; the tool's own **tensile ceiling** is
+the matching row of pips above the top cell. That, and nothing written down, is the whole of
+"bow tensile strength". It is a hold, not a mode: it is on screen exactly as long as the key is.
 
 ### The backpack and gear widget
 
 Everything a slot owns is **one frame in one corner** — the gear row is not a separate widget any
 more, it is the top row of the bag. `bagFrameRect()` is the whole thing, and top to bottom it is:
 
-1. an **icon row** of five identical cells — the pack, then helmet / chest / legs / boots;
-2. the **inventory grid**, only when `state.bagOpen`, continuing straight down the row's own
-   five columns on the same `BAG_GAP` — no wider seam between them, because they are cells of
-   the same size holding the same kind of thing;
-3. a single 1 px rule, the only line inside the widget;
-4. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim.
+1. a **gear row** of five identical cells — the pack, then helmet / chest / legs / boots;
+2. an **ability row** on the same five columns, only when open — the unspent skill points in the
+   pack's own column, then LOOSE / DODGE / AMBUSH / FLETCH. It is the gear row's twin: both are
+   things you buy the next level of, one with gold and one with skill points, which is why they
+   are stacked and share a grid. Rank is pips along the bottom of the well, the renock / dodge /
+   fletch cooldowns still wipe it top-down, and an ability a point can land on wears a pulsing
+   gold rim and a plus badge in its corner — gone the moment one cannot. (The badge sits *in* the
+   corner rather than perching above the cell, because the gear row is directly overhead.)
+3. the **inventory grid** (`BAG_CAP` 25 — five rows of five), only when open, continuing straight
+   down the same columns on the same `BAG_GAP` — no wider seam between them, because they are
+   cells of the same size holding the same kind of thing;
+4. a single 1 px rule, the only line inside the widget;
+5. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim.
+
+Everything that lays the widget out or hit-tests it asks **`bagOpenNow()`**, never
+`state.bagOpen`: a raised bit column forces the pack open (there has to be a grid to drag bits
+from), and the two answers disagreeing by a row would land every click below the gear one cell out.
+
+A grid cell holding a tool or a bit wears that item's **tier plate** rather than the default well,
+so a find is read at a glance without a rarity word anywhere; a tool also counts its loaded bits
+as pips along the bottom, in the corner a stack number would have used.
 
 **The row is on top and the grid hangs below it, and that is load-bearing rather than taste.** An
 affordable gear piece bobs a gold chevron *above* its cell and the hover price sits higher still,
@@ -721,20 +822,22 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a live main-menu item (`menuHit()`, frozen planks stay an arrow), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree), a live wheel segment, or a control inside the backpack
-  widget (`gearHit()` / `bagHit()`), or a free skill-point square on the hud strip
-  (`abHit()` — the gold strip of the bag stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
-  slider; **hammer** — over a stump or finished structure (right-clickable; `dim` beyond the
-  60 px reach); **reticle** — everywhere else in play.
+  widget (`gearHit()` / `bagHit()`), a weapon slot (`stripHit()`) or a cell of a raised bit column
+  (`bitColHit()` — the gold strip of the bag stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
+  slider, **or carrying an item on the cursor** (`state.drag`, which outranks everything: the drag
+  ghost *is* the cursor until it is put down); **hammer** — over a stump or finished structure
+  (right-clickable; `dim` beyond the 60 px reach); **reticle** — everywhere else in play.
 - Reticle `mode` (table `RETICLE`): **idle** white cross; **lock** gold ring — E will work
   the object under the pointer (`workTarget()` is non-null: tree, rock, berried bush),
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
   the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
   are blocked right now: floundering in a hole, or mid-roll.
-- Every reticle in play also carries the **bow's own state**, whatever the pointer is over, since
-  the crosshair is where the eye already is: `nock` (0→1 as the renock cooldown elapses) draws
-  four gold corner marks falling inward onto the ring, and `dry` (empty quiver) drops the centre
-  pixel and greys the ticks — a hollow crosshair. `amb` (buried, settled: the next arrow is worth
+- Every reticle in play also carries the **selected tool's own state**, whatever the pointer is
+  over, since the crosshair is where the eye already is: `nock` (0→1 over that tool's own
+  `toolRof`) draws four gold corner marks falling inward onto the ring, and `dry` — an empty
+  quiver, an empty slot, **or** a tool with no bit light enough to throw — drops the centre
+  pixel and greys the ticks, a hollow crosshair. `amb` (buried, settled: the next shot is worth
   `AMBUSH_MUL`) grows a second segment out along each of the crosshair's **own axes** and warms the
   centre pixel to gold — deliberately on the cross, where the renock's marks are on the diagonals,
   so a bow that is both reloading and buried says two separate things at once. All three come from
@@ -760,7 +863,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
 `state.menu`:
 
-- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / SETTINGS —
+- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / TECH TREE / SETTINGS —
   `menuFrozen(i)` is true for MULTIPLAYER and PRACTICE TOOL: both drawn sealed under an ice
   glaze by `drawMenuButton(..., frozen)`, never selectable or activatable until they exist;
   arrow keys skip the whole iced block and the hand cursor ignores them. Each frozen plank's
@@ -770,9 +873,12 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   struck point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it
   refreezes, and `menu.shards` ice chips spray and fall, to `SFX.iceKnock`. SINGLEPLAYER leads
   the column as the one live way in; the sealed pair sits as a quiet coming-soon block;
-  SETTINGS is the live utility at the foot) plus the seed row (`SEED N` + an
-  11×11 die) as one more selectable, stacked
-  `MENU_PITCH` apart from `MENU_Y0`; the slab (`MENU_SLAB_PAD` past each side of `MENU_BW`) and
+  [TECH TREE](#the-tech-tree-screen) and SETTINGS are the two live utilities at the foot) plus
+  the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
+  `MENU_PITCH` apart from `MENU_Y0`. **`menu.hover` has one cell per rect** — items *plus* the
+  seed row — and its length is a literal in core.js, a file that loads before `MENU_ITEMS`
+  exists; the ease tops a missing cell up with `|| 0` because a short array went NaN and silently
+  deleted the seed row when the fifth plank arrived. The slab (`MENU_SLAB_PAD` past each side of `MENU_BW`) and
   pillars (`TITLE_PILLAR_W`, `TITLE_PILLAR_DX`) size themselves to the rects; `menuLayout()` is the single source of rects for hit-testing
   (`menuHit()`) and drawing. `menu.sel` is the keyboard selection; the mouse only steals it
   when it actually moves (`menu.moved`, set by mousemove), so arrows and hover never fight.

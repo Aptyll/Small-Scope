@@ -41,6 +41,11 @@ declare victory. The three affordances:
   once will never show it again. `DBG.PROFILE` is the store and `DBG.openNamePanel(first)` opens
   the panel either way (`true` = the SKIP variant). See
   [architecture.md](architecture.md#profilejs).
+- **The [tech tree](gameplay.md#the-tech-tree) needs staging too**, because it decides what the
+  world may drop and a played-in profile has already opened half of it. `DBG.wipeTech()` puts it
+  back to a fresh install without losing the name, `PROFILE.addGold(n)` buys research points
+  (`DBG.techPoints()`), and `DBG.research(id)` unlocks a node the way a click does — it rebuilds
+  `LOOT_POOL` itself, so read that back rather than the profile to prove an unlock landed.
 - **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
@@ -119,13 +124,38 @@ is not an object type: it is a `STRUCTS` entry in [js/structures.js](../../js/st
 which carries the same `mm`/`map` pair and gets solidity, both maps and the E prompt for free.
 
 **Adding a carried item** — one `ITEMS` entry (`icon`, `stack`) is the storage half: the bag,
-the drop pickup, the death spill and the refusal tell are all generic over that table. What is
-*not* generic and must be written per item: an 8×8 icon sprite beside `itemBerry`, a colour in
-`RES_COLORS` for the pickup floater, the sprite branch in the drop draw pass, whatever *makes*
-the item, and what using it does — `bagClick` maps a cell click onto an input flag, so a new
-item needs its own branch there or clicking its cell will just deny. Gold is **not** an `ITEMS`
-entry and must not become one: it is a wallet number with no ceiling.
-See [gameplay.md](gameplay.md#inventory-and-the-backpack).
+the drop pickup, the death spill, the drag and the refusal tell are all generic over that table.
+What is *not* generic and must be written per item: an 8×8 icon sprite (bake it beside its own
+code, not in the byte-fragile js/sprites.js — see `bakeGrid` in js/tools.js and `CHEST_SPR`), a
+colour in `RES_COLORS` for the pickup floater, whatever *makes* the item, and what using it does —
+`bagClick` maps a cell click onto an input flag, so a new item needs its own branch there or
+clicking its cell will just deny — and a branch in `tipStack` (the `tooltips` banner, js/ui.js) or
+hovering it says only its raw type name. The drop draw pass and the bag cell both centre an icon
+on its own width, so a 12×12 needs no branch. Gold is **not** an `ITEMS` entry and must not become
+one: it is a wallet number with no ceiling. See
+[gameplay.md](gameplay.md#inventory-and-the-backpack).
+
+**Adding a weapon (a tool) or a bit** — both are one entry in `TOOLS` / `BITS`
+([js/tools.js](../../js/tools.js)); the loop at the foot of that file registers the `ITEMS` and
+`RES_COLORS` rows, so storage, drops, the death spill, the drag and the loot pools all pick it up
+with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` key — reuse one of
+the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
+**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`stick`/`col` and an
+8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
+envelope in `toolMods`. Both need a `name` and a `blurb` — the tooltip prints them, and they are
+the only words the kind ever gets.
+
+**It also needs a `TECH` node**, or it is unreachable: the loot pool is built from what the
+profile has *researched*, so a kind with no node is never rolled and never appears in any match.
+Give it a `req` naming the node beneath it (null only on the free tier-0 row), and keep each
+lineage to a root plus at most two children — the tech screen's 7×3 grid derives its rows from
+`TECH` and a fourth column would draw off the page. The screen, the tooltip and the loot pool all
+follow from that one row.
+
+A brand-new `path` is the only thing that is not table-driven: it needs a
+branch in `steerBit`, and a body of its own in the shots pass (`drawTumbler`/`drawMote`,
+js/render.js) if the arrow silhouette would misread it — plus a line in `drawAimLine`'s honesty
+rule, which refuses to draw a straight line for a path that does not fly straight.
 
 **Adding a stored profile field** — the field goes in `blank()` in
 [js/profile.js](../../js/profile.js) *and* in the repair loop `PROFILE.load()` runs over an
@@ -134,10 +164,11 @@ existing save, or an old profile reaches its readers without it. Give it an acce
 `saveNow()` for something the player just chose, `scheduleSave()` for anything the sim writes
 mid-match. Nothing outside that file may name a storage key.
 
-**Adding a tool** — append to `TOOLS` with a `TOOL_*` index constant, add an 8×8 icon sprite
-and name it in the entry's `icon` field, map the object types it works in `workTarget()`
-(that is the only selection logic — there are no keys or bar slots), and give its `key`
-behavior in `hitObject()`'s gating.
+**Adding a swing tool** (the axe/pick family that E brings out — *not* a weapon, which is the
+entry above) — append to `SWING_TOOLS` with a `SWING_*` index constant, add an 8×8 icon sprite and
+name it in the entry's `icon` field, map the object types it works in `workTarget()` (that is the
+only selection logic — there are no keys or bar slots), and give its `key` behavior in
+`hitObject()`'s gating.
 
 **Adding an ability or input** — it belongs to *every* slot, not to the local player. Add the
 field to `makeInput()`, fill it for the human in `sampleHumanInput()` (edge-triggered flags are
@@ -235,7 +266,8 @@ count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
 `CHAMPS`, the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
 the slot count (`MAX_PLAYER_SLOTS`, js/player.js) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
-the arrow speed/damage formulas in `fireArrow()`,
+the `TOOLS` and `BITS` tables and the loot rates (`ROCK_DROP`/`TREE_DROP`/`CHEST_TOOL`/`LOOT_TOOL`)
+in js/tools.js, the flight-path constants beside `steerBit`, the damage roll in `emitBit()`,
 `TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
 `update()`.
 
@@ -281,6 +313,10 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 - `SPRITES.goldOre`, `SPRITES.itemWood`, and `SPRITES.itemStone` are baked but unreferenced since
   the single-currency change (no ore object, no wood/stone drops or HUD counters). They are now
   one `ITEMS` entry each away from being carryable, should a resource ever return.
+- `SWING_TOOLS[SWING_BOW].icon` (`'itemBow'`) is unread since the weapon slots landed —
+  `drawHeldTool` puts the *equipped* tool in the hands at rest, and only the axe and pick rows'
+  icons are still resolved through the table. The row is kept so `SWING_TOOLS` stays one entry per
+  `p.swing` value, and `SPRITES.itemBow` itself is live on the end screen's kills plate.
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
 - `audio/music/` is now exactly the six files `TRACKS` names — the alternate takes and album art

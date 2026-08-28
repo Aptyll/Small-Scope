@@ -188,12 +188,17 @@ function updatePlay(dt) {
   resolveContests(); // this step's work swings, build orders and fish claims
   if (state.drop) updateDrop(dt);
 
-  // arrows in flight
+  // Shots in flight. Everything a tool fires rides this one array, whatever
+  // bit it came out of - steerBit() is where the bit's flight path gets to
+  // rewrite the velocity before the step is taken, so the trail, the hit
+  // tests and the drawn body all just follow wherever it went. A turret bolt
+  // carries no path and falls straight through it.
   for (let i = arrows.length - 1; i >= 0; i--) {
     const a = arrows[i];
+    a.t += dt;
+    steerBit(a, dt);
     const vd = Math.hypot(a.vx, a.vy) || 1;
     const nx = a.vx / vd, ny = a.vy / vd;
-    a.t += dt;
     a.x += a.vx * dt; a.y += a.vy * dt;
     // a faint mote in the shooter's colour every few px of flight: the shot
     // reads as a streak, and whose shot it is reads from across the map. The
@@ -206,7 +211,10 @@ function updatePlay(dt) {
       particles.push({
         x: a.x - nx * a.trailD, y: a.y - ny * a.trailD,
         vx: -nx * 8, vy: -ny * 8,
-        life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE, color: TEAMS[a.team].mark,
+        life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE,
+        // the trail says WHOSE shot it is, which is what it is for - except a
+        // burning one, where the fire is the more urgent fact about it
+        color: a.burn ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[a.team].mark,
         size: 1, grav: 0, alpha: ARROW_TRAIL_A,
       });
     }
@@ -227,17 +235,25 @@ function updatePlay(dt) {
         }
       }
     }
-    if (!dead && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
+    // a bit whose `solid` is false passes through the world - that is the
+    // whole of "never hits ground", and the only reason a wisp can circle you
+    // through a treeline
+    if (!dead && a.solid !== false && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
       dead = true;
       burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
+      if (a.burn) burst(a.x, a.y, '#ff9440', 7, 50, 0.5);
     }
     if (!dead) {
-      // players first: the same shot that drops a deer drops a rival
+      // players first: the same shot that drops a deer drops a rival. A bit
+      // with friendly fire on skips the team check - but never the shooter,
+      // who is not a target of their own tool at any weight.
       for (const t of players) {
-        if (a.team === t.team || !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
+        if ((a.team === t.team && !a.ff) || t.id === a.owner ||
+            !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
         if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
           damagePlayer(t, a.dmg, nx, ny, players[a.owner], null, a.ambush);
           burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+          if (a.burn) burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
           break;
@@ -248,7 +264,7 @@ function updatePlay(dt) {
       // worker bots take the same shot: they are units in the open, on a
       // team, and the only thing that ever stood outside the arrow pipeline
       for (const b of robots) {
-        if (a.team === b.team || b.dead) continue;
+        if ((a.team === b.team && !a.ff) || b.dead) continue;
         if (robotHit(b, a.x, a.y)) {
           hurtRobot(b, a.dmg, nx, ny, players[a.owner]);
           if (a.ambush) ambushFx(a.x, a.y);
@@ -267,11 +283,12 @@ function updatePlay(dt) {
       }
     }
     if (dead) {
-      // every bow shot that ends - a miss, a wall, a body, or the end of its
-      // life - leaves the shaft where it stopped. One rule, no exceptions, so
-      // "arrows come back" is learnable from the first miss. Turret bolts ride
-      // this same array and are not arrows: they leave nothing.
-      if (!a.kind) stickArrow(a, nx, ny);
+      // A shot that ends - a miss, a wall, a body, or the end of its life -
+      // leaves a shaft where it stopped IF the bit that fired it is one that
+      // comes back (BITS[...].stick, the plain arrow and the barb). That is
+      // what keeps "arrows come back" true while a thrown log or a conjured
+      // wisp plainly does not. Turret bolts carry no bit and leave nothing.
+      if (!a.kind && a.stick) stickArrow(a, nx, ny);
       arrows.splice(i, 1);
     }
   }
@@ -356,11 +373,13 @@ function updatePlay(dt) {
         if (j < 0) return;
         // a pickup takes only what fits, and what was taken comes OFF the
         // drop, so a stack that only partly fits leaves its remainder lying
-        // there instead of being picked up forever.
-        const got = bagAdd(p, d.type, d.n);
+        // there instead of being picked up forever. An instanced drop (a
+        // loaded tool) goes in whole or not at all - it cannot be split.
+        const got = d.it ? (bagPut(p, d.it) ? 1 : 0) : bagAdd(p, d.type, d.n);
         if (got > 0) {
           d.n -= got;
           addFloater(p.x, p.y - 14, '+' + got, RES_COLORS[d.type]);
+          noteSeen(p, d.type); // the local player has now held one: mark the tech node
           if (p === player) SFX.stash();
         }
         if (d.n <= 0) drops.splice(j, 1); else d.t = 0;
@@ -705,8 +724,16 @@ function updatePlayer(p, dt) {
     }
   }
   // the work tool goes away with the swing cooldown; held E brings it right back
-  if (p.swingT <= 0 && p.swingCd <= 0) p.tool = TOOL_BOW;
+  if (p.swingT <= 0 && p.swingCd <= 0) p.swing = SWING_BOW;
   if (inp.work) tryWork(p);
+
+  // The four weapon slots: a tap of 1-4 selects, and keeping that key down
+  // past TOOL_HOLD_T raises the slot's bit column (bitEditSlot, js/tools.js -
+  // the local slot's editor, drawn by the UI). The timer lives on the player
+  // and runs off the input struct like everything else, so nothing about it
+  // reads `keys` directly.
+  if (inp.toolPick >= 0) { selectTool(p, inp.toolPick); inp.toolPick = -1; }
+  p.toolHoldT = inp.toolHold ? p.toolHoldT + dt : 0;
 
   // the quiver: the renock cooldown counts down, and a short quiver fletches
   // one arrow back at a time. Both run for every slot, dead or alive is
@@ -723,24 +750,27 @@ function updatePlayer(p, dt) {
   p.readyFlash = Math.max(0, p.readyFlash - dt);
   p.dryT = Math.max(0, p.dryT - dt);
 
-  // bow: pressing arms the shot, releasing looses. The press does not have to
-  // land on a ready bow - it stays armed, so holding through the renock (or
-  // through an empty quiver) draws the moment the next arrow is there. Without
-  // that, a controller that holds fire down - every AI slot does - would fire
-  // once and then wait forever for an edge it already spent.
+  // The tool: pressing arms the shot, releasing fires it. The press does not
+  // have to land on a ready tool - it stays armed, so holding through the
+  // cycle (or through an empty quiver) draws the moment the next shot is
+  // there. Without that, a controller that holds fire down - every AI slot
+  // does - would fire once and then wait forever for an edge it already spent.
+  // `toolReady` is the second half of the old quiver gate: a slot with no tool
+  // in it, or a tool with no bit light enough to throw, is just as dry.
+  const armed = p.quiver > 0 && toolReady(p);
   if (inp.fire && !p.firePrev) {
     p.fireArmed = true;
-    if (p.quiver <= 0 && p.dryT <= 0) dryFire(p);
+    if (!armed && p.dryT <= 0) dryFire(p);
   }
   if (!inp.fire) p.fireArmed = false;
-  if (p.fireArmed && !p.charging && p.nockT <= 0 && p.quiver > 0 && p.fallT <= 0 && p.swingT <= 0) {
+  if (p.fireArmed && !p.charging && p.nockT <= 0 && armed && p.fallT <= 0 && p.swingT <= 0) {
     p.charging = true;
     p.chargeT = 0;
     if (nearPlayer(p.x, p.y)) SFX.bowDraw();
   }
   if (!inp.fire && p.charging) {
     p.charging = false;
-    fireArrow(p);
+    fireTool(p);
     p.chargeT = 0;
   }
   p.firePrev = inp.fire;

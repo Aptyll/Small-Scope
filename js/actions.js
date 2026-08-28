@@ -1,19 +1,26 @@
 'use strict';
-// What a player does: click/E/space resolved - the tools and what they
-// harvest, the bow's quiver and its spent shafts, the roll as a hit, prone,
-// and one blow against anything built, each with its own tuning above it.
+// What a player does: click/E/space resolved - the swing tools and what they
+// harvest, the quiver and its spent shafts, the roll as a hit, prone, and one
+// blow against anything built, each with its own tuning above it. What the
+// LEFT button fires is a tool on one of the four slots: js/tools.js.
 // ------------------------------------------------------------ actions
 // Every action takes the player performing it, so the local human, an AI fill
 // and a future network peer all reach the world through the same calls.
 
-// the three infinite tools. Not player-selectable: the bow is always in hand
-// and E auto-swaps to the axe / pick for whatever is under the cursor
-const TOOLS = [
+// The three infinite SWING tools - what E has in hand, never what the button
+// fires. Not player-selectable: E auto-swaps to the axe / pick for whatever is
+// under the cursor, and the slot's weapon comes back the moment the swing ends.
+// The player-selectable weapons are the four slots in TOOLS (js/tools.js).
+const SWING_TOOLS = [
+  // the 'bow' row is the AT REST state, not a thing that draws: drawHeldTool
+  // puts the weapon on the selected slot in the hands instead, so this entry's
+  // `icon` is unread (SPRITES.itemBow is still live on the end screen's kills
+  // plate). Kept so the table stays one row per p.swing value.
   { key: 'bow',  name: 'BOW',     icon: 'itemBow' },
   { key: 'axe',  name: 'AXE',     icon: 'itemAxe' },
   { key: 'pick', name: 'PICKAXE', icon: 'itemPick' },
 ];
-const TOOL_BOW = 0, TOOL_AXE = 1, TOOL_PICK = 2;
+const SWING_BOW = 0, SWING_AXE = 1, SWING_PICK = 2;
 const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
 // The quiver: arrows are a resource, not an infinite stream. A shot spends one
 // and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
@@ -65,7 +72,7 @@ const PRONE_SNIFF = 22;   // px: nothing hides at arm's length, whatever it is u
 const PRONE_MAP = 0.55;   // cover past this drops a rival off both maps (a crawler never reaches it)
 const AMBUSH_MUL = 2.5;   // damage on the shot loosed out of full cover
 
-// left click is the bow, always: the press only records the intent
+// left click fires the selected tool slot: the press only records the intent
 function clickAction(p) {
   SFX.unlock();
   p.input.fire = true;
@@ -83,7 +90,7 @@ function workTarget(p) {
     // a building (any tile of its footprint - `part` resolves to the anchor) is a
     // target only for the other team; you take your own down from the wheel instead
     const st = structOf(o);
-    if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) t = TOOL_AXE; }
+    if (STRUCTS[st.type]) { if (!ownsStruct(st, p)) t = SWING_AXE; }
     else {
       // scenery answers from its OBJECTS entry: `tool` is what E reaches for,
       // and `ready` (the bush's berries) is what decides it is worth reaching.
@@ -91,9 +98,9 @@ function workTarget(p) {
       // rival-only target, the same rule a building answers above.
       const d = OBJECTS[o.type];
       if (d && d.tool && (!d.ready || d.ready(o)) &&
-        (o.team === undefined || o.team !== p.team)) t = d.tool === 'pick' ? TOOL_PICK : TOOL_AXE;
+        (o.team === undefined || o.team !== p.team)) t = d.tool === 'pick' ? SWING_PICK : SWING_AXE;
     }
-  } else if (ground[idx(tx, ty)] === 1) t = TOOL_PICK;
+  } else if (ground[idx(tx, ty)] === 1) t = SWING_PICK;
   if (t < 0) return null;
   // tile-based, not a radius: only the ring of tiles around the one you stand on
   const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
@@ -124,7 +131,7 @@ function tryWork(p) {
   if (!t || !t.near) return;
   if (p.charging) { p.charging = false; p.chargeT = 0; } // work drops the draw
   p.fireArmed = false;                                     // ...and the held button has to be pressed again
-  p.tool = t.tool;
+  p.swing = t.tool;
   p.workTx = t.tx; p.workTy = t.ty;
   const dx = t.tx * TILE + 8 - p.x, dy = t.ty * TILE + 8 - p.y;
   p.swingDir = Math.atan2(dy, dx);
@@ -351,84 +358,13 @@ function stickArrow(a, nx, ny) {
   shafts.push({ x, y, nx, ny, team: a.team, t: 0 });
   while (shafts.length > SHAFT_MAX) shafts.shift();
 }
-// pressing the bow on an empty quiver: the tell, rate-limited to the press
+// pressing a tool that cannot answer - an empty quiver, an empty slot, or a
+// tool with no bit light enough to throw: the tell, rate-limited to the press.
+// What the press WOULD have fired lives in fireTool (js/tools.js).
 function dryFire(p) {
   p.dryT = 0.45;
   burst(p.x, p.y - BOW_Y, '#8a97bd', 3, 22, 0.3, true);
   if (p === player) SFX.dryFire();
-}
-
-function fireArrow(p) {
-  // read the cover before anything below can break it: this is the one shot
-  // that pays for the walk in at a crawl
-  const amb = ambushReady(p);
-  // bow-fishing: standing on ice with a fish right underfoot spears it
-  // through the sheet instead of loosing the arrow. Two players can reach the
-  // same fish in one step, so the catch is contested, not first-come.
-  const ftx = Math.floor(p.x / TILE), fty = Math.floor((p.y + 4) / TILE);
-  if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
-    let bi = -1, bd = FISH_CATCH_R;
-    for (let i = 0; i < fish.length; i++) {
-      if (!fish[i].born) continue; // still swimming in from under the shore: not there to spear yet
-      const d = Math.hypot(fish[i].x - p.x, fish[i].y - p.y);
-      if (d < bd) { bd = d; bi = i; }
-    }
-    // a full bag refuses the catch rather than spearing a fish into nowhere:
-    // the motion is spent (the bow still renocks) and the fish stays under
-    // the ice. Falling through to the arrow instead would shoot the floor.
-    if (bi >= 0 && bagRoom(p, 'fish') <= 0) {
-      if (p === player) bagDenied();
-      p.nockT = kitOf(p).nock;
-      return;
-    }
-    if (bi >= 0) {
-      const f = fish[bi];
-      contest('fish:' + bi, p, () => {
-        const j = fish.indexOf(f);
-        if (j < 0) return;
-        fish.splice(j, 1);
-        bagAdd(p, 'fish', 1);
-        addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
-        burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
-        burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
-        if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.stash(); }
-      });
-      // the shaft is speared through the ice, not loosed: it costs no arrow,
-      // but it is the same hand motion, so the bow still has to be renocked
-      p.nockT = kitOf(p).nock;
-      return;
-    }
-  }
-  const kit = kitOf(p);
-  // the arrow leaves the quiver here, and the bow cannot be drawn again until
-  // the next one is nocked - the one gate every shot goes through
-  p.quiver = Math.max(0, p.quiver - 1);
-  p.nockT = kit.nock;
-  const pw = Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
-  // momentum shot: a kit with spdDmg pays extra for speed at the moment of release
-  const spdBonus = kit.spdDmg * Math.min(1, Math.hypot(p.vx, p.vy) / 200);
-  // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise the
-  // flight runs parallel to the aim line, a few px above it, and never meets it
-  const dx = p.input.aimX - p.x;
-  const dy = p.input.aimY - (p.y - BOW_Y);
-  const d = Math.hypot(dx, dy) || 1;
-  const spd = 170 + 190 * pw;
-  let dmg = Math.round(kit.dmgBase + kit.dmgPow * pw + spdBonus) + LVL_DMG * (p.level - 1);
-  if (amb) dmg = Math.round(dmg * kit.ambushMul);
-  arrows.push({
-    x: p.x, y: p.y - BOW_Y,
-    vx: dx / d * spd, vy: dy / d * spd,
-    t: 0, life: 0.85, dmg, pow: pw,
-    owner: p.id, team: p.team, // whose shot it is - it never hits its own side
-    ambush: amb,               // loosed out of full cover: hits for AMBUSH_MUL and lands loud
-    trailD: 0,                 // px of flight banked toward the next trail mote (see updatePlay)
-  });
-  if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
-  else p.dir = dy > 0 ? 'down' : 'up';
-  if (nearPlayer(p.x, p.y)) SFX.arrow();
-  // the loose is what breaks cover - one ambush per burrow, then you are a
-  // player lying in the open with a bow that still has to be renocked
-  risePlayer(p);
 }
 
 // the swing lands on the tile tryWork() locked, whatever is there by now
@@ -504,7 +440,7 @@ function hitObject(o, p) {
   const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
   const near = nearPlayer(ox, oy); // remote players' work must not spam the mix
   // hard tool gating: an object with a `needs` bounces off anything else
-  const k = TOOLS[p.tool].key;
+  const k = SWING_TOOLS[p.swing].key;
   const d = OBJECTS[o.type];
   if (d && d.needs && k !== d.needs) {
     if (near) SFX.deny();
@@ -530,6 +466,7 @@ function hitObject(o, p) {
       awardGold(p, YIELD.treeFall + kitOf(p).harvest, ox, oy - 6); // PACKMULE fattens the fell
       burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
       burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
+      dropLoot(ox, oy - 6, 0, TREE_DROP); // the rare one: something was living in it
       if (o.rare) {
         awardGold(p, YIELD.treeRare, ox, oy - 12);
         burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
@@ -565,6 +502,10 @@ function hitObject(o, p) {
       if (p === player) state.shake = Math.max(state.shake, 2);
       awardGold(p, YIELD.rockBreak + kitOf(p).harvest, ox, oy - 6);
       burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
+      // the common source: a rock is where a bottom-tier tool or bit was
+      // buried, and it is what makes mining worth doing after the gold stops
+      // being the point (js/tools.js)
+      dropLoot(ox, oy - 4, 0, ROCK_DROP);
     }
   } else if (o.type === 'eagle') {
     // the roost: a rival's E swing is the melee siege on the objective. The
@@ -586,9 +527,10 @@ function hitObject(o, p) {
     }
   } else if (o.type === 'chest') {
     // a buried cache in the treeline (placeChests, js/world.js): one free E
-    // press springs it - gold straight into the purse, plus a card drop
-    // rolled from CHEST_ODDS. The tile opens with it, so a sprung chest
-    // leaves a gap in the forest wall where it stood.
+    // press springs it - gold straight into the purse, a card drop rolled
+    // from CHEST_ODDS, and the one place a TOP-tier tool or bit is found (a
+    // rock and a felled tree only ever pay out the bottom tier). The tile
+    // opens with it, so a sprung chest leaves a gap in the forest wall.
     objects[idx(o.tx, o.ty)] = null;
     if (near) SFX.stash();
     if (p === player) state.shake = Math.max(state.shake, 1.5);
@@ -597,6 +539,7 @@ function hitObject(o, p) {
     const key = cardKey(rarity);
     spawnDrop(ox, oy, key, 1);
     addFloater(ox, oy - 24, rarity.toUpperCase() + ' CARD', RES_COLORS[key]);
+    dropLoot(ox, oy, TOOL_TIERS.length - 1, CHEST_TOOL);
     burst(ox, oy - 6, '#f2cc6a', 12, 55, 0.6, true);
     burst(ox, oy - 6, '#8a6142', 8, 45, 0.5, true);
   } else if (STRUCTS[o.type]) {

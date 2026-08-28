@@ -169,10 +169,20 @@ function render() {
   drawShafts(ex, ey, now);
   for (const d of drops) {
     const spr = SPRITES[ITEMS[d.type] ? ITEMS[d.type].icon : 'itemGold'];
+    const h = spr.width >> 1; // a tool's icon is 12x12, everything else 8x8
     // shadow
     ctx.fillStyle = 'rgba(120,140,175,0.35)';
     ctx.fillRect(Math.round(d.x - ex) - 2, Math.round(d.y - ey) + 2, 4, 2);
-    ctx.drawImage(spr, Math.round(d.x - ex) - 4, Math.round(d.y - d.z - ey) - 4);
+    // a find glints in the colour of its own tier, so something worth walking
+    // to is told from a berry at a distance
+    const tier = itemTier(d.type);
+    if (tier >= 0) {
+      ctx.globalAlpha = 0.35 + 0.25 * Math.sin(now * 5 + d.x);
+      ctx.fillStyle = TOOL_TIERS[tier].rim;
+      ctx.fillRect(Math.round(d.x - ex) - h - 1, Math.round(d.y - d.z - ey) - h - 1, h * 2 + 2, h * 2 + 2);
+      ctx.globalAlpha = 1;
+    }
+    ctx.drawImage(spr, Math.round(d.x - ex) - h, Math.round(d.y - d.z - ey) - h);
   }
 
   // y-sorted entities. A building sorts by the bottom of its footprint; a
@@ -340,6 +350,12 @@ function render() {
     const nx = a.vx / vd, ny = a.vy / vd;
     const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
     if (hx < -16 || hx > WV_W + 16 || hy < -16 || hy > WV_H + 16) continue;
+    // Not everything a tool fires is a shaft. A thrown log tumbles as a block
+    // and a conjured mote is a glow with no bearing at all, so those two get
+    // bodies of their own; every other bit is the arrow silhouette below,
+    // inked in the bit's own colour.
+    if (a.path === 'lob') { drawTumbler(a, hx, hy); continue; }
+    if (a.path === 'orbit') { drawMote(a, hx, hy, now); continue; }
     const qx = -ny, qy = nx;
     ARROW_PX.length = 0;
     const at = (i, j) => ARROW_PX.push(
@@ -356,7 +372,7 @@ function render() {
       ctx.fillRect(px - 1, py, 1, 1); ctx.fillRect(px + 1, py, 1, 1);
       ctx.fillRect(px, py - 1, 1, 1); ctx.fillRect(px, py + 1, 1, 1);
     }
-    ctx.fillStyle = '#e8dcb4';
+    ctx.fillStyle = a.col || '#e8dcb4'; // the bit's own colour is the shaft
     for (let k = 0; k < shaftEnd; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
     ctx.fillStyle = TEAMS[a.team].mark;
     for (let k = shaftEnd; k < ARROW_PX.length; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
@@ -430,6 +446,10 @@ function render() {
   renderWeather(ex, ey);
   renderVignettes();
   replayTick(now); // banks the finished world frame - must stay above renderUI
+  // what the pointer is on, resolved ONCE and before anything lays out around
+  // it: the event feed steps up by tipLift() the way it does for the replay
+  // window, so this cannot come after the feed (see the tooltips banner, ui.js)
+  tipResolve();
   renderUI(now);
   if (state.mode === 'drop') renderDropUI(now);
   // the flag order riding the pointer (its target tile is bracketed back in
@@ -449,6 +469,10 @@ function render() {
   if (!state.mapOpen && !state.settingsOpen && !window.DBG.hideUI &&
     !endScreen() && // a victory or defeat screen owns the whole frame
     (state.mode === 'play' || state.mode === 'dead')) renderEventLog();
+  // the tooltip owns the bottom-left corner while it is up (the feed lifted
+  // out of its way above); it draws in every mode, since the tech tree on the
+  // title screen is read through it too
+  if (!window.DBG.hideUI && !endScreen()) drawTooltip();
   if (scoreboardOpen()) renderScoreboard();
   if (!window.DBG.hideUI) drawTags();
   if (state.fade && state.fade.a > 0) {
@@ -469,6 +493,36 @@ function render() {
 // clear of the berry/fish counters above it, above every overlay. In title
 // only the fps line shows - nobody stands anywhere yet, and the menu prints
 // the seed itself with the reroll die.
+// A thrown log: a 5x5 block spinning about its own centre as it arcs. Drawn
+// as four rotated corner runs rather than a sprite, so it reads at any angle
+// the way the arrow body does, and rimmed for the same reason.
+function drawTumbler(a, hx, hy) {
+  const s = a.t * 9;
+  const c = Math.cos(s), n = Math.sin(s);
+  const put = (col, r) => {
+    ctx.fillStyle = col;
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      ctx.fillRect(Math.round(hx + dx * c - dy * n), Math.round(hy + dx * n + dy * c), 1, 1);
+    }
+  };
+  put(ARROW_RIM, 3);
+  put(a.col || '#a3794f', 2);
+  ctx.fillStyle = '#d9ad72';
+  ctx.fillRect(Math.round(hx - c - n), Math.round(hy - n + c), 1, 1);
+}
+// A conjured mote: no bearing, so no shaft - a rimmed core that breathes, and
+// the one shot whose light in the dark is the point of it
+function drawMote(a, hx, hy, now) {
+  const r = 2 + Math.round(Math.abs(Math.sin(now * 7 + a.ox)) );
+  ctx.fillStyle = ARROW_RIM;
+  ctx.fillRect(hx - r, hy - r + 1, r * 2 + 1, r * 2 - 1);
+  ctx.fillRect(hx - r + 1, hy - r, r * 2 - 1, r * 2 + 1);
+  ctx.fillStyle = a.col || '#8fd8ff';
+  ctx.fillRect(hx - r + 1, hy - r + 1, r * 2 - 1, r * 2 - 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(hx, hy, 1, 1);
+}
+
 function drawTags() {
   if (!settings.info) return;
   // two columns: a dim label, then the value on one shared x so the numbers
@@ -748,24 +802,31 @@ function cursorInfo() {
   }
   if (state.mapOpen || state.paused) return { kind: 'arrow' };
   if (state.wheel) return { kind: wheelLayout().seg >= 0 ? 'hand' : 'arrow' };
+  // an item riding the pointer hides the reticle entirely: the drag ghost IS
+  // the cursor until it is put down somewhere
+  if (state.drag) return { kind: 'grab' };
   // the backpack widget: a hand over anything in it that does something, a
   // plain arrow over the rest of its frame (which still swallows the click).
-  // The hud strip's upgrade squares (and their wells, while a point is free)
-  // are the other left-clickable HUD in play.
+  // The weapon slots and an open bit column are the other left-draggable HUD.
   const bh = bagHit(mouse.x, mouse.y);
   if (gearHit(mouse.x, mouse.y) >= 0 || (bh && bh.kind !== 'frame')) return { kind: 'hand' };
   if (bh) return { kind: 'arrow' };
-  const ah = abHit(mouse.x, mouse.y);
-  if (ah && (ah.kind === 'up' || ah.kind === 'slot') && abCanBuy(player, ah.i)) return { kind: 'hand' };
-  if (ah) return { kind: 'arrow' };
+  if (bitColHit(mouse.x, mouse.y) >= 0) return { kind: 'hand' };
+  const sh = stripHit(mouse.x, mouse.y);
+  if (sh && sh.kind === 'slot') return { kind: 'hand' };
+  if (sh) return { kind: 'arrow' };
 
-  // Every reticle in play carries the bow's state, whatever it is hovering:
-  // `nock` is how much of the renock has elapsed (1 = ready) and `dry` says
-  // the quiver is empty. drawCursor turns them into the ring's own behaviour,
-  // so the crosshair the eye is already on is where the cooldown is read.
+  // Every reticle in play carries the tool's state, whatever it is hovering:
+  // `nock` is how much of the cycle between shots has elapsed (1 = ready) and
+  // `dry` says the button has nothing to answer with - an empty quiver, an
+  // empty slot, or a tool with no bit light enough to throw. drawCursor turns
+  // them into the ring's own behaviour, so the crosshair the eye is already on
+  // is where the cooldown is read.
   const nockK = kitOf(player);
-  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockK.nock) : 1;
-  const dry = player.quiver <= 0;
+  const held = heldTool(player);
+  const nockSpan = held ? toolRof(player, held) : nockK.nock;
+  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockSpan) : 1;
+  const dry = player.quiver <= 0 || !toolReady(player);
   // `amb` rides along the same way: buried, settled, and the next arrow off
   // this string is the one worth AMBUSH_MUL
   const ret = (mode, dim, extra) =>
@@ -913,10 +974,16 @@ function drawCursor(info, now) {
   }
 }
 
-// dotted flight line while the bow is drawn: a static dotted line from the
-// arrow's spawn point through the cursor, exactly as far as the arrow would fly (range grows with the draw),
-// and stop at the first solid tile, since arrows die on those. A fish in
-// bow-fishing reach gets a catch marker instead - that shot never flies.
+// Dotted flight line while the tool is drawn: a static dotted line from the
+// shot's spawn point through the cursor, exactly as far as the BIT that is up
+// next would fly, stopping at the first solid tile if that bit is one a wall
+// stops. A fish in bow-fishing reach gets a catch marker instead - that shot
+// never flies.
+//
+// A bit that does not fly in a straight line gets NO line, because the only
+// honest straight line for a boomerang or an orbit is none: what those do is
+// shown by the shot itself the moment it leaves. A lob gets the first part of
+// its flight, up to where it starts falling away from the bearing.
 function drawAimLine(ex, ey, now) {
   if (!player.charging || state.mode !== 'play') return;
   const full = player.chargeT >= kitOf(player).bowCharge;
@@ -939,17 +1006,25 @@ function drawAimLine(ex, ey, now) {
       return;
     }
   }
-  const p = Math.min(1, Math.max(0.18, player.chargeT / kitOf(player).bowCharge));
-  const range = (170 + 190 * p) * 0.85; // speed x lifetime, as fireArrow() sets them
-  const x0 = player.x, y0 = player.y - BOW_Y; // exactly fireArrow()'s origin and direction
+  // the bit that is up next, and the envelope its tool would fire it through
+  const cell = heldTool(player);
+  if (!cell) return;
+  const bi = peekBit(cell);
+  if (bi < 0) return;
+  const bit = BITS[cell.bits[bi]];
+  if (bit.path === 'boomer' || bit.path === 'orbit') return;
+  const m = toolMods(cell);
+  const range = bit.speed * m.spdMul * bit.life * m.lifeMul * (bit.path === 'lob' ? 0.35 : 0.85);
+  const x0 = player.x, y0 = player.y - BOW_Y; // exactly emitBit()'s origin and direction
   const dx = mouseWX() - x0, dy = mouseWY() - y0;
   const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
-  // walk the flight: stop at the first solid tile or the first animal the
-  // arrow would hit (same 8px body test as the arrow update)
+  // walk the flight: stop at the first solid tile (only for a bit a wall
+  // stops) or the first animal the shot would hit (the arrow update's own
+  // 8px body test)
   let len = range, blocked = null; // 'solid' | 'animal'
   for (let s = 10; s < range; s += 3) {
     const x = x0 + nx * s, y = y0 + ny * s;
-    if (isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
+    if (bit.solid !== false && isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
     let hit = false;
     for (const an of animals) if (animalHit(an, x, y)) { hit = true; break; }
     if (!hit) for (const q of players) {

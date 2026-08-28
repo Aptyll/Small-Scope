@@ -57,10 +57,13 @@ white, for the downed objective's hit flash):
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to
-those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The tool
-icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
-`drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the `TOOLS`
-table) and by `drawRobot()` for a bot's swing — there is no tool bar. The **gear icons** are
+those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The swing
+tool icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
+`drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the
+`SWING_TOOLS` table) and by `drawRobot()` for a bot's swing — E picks the tool, there is no tool
+bar. At rest `drawHeldTool()` draws the **weapon on the selected slot** instead, which is a 12×12
+`toolArt_*` canvas baked in [js/tools.js](../../js/tools.js) rather than here; both sizes go
+through the same code because the icon is centred on its own half-width. The **gear icons** are
 twelve 12×12 grids, **one per variant** (`gearLongsight` … `gearGhoststep`), each baked once per
 **material** — `GEAR_MAT_PALS`, leather → iron → steel → gold, plus the shared accent chars `w`
 (ice-white) and `r` (hearth-red) — into `SPRITES.gearIcons[slot][variant][material]`: the glyph
@@ -90,6 +93,14 @@ frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — 
 `deadTree` (two 16×24 snags on `DTPAL`, the same footprint as a pine so they draw in the same
 band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
 Anything drawn through `drawSpriteFlash` must stay within 64×64.
+
+**New sprites bake beside the code that draws them, not here.** The treasure chest (`CHEST_SPR`,
+js/draw-world.js) and every tool and bit icon (`TOOL_ART` / `BIT_ART` / `bakeGrid`, js/tools.js)
+paint their char grids onto their own canvases and assign into `SPRITES`, which works because it
+is a plain object. The reason is the paragraph below: `js/sprites.js` is byte-fragile, so the
+fewer sessions that rewrite it, the better. Tool art goes further and follows the gear icons'
+trick — one 12×12 silhouette per family, baked once per **tier** through `TOOL_ART_PAL`, so shape
+says which weapon and palette says how good it is.
 
 `js/sprites.js` has a UTF-8 BOM and **seven** rows that repair a mangled byte via
 `'...'.replace('о', 'g')` — in `stump`, `imp1` (×2), `wall` (×2, one of them a `/g` replace),

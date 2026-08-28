@@ -1,10 +1,9 @@
 # CLAUDE.md
 
-Softfall: a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map. Ten
-slots over two teams — RED vs BLUE, five a side — each side dropped in by its own armoured eagle,
-which crashes into the treeline and becomes that team's objective; a team's Keep is its way back,
-its downed eagle is its life, and last team standing wins. **Read [docs/dev/game.md](docs/dev/game.md) before proposing a feature or judging whether
-one fits** — that is the design in one page. This file is only the rules.
+Softfall: a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map — ten
+slots, two teams, last side standing. **Read [docs/dev/game.md](docs/dev/game.md) before proposing
+a feature or judging whether one fits**: that is the design in one page, and this file is only the
+rules.
 
 ## Commands
 
@@ -15,14 +14,13 @@ node tools/bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after cha
 
 **Double-clicking [index.html](index.html) has to work** — nothing may depend on being served. A
 `file://` page cannot `fetch` its own folder, which is why `tools/bake-sfx.js` inlines the sound
-effects; an asset loaded any other way is silently dead off the disk. `tools/serve.js` is only the
-screenshot sink and headless driving. No package manager, dependencies, tests or linter; editing a
-`js/*.js` file and reloading is the whole dev loop, and the baker's output is committed.
+effects (its output is committed); an asset loaded any other way is silently dead off the disk.
+No package manager, dependencies, tests or linter: edit a `js/*.js` file and reload.
 
 **Verify changes in the browser, not by re-reading code.** `window.DBG` (end of
-[js/boot.js](js/boot.js)) exposes the live singletons and stages a scene without playing to it,
-`?seed=N` pins the world, `POST /shot` ([tools/serve.js](tools/serve.js#L14)) sinks the canvas to
-`shot.png`, and **`.`** toggles hitboxes and routes: [checklists](docs/dev/checklists.md#verifying-a-change).
+[js/boot.js](js/boot.js)) stages a scene without playing to it, `?seed=N` pins the world,
+`POST /shot` sinks the canvas, and **`.`** toggles hitboxes and routes:
+[checklists](docs/dev/checklists.md#verifying-a-change).
 
 ## Deep docs
 
@@ -33,7 +31,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
-| movement, bow and tools, dodge, wildlife, wolves and birds, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| movement, tools and bits, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
@@ -44,36 +42,37 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** — nineteen files, `core.js` through
+**flat top-level classic scripts sharing one global scope** — twenty files, `core.js` through
 `boot.js` (the tag `pre-split` keeps the one-file history).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
 shared-scope mechanism: [architecture](docs/dev/architecture.md).
 
 **`js/profile.js` is the only file that touches `localStorage`** — the local player profile (name,
-lifetime stats, and the settings that live under it). Everything else goes through `PROFILE`, so
-putting the profile on a server stays a one-file change; never read or write a storage key
-directly.
+lifetime stats, the tech tree's two id lists, and the settings that live under it). Everything else
+goes through `PROFILE`, so putting the profile on a server stays a one-file change; never read or
+write a storage key directly. The **tech tree** is the one part of a profile a match reads back:
+what is researched decides what the world may drop, through `rebuildLootPool()`
+([tech tree](docs/dev/gameplay.md#the-tech-tree)).
 
-All game state lives in module-scope singletons — `state`, `settings`, `players` (`player`/`inv`
-point at the local slot and its gold-only wallet; carried goods are `player.bag`) — plus the arrays
-`animals`, `arrows`, `drops`, `particles`, `floaters`, `footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
+All game state lives in module-scope singletons (`state`, `settings`, `players`) and the entity
+arrays beside them; `player`/`inv` are the **local slot only**, and carried goods are `player.bag`.
+The full list: [code-map](docs/dev/code-map.md#jsplayerjs).
 
 A feature's **tuning constants live in the file that owns the feature**, above the code that reads
 them; `core.js` keeps only the numbers with no one owner. A const is invisible to files that load
 before its own, so anything read at *load time* must be declared no later:
 [architecture](docs/dev/architecture.md#the-game-files-corejs--bootjs).
 
-The game code is organized only by `// ------ name` banners inside its nineteen files.
+The game code is organized only by `// ------ name` banners inside its twenty files.
 **Keep every banner honest**, and find any function by its banner in
-[docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind. Adding a landmark is one `LANDMARKS` entry + `LANDMARK_ORDER`:
-[checklists](docs/dev/checklists.md#common-changes).
+[docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind.
 
 ## Versioning
 
 **Every commit pushed to main bumps the patch by 0.01** — `PATCH_TXT` in [js/menu.js](js/menu.js),
 same commit, before the push; it prints bottom-right of the title screen, so a screenshot carries
-its build. The same commit tops `PATCH_NOTES` with **one sentence**: plain English, uppercase.
+its build. That commit also tops `PATCH_NOTES` with **one sentence**: plain English, uppercase.
 
 ## UI rule: show, don't label
 
@@ -82,15 +81,18 @@ explanations.** An icon beside a number, an arrow that is clickable, a colour th
 team, a plank that lifts on hover — not "CLICK OR ARROWS TO SWAP", not "PLAYERS LEFT: 5". A
 control must read as what it does by its shape and its hover state alone, and if you catch
 yourself writing a hint sentence, build the affordance instead. Text is for names, numbers,
-headlines (a death, a landmark) and three deliberate carve-outs: **keybind indicators** (`'ESC
-BACK'`, a "1" in a slot's corner), the **settings and PLAYER panels**' labelled rows, and
-**first-run onboarding** (the two `showMsg` teaching lines). Anything else that wants words is a design bug.
+headlines (a death, a landmark) and four deliberate carve-outs: **keybind indicators** (`'ESC
+BACK'`, a "1" in a slot's corner), the **settings and PLAYER panels**' labelled rows,
+**first-run onboarding** (the two `showMsg` teaching lines), and the **hover tooltip** (bottom-left,
+`tipAt`/`drawTooltip`, ui.js) — which earns it because comparing a tool's rate of fire against a
+bit's weight is comparing *numbers*, and no shape does that. It is a carve-out, not a licence: the
+well still has to read at a glance without it. Anything else that wants words is a design bug.
 
 ## Hard rules
 
-Cross-file invariants — breaking one produces a bug that looks unrelated to its cause. The test
-for a line belonging here: **would you break it without ever having reason to open the deep doc?**
-If not, it lives in `docs/dev/*.md` beside the code it protects.
+Cross-file invariants — breaking one produces a bug that looks unrelated to its cause. The test for
+belonging here: **would you break it without ever having reason to open the deep doc?** If not, it
+lives in `docs/dev/*.md` beside the code it protects.
 
 - **Canvas size changed?** Call `fitCanvas()` **then** `relayout()` — both paths (window resize,
   `fullscreenchange`) do. Never write layout against a literal 480/270; the view is `VIEW_W`×`VIEW_H`.
@@ -122,6 +124,11 @@ If not, it lives in `docs/dev/*.md` beside the code it protects.
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is
   also the XP source; a direct `+=` earns no levels.
+- **A tool is an instance, not a type name.** Its bag cell carries the bits loaded into it, so a
+  tool is **moved** between bag, slot, drop and back (`bagPut`, `slotPut`, `spawnDrop`'s `it`) and
+  never rebuilt from `s.type` — rebuilding it silently empties somebody's build. What the button
+  fires goes through `fireTool` → `emitBit` for every slot alike: [tools and
+  bits](docs/dev/gameplay.md#tools-and-bits).
 - **Anything deciding it can see a player asks `seenAt(p, range)`**, never a bare range — that one
   function is where GHOSTSTEP and burial live (both maps gate on `concealOf(p)`).
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
@@ -133,17 +140,16 @@ If not, it lives in `docs/dev/*.md` beside the code it protects.
   through `placeStruct`/`destroyStructure` so the registry and lights stay in sync. A building with
   `w`/`h` in `STRUCTS` (the bot bay, 3×2) fills its other tiles with `part` objects pointing at the
   anchor — **read one off a tile with `structOf(objAt(...))`**, create/remove only via
-  `createStruct`/`removeStruct`. **What a type *is* — solid, which tool, the E verb, each map's
-  colour — is its `OBJECTS` entry (scenery) or its `STRUCTS` entry (buildings), never a type name
-  in an `if`;** generic code asks the table: [checklists](docs/dev/checklists.md#common-changes).
+  `createStruct`/`removeStruct`. **What a type *is* lives in its `OBJECTS`/`STRUCTS` entry, never
+  in an `if`** — generic code asks the table: [checklists](docs/dev/checklists.md#common-changes).
 
 ## Keeping the docs current
 
 **The docs are part of the deliverable.** When a change makes a line in this file or in
 `docs/dev/*.md` false, fix it in the same turn as the code change — a stale line is worse than a
 missing one, because future sessions act on it without re-verifying. Prune
-[Known drift](docs/dev/checklists.md#known-drift) entries once fixed; what is worth recording at
-all: [checklists](docs/dev/checklists.md#what-is-worth-recording).
+[Known drift](docs/dev/checklists.md#known-drift) once fixed; what is worth recording at all:
+[checklists](docs/dev/checklists.md#what-is-worth-recording).
 
 **Keep this file under ~150 lines** — it loads in full at the start of every session, and rule
 adherence drops as it grows. Anything derivable by reading the code belongs in `docs/dev/*.md`,

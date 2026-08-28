@@ -34,7 +34,7 @@ on from the eagle), `aboard`/`dropT`/`dropU`
 "a fresh player". Only boot calls it now (death is final — see below); the `first` flag still
 decides whether the slot gets 3 s of i-frames, so a future respawn path can pass `false`.
 
-Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireArrow`, `tryDodge`,
+Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireTool`, `tryDodge`,
 `eatBerry`, `damagePlayer`, `die`, `spillInventory`, `placeStruct`, …), matching the rest of the file's
 style — the class is the state container, not a god object.
 
@@ -78,17 +78,25 @@ instead of the bare constants. **`kitOf(p)` returns the *effective* kit**: the c
 with the slot's [gear](gameplay.md#gear) folded in by `refreshKit(p)` (cached on `p.kit`, rebuilt
 on champion or gear change — never per frame). The champion fields: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
 (snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
-`nock` (seconds between a shot and the next draw — see [the quiver](gameplay.md#the-quiver)),
-`dmgBase`/`dmgPow` (arrow damage = base + pow × draw), `spdDmg` (extra damage scaled by the
-shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
-`updatePlayer`'s movement block, `fireArrow`, `tryDodge`, the AI's draw timing, the cursor,
+`nock` (the baseline every rate of fire is scaled against — a tool's own `rof` is multiplied by
+`nock / BOW_NOCK`, so a champion's hands still set the rhythm; see
+[the quiver](gameplay.md#the-quiver)),
+`dmgBase`/`dmgPow` (what the *player* adds to the bit's own damage), `spdDmg` (extra damage scaled
+by the shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
+`updatePlayer`'s movement block, `emitBit`, `tryDodge`, the AI's draw timing, the cursor,
 aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre-match choice);
 `p.maxHp` is always `levelMaxHp(p)` = kit hp + the level growth below.
 
-| # | Name | Look | Kit |
-| --- | --- | --- | --- |
-| 0 | **WREN**, the Ranger | the original pom-hat sprite | the original numbers, unchanged |
-| 1 | **SKADI**, the Skater | hood, goggles, trailing scarf, skate blades (`SPRITES.champ[1]`) | ice cap ×1.35, sharper carves, slide engages at 60 and fatigues half as fast, draw 0.6 s at 85 % speed, arrows 3 + 6·draw **+ up to 7 for speed**, dash 245, 85 hp |
+| # | Name | Look | Kit | Flies in with |
+| --- | --- | --- | --- | --- |
+| 0 | **WREN**, the Ranger | the original pom-hat sprite | the original numbers, unchanged | a SHORTBOW loaded ARROW + BARBED SHOT |
+| 1 | **SKADI**, the Skater | hood, goggles, trailing scarf, skate blades (`SPRITES.champ[1]`) | ice cap ×1.35, sharper carves, slide engages at 60 and fatigues half as fast, draw 0.6 s at 85 % speed, +3 damage and up to +7 for speed on top of the bit, dash 245, 85 hp | a SLING loaded ARROW + SPEEDUP |
+
+The **weapon is part of the champion**: `CHAMP_LOADOUT` (js/tools.js) pairs each one with a tool
+and its bits, and `setChamp` / `Player.reset` hand it over — so the two champions do not shoot the
+same thing, every AI slot arrives armed, and a respawn is re-armed after
+[death spills the build](gameplay.md#death-is-final). See
+[Tools and bits](gameplay.md#tools-and-bits).
 
 The local slot picks on the champion select screen (see
 [Main menu](rendering.md#main-menu-title)); AI slots hash theirs — champion **and** all four gear
@@ -108,7 +116,7 @@ payout every source uses — and robot deposits both route through it) — it pa
 
 Growth is flat and identical for both champions: each level past 1 adds `LVL_HP` (6) to
 `maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
-(`fireArrow` adds it after the kit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
+(`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
 damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
 plays `SFX.levelUp()` for the local slot.
 
@@ -116,8 +124,10 @@ Each level also grants **one skill point** (`p.skillPts`, starting with one at l
 hud abilities — loose, dodge, ambush, fletch — take ranks 0–`AB_RANK_MAX` (3) on `p.skill`. Rank 0
 is the baseline everything already does; `buySkill(p, i)` spends a point, bumps that rank, and
 `refreshKit` folds `AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`,
-`fletch`). The hud strip's plus-squares (perched on the plate, gone once spent) are the ask; bots dump a free point onto the lowest rank at
-the top of `updateAI`. Nine points by level 9 fill three abilities to rank 3.
+`fletch`). The ability row inside the backpack is where they are spent — a pulsing rim and a plus
+badge on any cell a point can land on, gone once it cannot, and the pack's own column counting
+what is unspent; bots dump a free point onto the lowest rank at the top of `updateAI`. Nine points
+by level 9 fill three abilities to rank 3.
 
 The level shows as a 7×7 badge in `drawPlayer`, flush against the left edge of the overhead
 bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every
@@ -270,7 +280,7 @@ resolution, so a loser keeps its gold.
 Currently contested: work swings (`swingHit`, keyed by tile), build orders (`placeStruct`, keyed by
 tile — a Keep order adds a second check, `teamHasLivingKeep`, re-run *inside* the winning
 callback so two teammates ordering one on two different stumps in the same tick can't both land
-one), fish spears (`fireArrow`, keyed by fish index — a full bag refuses the catch before the
+one), fish spears (`spearFish`, keyed by fish index — a full bag refuses the catch before the
 contest is even entered), drop pickups (keyed by drop index — every player standing on a drop
 claims it *if they have room for it*, and the magnet pulls it toward the nearest such player,
 so a full bag hands the pickup on rather than sitting on it — a dropped card is a neutral pickup

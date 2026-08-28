@@ -242,7 +242,7 @@ sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net
   snowdrift. They render as translucent silhouettes
   through the ice — brighter and surfaced inside an open hole — in a pass right after the
   ground blit (using `ex`/`ey`). Cracking ice spooks nearby fish into a fast dart.
-- **Bow-fishing**: `fireArrow(p)` first checks whether that player stands on an ice tile with a
+- **Bow-fishing**: `spearFish(p)`, the first thing `fireTool(p)` tries, checks whether that player stands on an ice tile with a
   fish within `FISH_CATCH_R` (16 px); if so the shot becomes the catch (any charge level):
   `p.inv.fish++`, splash, no arrow — and the catch is
   [contested](multiplayer.md#contested-orders), so two players can't land the same fish. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
@@ -279,7 +279,7 @@ clamp keeps `vis` at 1 forever). The **draw alpha ramps off the back half of it*
 under the ice, and by the time anything is drawn the only part still outside is a pixel or two of
 tail at a fraction of 0.4 (worst case measured: **0.24**). An emerger that has not made it in
 `FISH_EMERGE_MAX` (14 s) is dropped, unseen. Everything that selects a fish — `hoverFish`,
-`fishInRange`, `fireArrow`'s catch, `drawAimLine`'s marker, the net, the `crackIce` spook — tests
+`fishInRange`, `spearFish`, `drawAimLine`'s marker, the net, the `crackIce` spook — tests
 `born` first.
 
 **The emerge sites are found once and cached** (`emergeSites`/`buildEmergeSites`, a lazy one-time

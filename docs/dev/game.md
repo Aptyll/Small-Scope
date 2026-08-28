@@ -21,10 +21,25 @@ interior threaded by frozen lakes and rivers. See [world.md](world.md#the-tile-w
 
 ## The pillars
 
-**Arrows are finite, on a bow that is always in hand.** There is no weapon swap — the bow is the
-default state of your hands. A spent shaft sticks in the snow where it landed and **anyone** can
-pick it up, so a firefight leaves ammunition on the ground for whoever is still standing.
-[The quiver](gameplay.md#the-quiver).
+**Your weapon is something you build.** Keys 1-4 are four slots, each holding a **tool** — a body
+with a rate of fire, a number of bit cells and a weight it is strong enough to throw. What comes
+out of it is the **bits** loaded into it, fired in order and then round again: a plain arrow, a
+log that arcs down and flattens whoever it lands on, a wisp that circles you lighting the dark,
+or a modifier that rewrites every shot on that tool at once. Neither is bought. Both are found —
+in broken rocks, in felled trees, and at the top tier in the treeline's chests — so the weapon you
+finish a match with is one the map handed you a piece at a time. Hold a slot's key and its bit
+column rises out of it to be rebuilt mid-fight. [Tools and bits](gameplay.md#tools-and-bits).
+
+**The arsenal itself grows across matches.** A **tech tree** on the main menu spends lifetime gold
+on permanently unlocking tools and bits, and what is unlocked is what the world is allowed to drop
+— so the snowfield of your fiftieth match is stocked with things your first one had never heard
+of. It is the only thing that survives a match, and the only thing a match reads back out of the
+profile. [The tech tree](gameplay.md#the-tech-tree).
+
+**Arrows are finite whatever is firing them.** Every projectile bit spends one from the same small
+quiver, and the plain shafts stick in the snow where they land for **anyone** to pick up — so a
+firefight leaves ammunition on the ground for whoever is still standing, and the exotic bits that
+leave nothing behind cost more than their damage says. [The quiver](gameplay.md#the-quiver).
 
 **Momentum is the movement.** Ice is mechanically slippery, dodges chain, and **a roll is a hit** —
 the dodge is an attack, which is why a player mid-roll passes through small units instead of
@@ -36,16 +51,18 @@ visual effect: everything that decides it can see a player goes through one func
 lives inside it. [Prone](gameplay.md#prone-under-the-snow).
 
 **E is the one verb for the world.** The same key harvests a tree, mines a rock, breaks an
-enemy building, and strikes a rival's grounded eagle. [Tools and the bow](gameplay.md#tools-and-the-bow).
+enemy building, and strikes a rival's grounded eagle — and the axe and pick it swings are never
+selected, they come out on their own for whatever is under the cursor.
+[The swing tools](gameplay.md#the-swing-tools-e).
 
 **Gold is the only currency, and gold is also XP.** No wood, no stone — one number earned many
 ways, each source with its own yield profile, and it pays itself: gold is never a pickup on the
 ground, every source pays the earner on the spot. Every payout levels you as a side effect.
 [Economy](gameplay.md#economy-one-currency), [Hero levels](multiplayer.md#hero-levels).
 
-**You carry a 10-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you
-*carry* is `p.bag`, and it is small on purpose. Berries and fish are food, never spent.
-[Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
+**You carry a 25-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you
+*carry* is `p.bag`. Berries and fish are food, never spent; tools and bits are the build being laid
+out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 
 **Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
 gear page is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
@@ -85,8 +102,9 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.
-- **Not an account.** The player profile is a display name and a few lifetime numbers in the
-  browser, and it is skippable. No passwords, no sign-in, nothing gated behind it and nothing in a
-  match reading it but the name over your head — see
+- **Not an account.** The player profile is a display name, a few lifetime numbers and the tech
+  tree, in the browser, and it is skippable. No passwords, no sign-in, nothing to log into. The
+  **one** thing in it a match reads is which nodes are researched, which is what the world may drop
+  — everything else about a match is decided inside that match. See
   [architecture.md](architecture.md#profilejs). If a server ever holds it, it holds the same
   object.

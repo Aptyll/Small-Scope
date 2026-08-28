@@ -10,17 +10,23 @@
 const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
 const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
 const PANEL_SLIDE_T = 0.32;
-const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'SETTINGS'];
+const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'TECH TREE', 'SETTINGS'];
 // sealed under ice until they exist: inert to hover, keys and clicks. 1 and 2
 // are MULTIPLAYER and PRACTICE TOOL - SINGLEPLAYER leads, the sealed pair sits
-// as a quiet coming-soon block, SETTINGS is the live utility at the foot.
+// as a quiet coming-soon block, and TECH TREE / SETTINGS are the two live
+// utilities at the foot.
 function menuFrozen(i) { return i === 1 || i === 2; }
-const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 32;
-const MENU_Y0 = 92;    // first plank, in the 270-tall authored frame; the seed row follows the last plank
+const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
+// First plank, in the 270-tall authored frame; the seed row follows the last
+// plank. The pitch tightened by 2 and the column started 4 higher when the
+// fifth plank arrived, so the seed row still lands clear of the corner tags.
+const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.84'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.86'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.86', 'HOVER ANYTHING AND THE BOTTOM LEFT SAYS WHAT IT IS AND WHAT ITS NUMBERS ARE, AND A TECH TREE ON THE MAIN MENU REMEMBERS WHAT YOU HAVE RESEARCHED AND DECIDES WHAT THE WORLD IS ALLOWED TO DROP.'],
+  ['1.85', 'WEAPONS ARE BUILT NOW - KEYS 1-4 HOLD TOOLS, TOOLS HOLD BITS THAT SAY WHAT THEY FIRE, AND ROCKS, TREES AND CHESTS ARE WHERE BOTH ARE FOUND.'],
   ['1.84', 'A LOSS PLAYS ITS OWN SONG NOW - SLEEPY GAME SAVE, NOT THE VICTORY TRACK.'],
   ['1.83', 'THE PLAYER PANEL COUNTS WINS AND DAYS PLAYED NOW - A MATCH YOU WERE STANDING FOR AT THE END IS A WIN, AND EACH DAY YOU SET FOOT IN IS KEPT, NOT MATCHES STARTED AND A BEST DAY.'],
   ['1.82', 'THE PLAYER PANEL SAYS WHAT ITS NUMBERS MEAN - MATCHES, GOLD EARNED AND BEST DAY EACH GET A LABEL, A DOTTED LEADER AND A COMMA IN THE BIG TOTALS.'],
@@ -186,7 +192,8 @@ function menuActivate(i) {
   if (menuFrozen(i)) return; // solid ice - iceRefuse() is the only answer
   SFX.unlock();
   if (i === 0) beginSelect();
-  else if (i === 3) openMenuPanel('settings');
+  else if (i === 3) beginTech();
+  else if (i === 4) openMenuPanel('settings');
   else if (i === MENU_ITEMS.length) rerollWorld();
 }
 
@@ -216,6 +223,7 @@ function menuKey(e) {
   const m = state.menu;
   const k = e.key.toLowerCase();
   if (state.fade) return; // a reroll is already leaving
+  if (m.screen === 'tech') { if (m.techT >= 1) techKey(k); return; }
   if (m.screen === 'gear') { if (m.gearT >= 1) gearKey(k); return; }
   if (m.screen === 'select') { if (m.screenT >= 1 && m.gearT <= 0) selectKey(k); return; }
   if (m.panel) {
@@ -233,6 +241,7 @@ function menuClick() {
   const m = state.menu;
   SFX.unlock();
   if (state.fade) return;
+  if (m.screen === 'tech') { techClick(); return; }
   if (m.screen === 'gear') { gearClick(); return; }
   if (m.screen === 'select') { selectClick(); return; }
   if (m.panel) {
@@ -323,7 +332,9 @@ function updateTitle(dt) {
   const hit = !m.panel && m.screen === 'menu' ? menuHit() : -1;
   for (let i = 0; i <= MENU_ITEMS.length; i++) {
     const target = menuFrozen(i) ? (hit === i ? 1 : 0) : (m.sel === i ? 1 : 0);
-    m.hover[i] += (target - m.hover[i]) * Math.min(1, dt * 14);
+    // `|| 0` because the array's length is a literal in core.js: a missing
+    // cell would go NaN here and take its whole row off the screen
+    m.hover[i] = (m.hover[i] || 0) + (target - (m.hover[i] || 0)) * Math.min(1, dt * 14);
   }
   // the refusal shudder heals and the ice chips fall
   if (m.iceT > 0) m.iceT = Math.max(0, m.iceT - dt);
@@ -338,6 +349,9 @@ function updateTitle(dt) {
   m.screenT = Math.max(0, Math.min(1, m.screenT + (st ? 1 : -1) * dt / 0.35));
   const gt = m.screen === 'gear' ? 1 : 0;
   m.gearT = Math.max(0, Math.min(1, m.gearT + (gt ? 1 : -1) * dt / 0.3));
+  // the tech tree is a surface of its own, not a third state of the pick
+  // pair - it eases in over the same chrome on a clock of its own
+  m.techT = Math.max(0, Math.min(1, m.techT + (m.screen === 'tech' ? 1 : -1) * dt / 0.35));
   m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
   const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
   for (let i = 0; i < CHAMPS.length; i++) {
@@ -804,14 +818,57 @@ function selectLayout() {
 // variants are on screen at once as cards - four rows, one per piece, three
 // options each - so the choice is a read, not a cycle. Clicking a card picks
 // it (writes straight to player.gear); FLY launches the match via lockIn().
+//
+// Above the cards is the ARMS strip: the tool this champion flies in with and
+// the bits already loaded into it, drawn in exactly the wells they will wear
+// in the HUD - tier plate and all - so what comes out of the eagle is read
+// here rather than discovered on the ground. It is not a choice: the two
+// champions carry different weapons, and that is part of picking one.
 function gearLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  const w = 132, h = 34, gapx = 6, gapy = 4;
+  // the cards lost 4px of height to the arms strip above them; everything
+  // inside drawGearCard still clears its rim at 30
+  const w = 132, h = 30, gapx = 6, gapy = 3;
   const x0 = cx - Math.round((3 * w + 2 * gapx) / 2);
-  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: toy + 56 + i * (h + gapy), w, h })));
+  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: toy + 88 + i * (h + gapy), w, h })));
   const fly = { x: cx - 56, y: toy + 224, w: 112, h: 20 };
-  return { toy, cx, rows, fly };
+  return { toy, cx, rows, fly, arms: { x: cx, y: toy + 58, w: 200, h: 22 } };
+}
+// The champion's starting weapon, laid out flat: the tool's well, then its bit
+// cells left to right in firing order - the bit column of the HUD, tipped on
+// its side because there is no key to hold here. One caption names them, the
+// one place the tool and its bits are spelled out, since a menu is where a
+// name is learned and the HUD is where the colour is then recognised.
+function drawArmsStrip(cx, y, champ, now) {
+  const L = CHAMP_LOADOUT[champ] || CHAMP_LOADOUT[0];
+  const T = TOOLS[L.tool];
+  const cells = 1 + T.cap;
+  const cw = 20, gap = 3;
+  const x0 = cx - Math.round((cells * cw + (cells - 1) * gap) / 2);
+  const names = [T.name].concat(L.bits.map((b) => BITS[b].name)).join(' - ');
+  drawPixelTextShadow(ctx, names, Math.round(cx - pixelTextWidth(names) / 2), y - 10, '#9fb6d8', '#0a0e23');
+  for (let i = 0; i < cells; i++) {
+    const type = i === 0 ? toolType(L.tool) : (L.bits[i - 1] ? bitType(L.bits[i - 1]) : null);
+    const r = { x: x0 + i * (cw + gap), y, w: cw, h: cw };
+    const tp = type ? tierPlate(type, i === 0) : { plate: '#171f45', rim: '#2c3560' };
+    ctx.fillStyle = 'rgba(4,6,18,0.55)';
+    ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
+    ctx.fillStyle = tp.rim;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = tp.plate;
+    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    if (!type) continue;
+    tierShine(r, r.y, type, now);
+    const im = SPRITES[ITEMS[type].icon];
+    ctx.drawImage(im, r.x + ((r.w - im.width) >> 1), r.y + ((r.h - im.height) >> 1));
+  }
+  // and the tool's own ceiling, under the strip: one pip per unit of weight
+  // it can throw, the same pips the bit column counts a bit's weight in
+  for (let k = 0; k < T.tensile && k < 12; k++) {
+    ctx.fillStyle = TOOL_TIERS[T.tier].ink;
+    ctx.fillRect(x0 + 2 + k * 3, y + cw + 2, 2, 2);
+  }
 }
 
 // what the pointer is over on the gear screen: {row, v}, 'fly', or null
@@ -1068,13 +1125,16 @@ function drawGearCard(r, slot, v, hot, picked, focused, now) {
 
 function renderGear(now, a) {
   const m = state.menu;
-  const { toy, cx, rows, fly } = gearLayout();
+  const { toy, cx, rows, fly, arms } = gearLayout();
   const slideIn = 1 - a;
 
   ctx.globalAlpha = a;
   const t0 = 'CHOOSE YOUR GEAR';
   drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 26 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
   drawGoldRule(cx, toy + 41 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+  // what this champion is armed with, above the pieces it is being armoured in
+  drawArmsStrip(cx, arms.y - Math.round(slideIn * 20), m.csel, now);
+  ctx.globalAlpha = a;
 
   const gh = m.gearT >= 1 && mouse.inside ? gearScreenHit() : null;
   for (let i = 0; i < rows.length; i++) {
@@ -1097,6 +1157,181 @@ function renderGear(now, a) {
   ctx.globalAlpha = 1;
 }
 
+// ---- the tech tree screen: what the world is allowed to drop -------------
+// Entered from the TECH TREE plank. `TECH` (js/tools.js) already carries the
+// only edge in the graph - each node's `req` - and it happens to lay out as
+// seven clean lineages of at most three, so the page is a 7x3 grid: one ROW
+// per lineage, one COLUMN per tier, and every edge is a horizontal line from a
+// node to the one it opens. Nothing here is written down but the three tier
+// names and the research total; a node's identity, its stats, its price and
+// its state are all read through the tooltip (bottom left) that any hover
+// raises, which is the whole reason that panel exists.
+const TECH_CELL = 20, TECH_COLW = 96, TECH_ROWH = 24;
+// the lineages, built once from TECH: a tier-0 root, then whatever it opens
+const TECH_ROWS = (() => {
+  const kids = {};
+  for (const n of TECH) if (n.req) (kids[n.req] = kids[n.req] || []).push(n.id);
+  return TECH.filter((n) => !n.req).map((root) => {
+    const row = [root.id];
+    for (let cur = root.id; kids[cur] && kids[cur].length; cur = kids[cur][0]) row.push(kids[cur][0]);
+    return row;
+  });
+})();
+function techLayout() {
+  const toy = Math.round((VIEW_H - 270) / 2);
+  const cx = Math.round(VIEW_W / 2);
+  const x0 = cx - Math.round((2 * TECH_COLW + TECH_CELL) / 2);
+  const y0 = toy + 76;
+  return { toy, cx, x0, y0 };
+}
+function techNodeRect(row, col) {
+  const { x0, y0 } = techLayout();
+  return { x: x0 + col * TECH_COLW, y: y0 + row * TECH_ROWH, w: TECH_CELL, h: TECH_CELL };
+}
+// the node id under (mx, my), or null. Shared by the hover, the click and the
+// tooltip, so the three can never point at different nodes.
+function techHit(mx, my) {
+  for (let r = 0; r < TECH_ROWS.length; r++) {
+    for (let c = 0; c < TECH_ROWS[r].length; c++) {
+      const n = techNodeRect(r, c);
+      if (mx >= n.x - 2 && mx < n.x + n.w + 2 && my >= n.y - 2 && my < n.y + n.h + 2) return TECH_ROWS[r][c];
+    }
+  }
+  return null;
+}
+function beginTech() {
+  const m = state.menu;
+  m.screen = 'tech';
+  m.tsel = 0;
+  SFX.place();
+}
+function leaveTech() { state.menu.screen = 'menu'; SFX.pickup(); }
+// every node in one flat list, for the keyboard cursor
+function techFlat() {
+  const out = [];
+  for (let r = 0; r < TECH_ROWS.length; r++) for (let c = 0; c < TECH_ROWS[r].length; c++) out.push({ r, c, id: TECH_ROWS[r][c] });
+  return out;
+}
+// the one spend: refused out loud rather than silently, since a locked node
+// and an unaffordable one look different but both do nothing
+function techBuy(id) {
+  if (!id) return;
+  if (techResearch(id)) { SFX.levelUp(); return; }
+  SFX.deny();
+}
+function techKey(k) {
+  const m = state.menu;
+  const flat = techFlat();
+  if (k === 'escape' || k === 'backspace') { leaveTech(); return; }
+  const cur = flat[Math.min(m.tsel, flat.length - 1)];
+  const move = (dr, dc) => {
+    const r = Math.max(0, Math.min(TECH_ROWS.length - 1, cur.r + dr));
+    const c = Math.max(0, Math.min(TECH_ROWS[r].length - 1, cur.c + dc));
+    const i = flat.findIndex((n) => n.r === r && n.c === c);
+    if (i >= 0 && i !== m.tsel) { m.tsel = i; SFX.pickup(); }
+  };
+  if (k === 'arrowup' || k === 'w') move(-1, 0);
+  else if (k === 'arrowdown' || k === 's') move(1, 0);
+  else if (k === 'arrowleft' || k === 'a') move(0, -1);
+  else if (k === 'arrowright' || k === 'd') move(0, 1);
+  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; techBuy(cur.id); }
+}
+function techClick() {
+  const m = state.menu;
+  if (m.techT < 1) return;
+  const id = techHit(mouse.x, mouse.y);
+  if (!id) return;
+  const flat = techFlat();
+  const i = flat.findIndex((n) => n.id === id);
+  if (i >= 0) m.tsel = i;
+  m.pressT = 0.12;
+  techBuy(id);
+}
+// one node. Three states and they are told apart by LIGHT, not by a label:
+// done is lit and rimmed in its tier, open is the same plate gone quiet with
+// its price under it, locked is nearly out. The blue pip is "you have held
+// one of these", which is the only thing on the page that is about you rather
+// than about the tree.
+function drawTechNode(id, r, c, hot, focused, now) {
+  const n = techNodeRect(r, c);
+  const done = techDone(id), open = techOpen(id);
+  const cost = techCost(id), afford = techPoints() >= cost;
+  const tp = tierPlate(id, done);
+  const y = n.y - (hot ? 1 : 0);
+  ctx.fillStyle = 'rgba(4,6,18,0.55)';
+  ctx.fillRect(n.x + 2, n.y + 2, n.w, n.h);
+  ctx.fillStyle = done ? tp.rim
+    : hot || focused ? '#8fa0c8'
+    : open ? (afford && Math.sin(now * 6) > 0 ? '#f2cc6a' : '#4a5a8e') : '#232c52';
+  ctx.fillRect(n.x, y, n.w, n.h);
+  ctx.fillStyle = done ? tp.plate : open ? '#141c3c' : '#0a0e23';
+  ctx.fillRect(n.x + 1, y + 1, n.w - 2, n.h - 2);
+  if (done) tierShine(n, y, id, now);
+  const im = SPRITES[ITEMS[id].icon];
+  ctx.globalAlpha = done ? 1 : open ? 0.6 : 0.2;
+  ctx.drawImage(im, n.x + ((n.w - im.width) >> 1), y + ((n.h - im.height) >> 1));
+  ctx.globalAlpha = 1;
+  if (done) { // the tick: two gold pixels in the corner, nothing more
+    ctx.fillStyle = '#8fe08a';
+    ctx.fillRect(n.x + n.w - 4, y + n.h - 3, 2, 2);
+  } else if (open) { // the price, in pips under the node
+    for (let k = 0; k < cost; k++) {
+      ctx.fillStyle = afford ? '#f2cc6a' : '#5a6690';
+      ctx.fillRect(n.x + 2 + k * 3, y + n.h + 2, 2, 2);
+    }
+  }
+  if (PROFILE.techSeen(id)) { ctx.fillStyle = '#8fd8ff'; ctx.fillRect(n.x + 2, y + 2, 2, 2); }
+}
+function renderTech(now, a) {
+  const m = state.menu;
+  const { toy, cx, x0, y0 } = techLayout();
+  const slideIn = 1 - a;
+  ctx.globalAlpha = a;
+  const t0 = 'TECH TREE';
+  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 24 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
+  drawGoldRule(cx, toy + 39 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+  // the one number the page is spent from - lifetime gold, turned into points
+  const pts = techPoints();
+  const rt = 'RESEARCH ' + pts;
+  drawPixelTextShadow(ctx, rt, Math.round((VIEW_W - pixelTextWidth(rt)) / 2), toy + 48, pts > 0 ? '#f2cc6a' : '#5a6690', '#0a0e23');
+  // tier names over their columns; the plate colour under each node repeats it
+  for (let c = 0; c < TOOL_TIERS.length; c++) {
+    const nm = TOOL_TIERS[c].name;
+    drawPixelTextShadow(ctx, nm, x0 + c * TECH_COLW + Math.round((TECH_CELL - pixelTextWidth(nm)) / 2),
+      y0 - 12, TOOL_TIERS[c].ink, '#0a0e23');
+  }
+  // edges first, under the nodes: gold once the node they leave is researched
+  for (let r = 0; r < TECH_ROWS.length; r++) {
+    for (let c = 0; c + 1 < TECH_ROWS[r].length; c++) {
+      const from = techNodeRect(r, c), lit = techDone(TECH_ROWS[r][c]);
+      const ly = from.y + (TECH_CELL >> 1);
+      ctx.fillStyle = '#0a0e23';
+      ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 2);
+      ctx.fillStyle = lit ? '#c89a3c' : '#2c3560';
+      ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 1);
+      if (lit) { // a bead running the wire, so a live branch reads as live
+        const t = (now * 0.6 + r * 0.3) % 1;
+        ctx.fillStyle = '#ffd95c';
+        ctx.fillRect(from.x + from.w + Math.round(t * (TECH_COLW - TECH_CELL - 2)), ly - 1, 2, 3);
+      }
+    }
+  }
+  const hov = m.techT >= 1 && mouse.inside ? techHit(mouse.x, mouse.y) : null;
+  const flat = techFlat();
+  const cur = flat[Math.min(m.tsel, flat.length - 1)];
+  for (let r = 0; r < TECH_ROWS.length; r++) {
+    for (let c = 0; c < TECH_ROWS[r].length; c++) {
+      const id = TECH_ROWS[r][c];
+      ctx.globalAlpha = a;
+      drawTechNode(id, r, c, hov === id, cur && cur.id === id, now);
+    }
+  }
+  ctx.globalAlpha = a;
+  const t3 = 'ESC BACK';
+  drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 254, '#5a6690', 'rgba(15,22,50,0.9)');
+  ctx.globalAlpha = 1;
+}
+
 function renderTitle(now) {
   const m = state.menu;
   // leaving: 0 while the menu is up, 0->1 over the intro
@@ -1105,7 +1340,8 @@ function renderTitle(now) {
   if (tintA > 0.005) drawTitleBackdrop(tintA);
   const out = easeOut(outQ / 0.22);           // menu chrome drops away first
   const sc = easeInOut(m.screenT);             // champion select cross-fade
-  const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc); // chrome ducks under a panel or the select screen
+  const tc = easeInOut(m.techT);               // ...and the tech tree's own
+  const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc, tc); // chrome ducks under a panel or either full screen
   const { toy, rects } = menuLayout();
   const cx = Math.round(VIEW_W / 2);
   const chromeA = (1 - out) * (1 - pan);
@@ -1201,6 +1437,7 @@ function renderTitle(now) {
   const gc = easeInOut(state.menu.gearT);
   if (sc > 0.005 && gc < 0.995) renderSelect(now, sc * (1 - out) * (1 - gc));
   if (sc > 0.005 && gc > 0.005) renderGear(now, sc * (1 - out) * gc);
+  if (tc > 0.005) renderTech(now, tc * (1 - out));
 
   // sub-panels slide up from the bottom edge over the still-visible world
   if (m.panel) {

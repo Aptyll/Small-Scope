@@ -14,7 +14,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 
 | File | Lines | Exposes | Role |
 | --- | --- | --- | --- |
-| [js/profile.js](../../js/profile.js) | ~160 | `PROFILE` | the local player profile, and the only file that touches storage |
+| [js/profile.js](../../js/profile.js) | ~240 | `PROFILE` | the local player profile - name, stats, the tech tree - and the only file that touches storage |
 | [js/font.js](../../js/font.js) | ~100 | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | the bitmap font |
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
@@ -28,14 +28,15 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |
 | [js/robots.js](../../js/robots.js) | ~520 | shared scope, no `window.*` export | the worker bots a bay rolls out, and the one flag per player whose tile is their standing order |
-| [js/actions.js](../../js/actions.js) | ~620 | shared scope, no `window.*` export | what a player does: tools and harvesting, the roll as a hit, prone, the quiver |
+| [js/actions.js](../../js/actions.js) | ~600 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone, the quiver |
+| [js/tools.js](../../js/tools.js) | ~760 | shared scope, no `window.*` export | the weapon: the `TOOLS` and `BITS` tables, what a press fires, how each bit flies, the loot rolls, the tech tree, and the icons for both |
 | [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
 | [js/draw-world.js](../../js/draw-world.js) | ~1160 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, the flag and landmark glyphs, lighting/weather/vignettes |
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
-| [js/ui.js](../../js/ui.js) | ~1260 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear widget, hud strip, card draft |
+| [js/ui.js](../../js/ui.js) | ~1950 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear + ability widget, the weapon strip and bit column, the drag, card draft, the hover tooltip |
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
-| [js/menu.js](../../js/menu.js) | ~1200 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, champion select, the gear screen, `PATCH_TXT` |
+| [js/menu.js](../../js/menu.js) | ~1450 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, champion select, the gear screen, the tech tree screen, `PATCH_TXT` |
 | [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |
 | [js/boot.js](../../js/boot.js) | ~490 | `DBG` + shared scope | the last file to load: the eagle drop, the boot order, `window.DBG`, the rAF loop |
 
@@ -63,7 +64,8 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 The local player profile — display name, lifetime stats (`wins`, `gold`, `days`), the
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
-eagle, gating the ride's first-flight countdown) and the
+eagle, gating the ride's first-flight countdown), the
+[tech tree](gameplay.md#the-tech-tree)'s two id lists (`tech.seen` / `tech.done`) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
 is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the
@@ -84,6 +86,11 @@ file is a save file.
   `setName` and `putSettings` write through immediately. A save written with the old `games` /
   `bestDay` pair keeps its gold and starts wins and days at zero — those were different
   numbers, not a rename.
+- **The tech lists are ids and nothing else.** `markSeen` coalesces (it fires from a pickup);
+  `markDone` writes through (it is a deliberate spend). `load()` copies only strings and
+  de-duplicates, so a hand-edited save cannot put a number or a repeat into the tree, and a save
+  written before the tree existed simply arrives without them. What a node *is*, what it costs and
+  what unlocking one does to a match are all in js/tools.js — this file only remembers.
 
 The panel, the field and the title-screen tag are in panels.js, under the `player profile` banner.
 
@@ -134,7 +141,7 @@ list, the mixing targets and the track table: [gameplay.md](gameplay.md#audio).
 
 ### The game files (core.js … boot.js)
 
-Nineteen files of flat top-level code (see [Shared global scope](#shared-global-scope)), each
+Twenty files of flat top-level code (see [Shared global scope](#shared-global-scope)), each
 organized only by `// ------ name` banners.
 **Keep every banner honest.** Find any function by its banner in [code-map.md](code-map.md)
 rather than grepping blind.

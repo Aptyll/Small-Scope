@@ -34,10 +34,10 @@ function renderEventLog() {
   const n = Math.min(EVENT_MAX, events.length);
   if (!n) return;
   const pitch = 10;
-  // oldest at the top, newest along the bottom; it has the bottom-left corner
-  // to itself again now the gear row lives in the backpack, and steps up by
-  // replayLift() px for as long as the replay window is open
-  let y = VIEW_H - 8 - replayLift() - pitch * n;
+  // oldest at the top, newest along the bottom; it shares the bottom-left
+  // corner with the replay window and the tooltip, and steps up by their
+  // height for as long as either is open
+  let y = VIEW_H - 8 - replayLift() - tipLift() - pitch * n;
   for (let i = events.length - n; i < events.length; i++) {
     const e = events[i];
     const a = Math.max(0, 1 - e.t / EVENT_LIFE); // age alone sets the alpha
@@ -479,17 +479,20 @@ function buildSettingsPanel() {
   g.fillStyle = '#2c3a68';
   g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
   // hotkey listing, two columns
+  // HOLD 1-4 is in the left column because only that one has a 36px key
+  // field; it is the one binding in the game with nothing on screen to
+  // discover it from, which is exactly what this block is the carve-out for.
   const cols = [
-    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'BOW'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
-    [['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
+    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['HOLD 1-4', 'BITS'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
+    [['1-4', 'WEAPON'], ['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
   ];
   for (let c = 0; c < 2; c++) {
-    let y = 137; // eight rows in the left column: pitch 9 so the last still clears ESC CLOSE
+    let y = 137; // nine rows in the left column: pitch 8 so the last still clears ESC CLOSE
     const x0 = c === 0 ? 16 : 128;
     for (const [k, desc] of cols[c]) {
       drawPixelText(g, k, x0, y, '#ffd95c');
       drawPixelText(g, desc, x0 + (c === 0 ? 36 : 26), y, '#7a8bb8');
-      y += 9;
+      y += 8;
     }
   }
   // close hint

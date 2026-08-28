@@ -57,7 +57,7 @@ const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
 // ---- champions ----------------------------------------------------------
 // Every slot plays one of these. A champion is a look (SPRITES.champ[c]) plus
-// a kit: the handful of numbers updatePlayer / fireArrow / tryDodge read
+// a kit: the handful of numbers updatePlayer / emitBit / tryDodge read
 // through kitOf(p) instead of the bare constants. Champion 0 is the original
 // kit unchanged; the skater trades draw power for ice speed and shoots
 // harder the faster she is moving. Picked on the select screen (local) or
@@ -82,8 +82,10 @@ const CHAMPS = [
 // folded in. refreshKit() rebuilds the cache whenever champion or gear
 // changes; kitOf() itself is called many times a frame and must stay a read.
 function kitOf(p) { return p.kit || CHAMPS[p.champ].kit; }
-// swap a slot's champion: kit hp applies on the spot (full heal, it's a pre-match choice)
-function setChamp(p, c) { p.champ = c; refreshKit(p); p.hp = p.maxHp; }
+// swap a slot's champion: kit hp applies on the spot (full heal, it's a
+// pre-match choice), and the new champion brings its own tool and bits - the
+// loadout is part of who you picked, not a thing carried across (js/tools.js)
+function setChamp(p, c) { p.champ = c; refreshKit(p); p.hp = p.maxHp; giveLoadout(p); }
 // kit hp plus the flat per-level growth
 function levelMaxHp(p) { return kitOf(p).maxHp + LVL_HP * (p.level - 1); }
 // the one way gold enters a wallet: pays the purse and the same amount of XP
@@ -131,6 +133,11 @@ function playerTint(p) {
 // they do in any RPG bag, and the pickup path can genuinely refuse a berry
 // when there is nowhere to put it - which is the whole reason the system is
 // slots and not a pair of counters.
+//
+// A cell may also be INSTANCED: a tool's cell carries the bits loaded into it
+// (`bits`, `idx` - see js/tools.js), which is why a tool stacks to 1 and is
+// moved with bagPut() rather than rebuilt from a type name. Nothing else in
+// the bag has state of its own.
 const ITEMS = {
   berry: { icon: 'itemBerry', stack: 3 },
   fish: { icon: 'itemFish', stack: 2 },
@@ -149,7 +156,11 @@ const CARD_RARITIES = ['white', 'green', 'blue', 'purple', 'gold'];
 function cardKey(rarity) { return 'card' + rarity[0].toUpperCase() + rarity.slice(1); }
 const CARD_TYPE_RARITY = {}; // 'cardWhite' -> 'white', the inverse of cardKey
 for (const r of CARD_RARITIES) CARD_TYPE_RARITY[cardKey(r)] = r;
-const BAG_CAP = 10; // the one bag everyone starts with; a second one raises p.bagCap
+// The one bag everyone starts with; a second one raises p.bagCap. Five rows of
+// BAG_COLS: two for what you eat and draft, three more because tools and their
+// bits are collected, sorted and swapped between slots, and a build that lives
+// in the bag needs somewhere to be laid out.
+const BAG_CAP = 25;
 function bagCount(p, type) {
   let n = 0;
   for (const s of p.bag) if (s && s.type === type) n += s.n;
@@ -182,6 +193,14 @@ function bagAdd(p, type, n) {
     p.bag[i] = { type, n: take }; left -= take;
   }
   return n - left;
+}
+// An instanced cell (a tool, which carries its own bits) cannot be rebuilt
+// from a type name, so it is placed whole into the first free slot rather than
+// merged into a stack. Returns false when there was nowhere to put it, and the
+// caller decides - the drop path leaves it lying in the snow.
+function bagPut(p, cell) {
+  for (let i = 0; i < p.bag.length; i++) if (!p.bag[i]) { p.bag[i] = cell; return true; }
+  return false;
 }
 // spends from the LAST stack backwards, so partial stacks empty and free
 // their cell instead of leaving a trail of ones across the bag
@@ -353,6 +372,8 @@ function makeInput() {
                          // level - holding a modifier while tapping W closes the
                          // browser tab, and preventDefault cannot stop it
     eatBerry: false, eatFish: false, // edge-triggered
+    toolPick: -1,        // edge-triggered: select this weapon slot (keys 1-4)
+    toolHold: false,     // that slot's key is still down - past TOOL_HOLD_T it raises the bit column
     cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
   };
 }
@@ -396,7 +417,7 @@ class Player {
     this.ai = {
       tgt: null, avoid: null, avoidT: 0, thinkT: 0,
       huntTgt: null, huntT: 0, huntAvoid: null, huntAvoidT: 0,
-      lootT: 0, spendT: 0, buildT: 0,
+      lootT: 0, spendT: 0, buildT: 0, fitT: 0,
       hideT: 0, hideCd: 0,
       wx: 0, wy: 0, roam: 0,
     };
@@ -428,7 +449,15 @@ class Player {
     this.prone = false; this.hide = 0; this.riseT = 0;
     this.crawlT = 0; this.puffT = 0; this.hideFlash = 0;
     this.swingT = 0; this.swingCd = 0; this.swingDir = 0; this.swingHitDone = false;
-    this.tool = TOOL_BOW;                          // held TOOLS index (bow at rest)
+    this.swing = SWING_BOW;                        // held SWING_TOOLS index (bow at rest)
+    // The four weapon slots (keys 1-4) and which one the button fires. A slot
+    // holds a tool CELL - the same object a bag cell is, bits and all - so
+    // moving one between the bag and a slot is a reference move and a tool
+    // never loses what is loaded into it. Regranted here rather than kept,
+    // because death spills the build where you fell (spillInventory) and the
+    // Keep hands your champion's own loadout back. js/tools.js owns all of it.
+    giveLoadout(this);
+    this.toolHoldT = 0;                            // s the selected slot's key has been held (the bit column rises at TOOL_HOLD_T)
     this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
     this.hurtT = 0; this.invuln = first ? 0 : 3;
     this.kbx = 0; this.kby = 0;
@@ -572,10 +601,19 @@ function spillInventory(p, killer) {
     const base = Math.floor(n / parts), rem = n % parts;
     for (let i = 0; i < parts; i++) spawnDrop(p.x, p.y - 4, k, base + (i < rem ? 1 : 0));
   }
+  // the bag, and then the four weapon slots: a build goes down with the body
+  // and lies where it fell, loaded, for whoever walks over it. reset() hands
+  // the slot its champion's starting loadout back, so a respawn is armed but
+  // not the same player it was.
   for (let i = 0; i < p.bag.length; i++) {
     const s = p.bag[i];
     p.bag[i] = null;
-    if (s && s.n > 0) spawnDrop(p.x, p.y - 4, s.type, s.n);
+    if (s && s.n > 0) spawnDrop(p.x, p.y - 4, s.type, s.n, s.bits ? s : null);
+  }
+  for (let i = 0; i < p.tools.length; i++) {
+    const s = p.tools[i];
+    p.tools[i] = null;
+    if (s) spawnDrop(p.x, p.y - 4, s.type, 1, s);
   }
 }
 
@@ -605,6 +643,9 @@ function die(p, src, cause) {
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about
   const killer = src && src !== p ? src : null;
+  // an item on the cursor goes back in the bag first, so it spills with the
+  // rest of the build instead of vanishing with the hand that was holding it
+  if (p === player && state.drag) { dragReturn(); state.dragPend = null; }
   p.downedBy = killer ? killer.name : null;
   p.downedTeam = killer ? killer.team : p.team;
   p.downedCause = cause;

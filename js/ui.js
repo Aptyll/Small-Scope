@@ -579,11 +579,20 @@ function bagGridH() {
   const rows = Math.ceil(player.bagCap / BAG_COLS);
   return rows * BAG_CELL + (rows - 1) * BAG_GAP;
 }
+// The pack is OPEN whenever its own toggle says so, and also whenever a bit
+// column is up: customising a tool means dragging bits between the column and
+// the grid, so the grid has to be there to drag from. Everything that lays the
+// widget out or hit-tests it asks this, never state.bagOpen, or the two
+// disagree by a row and every click below the gear lands one cell out.
+function bagOpenNow() { return state.bagOpen || bitEditSlot() >= 0; }
 // the whole widget; its bottom-right is the view's last pixel, so the grid
 // opens by growing upward rather than off the screen
 function bagFrameRect() {
-  const h = BAG_PAD + BAG_CELL + (state.bagOpen ? BAG_GAP + bagGridH() : 0) +
-    BAG_GAP + 1 + BAG_STRIP + 1; // gap, the gold rule, the gold row, the rim
+  // pad, the gear row, then (open) the ability row and the grid, then the gap,
+  // the gold rule, the gold row and the rim
+  const h = BAG_PAD + BAG_CELL +
+    (bagOpenNow() ? BAG_GAP + BAG_CELL + BAG_GAP + bagGridH() : 0) +
+    BAG_GAP + 1 + BAG_STRIP + 1;
   return { x: VIEW_W - BAG_W, y: VIEW_H - h, w: BAG_W, h };
 }
 // cell i of the top row: 0 is the pack, 1-4 are the gear pieces
@@ -592,12 +601,24 @@ function bagRowRect(i) {
   return { x: f.x + BAG_PAD + i * (BAG_CELL + BAG_GAP), y: f.y + BAG_PAD, w: BAG_CELL, h: BAG_CELL };
 }
 function bagBtnRect() { return bagRowRect(0); }
-// cell i of the inventory grid, on the row's columns
+// Cell i of the ABILITY row, directly under the gear row and on its columns:
+// 0 is the unspent skill points, 1-4 are the four abilities. This row is the
+// gear row's twin - both are things you buy an upgrade of, one with gold and
+// one with skill points - which is why they are stacked and share a grid.
+function bagAbRect(i) {
+  const f = bagFrameRect();
+  return {
+    x: f.x + BAG_PAD + i * (BAG_CELL + BAG_GAP),
+    y: f.y + BAG_PAD + BAG_CELL + BAG_GAP,
+    w: BAG_CELL, h: BAG_CELL,
+  };
+}
+// cell i of the inventory grid, on the row's columns, under both upgrade rows
 function bagCellRect(i) {
   const f = bagFrameRect();
   return {
     x: f.x + BAG_PAD + (i % BAG_COLS) * (BAG_CELL + BAG_GAP),
-    y: f.y + BAG_PAD + BAG_CELL + BAG_GAP + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
+    y: f.y + BAG_PAD + 2 * (BAG_CELL + BAG_GAP) + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
     w: BAG_CELL, h: BAG_CELL,
   };
 }
@@ -609,13 +630,14 @@ function bagStripRect() {
 }
 // the pointer is over HUD that owns its own clicks, not over the world
 function overHud(x, y) {
-  return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!abHit(x, y) || overMinimap();
+  return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!stripHit(x, y) || bitColHit(x, y) >= 0 || overMinimap();
 }
 // What the pointer is on: { kind: 'btn' } (the pack) | { kind: 'cell', i }
-// (a grid slot) | { kind: 'frame' } (anywhere else inside, swallowed and
-// otherwise inert) | null. GEAR cells are NOT reported here - gearHit owns
-// those and every caller asks it first. Shared by the click handler, the
-// cursor and the widget's own hover, so the three can never disagree.
+// (a grid slot) | { kind: 'ab', i } (an ability, or 0 for the skill-point
+// well) | { kind: 'frame' } (anywhere else inside, swallowed and otherwise
+// inert) | null. GEAR cells are NOT reported here - gearHit owns those and
+// every caller asks it first. Shared by the click handler, the cursor and the
+// widget's own hover, so the three can never disagree.
 function bagHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
@@ -623,9 +645,15 @@ function bagHit(mx, my) {
   if (mx < f.x || mx >= f.x + f.w || my < f.y || my >= f.y + f.h) return null;
   const b = bagBtnRect();
   if (mx >= b.x && mx < b.x + b.w && my >= b.y && my < b.y + b.h) return { kind: 'btn' };
-  if (state.bagOpen) for (let i = 0; i < player.bagCap; i++) {
-    const r = bagCellRect(i);
-    if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return { kind: 'cell', i };
+  if (bagOpenNow()) {
+    for (let i = 1; i < BAG_COLS; i++) {
+      const r = bagAbRect(i);
+      if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return { kind: 'ab', i: i - 1 };
+    }
+    for (let i = 0; i < player.bagCap; i++) {
+      const r = bagCellRect(i);
+      if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return { kind: 'cell', i };
+    }
   }
   return { kind: 'frame' };
 }
@@ -634,12 +662,80 @@ function bagClick(h) {
   if (!h) return false;
   if (h.kind === 'frame') return true; // the panel eats it; the world never sees it
   if (h.kind === 'btn') { state.bagOpen = !state.bagOpen; SFX.pickup(); return true; }
+  // an ability cell spends a skill point on that ability, exactly the way a
+  // gear cell spends gold on that piece - the two upgrade rows answer the
+  // same click. The skill-point well (i < 0) is a readout and denies.
+  if (h.kind === 'ab') {
+    if (h.i >= 0 && abCanBuy(player, h.i)) player.input.cmd = { kind: 'skill', i: h.i };
+    else SFX.deny();
+    return true;
+  }
   const s = player.bag[h.i];
   if (!s) { SFX.deny(); return true; }
   if (s.type === 'berry') player.input.eatBerry = true;
   else if (s.type === 'fish') player.input.eatFish = true;
   else if (CARD_TYPE_RARITY[s.type]) openDraft(CARD_TYPE_RARITY[s.type]);
   else SFX.deny();
+  return true;
+}
+
+// ---- carrying an item on the cursor -------------------------------------
+// One drag, shared by everything that can hold an item: the grid, the four
+// weapon slots and a tool's bit column. `state.drag` is the cell riding the
+// pointer - the SAME object the bag held, so a tool never loses its bits on
+// the way across - and `from` is where to put it back when a release lands
+// somewhere that will not take it.
+//
+// Releasing over the WORLD throws it: that is how a tool is thrown away, and
+// the only way to get rid of one. Releasing anywhere on the HUD that is not a
+// valid target returns it home instead, so the frame is a safe place to think
+// better of a drag.
+function dragTake(cell, from) {
+  if (!cell) return false;
+  state.drag = { cell, from };
+  SFX.pickup();
+  return true;
+}
+// Put a carried cell back where the drag started. Home may have been filled
+// behind it (the drop that landed there, a swap earlier in the same gesture),
+// so every branch falls back to any free bag cell and then to the snow -
+// nothing carried is ever destroyed by putting it down.
+function dragReturn() {
+  const d = state.drag;
+  if (!d) return;
+  const f = d.from;
+  let home = false;
+  if (f.k === 'bag') { if (!player.bag[f.i]) { player.bag[f.i] = d.cell; home = true; } }
+  else if (f.k === 'slot') { if (!player.tools[f.i]) { player.tools[f.i] = d.cell; home = true; } }
+  else if (f.k === 'bit') {
+    // a bit came out of a tool as a one-off cell; it goes back as an id
+    const t = player.tools[f.slot];
+    if (t && !t.bits[f.i]) { t.bits[f.i] = bitIdOf(d.cell.type); home = true; }
+  }
+  if (!home && !bagPut(player, d.cell)) throwCell(d.cell);
+  state.drag = null;
+}
+// the world takes it: dropped at the player's feet, instanced items whole
+function throwCell(cell) {
+  spawnDrop(player.x, player.y - 4, cell.type, cell.n, cell.bits ? cell : null);
+  SFX.stash();
+}
+// a carried cell landing on grid cell i: merge into the same kind if it will
+// take it, otherwise swap with whatever is sitting there
+function dragDropBag(i) {
+  const d = state.drag, s = player.bag[i];
+  if (!s) { player.bag[i] = d.cell; state.drag = null; SFX.stash(); return true; }
+  const max = ITEMS[d.cell.type] ? ITEMS[d.cell.type].stack : 1;
+  if (s.type === d.cell.type && !s.bits && s.n < max) {
+    const take = Math.min(d.cell.n, max - s.n);
+    s.n += take; d.cell.n -= take;
+    if (d.cell.n <= 0) state.drag = null;
+    SFX.stash();
+    return true;
+  }
+  player.bag[i] = d.cell;                 // swap: what was here is now carried
+  state.drag = { cell: s, from: { k: 'bag', i } };
+  SFX.pickup();
   return true;
 }
 // opens the pick-1-of-3 draft for a rarity - a pure local UI state change,
@@ -804,27 +900,41 @@ function drawBag(now) {
   // and a bag with no free cell wears amber whatever the pointer is doing
   const btn = bagBtnRect();
   const onBtn = hov && hov.kind === 'btn';
+  const open = bagOpenNow();
   const full = bagUsed(player) >= player.bagCap;
-  bagCellPlate(btn, onBtn || state.bagOpen ? '#8fa0c8' : full ? '#c9922f' : '#35426e',
-    state.bagOpen ? '#182350' : BAG_WELL, false);
+  bagCellPlate(btn, onBtn || open ? '#8fa0c8' : full ? '#c9922f' : '#35426e',
+    open ? '#182350' : BAG_WELL, false);
   ctx.drawImage(SPRITES.itemBag, btn.x + 3, btn.y + 3);
   drawGearCells(now, ghov);
-  if (state.bagOpen) {
+  if (open) {
+    drawAbilityRow(now, hov);
     for (let i = 0; i < player.bagCap; i++) {
       const r = bagCellRect(i), s = player.bag[i];
       const on = hov && hov.kind === 'cell' && hov.i === i;
       // an EMPTY cell is the lighter one. It has no icon to show off, so the
       // well itself has to be the thing you see - free space is what the grid
-      // is being read for - while a full cell goes dark behind its item.
-      const y = bagCellPlate(r, on ? '#8fa0c8' : s ? '#35426e' : '#2c3560',
-        s ? BAG_WELL : '#171f45', on && s);
+      // is being read for - while a full cell goes dark behind its item. A
+      // tool or a bit brings its own ground: the tier plate, which is where
+      // the whole "how good is this find" question is answered.
+      const tp = s ? tierPlate(s.type, on) : null;
+      const y = bagCellPlate(r, on ? '#8fa0c8' : s ? tp.rim : '#2c3560',
+        s ? tp.plate : '#171f45', on && s);
       if (!s) continue;
+      tierShine(r, y, s.type, now);
       // the icon sits high in the cell so the count can have the bottom
       // right corner without its outline eating the cell's own rim
-      ctx.drawImage(SPRITES[ITEMS[s.type].icon], r.x + 5, y + 3);
+      drawItemIcon(s.type, r, y - 2);
       if (s.n > 1) { // a lone item needs no '1' on it - an empty corner says it
         const t = String(s.n);
         drawPixelTextOutline(ctx, t, r.x + r.w - 3 - pixelTextWidth(t), y + 10, '#f4f7ff', '#0f1632');
+      }
+      // a loaded tool counts its bits in the corner the stack number would
+      // have used, so a full build is told apart from a bare body in the grid
+      if (s.bits) {
+        for (let k = 0; k < s.bits.length && k < 5; k++) {
+          ctx.fillStyle = s.bits[k] ? BITS[s.bits[k]].col : '#2c3560';
+          ctx.fillRect(r.x + 3 + k * 3, y + r.h - 4, 2, 2);
+        }
       }
     }
   }
@@ -862,55 +972,194 @@ function drawBag(now) {
   ctx.restore();
 }
 
-// ---- hud strip: four ability slots over the xp bar, bottom-centre --------
-// One opaque plate. Four ability wells on top - LOOSE, DODGE, AMBUSH, FLETCH
-// - and a gold xp bar flush along the bottom (xp IS lifetime gold). While a
-// skill point can land on an ability, a plus-square perches on the plate's
-// top rim (drawn after the frame, so the border does not wrap it) and is
-// gone the moment a point cannot land there. Rank is three pips on the well.
-// A cooldown wipes top-down in whole pixels under a 1px sweep line; a
-// finished one flashes its well white for a beat. Icons are 16x16 char
-// grids with the outline IN the art - an extra rim pass blobs the leather
-// and the fletching into a smear. Team fletching is injected at bake.
+// ---- hud strip: the four weapon slots over the xp bar, bottom-centre -----
+// One opaque plate. Four TOOL wells on top - keys 1-4, the weapon the button
+// fires - then a thin rail carrying the two numbers a fight is read off (what
+// is left in the quiver, and how many dodges are charged), then the gold xp
+// bar flush along the bottom (xp IS lifetime gold).
+//
+// A tool cell says four things without a word on it. The PLATE behind the icon
+// is the tool's tier colour, the same colour it wears in every other well it
+// ever sits in. The SELECTED slot is the one with the lit rim, lifted a pixel
+// off the plate. Along the top inner edge, one pip per bit cell in that tool,
+// inked in each bit's own colour: a filled pip is a bit, a hollow one is a
+// free cell, the bright one is what the next press will fire, and a red one is
+// a bit this tool is not strong enough to throw. And the cooldown between
+// shots wipes top-down over the whole well, so the tool's rate of fire is the
+// shape of the wipe rather than a number anywhere.
+//
+// The upgrade half of this strip - the four ability wells and the plus that
+// spends a skill point on one - moved into the backpack, under the gear row
+// (bagAbRect / drawAbilityRow): both rows are "buy the next level of this",
+// one with gold and one with skill points, so they belong stacked in the same
+// grid rather than split across two corners of the screen.
 const AB_CELL = 20, AB_GAP = 3, AB_N = 4;
 const AB_W = AB_N * AB_CELL + (AB_N - 1) * AB_GAP; // 89: odd, so the centre is a real column
 const AB_PAD = 2, AB_UP = 8, AB_XP = 5;
-const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
+const AB_RAIL = 9; // the quiver + dodge rail between the wells and the bar
+const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_RAIL + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
 const AB_COVER = 'rgba(8,12,30,0.82)';
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
-function abSlotRect(i) {
+// weapon slot i's well
+function toolCellRect(i) {
   const R = hudStripRect();
-  return {
-    x: R.x + i * (AB_CELL + AB_GAP),
-    y: R.y + AB_PAD,
-    w: AB_CELL, h: AB_CELL,
-  };
+  return { x: R.x + i * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
 }
-function abUpRect(i) {
-  const s = abSlotRect(i);
-  // bottom of the square sits on the cell's top, covering the plate's rim
-  return { x: s.x + ((AB_CELL - AB_UP) >> 1), y: s.y - AB_UP, w: AB_UP, h: AB_UP };
-}
-// { kind:'up'|'slot', i } | { kind:'frame' } | null. Shared by the click
-// handler, the cursor and the strip's own hover so they cannot disagree.
-function abHit(mx, my) {
+// { kind:'slot', i } | { kind:'frame' } | null. Shared by the click handler,
+// the cursor and the strip's own hover so they cannot disagree.
+function stripHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
-  for (let i = 0; i < AB_N; i++) {
-    if (!abCanBuy(player, i)) continue;
-    const u = abUpRect(i);
-    if (mx >= u.x && mx < u.x + u.w && my >= u.y - 1 && my < u.y + u.h) return { kind: 'up', i };
-  }
   const R = hudStripRect();
   if (mx < R.x - 3 || mx >= R.x + R.w + 3 || my < R.y || my >= R.y + R.h) return null;
   for (let i = 0; i < AB_N; i++) {
-    const s = abSlotRect(i);
-    if (mx >= s.x && mx < s.x + s.w && my >= s.y && my < s.y + s.h) return { kind: 'slot', i };
+    const s = toolCellRect(i);
+    if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'slot', i };
   }
   return { kind: 'frame' };
+}
+
+// ---- the bit column ------------------------------------------------------
+// Hold a slot's own key and the tool's bit cells rise out of it, bottom to
+// top: cell 0 sits nearest the tool because that is the one that fires first,
+// and the list is walked upward and then wraps, which is what the gold caret
+// climbing its left edge is showing. While it is up the backpack is open too
+// (bagOpenNow), so a bit is dragged straight between the two.
+//
+// The column is a hold, not a mode: it is on screen exactly as long as the key
+// is down. Nothing about it is a menu you can get stuck in.
+const BITC_CELL = 18, BITC_GAP = 2, BITC_LIFT = 6; // lift: clear of the tool well's rim
+// cell i of the column over slot s, i = 0 at the bottom
+function bitColRect(s, i) {
+  const c = toolCellRect(s);
+  const cell = player.tools[s];
+  const n = cell ? cell.bits.length : 0;
+  const top = c.y - BITC_LIFT - n * BITC_CELL - (n - 1) * BITC_GAP;
+  return {
+    x: c.x + ((AB_CELL - BITC_CELL) >> 1),
+    y: top + (n - 1 - i) * (BITC_CELL + BITC_GAP),
+    w: BITC_CELL, h: BITC_CELL,
+  };
+}
+// which bit cell the pointer is on, or -1
+function bitColHit(mx, my) {
+  const s = bitEditSlot();
+  if (s < 0) return -1;
+  const cell = player.tools[s];
+  for (let i = 0; i < cell.bits.length; i++) {
+    const r = bitColRect(s, i);
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return i;
+  }
+  return -1;
+}
+// A carried bit landing in bit cell i of slot s. One bit comes off the stack;
+// whatever it displaces goes onto the now-free hand, into the bag, or onto the
+// snow - in that order, so a swap is never a deletion.
+function dragDropBit(s, i) {
+  const cell = player.tools[s], d = state.drag;
+  const id = bitIdOf(d.cell.type);
+  if (!id) { SFX.deny(); return; }        // a tool does not go inside a tool
+  const was = bitPut(cell, i, id);
+  d.cell.n--;
+  if (d.cell.n <= 0) state.drag = null;
+  if (was) {
+    const out = { type: bitType(was), n: 1 };
+    if (!state.drag) state.drag = { cell: out, from: { k: 'bit', slot: s, i } };
+    else if (!bagPut(player, out)) throwCell(out);
+  }
+  SFX.stash();
+}
+// A carried tool landing on weapon slot i. Only a tool goes here - a bit
+// dropped on a slot is refused rather than quietly swallowed, because a bit
+// belongs in a tool, not on a key.
+function dragDropSlot(i) {
+  const d = state.drag;
+  if (!isToolCell(d.cell)) { SFX.deny(); return; }
+  const was = slotPut(player, i, d.cell);
+  state.drag = was ? { cell: was, from: { k: 'slot', i } } : null;
+  SFX.place();
+}
+// Where the carried item is being let go. Every well that can hold one is
+// tried, then the rest of the HUD sends it home, and only the WORLD throws it
+// away - so a fumbled release inside the frame costs nothing and a deliberate
+// drag out onto the snow is the one way to get rid of a tool.
+function dragDrop(mx, my) {
+  const bc = bitColHit(mx, my);
+  if (bc >= 0) { dragDropBit(bitEditSlot(), bc); return; }
+  const sh = stripHit(mx, my);
+  if (sh) { if (sh.kind === 'slot') dragDropSlot(sh.i); else dragReturn(); return; }
+  const bh = bagHit(mx, my);
+  if (bh) { if (bh.kind === 'cell') dragDropBag(bh.i); else dragReturn(); return; }
+  if (overHud(mx, my)) { dragReturn(); return; }
+  throwCell(state.drag.cell);
+  state.drag = null;
+}
+
+// ---- the press / move / release the drag is made of ---------------------
+// A press ARMS a pick-up rather than performing one, and only movement past a
+// few pixels promotes it into a live drag. That is what keeps one gesture
+// doing two jobs: a tap on a berry still eats it and a tap on a weapon slot
+// still selects it, while a drag off either one picks it up. `state.dragPend`
+// is the armed press; it never survives the release that resolves it.
+const DRAG_SLOP = 3; // px of travel before a press becomes a drag
+function hudPress(mx, my) {
+  if (state.drag) { dragDrop(mx, my); return true; }
+  const bc = bitColHit(mx, my);
+  if (bc >= 0) {
+    const cell = player.tools[bitEditSlot()];
+    if (cell.bits[bc]) state.dragPend = { src: { k: 'bit', slot: bitEditSlot(), i: bc }, x: mx, y: my };
+    return true; // the column swallows the press either way
+  }
+  const sh = stripHit(mx, my);
+  if (sh) {
+    if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
+    else if (sh.kind === 'slot') state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my, empty: true };
+    return true;
+  }
+  const bh = bagHit(mx, my);
+  if (bh) {
+    if (bh.kind === 'cell' && player.bag[bh.i]) state.dragPend = { src: { k: 'bag', i: bh.i }, x: mx, y: my };
+    else if (bh.kind !== 'cell') return bagClick(bh); // the pack button and the ability row act on the press
+    return true;
+  }
+  return false;
+}
+// the pointer moved: an armed press that has travelled far enough becomes the
+// drag itself, lifting the item out of wherever it was sitting
+function hudMove(mx, my) {
+  const q = state.dragPend;
+  if (!q || q.empty) return;
+  if (Math.abs(mx - q.x) < DRAG_SLOP && Math.abs(my - q.y) < DRAG_SLOP) return;
+  state.dragPend = null;
+  if (q.src.k === 'bag') {
+    const s = player.bag[q.src.i];
+    if (!s) return;
+    player.bag[q.src.i] = null;
+    dragTake(s, q.src);
+  } else if (q.src.k === 'slot') {
+    const s = player.tools[q.src.i];
+    if (!s) return;
+    player.tools[q.src.i] = null;
+    dragTake(s, q.src);
+  } else {
+    const cell = player.tools[q.src.slot];
+    const was = cell && bitPut(cell, q.src.i, null);
+    if (was) dragTake({ type: bitType(was), n: 1 }, q.src);
+  }
+}
+// the release. A live drag is put down; an armed press that never moved is
+// the click it always was.
+function hudRelease(mx, my) {
+  if (state.drag) { dragDrop(mx, my); state.dragPend = null; return true; }
+  const q = state.dragPend;
+  state.dragPend = null;
+  if (!q) return false;
+  if (q.src.k === 'bag') bagClick({ kind: 'cell', i: q.src.i });
+  else if (q.src.k === 'slot') selectTool(player, q.src.i);
+  return true;
 }
 // o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
 const AB_PAL = {
@@ -1058,44 +1307,67 @@ function drawXpBar(now, x, y) {
   ctx.fillStyle = hot ? '#cfd8e8' : '#b07a1c';
   ctx.fillRect(gx, gy + gh - 1, Math.max(1, fw - cap), 1);
 }
-function drawAbUp(i, now, hov) {
-  const r = abUpRect(i);
-  const y = r.y - (hov ? 1 : 0);
-  const rim = hov ? '#f4f7ff'
-    : (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227');
-  // dark box so the square silhouettes against snow above the plate
-  ctx.fillStyle = '#0f1632';
-  ctx.fillRect(r.x - 1, y - 1, r.w + 2, r.h + 2);
-  ctx.fillStyle = rim;
-  ctx.fillRect(r.x, y, r.w, r.h);
-  ctx.fillStyle = BAG_WELL;
-  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
-  // 2px-thick 4x4 plus, equal arms, centred in the 6x6 well
-  ctx.fillStyle = '#0f1632';
-  ctx.fillRect(r.x + 2, y + 1, 4, 6);
-  ctx.fillRect(r.x + 1, y + 2, 6, 4);
-  ctx.fillStyle = '#f2cc6a';
-  ctx.fillRect(r.x + 3, y + 2, 2, 4);
-  ctx.fillRect(r.x + 2, y + 3, 4, 2);
+// The tier plate behind an item's icon, wherever that icon sits: a bag cell,
+// a weapon slot, a bit cell, the drag ghost. This is the ONLY place a tier is
+// stated, and it is stated the same way everywhere, which is what lets a find
+// be read at a glance without a rarity word anywhere on screen.
+function tierPlate(type, lit) {
+  const t = itemTier(type);
+  if (t < 0) return { plate: BAG_WELL, rim: lit ? '#8fa0c8' : '#35426e' };
+  const T = TOOL_TIERS[t];
+  return { plate: T.plate, rim: lit ? T.ink : T.rim };
 }
-function drawHudStrip(now) {
+// the gilded tier is the one that moves: a 2px highlight sweeping the plate
+function tierShine(r, y, type, now) {
+  if (itemTier(type) !== TIER_SHINE) return;
+  const span = r.w + r.h;
+  const s = ((now * 26) % (span + 18)) - 9;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(r.x + 1, y + 1, r.w - 2, r.h - 2); ctx.clip();
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#fff2c0';
+  for (let k = 0; k < 2; k++) {
+    for (let dy = 0; dy < r.h; dy++) ctx.fillRect(r.x + Math.round(s + k - dy), y + dy, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+// an item icon centred in a cell of any size (tools are 12x12, everything
+// else 8x8), so one call covers every well the two sizes share
+function drawItemIcon(type, r, y) {
+  const d = ITEMS[type];
+  if (!d) return;
+  const im = SPRITES[d.icon];
+  if (!im) return;
+  ctx.drawImage(im, r.x + ((r.w - im.width) >> 1), y + ((r.h - im.height) >> 1));
+}
+
+// ---- the ability row, in the backpack under the gear -------------------
+// The four hud abilities - LOOSE, DODGE, AMBUSH, FLETCH - and, in the pack's
+// own column, however many skill points are waiting to be spent. Rank is pips
+// along the bottom of the well; a cooldown still wipes the well top-down, so
+// the row is a live readout as well as a shop. An ability a point can land on
+// wears a gold rim and a plus badge in its corner, and stops the moment it
+// cannot - the same "the ask appears, then goes" grammar as the gear row's
+// bobbing chevron one row up.
+function drawAbilityRow(now, hov) {
   const p = player, kit = kitOf(p);
-  const R = hudStripRect();
-  const hov = mouse.inside ? abHit(mouse.x, mouse.y) : null;
-  // one chamfered plate behind bar and slots - the bag's ground, so the two
-  // HUD pieces sit in the same family
-  ctx.fillStyle = AB_BG;
-  ctx.fillRect(R.x - 3, R.y, R.w + 6, R.h);
-  ctx.fillStyle = '#35426e';
-  ctx.fillRect(R.x - 2, R.y, R.w + 4, 1);
-  ctx.fillRect(R.x - 2, R.y + R.h - 1, R.w + 4, 1);
-  ctx.fillRect(R.x - 3, R.y + 1, 1, R.h - 2);
-  ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
+  // the pack's column: what is unspent, in gold pips, and nothing when zero
+  const sr = bagAbRect(0);
+  bagCellPlate(sr, p.skillPts > 0 ? '#8a7a3a' : '#2c3560', BAG_WELL, false);
+  if (p.skillPts > 0) {
+    const bob = Math.round(Math.sin(now * 6));
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(sr.x + 6, sr.y + 3 + bob, 6, 10); ctx.fillRect(sr.x + 4, sr.y + 5 + bob, 10, 6);
+    ctx.fillStyle = '#f2cc6a';
+    ctx.fillRect(sr.x + 7, sr.y + 4 + bob, 4, 8); ctx.fillRect(sr.x + 5, sr.y + 6 + bob, 8, 4);
+    const t = String(p.skillPts);
+    drawPixelTextOutline(ctx, t, sr.x + sr.w - 2 - pixelTextWidth(t), sr.y + sr.h - 7, '#f2cc6a', '#0f1632');
+  }
   if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
   abChSeen = p.dodgeCharges;
-  const dry = p.quiver <= 0;
-  const amb = ambushReady(p);
   const clamp01 = (v) => Math.max(0, Math.min(1, v));
+  const amb = ambushReady(p);
   const nockF = p.nockT > 0 ? clamp01(1 - p.nockT / Math.max(0.01, kit.nock)) : 1;
   const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
     : clamp01(1 - p.dodgeRegenT / Math.max(0.01, kit.dodgeCd));
@@ -1107,82 +1379,491 @@ function drawHudStrip(now) {
     { frac: flF, wipe: p.quiver < QUIVER_MAX, flash: p.quiverFlash > 0 },
   ];
   for (let i = 0; i < AB_N; i++) {
-    const s = slots[i];
-    const cell = abSlotRect(i);
-    const x = cell.x + (i === 0 && p.dryT > 0 ? (((now * 30) | 0) % 2 ? 1 : -1) : 0);
-    const y = cell.y;
-    const rim = s.flash ? '#f4f7ff'
-      : i === 2 && amb ? '#f2cc6a'
-      : i === 0 && dry ? '#7e3346' : '#35426e';
-    ctx.fillStyle = rim;
-    ctx.fillRect(x, y, AB_CELL, AB_CELL);
-    if (rim === '#35426e') {
-      ctx.fillStyle = '#46548a';
-      ctx.fillRect(x, y, AB_CELL, 1);
-      ctx.fillStyle = '#283258';
-      ctx.fillRect(x, y + AB_CELL - 1, AB_CELL, 1);
-    }
-    ctx.fillStyle = i === 0 && dry ? '#241028' : BAG_WELL;
-    ctx.fillRect(x + 1, y + 1, AB_CELL - 2, AB_CELL - 2);
-    if (i === 0 && dry) ctx.globalAlpha = 0.55;
-    ctx.drawImage(abIcon(i, i === 2 && amb), x + 2, y + 2);
-    ctx.globalAlpha = 1;
-    // AMBUSH charge-up: four gold ticks along the top of the well, then the
-    // rim itself goes gold at full cover - no translucent snow over the art
-    if (i === 2 && p.hide > 0) {
-      const ticks = Math.round(p.hide * 4);
-      for (let k = 0; k < 4; k++) {
-        ctx.fillStyle = k < ticks ? (amb ? '#f2cc6a' : '#cfe0f2') : '#2c3560';
-        ctx.fillRect(x + 3 + k * 4, y + 2, 3, 2);
-      }
-    }
+    const s = slots[i], r = bagAbRect(i + 1);
+    const on = hov && hov.kind === 'ab' && hov.i === i;
+    const buy = abCanBuy(p, i);
+    const rim = s.flash ? '#f4f7ff' : on ? '#8fa0c8'
+      : buy ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
+      : i === 2 && amb ? '#f2cc6a' : '#35426e';
+    const y = bagCellPlate(r, rim, BAG_WELL, false);
+    ctx.drawImage(abIcon(i, i === 2 && amb), r.x + 1, y + 1);
     if (s.wipe) {
       const cov = 16 - Math.round(s.frac * 16);
       if (cov > 0) {
         ctx.fillStyle = AB_COVER;
-        ctx.fillRect(x + 2, y + 2, 16, cov);
-        if (cov < 16) {
-          ctx.fillStyle = '#9fb6d8';
-          ctx.fillRect(x + 2, y + 1 + cov, 16, 1);
-        }
+        ctx.fillRect(r.x + 1, y + 1, 16, cov);
+        if (cov < 16) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, y + cov, 16, 1); }
       }
     }
-    if (s.flash) {
-      ctx.fillStyle = '#f4f7ff';
-      ctx.fillRect(x + 2, y + 2, 16, 1);
-      ctx.fillRect(x + 2, y + 2, 1, 16);
-    }
-    if (i === 0) {
-      const col = dry ? '#e0637a' : p.quiverFlash > 0 ? '#f2cc6a' : '#f4f7ff';
-      drawPixelTextOutline(ctx, String(p.quiver), x + 2, y + 12, col, '#0f1632');
-    }
-    if (i === 1) {
-      for (let k = 0; k < DODGE_CHARGES; k++) {
-        ctx.fillStyle = '#0f1632';
-        ctx.fillRect(x + 2 + k * 5, y + 13, 4, 4);
-        const on = k < p.dodgeCharges;
-        const regen = !on && k === p.dodgeCharges;
-        ctx.fillStyle = on ? '#f2cc6a' : '#2c3560';
-        ctx.fillRect(x + 3 + k * 5, y + 14, 2, 2);
-        if (regen) {
-          const h = Math.max(1, Math.round(s.frac * 2));
-          ctx.fillStyle = '#9fb6d8';
-          ctx.fillRect(x + 3 + k * 5, y + 16 - h, 2, h);
-        }
-      }
-    }
-    drawPixelTextOutline(ctx, String(i + 1), x + AB_CELL - 6, y + AB_CELL - 8, '#8fa0c8', '#0f1632');
-    // rank lives on the well, not on the plus-square (that one vanishes)
-    for (let k = 0; k < AB_RANK_MAX; k++) {
+    for (let k = 0; k < AB_RANK_MAX; k++) { // rank, along the bottom edge
       ctx.fillStyle = k < p.skill[i] ? '#f2cc6a' : '#2c3560';
-      ctx.fillRect(x + 4 + k * 4, y + 1, 3, 1);
+      ctx.fillRect(r.x + 3 + k * 4, y + r.h - 3, 3, 1);
+    }
+    if (buy) { // the ask: a plus badge in the corner, gone once it cannot land
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(r.x + r.w - 7, y + 1, 6, 6);
+      ctx.fillStyle = '#f2cc6a';
+      ctx.fillRect(r.x + r.w - 5, y + 2, 2, 4); ctx.fillRect(r.x + r.w - 6, y + 3, 4, 2);
     }
   }
-  drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD);
-  // plus-squares on TOP of the frame, only while a point can land there
+}
+
+// ---- drawing the strip, the bit column and the carried item -------------
+function drawToolCell(i, now, hov) {
+  const p = player;
+  const cell = p.tools[i];
+  const sel = p.toolSel === i;
+  const r = toolCellRect(i);
+  const y = r.y - (sel ? 1 : 0);
+  const dry = sel && (p.quiver <= 0 || !toolReady(p));
+  const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
+  // the rim is the selection: one lit well, three quiet ones. A selected tool
+  // that cannot answer the button goes red instead - the old dry-bow tell.
+  ctx.fillStyle = dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
+  ctx.fillRect(r.x, y, r.w, r.h);
+  ctx.fillStyle = dry ? '#241028' : tp.plate;
+  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+  if (cell) {
+    tierShine(r, y, cell.type, now);
+    drawItemIcon(cell.type, r, y + 1);
+    // one pip per bit cell along the top inner edge, in each bit's own colour
+    const bits = cell.bits, up = peekBit(cell);
+    const T = TOOLS[toolIdOf(cell.type)];
+    for (let k = 0; k < bits.length; k++) {
+      const id = bits[k], b = id && BITS[id];
+      const over = b && b.proj && b.weight > T.tensile;
+      ctx.fillStyle = !b ? '#2c3560' : over ? '#c2465a' : k === up ? '#ffffff' : b.col;
+      ctx.fillRect(r.x + 3 + k * 3, y + 2, 2, 2);
+    }
+    // the wipe IS the rate of fire: a slow tool covers its well for longer
+    if (p.nockT > 0 && sel) {
+      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolRof(p, cell))) * (r.h - 2));
+      if (cov > 0) {
+        ctx.fillStyle = AB_COVER;
+        ctx.fillRect(r.x + 1, y + 1, r.w - 2, cov);
+        if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, y + cov, r.w - 2, 1); }
+      }
+    }
+  }
+  drawPixelTextOutline(ctx, String(i + 1), r.x + r.w - 6, y + r.h - 8,
+    sel ? '#f4f7ff' : '#5f6f96', '#0f1632');
+}
+function drawHudStrip(now) {
+  const p = player;
+  const R = hudStripRect();
+  const hov = mouse.inside ? stripHit(mouse.x, mouse.y) : null;
+  // one chamfered plate behind bar, rail and slots - the bag's ground, so the
+  // two HUD pieces sit in the same family
+  ctx.fillStyle = AB_BG;
+  ctx.fillRect(R.x - 3, R.y, R.w + 6, R.h);
+  ctx.fillStyle = '#35426e';
+  ctx.fillRect(R.x - 2, R.y, R.w + 4, 1);
+  ctx.fillRect(R.x - 2, R.y + R.h - 1, R.w + 4, 1);
+  ctx.fillRect(R.x - 3, R.y + 1, 1, R.h - 2);
+  ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
   for (let i = 0; i < AB_N; i++) {
-    if (!abCanBuy(p, i)) continue;
-    drawAbUp(i, now, hov && (hov.kind === 'up' || hov.kind === 'slot') && hov.i === i);
+    drawToolCell(i, now, hov && hov.kind === 'slot' && hov.i === i);
+  }
+  // The rail: the two numbers a firefight is actually read off, and nothing
+  // else. Shafts left in the quiver on the left with the arrow that spends
+  // them, dodge charges on the right as the pips they always were - both were
+  // on the ability wells that moved into the pack, and both are needed with
+  // the pack shut.
+  const ry = R.y + AB_PAD + AB_CELL + AB_PAD;
+  if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
+  abChSeen = p.dodgeCharges;
+  const dry = p.quiver <= 0;
+  ctx.globalAlpha = dry ? 0.5 : 1;
+  ctx.drawImage(SPRITES.bitArt_arrow, R.x + 1, ry);
+  ctx.globalAlpha = 1;
+  drawPixelTextOutline(ctx, String(p.quiver), R.x + 11, ry + 2,
+    dry ? '#e0637a' : p.quiverFlash > 0 ? '#f2cc6a' : '#f4f7ff', '#0f1632');
+  const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
+    : Math.max(0, Math.min(1, 1 - p.dodgeRegenT / Math.max(0.01, kitOf(p).dodgeCd)));
+  for (let k = 0; k < DODGE_CHARGES; k++) {
+    const x = R.x + R.w - 1 - (DODGE_CHARGES - k) * 6;
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(x, ry + 1, 5, 6);
+    const on = k < p.dodgeCharges;
+    ctx.fillStyle = now < abChFlash && on ? '#f4f7ff' : on ? '#f2cc6a' : '#2c3560';
+    ctx.fillRect(x + 1, ry + 2, 3, 4);
+    if (!on && k === p.dodgeCharges) { // the one coming back fills from the bottom
+      const h = Math.max(1, Math.round(chF * 4));
+      ctx.fillStyle = '#9fb6d8';
+      ctx.fillRect(x + 1, ry + 6 - h, 3, h);
+    }
+  }
+  drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD + AB_RAIL);
+}
+
+// The bit column, rising out of the slot whose key is held. Bottom cell is bit
+// 0; the caret on the left edge marks what the next press fires, and it climbs
+// as the tool cycles. Each cell carries the bit's weight as pips along its
+// bottom - gold while the tool can throw it, red when it cannot, which is the
+// whole of "tensile strength" said without the word.
+function drawBitColumn(now) {
+  const s = bitEditSlot();
+  if (s < 0) return;
+  const cell = player.tools[s], T = TOOLS[toolIdOf(cell.type)];
+  const up = peekBit(cell);
+  const hov = mouse.inside ? bitColHit(mouse.x, mouse.y) : -1;
+  // the spine: a 1px line from the tool up the column's left edge, so the
+  // stack reads as coming OUT of the slot rather than floating over it
+  const c0 = toolCellRect(s), top = bitColRect(s, cell.bits.length - 1);
+  ctx.fillStyle = '#2c3a68';
+  ctx.fillRect(c0.x + (AB_CELL >> 1) - 1, top.y - 2, 2, c0.y - top.y + 2);
+  for (let i = 0; i < cell.bits.length; i++) {
+    const r = bitColRect(s, i), id = cell.bits[i], b = id && BITS[id];
+    const over = b && b.proj && b.weight > T.tensile;
+    const tp = b ? tierPlate(bitType(id), hov === i) : { plate: '#171f45', rim: hov === i ? '#8fa0c8' : '#2c3560' };
+    ctx.fillStyle = 'rgba(4,6,18,0.55)';
+    ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
+    ctx.fillStyle = over ? '#c2465a' : tp.rim;
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+    ctx.fillStyle = tp.plate;
+    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    if (b) {
+      tierShine(r, r.y, bitType(id), now);
+      drawItemIcon(bitType(id), r, r.y - 2);
+      if (b.proj) { // weight, as pips: gold while this tool can throw it
+        for (let k = 0; k < b.weight; k++) {
+          ctx.fillStyle = over ? '#e0637a' : '#f2cc6a';
+          ctx.fillRect(r.x + 2 + k * 2, r.y + r.h - 3, 1, 2);
+        }
+      } else { // a modifier has no weight and never fires: a bar, not pips
+        ctx.fillStyle = b.col;
+        ctx.fillRect(r.x + 2, r.y + r.h - 3, r.w - 4, 1);
+      }
+    }
+    if (i === up) { // the caret: what the next press fires
+      const bob = Math.round(Math.sin(now * 8));
+      ctx.fillStyle = '#0f1632';
+      for (let k = 0; k < 3; k++) ctx.fillRect(r.x - 5 + bob, r.y + 6 + k, 3 - k + 1, 1);
+      ctx.fillStyle = '#f2cc6a';
+      for (let k = 0; k < 3; k++) ctx.fillRect(r.x - 5 + bob, r.y + 6 + k, 3 - k, 1);
+    }
+  }
+  // the tool's own ceiling, over the top cell: as many pips as it can throw
+  ctx.fillStyle = '#0f1632';
+  ctx.fillRect(top.x, top.y - 5, top.w, 4);
+  for (let k = 0; k < T.tensile && k < 9; k++) { // 9 is what an 18px plate holds
+    ctx.fillStyle = TOOL_TIERS[T.tier].ink;
+    ctx.fillRect(top.x + 1 + k * 2, top.y - 4, 1, 2);
+  }
+}
+
+// Whatever is riding the pointer, drawn last so it is over every well it
+// might be dropped into. It wears its own tier plate, so the thing in your
+// hand is read exactly the way it is read in a cell.
+function drawDragGhost(now) {
+  const d = state.drag;
+  if (!d || !mouse.inside) return;
+  const r = { x: Math.round(mouse.x) - 8, y: Math.round(mouse.y) - 8, w: 18, h: 18 };
+  const tp = tierPlate(d.cell.type, true);
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = tp.rim;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = tp.plate;
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  tierShine(r, r.y, d.cell.type, now);
+  drawItemIcon(d.cell.type, r, r.y);
+  ctx.globalAlpha = 1;
+  if (d.cell.n > 1) {
+    const t = String(d.cell.n);
+    drawPixelTextOutline(ctx, t, r.x + r.w - 2 - pixelTextWidth(t), r.y + r.h - 7, '#f4f7ff', '#0f1632');
+  }
+  // over the world rather than over any well: the release throws it, and the
+  // ghost says so by growing a fall shadow under itself
+  if (!overHud(mouse.x, mouse.y)) {
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#0a0e23';
+    ctx.fillRect(r.x + 3, r.y + r.h + 3, r.w - 6, 2);
+    ctx.fillRect(r.x + 5, r.y + r.h + 6, r.w - 10, 1);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ------------------------------------------------------------ tooltips
+// One panel, bottom left, that says what the pointer is on - and the one
+// deliberate exception to show-don't-label in the HUD, recorded as such in
+// CLAUDE.md's UI rule. The reason it earns the exception: a tool's rate of
+// fire, a bit's weight and a card's effect are NUMBERS the player is being
+// asked to compare, and there is no shape that compares numbers. The wells
+// keep doing the at-a-glance job - tier plate, pips, wipes - and this is where
+// you go when at-a-glance is not enough.
+//
+// It is bottom LEFT because that is the corner the pointer is furthest from
+// while it hovers the backpack, the weapon strip or a tech node, so the panel
+// never sits under the hand reading it. The event feed shares that corner and
+// steps up by tipLift() while one is open, exactly as it already does for the
+// replay window.
+//
+// EVERY tooltip comes from tipAt(), which asks the same hit-testers, in the
+// same order, that the click handler does - so what the panel describes and
+// what a click would do can never be two different things.
+const TIP_PAD = 4;      // frame edge to content
+const TIP_ROW = 8;      // pitch of a stat row
+const TIP_MAXW = 168;   // wraps nothing; long lines are authored to fit
+const TIP_LABEL = '#7a8bb8';
+const TIP_DIM = '#9fb6d8';
+let tipNow = null;      // this frame's descriptor, resolved once in render()
+
+// seconds, to two places, without a trailing shout of precision
+function tipSec(s) { return (Math.round(s * 100) / 100).toFixed(2) + 'S'; }
+// A descriptor is { title, tcol, kind, rows: [[label, value, col]],
+// notes: [[text, col]], icon, plate, rim }. Everything below builds one of
+// these and drawTooltip is the only thing that knows how to paint it.
+function tipBase(type, title, kind) {
+  const t = itemTier(type);
+  const tp = tierPlate(type, true);
+  return {
+    title, tcol: t >= 0 ? TOOL_TIERS[t].ink : '#f4f7ff',
+    kind, rows: [], notes: [],
+    icon: ITEMS[type] && SPRITES[ITEMS[type].icon], plate: tp.plate, rim: tp.rim, type,
+  };
+}
+const TIP_PATH = { line: 'STRAIGHT', zig: 'ZIG-ZAG', orbit: 'ORBIT', boomer: 'BOOMERANG', lob: 'ARCS DOWN' };
+// A TOOL: the three numbers that are the whole of what a tool is, and then
+// what is loaded in it - which is the other half of "what will this do".
+function tipTool(cell) {
+  const id = toolIdOf(cell.type), T = TOOLS[id];
+  const d = tipBase(cell.type, T.name, TOOL_TIERS[T.tier].name + ' TOOL');
+  d.rows.push(['RATE OF FIRE', tipSec(T.rof * TOOL_ROF_STEP), '#f4f7ff']);
+  d.rows.push(['BIT SLOTS', bitsIn(cell) + '/' + T.cap, '#f4f7ff']);
+  d.rows.push(['MAX WEIGHT', String(T.tensile), '#f2cc6a']);
+  const up = peekBit(cell);
+  for (let i = 0; i < cell.bits.length; i++) {
+    const b = cell.bits[i] && BITS[cell.bits[i]];
+    if (!b) continue;
+    const over = b.proj && b.weight > T.tensile;
+    // the firing order is the point, so the list is numbered and the next one
+    // up is marked - the same thing the column's gold caret says
+    d.notes.push([(i === up ? '> ' : '  ') + (i + 1) + ' ' + b.name + (over ? ' - TOO HEAVY' : ''),
+      over ? '#e0637a' : i === up ? '#f2cc6a' : b.col]);
+  }
+  if (!bitsIn(cell)) d.notes.push(['  NO BITS LOADED', TIP_DIM]);
+  return d;
+}
+// A BIT: every property the shot carries, because that is exactly the list a
+// player is choosing between when they drag one into a cell.
+function tipBit(id, cell) {
+  const b = BITS[id];
+  const d = tipBase(bitType(id), b.name,
+    TOOL_TIERS[b.tier].name + (b.proj ? ' BIT' : ' MODIFIER'));
+  if (b.proj) {
+    const T = cell && TOOLS[toolIdOf(cell.type)];
+    const over = T && b.weight > T.tensile;
+    d.rows.push(['DAMAGE', String(b.dmg), '#e0637a']);
+    d.rows.push(['WEIGHT', String(b.weight) + (over ? ' - TOO HEAVY' : ''), over ? '#e0637a' : '#f2cc6a']);
+    d.rows.push(['SPEED', String(b.speed), '#f4f7ff']);
+    d.rows.push(['LIFESPAN', tipSec(b.life), '#f4f7ff']);
+    d.rows.push(['FLIGHT', TIP_PATH[b.path] || b.path, b.col]);
+    // the flags, only when they are true: an absent line is the default, and
+    // four rows of NO would drown the three that matter
+    if (b.solid === false) d.notes.push(['PASSES THROUGH WALLS', '#8fd8ff']);
+    if (b.stick) d.notes.push(['STICKS IN THE SNOW TO REUSE', '#e8dcb4']);
+    if (b.ff) d.notes.push(['HITS YOUR OWN TEAM TOO', '#e0637a']);
+    if (b.lit) d.notes.push(['LIGHTS THE GROUND IT PASSES', '#ffd95c']);
+  } else {
+    d.rows.push(['WEIGHT', 'NONE', TIP_DIM]);
+    d.notes.push(['AFFECTS EVERY SHOT ON ITS TOOL', '#8fd8ff']);
+  }
+  d.notes.push([b.blurb, TIP_DIM]);
+  return d;
+}
+// anything else a bag cell can hold
+function tipStack(s) {
+  const r = CARD_TYPE_RARITY[s.type];
+  if (r) {
+    const d = tipBase(s.type, r.toUpperCase() + ' CARD', 'UNOPENED');
+    d.tcol = RES_COLORS[s.type];
+    d.rows.push(['CARRIED', String(s.n), '#f4f7ff']);
+    d.notes.push(['CLICK: DRAW ONE OF THREE BUFFS', TIP_DIM]);
+    return d;
+  }
+  if (s.type === 'berry' || s.type === 'fish') {
+    const heal = Math.round((s.type === 'berry' ? 20 : 45) * kitOf(player).foodMul);
+    const d = tipBase(s.type, s.type === 'berry' ? 'BERRIES' : 'FISH', 'FOOD');
+    d.tcol = RES_COLORS[s.type];
+    d.rows.push(['HEALS', '+' + heal, '#8fe08a']);
+    d.rows.push(['CARRIED', String(s.n), '#f4f7ff']);
+    d.notes.push([s.type === 'berry' ? 'Q OR CLICK TO EAT' : 'F OR CLICK TO EAT', TIP_DIM]);
+    return d;
+  }
+  const d = tipBase(s.type, s.type.toUpperCase(), 'ITEM');
+  d.rows.push(['CARRIED', String(s.n), '#f4f7ff']);
+  return d;
+}
+// whatever is in a bag cell, a slot, a bit cell or on the cursor
+function tipCell(s, cell) {
+  if (!s) return null;
+  if (isToolCell(s)) return tipTool(s);
+  const b = bitIdOf(s.type);
+  if (b) return tipBit(b, cell);
+  return tipStack(s);
+}
+// the two HUD rows that are not items: a gear piece and an ability
+function tipGear(i) {
+  const g = GEAR[i][player.gear[i]], lv = player.gearLv[i], cost = gearCost(player, i);
+  const d = { title: g.name, tcol: GEAR_MATS[lv - 1], kind: GEAR_SLOTS[i], rows: [], notes: [],
+    icon: SPRITES.gearIcons[i][player.gear[i]][lv - 1], plate: BAG_WELL, rim: '#35426e' };
+  d.rows.push(['LEVEL', lv + '/' + GEAR_LV_MAX, GEAR_MATS[lv - 1]]);
+  if (cost) d.rows.push(['NEXT LEVEL', cost.gold + ' GOLD',
+    player.inv.gold >= cost.gold ? '#f2cc6a' : '#e0637a']);
+  d.notes.push([g.blurb, TIP_DIM]);
+  d.notes.push([cost ? 'CLICK TO BUY THE NEXT LEVEL' : 'FULLY UPGRADED', TIP_DIM]);
+  return d;
+}
+const AB_NAMES = ['LOOSE', 'DODGE', 'AMBUSH', 'FLETCH'];
+const AB_BLURB = [
+  'THE TOOL CYCLES SOONER BETWEEN SHOTS',
+  'DODGE CHARGES COME BACK FASTER',
+  'AMBUSH HITS HARDER AND BURIES QUICKER',
+  'THE QUIVER REFILLS FASTER',
+];
+function tipAbility(i) {
+  const d = { title: AB_NAMES[i], tcol: '#f4f7ff', kind: 'ABILITY', rows: [], notes: [],
+    icon: abIcon(i, false), plate: BAG_WELL, rim: '#35426e' };
+  d.rows.push(['RANK', player.skill[i] + '/' + AB_RANK_MAX,
+    player.skill[i] >= AB_RANK_MAX ? '#f2cc6a' : '#f4f7ff']);
+  d.rows.push(['SKILL POINTS', String(player.skillPts), player.skillPts > 0 ? '#f2cc6a' : TIP_DIM]);
+  d.notes.push([AB_BLURB[i], TIP_DIM]);
+  d.notes.push([abCanBuy(player, i) ? 'CLICK TO SPEND A POINT'
+    : player.skill[i] >= AB_RANK_MAX ? 'MAXED OUT' : 'NO POINTS TO SPEND', TIP_DIM]);
+  return d;
+}
+// A TECH NODE on the title screen's tree - the one tooltip that is not about
+// something you are holding, so it carries the node's state and price on top
+// of the same item description the HUD gives.
+function tipTech(id) {
+  const cell = toolIdOf(id) ? makeTool(toolIdOf(id)) : null;
+  const d = cell ? tipTool(cell) : tipBit(bitIdOf(id), null);
+  // A tree node describes the KIND, not a tool somebody is holding, so the
+  // "what is loaded in it" half goes: no bit list, and the slot count is the
+  // capacity rather than 0-out-of-capacity.
+  d.notes.length = 0;
+  if (cell) {
+    d.rows.length = 3;
+    d.rows[1] = ['BIT SLOTS', String(TOOLS[toolIdOf(id)].cap), '#f4f7ff'];
+  }
+  const done = techDone(id), open = techOpen(id);
+  const cost = techCost(id);
+  d.rows.push(['RESEARCH', done ? 'DONE' : cost + ' PTS',
+    done ? '#8fe08a' : techPoints() >= cost ? '#f2cc6a' : '#e0637a']);
+  if (done) d.notes.push(['UNLOCKED - THE WORLD CAN DROP IT', '#8fe08a']);
+  else if (open) d.notes.push([techPoints() >= cost ? 'CLICK TO RESEARCH IT'
+    : 'NOT ENOUGH RESEARCH YET', techPoints() >= cost ? '#f2cc6a' : '#e0637a']);
+  else {
+    const req = TECH_BY_ID[id].req;
+    const rn = toolIdOf(req) ? TOOLS[toolIdOf(req)].name : BITS[bitIdOf(req)].name;
+    d.notes.push(['LOCKED - RESEARCH ' + rn + ' FIRST', '#e0637a']);
+  }
+  d.notes.push([PROFILE.techSeen(id) ? 'YOU HAVE HELD ONE OF THESE'
+    : 'NEVER HELD ONE', PROFILE.techSeen(id) ? '#8fd8ff' : TIP_DIM]);
+  return d;
+}
+
+// What the pointer is on, asked once per frame. The order mirrors the
+// mousedown handler exactly: gear, then the bit column, then the weapon strip,
+// then the backpack - so the panel and the click always agree.
+function tipAt(mx, my) {
+  if (window.DBG.hideUI || !mouse.inside) return null;
+  if (state.mode === 'title') {
+    const t = state.menu.screen === 'tech' && state.menu.techT >= 1 ? techHit(mx, my) : null;
+    return t ? tipTech(t) : null;
+  }
+  if (state.mode !== 'play') return null;
+  if (state.drag) return tipCell(state.drag.cell, null);
+  const gi = gearHit(mx, my);
+  if (gi >= 0) return tipGear(gi);
+  const bc = bitColHit(mx, my);
+  if (bc >= 0) {
+    const cell = player.tools[bitEditSlot()];
+    const id = cell.bits[bc];
+    if (id) return tipBit(id, cell);
+    const T = TOOLS[toolIdOf(cell.type)];
+    const d = tipBase(cell.type, 'EMPTY BIT CELL', TOOL_TIERS[T.tier].name + ' TOOL');
+    d.icon = null; d.tcol = TIP_DIM;
+    d.notes.push(['DRAG A BIT IN FROM THE PACK', TIP_DIM]);
+    d.notes.push(['THIS TOOL THROWS UP TO WEIGHT ' + T.tensile, '#f2cc6a']);
+    return d;
+  }
+  const sh = stripHit(mx, my);
+  if (sh && sh.kind === 'slot') {
+    const cell = player.tools[sh.i];
+    if (cell) return tipCell(cell, null);
+    return { title: 'EMPTY SLOT ' + (sh.i + 1), tcol: TIP_DIM, kind: 'WEAPON', rows: [], plate: BAG_WELL, rim: '#35426e',
+      notes: [['DRAG A TOOL HERE FROM THE PACK', TIP_DIM], ['PRESS ' + (sh.i + 1) + ' TO SELECT IT', TIP_DIM]] };
+  }
+  const bh = bagHit(mx, my);
+  if (!bh) return null;
+  if (bh.kind === 'btn') {
+    return { title: 'BACKPACK', tcol: '#f4f7ff', kind: 'B TO OPEN', icon: SPRITES.itemBag,
+      plate: BAG_WELL, rim: '#35426e',
+      rows: [['CELLS USED', bagUsed(player) + '/' + player.bagCap,
+        bagUsed(player) >= player.bagCap ? '#e0637a' : '#f4f7ff']],
+      notes: [['DRAG ONTO THE SNOW TO THROW AWAY', TIP_DIM]] };
+  }
+  if (bh.kind === 'ab') return bh.i >= 0 ? tipAbility(bh.i) : null;
+  if (bh.kind === 'cell') return tipCell(player.bag[bh.i], null);
+  return null;
+}
+// resolved once a frame, before anything that has to lay out around it
+function tipResolve() { tipNow = tipAt(mouse.x, mouse.y); }
+// how far the event feed steps up to keep clear of an open tooltip
+function tipLift() { return tipNow ? tipSize(tipNow).h + 4 : 0; }
+function tipSize(d) {
+  const iw = d.icon ? d.icon.width + 3 : 0;
+  let w = iw + pixelTextWidth(d.title);
+  if (d.kind) w = Math.max(w, iw + pixelTextWidth(d.kind));
+  for (const [l, v] of d.rows) w = Math.max(w, pixelTextWidth(l) + 10 + pixelTextWidth(v));
+  for (const [t] of d.notes || []) w = Math.max(w, pixelTextWidth(t));
+  const head = d.icon ? Math.max(14, d.icon.height + 2) : 14;
+  const h = TIP_PAD * 2 + head + d.rows.length * TIP_ROW + (d.notes || []).length * TIP_ROW;
+  return { w: Math.min(TIP_MAXW, w) + TIP_PAD * 2, h };
+}
+// The panel itself: an item's own tier plate behind the icon, the name in its
+// tier ink, then label/value rows with a dotted leader between them - the
+// PLAYER panel's ledger, which is where that pattern already lives.
+function drawTooltip() {
+  const d = tipNow;
+  if (!d) return;
+  const { w, h } = tipSize(d);
+  const x = 4, y = VIEW_H - 8 - h;
+  ctx.fillStyle = 'rgba(4,6,18,0.55)';
+  ctx.fillRect(x + 2, y + 2, w, h);
+  ctx.fillStyle = BAG_BG;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = d.rim || '#35426e';
+  ctx.fillRect(x, y, w, 1); ctx.fillRect(x, y + h - 1, w, 1);
+  ctx.fillRect(x, y, 1, h); ctx.fillRect(x + w - 1, y, 1, h);
+  let cy = y + TIP_PAD;
+  let tx = x + TIP_PAD;
+  if (d.icon) {
+    // the icon on its own tier plate, so the panel opens with the same colour
+    // the well the pointer is over is wearing
+    const s = d.icon.width;
+    ctx.fillStyle = d.plate || BAG_WELL;
+    ctx.fillRect(tx - 1, cy - 1, s + 2, s + 2);
+    ctx.drawImage(d.icon, tx, cy);
+    tx += s + 3;
+  }
+  drawPixelTextShadow(ctx, d.title, tx, cy, d.tcol, '#0a0e23');
+  if (d.kind) drawPixelTextShadow(ctx, d.kind, tx, cy + 7, TIP_LABEL, '#0a0e23');
+  cy += d.icon ? Math.max(14, d.icon.height + 2) : 14;
+  for (const [label, value, col] of d.rows) {
+    const lw = pixelTextWidth(label), vw = pixelTextWidth(value);
+    drawPixelTextShadow(ctx, label, x + TIP_PAD, cy, TIP_LABEL, '#0a0e23');
+    // the dotted leader ties the pair across the gap, exactly as the PLAYER
+    // panel's stat rows do - a bare gap reads as two unrelated columns
+    ctx.fillStyle = '#2c3560';
+    for (let px = x + TIP_PAD + lw + 3; px < x + w - TIP_PAD - vw - 2; px += 2) ctx.fillRect(px, cy + 4, 1, 1);
+    drawPixelTextShadow(ctx, value, x + w - TIP_PAD - vw, cy, col || '#f4f7ff', '#0a0e23');
+    cy += TIP_ROW;
+  }
+  for (const [text, col] of d.notes || []) {
+    drawPixelTextShadow(ctx, text, x + TIP_PAD, cy, col || TIP_DIM, '#0a0e23');
+    cy += TIP_ROW;
   }
 }
 
@@ -1216,13 +1897,16 @@ function renderUI(now) {
     ctx.restore();
   }
 
-  // hud strip (xp bar + ability slots), bottom-centre; it rides the intro
-  // slide up from below
+  // hud strip (the four weapon slots, the quiver/dodge rail and the xp bar),
+  // bottom-centre; it rides the intro slide up from below. The bit column
+  // rises out of it and the carried item rides over everything, so both are
+  // drawn after it and outside the slide.
   if (!out) {
     ctx.save();
     ctx.translate(0, Math.round(slide * 40));
     drawHudStrip(now);
     ctx.restore();
+    if (hudIn >= 1) { drawBitColumn(now); drawDragGhost(now); }
   }
 
   // arriving at a named place announces it, top centre: the name big, its

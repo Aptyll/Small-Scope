@@ -1016,8 +1016,17 @@ function drawGhost(p, ex, ey) {
 // walking, swept along the arc during a melee swing, aimed at that player's
 // aim point while the bow is drawn. px/py are the sprite's top-left on screen.
 function drawHeldTool(p, px, py) {
-  const t = TOOLS[p.tool];
-  const icon = SPRITES[t.icon];
+  const t = SWING_TOOLS[p.swing];
+  // At rest the hands hold the WEAPON on the selected slot, whose art carries
+  // its own tier colour - so what somebody is carrying reads off their sprite
+  // from across the snow, and an empty slot reads as empty hands. Mid-swing
+  // (axe, pick) the swing tool's own 8x8 icon takes over.
+  const weapon = t.key === 'bow' ? heldTool(p) : null;
+  const icon = t.key === 'bow'
+    ? (weapon ? SPRITES[ITEMS[weapon.type].icon] : null)
+    : SPRITES[t.icon];
+  if (!icon) return;
+  const half = icon.width >> 1;
   const cxp = px + 8, cyp = py + 10; // roughly the hands
 
   // drawn bow tracks the aim; base sprite fires -x (arc on the left), so
@@ -1027,7 +1036,7 @@ function drawHeldTool(p, px, py) {
     ctx.save();
     ctx.translate(Math.round(cxp + Math.cos(a) * 8), Math.round(cyp - 2 + Math.sin(a) * 8));
     ctx.rotate(a + Math.PI);
-    ctx.drawImage(icon, -4, -4);
+    ctx.drawImage(icon, -half, -half);
     ctx.restore();
     return;
   }
@@ -1040,7 +1049,7 @@ function drawHeldTool(p, px, py) {
     ctx.save();
     ctx.translate(Math.round(cxp + Math.cos(a) * 9), Math.round(cyp - 2 + Math.sin(a) * 9));
     ctx.rotate(a + Math.PI / 2);
-    ctx.drawImage(icon, -4, -4);
+    ctx.drawImage(icon, -half, -half);
     ctx.restore();
     return;
   }
@@ -1051,14 +1060,14 @@ function drawHeldTool(p, px, py) {
     ctx.save();
     ctx.translate(px + 2, cyp - 2 + bob);
     ctx.scale(-1, 1);
-    ctx.drawImage(icon, -4, -4);
+    ctx.drawImage(icon, -half, -half);
     ctx.restore();
   } else if (p.dir === 'right') {
-    ctx.drawImage(icon, px + 10, cyp - 6 + bob);
+    ctx.drawImage(icon, px + 14 - half, cyp - 2 - half + bob);
   } else if (p.dir === 'down') {
-    ctx.drawImage(icon, px + 10, cyp - 5 + bob);
+    ctx.drawImage(icon, px + 14 - half, cyp - 1 - half + bob);
   } else { // up: far hand, occluded by the body (caller draws us first)
-    ctx.drawImage(icon, px - 2, cyp - 5 + bob);
+    ctx.drawImage(icon, px + 2 - half, cyp - 1 - half + bob);
   }
 }
 
@@ -1138,6 +1147,23 @@ function drawWarmGlows(ox, oy, now, strength) {
     const grd = ctx.createRadialGradient(lx, ly, 1, lx, ly, r);
     grd.addColorStop(0, 'rgba(255,205,150,' + a.toFixed(3) + ')');
     grd.addColorStop(0.6, 'rgba(255,222,180,' + (a * 0.6).toFixed(3) + ')');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(lx - r, ly - r, r * 2, r * 2);
+  }
+  // A shot in flight can carry its own light: the CARE ARROW and the WISP do,
+  // and anything a FLAME modifier is riding. They are not in `lights` (which
+  // is rebuilt from placed objects and would have to be rebuilt every frame) -
+  // they are read straight off the live shots, on the same multiply pass, so
+  // a lit arrow genuinely opens the dark ahead of it.
+  for (const a of arrows) {
+    if (!a.lit) continue;
+    const r = a.lit * 0.95;
+    const lx = a.x - ox, ly = a.y - oy;
+    if (lx < -r || ly < -r || lx > WV_W + r || ly > WV_H + r) continue;
+    const al = Math.min(1, strength * 3.2);
+    const grd = ctx.createRadialGradient(lx, ly, 1, lx, ly, r);
+    grd.addColorStop(0, 'rgba(255,215,165,' + al.toFixed(3) + ')');
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = grd;
     ctx.fillRect(lx - r, ly - r, r * 2, r * 2);

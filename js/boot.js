@@ -816,6 +816,9 @@ function startGame() {
 
 PROFILE.load();   // the profile carries the settings, so it is read first
 loadSettings();
+// ...and the tech tree, which decides what this profile's world may drop.
+// Must run after PROFILE.load() and before initPlayers()/any swing.
+rebuildLootPool();
 relayout(); // fitCanvas already ran at load; this places the UI for the fitted view
 SFX.setVolume(settings.volume);
 SFX.setMusicVolume(settings.musicVol);
@@ -865,7 +868,7 @@ window.DBG = {
   // the radial wheel: open one by hand (state.wheel) and read back the
   // geometry the hover test and the pixels both use
   wheelLayout, wheelSpan, wheelAng, WHEEL_HUB, WHEEL_R, WHEEL_RING,
-  structures, robots, tracers, arrows, STRUCTS, TOOLS,
+  structures, robots, tracers, arrows, STRUCTS, SWING_TOOLS, TOOLS, BITS,
   // the worker flag: plant one without a mouse, read back what a tile would
   // order, and reach the corridor a PATH flag asks its crew to clear
   FLAG_JOBS, flagCorridor, mapTileAt,
@@ -877,10 +880,39 @@ window.DBG = {
   flagTarget, // what the held press is aiming at right now (null = nothing drawn)
   get flag() { return player.flag; },
   // the quiver: the shafts lying in the world, the ceiling, and a way to set
-  // a slot's ammo / renock without playing to it. hudStripRect is the xp bar
-  // + ability row that reads all of it back, bottom-centre.
-  shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, abHit, buySkill,
+  // a slot's ammo / cycle without playing to it. hudStripRect is the weapon
+  // strip + xp bar that reads it back, bottom-centre.
+  shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, stripHit, buySkill,
   AB_RANK_MAX,
+  // Tools and bits: the two tables, the tier palette, an instance maker, the
+  // firing pipeline and the loot roll - so a driver can stage a build without
+  // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells
+  // the pointer tests against, and `bagAbRect` is the ability row that moved
+  // into the pack. bitEditSlot is which column is up (-1 = none).
+  TOOL_TIERS, TOOL_SLOTS, TOOL_HOLD_T, makeTool, toolType, bitType, toolMods,
+  toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CHAMP_LOADOUT,
+  toolCellRect, bitColRect, bitColHit, bagAbRect, bitEditSlot, tierPlate,
+  // the tech tree: the graph, the sums behind it, and the page's own geometry.
+  // `research` is the one writer (it rebuilds the loot pool itself), and
+  // `wipeTech` puts a profile back to a fresh install without clearing the name.
+  TECH, TECH_ROWS, TECH_COST, TECH_GOLD_PER_PT, techCost, techOpen, techPoints,
+  techNodeRect, techHit, rebuildLootPool, LOOT_POOL,
+  techDone: (id) => techDone(id),
+  research: (id) => techResearch(id),
+  wipeTech: () => { PROFILE.clearTech(); rebuildLootPool(); },
+  // what the pointer is on, as the panel would describe it (null = nothing)
+  tipAt: (x, y) => tipAt(x == null ? mouse.x : x, y == null ? mouse.y : y),
+  tipLift,
+  fireTool: (p) => fireTool(p || player),
+  selectTool: (i, p) => selectTool(p || player, i),
+  get tools() { return player.tools; },
+  // stage a loaded tool straight onto a slot: DBG.equip(0, 'longbow', ['arrow','flame'])
+  equip: (slot, id, bits, p) => {
+    const q = p || player, cell = makeTool(id);
+    (bits || []).forEach((b, i) => { if (i < cell.bits.length) cell.bits[i] = b; });
+    q.tools[slot] = cell;
+    return cell;
+  },
   setQuiver: (n, p) => { const q = p || player; q.quiver = Math.max(0, Math.min(QUIVER_MAX, n)); q.fletchT = 0; return q.quiver; },
   setNock: (t, p) => { (p || player).nockT = t; },
   // multiplayer slots: every slot, the local one, and the teams table
@@ -935,7 +967,6 @@ window.DBG = {
   clickAction: (p) => clickAction(p || player),
   tryWork: (p) => tryWork(p || player),
   workTarget: (p) => workTarget(p || player),
-  fireArrow: (p) => fireArrow(p || player),
   tryDodge: (p) => tryDodge(p || player),
   // the roll as a hit: stun anything by hand, and read back what a roll at a
   // given speed would deal (`.` draws the sweep circle over a live dash)
@@ -972,8 +1003,8 @@ window.DBG = {
   getZoom: () => ({ want: zoomWantOf(), applied: zoomCur, k: kWant, devScale, exact: Math.abs(zoomCur * devScale - Math.round(zoomCur * devScale)) < 1e-6,
     rungs: (() => { const r = []; for (let k = kMin(); k <= kMax(); k++) r.push(+(k / devScale).toFixed(4)); return r; })(),
     wv: [WV_W, WV_H], mm: mmScale() }),
-  setTool: (i, p) => { (p || player).tool = i; },
-  getTool: (p) => (p || player).tool,
+  setSwing: (i, p) => { (p || player).swing = i; },
+  getSwing: (p) => (p || player).swing,
   cam: () => ({ x: camX, y: camY }),
   startGame, beginIntro, beginSelect, lockIn, setChamp, CHAMPS, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
   // the ESC panel: what the pointer is over, the speaker's plate, and every

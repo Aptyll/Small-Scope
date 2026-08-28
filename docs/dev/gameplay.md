@@ -125,27 +125,235 @@ knockback (their walk is a direction re-chosen each tick), and an idle animal/ro
 its knockback too, so a shoved deer actually moves. Measured: a 150 px/s slide into a deer
 comes out at ~60 px/s with a sideways kick and the deer shoved ~14 px.
 
-## Tools and the bow
+## Tools and bits
 
-There is **no tool bar and no tool selection**. `TOOLS` (`bow`, `axe`, `pick`, indices
-`TOOL_BOW/AXE/PICK`) is an internal table for icons and names; `p.tool` is that player's *held*
-index, which is the bow at rest. The bottom-centre strip of the HUD carries the quiver
-([below](#the-quiver)) and nothing else. Two verbs, two inputs:
+Everything in this section lives in **[js/tools.js](../../js/tools.js)**, under the `tools & bits`
+banner. It loads after `actions.js` because a shot it fires is the arrow pipeline's, and its
+top-level code registers one `ITEMS` row per kind — which is what makes the bag, the drop pickup,
+the death spill and the refusal flash work on tools and bits with no storage code of their own.
 
-- **Left click = bow**, always. The press only records intent (`clickAction` sets `input.fire`);
-  `updatePlayer` starts the draw on the rising edge and looses on the falling one.
+**Keys 1-4 are four weapon slots** (`p.tools`, `TOOL_SLOTS`), and the left button fires whichever
+one is selected (`p.toolSel`). A slot holds a **tool**; a tool holds **bits**; the bits are what
+actually fly. Both are found in the world, never bought, and both are carried items you can drag
+around — so the weapon is a thing a player assembles rather than a thing they are issued.
+
+### A tool
+
+One entry in the `TOOLS` table (`shortbow`, `sling`, `recurve`, `hornbow`, `longbow`). A tool is a
+**body** and carries no behaviour of its own — three numbers and a look:
+
+| field | means |
+| --- | --- |
+| `rof` | game steps between shots. `toolRof(p, cell)` turns it into seconds and scales it by `kit.nock / BOW_NOCK`, so QUICKDRAW, the LOOSE ability rank and QUICK HANDS all still quicken it |
+| `cap` | how many bit cells it has (2–5) |
+| `tensile` | the heaviest bit it can throw; anything heavier sits in its cell as dead weight and is skipped |
+| `tier` / `art` | which of the three `TOOL_TIERS` palettes it wears, and which 12×12 silhouette |
+
+A tool is **instanced**: its bag cell *is* the tool, `bits` array and all (`makeTool`), so it is
+moved between bag, slot and drop rather than rebuilt from its type name — see the hard rule in
+[CLAUDE.md](../../CLAUDE.md#hard-rules). That is what makes "throw a loaded tool away and pick it
+up later" work with no code: `spawnDrop`'s `it` payload is the same object the bag had, and
+`bagPut` puts that same object back.
+
+### A bit
+
+One entry in the `BITS` table, and there are two kinds of them, told apart by `proj`.
+
+A **projectile bit** is one shot: `weight` (what the tool has to be strong enough to throw),
+`path` (how it flies), `solid` (whether a wall stops it), `ff` (whether it will hurt your own
+side), `life`/`speed`/`dmg` as baselines, and `stick` — whether the spent shot lands as a shaft
+anyone can pull back out. Optional `lit` is a light radius it carries in flight.
+
+A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
+**every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
+`spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot becomes N in a spread), `burn`, `twin`
+(fire the next two projectile bits in one press) and `lit`. SPEEDUP, SPLITTER, FLAME, DUPLICATE,
+HEFT and LONGSHOT are the six that exist.
+
+### Firing
+
+`fireTool(p)` is the one entry point — the falling edge of `input.fire`, for every slot alike:
+
+1. Read the cover first (`ambushReady`), before anything below can break it.
+2. `spearFish(p)` — bow-fishing survived the new weapon: **any** tool, standing on ice with a fish
+   in `FISH_CATCH_R`, spears through the sheet instead of loosing. It takes the press and the
+   cycle, and costs no arrow.
+3. No tool on the selected slot → `dryFire(p)` and stop.
+4. `toolMods(cell)`; DUPLICATE makes the press consume two bits instead of one.
+5. Per shot: spend one from the quiver, `nextBit(cell)` (walk forward from `cell.idx`, wrapping
+   once, and take the first bit that is a projectile **and** light enough — the index tracker
+   lands one past what it found, which is what makes the list cycle), then `emitBit`.
+6. Nothing fired at all → `dryFire`. Otherwise `p.nockT = toolRof(...)`, one `SFX.arrow`, and
+   `risePlayer` (the shot is what breaks cover).
+
+`emitBit` is where the player is folded back in: the bit's own damage leads, and the draw
+(`pwScale`), the champion kit's `dmgBase`/`dmgPow`, SKADI's speed bonus, the hero level and then
+the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
+about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
+`stick`, `burn`, `lit` and `col` alongside the old fields.
+
+`toolReady(p)` is the second half of the old quiver gate: an empty slot and a tool with no bit
+light enough to throw are both as dry as an empty quiver, and `updatePlayer` refuses the draw on
+all three the same way.
+
+### Flight paths
+
+`steerBit(a, dt)` runs once per shot per sim step **before** the step is integrated, so the path
+owns the velocity and the trail, the hit tests and the drawn body just follow it. A turret bolt
+carries no `path` and falls straight through.
+
+| `path` | what it does |
+| --- | --- |
+| `line` | nothing — the old arrow, and it costs nothing |
+| `zig` | the bearing weaves ±`ZIG_SWING` at `ZIG_HZ` |
+| `lob` | drag on both axes plus `LOB_FALL` gravity: a heavy throw that arcs down and lands |
+| `boomer` | out on the bearing slowing to nothing, then hauled back to whoever threw it; the flight ends when it gets home |
+| `orbit` | a ring of `ORBIT_R` around the shooter, eased out over the first 0.25 s and swept at its own speed |
+
+Three per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
+test (that is the whole of "never hits ground"), `a.ff` lifts the team check on players and worker
+bots (never on the shooter, at any weight), and `a.stick` decides whether the spent shot leaves a
+shaft. A burning shot trails fire instead of team colour and bursts embers where it lands.
+
+### The bit column
+
+Holding a slot's own key past `TOOL_HOLD_T` (0.25 s, 15 frames at 60) raises that tool's bit cells
+out of it — `bitEditSlot()` is derived from `p.toolHoldT`, never stored, so it cannot disagree
+with the key that is actually down. Cell 0 is at the **bottom**, nearest the tool, because that is
+what fires first; a gold caret on the left edge marks what the next press will fire and climbs as
+the tool cycles. While the column is up the backpack is open too (`bagOpenNow`), because
+customising a tool means dragging bits between the two. It is a hold, not a mode.
+
+The drag is one mechanism shared by the grid, the four slots and the column
+([UI banner](../../js/ui.js), `state.drag`): a press **arms** a pick-up and only travel past
+`DRAG_SLOP` promotes it, so a tap on a berry still eats it and a tap on a slot still selects it
+while a drag off either one picks it up. A release over any well that will take it puts it there;
+over the rest of the HUD it goes home; **over the world it is thrown**, which is the only way to
+get rid of a tool — and it goes with its bits.
+
+### Where tools and bits come from
+
+`dropLoot(x, y, tier, chance)` rolls one find on the shared `rng` at the moment a swing lands
+(never inside `genWorld` — see the seed rule). `LOOT_TOOL` (0.3) of any find is a tool, the rest a
+bit, and only kinds at or under the given tier are in the pool.
+
+| source | chance | tier |
+| --- | --- | --- |
+| a broken rock | `ROCK_DROP` 0.2 | 0 |
+| a felled tree | `TREE_DROP` 0.04 | 0 |
+| a sprung chest | `CHEST_TOOL` 0.75 | up to 2 |
+
+So the bottom tier lies around loose and the good stuff is in the treeline's chests. A found tool
+comes out **empty** — its bits are the next thing to find.
+
+The pool a roll draws from is not the whole table: it is what this profile has **researched**, so
+a kind nobody has unlocked never appears in any match. See [the tech tree](#the-tech-tree).
+
+### Tiers, and how a find reads
+
+`TOOL_TIERS` is a colour and nothing else in the sim: what a tier buys you is written into each
+tool's own numbers. The tier is stated in **one** place and the same way everywhere — the plate
+behind the icon, in every well the item ever sits in (bag cell, weapon slot, bit cell, drag ghost,
+loadout card) — which is why nothing on screen has to say "TIER 2". `tierPlate(type)` is that
+lookup and `itemTier(type)` the raw index. The top tier is the only one that moves: `tierShine`
+sweeps a highlight across its plate. On the ground a find glints in its tier's colour so it is
+told from a berry at a distance. A tool's **shape** says which family it is and its **palette**
+says its tier, so three 12×12 silhouettes cover five tools across three tiers — the same trick
+`GEAR_MATS` plays with one gear icon across four materials.
+
+### Bots
+
+A bot has no bit column and no pointer, so `botFitLoadout(p)` (called from `updateAI`'s step 8 on
+a 2.5 s timer) does by hand what a person does with a drag: push loose bits into the tool it is
+firing, and put a spare tool on a free key — or over a strictly worse body, which then takes the
+bag cell the new one came out of. It only takes bits that fly *toward* what they were aimed at; a
+bot cannot read a boomerang or an orbit and leaves those for someone who can.
+
+### Starting loadouts
+
+`CHAMP_LOADOUT` gives each champion a tool and its bits, and `giveLoadout(p)` is called from
+`Player.reset()` and from `setChamp()` — so the weapon is part of picking a champion, every AI
+slot gets its own, and a respawn is re-armed. WREN flies in with a SHORTBOW loaded ARROW +
+BARBED SHOT; SKADI with a SLING loaded ARROW + SPEEDUP. Death **spills the equipped tools** with
+the bag (`spillInventory`), so a build lies where its owner fell and the Keep hands back the
+starting one — you come back armed, but not as the player you were. The gear screen draws the pair
+above the armour cards (`drawArmsStrip`, js/menu.js): the tool's well, its bit cells in firing
+order, the tool's tensile as pips, and one caption naming them.
+
+## The tech tree
+
+The one thing in this game that outlives a match, and the **only part of a profile that a match
+reads back**. Every tool and every bit is a node; researching one is permanent; and what it buys
+is that the kind joins the world's loot pool from then on. So the tree is not a shop and not a
+skill tree — it is the arsenal the map is allowed to hand you, and it grows as you play. It is
+reached from the main menu's **TECH TREE** plank (`m.screen = 'tech'`, its own `techT` ease, ESC
+back); the page itself is in [rendering.md](rendering.md#the-tech-tree-screen).
+
+The table is `TECH` in [js/tools.js](../../js/tools.js), and it carries exactly one edge per node:
+
+```
+req      the node beneath this one; null on the free tier-0 row
+```
+
+That is the whole graph, and because each lineage happens to be one root plus at most two
+children, it also lays out as a 7×3 grid — one **row** per lineage, one **column** per tier, and
+every edge a horizontal line. The seven lineages:
+
+| root (WORN, free) | KEEN | GILDED |
+| --- | --- | --- |
+| SHORTBOW | RECURVE BOW | LONGBOW |
+| SLING | HORN BOW | — |
+| ARROW | CARE ARROW | ICE LANCE |
+| BARBED SHOT | THROWING LOG | HEFT |
+| HOOKSHOT | WISP | LONGSHOT |
+| SPEEDUP | FLAME | — |
+| SPLITTER | DUPLICATE | — |
+
+**The whole tier-0 row is free and already done** (`techDone` returns true for tier 0 without
+asking the profile), so a fresh install finds the basics from its first rock and an old save
+needs no migration. Everything above opens one node at a time from the node beneath it
+(`techOpen`), which is what makes this a tree rather than a list.
+
+**Research is not a stored number.** `techPoints()` is
+`floor(PROFILE.stats().gold / TECH_GOLD_PER_PT) − Σ techCost(done)` — earned from lifetime gold,
+spent by what is already researched — so the two halves can never drift apart and there is no
+counter to corrupt. `TECH_GOLD_PER_PT` is 50 and `TECH_COST` is `[0, 2, 4]` by tier, which puts
+the first unlock inside a match or two.
+
+**`techResearch(id)` is the only writer**, and it calls `rebuildLootPool()` itself — so the pool
+and the profile cannot disagree. `LOOT_POOL` is rebuilt at boot (after `PROFILE.load()`, before
+anything can swing) and on every unlock, never filtered per roll, because a drop happens in the
+middle of a swing while the tree only changes between matches. `dropLoot` returns null on an empty
+pool rather than throwing.
+
+`PROFILE.markSeen(id)` is the other half and gates **nothing**: it is fired for the local player
+only (`noteSeen(p, type)`) from the drop pickup and from the loadout they fly in with, and it puts
+a blue pip on the node. The tree doubles as a record of what you have actually met in the snow.
+
+Storage is [js/profile.js](../../js/profile.js) and nothing here writes a key — see
+[architecture.md](architecture.md#profilejs).
+
+## The swing tools (E)
+
+The axe and the pick are **not selectable and are not weapons**. `SWING_TOOLS` (`bow`, `axe`,
+`pick`, indices `SWING_BOW/AXE/PICK`) is an internal table for icons and names; `p.swing` is what
+that player is *holding for work*, and it returns to `SWING_BOW` — which draws the weapon on the
+selected slot — the moment a swing ends. Two verbs, two inputs:
+
+- **Left click = the selected tool slot.** The press only records intent (`clickAction` sets
+  `input.fire`); `updatePlayer` starts the draw on the rising edge and fires on the falling one.
 - **E = work** (`tryWork(p)`, auto-repeating every swing cooldown while held — `updatePlayer`
   calls it whenever `p.input.work` is set). It resolves `workTarget(p)`: the tile that player is
   aiming at, if it holds a tree or a dead tree (→ axe), rock (→ pick), a berried bush (→ axe), or
   is bare ice with no object (→ pick, cracking toward a fishing hole); and `near` = the tile is
   within `WORK_REACH` (1) tiles, Chebyshev, of the tile the player stands on — i.e. the 3×3
   ring around you, never a second row, regardless of where in your tile you stand. Out of reach or nothing workable, E
-  does nothing. A valid target swaps `p.tool` to the right one, drops any bow draw, faces the
+  does nothing. A valid target swaps `p.swing` to the right one, drops any draw, faces the
   tile, and starts the swing; `swingHit(p)` **contests** the locked tile (`p.workTx/Ty`) so only
   one player's swing lands on it in a step, then hits whatever is there via
   `hitObject(o, p)`/`crackIce()`. Once `swingT` and `swingCd`
-  both reach 0, `updatePlayer` puts the bow back (`p.tool = TOOL_BOW`), so the axe only exists
-  visually for the duration of the work. `workTarget()` is shared with the cursor, so the
+  both reach 0, `updatePlayer` puts the weapon back (`p.swing = SWING_BOW`), so the axe only
+  exists visually for the duration of the work. `workTarget()` is shared with the cursor, so the
   lock ring is exactly "E will do something here".
 
 Whenever `workTarget()` is non-null and `near` (and tools aren't blocked or the bow drawn),
@@ -169,39 +377,45 @@ team are**: `workTarget()` resolves the tile through `structOf()` (so any tile o
 counts, via its `part`) and returns the axe when `ownsStruct()` is false, and `swingHit` routes
 the swing to the anchor. Your own buildings stay wheel-only, so E is never ambiguous. See
 [Base building](#base-building) for the damage numbers. There is still no melee against animals:
-the bow is the only weapon aimed at a living thing.
+the tool on the selected slot is the only weapon aimed at a living thing.
 
-The bow is **hold-to-charge**: holding the button arms the shot (`p.fireArmed`), the draw starts
-as soon as the bow is actually ready and runs `p.charging`/`p.chargeT` (movement targets scale to
-55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter renders above the
-player's health bar), and the release edge fires via `fireArrow(p)` — power scales speed
-(170–360 px/s) and damage (4–13), and a shot loosed out of full snow cover multiplies the lot by
-`AMBUSH_MUL` (see [Prone](#prone-under-the-snow)). Arrows carry their shooter's `owner`/`team`, live in the
-`arrows` array, and are updated in `updatePlay()`: they die on solid tiles, on a **rival player**
-(tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker bot**
-(`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or after
-0.85 s. They never hit structures — a building is broken by hand with E, not shot. **Wherever a
-shot ends it leaves a shaft behind** (`stickArrow`) — see [The quiver](#the-quiver).
+Every tool is **hold-to-charge**: holding the button arms the shot (`p.fireArmed`), the draw
+starts as soon as the tool is actually ready and runs `p.charging`/`p.chargeT` (movement targets
+scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter renders
+above the player's health bar), and the release edge fires via `fireTool(p)`. The draw scales the
+bit's damage and a shot loosed out of full snow cover multiplies the lot by `AMBUSH_MUL` (see
+[Prone](#prone-under-the-snow)). Shots carry their shooter's `owner`/`team`, live in the `arrows`
+array, and are updated in `updatePlay()`: they die on solid tiles (unless the bit passes through
+them), on a **rival player** (tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker
+bot** (`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or
+at the end of the bit's life. They never hit structures — a building is broken by hand with E, not
+shot. A shot from a bit with `stick` **leaves a shaft behind wherever it ends** (`stickArrow`) —
+see [The quiver](#the-quiver).
 
-`p.fireArmed` is what makes the draw survive a bow that isn't ready. It is set on the press edge,
+`p.fireArmed` is what makes the draw survive a tool that isn't ready. It is set on the press edge,
 cleared on release and at every point that cancels a draw (`tryWork`, falling in a hole, an
-overlay opening in `sampleHumanInput`, `die`), and the draw begins on the first step where it is
-set *and* `nockT <= 0` *and* `quiver > 0`. Requiring a fresh press instead would deadlock every
-controller that simply holds the button down — which is every AI slot: `updateAI` sets
-`inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight back to true and no second
-edge ever arrives.
+overlay opening in `sampleHumanInput`, changing slot, `die`), and the draw begins on the first
+step where it is set *and* `nockT <= 0` *and* `toolReady(p)` *and* `quiver > 0`. Requiring a fresh
+press instead would deadlock every controller that simply holds the button down — which is every
+AI slot: `updateAI` sets `inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight
+back to true and no second edge ever arrives.
 
 ### The quiver
 
-Arrows are a resource. `p.quiver` starts at `QUIVER_MAX` (6); `fireArrow` spends one and sets
-`p.nockT = kit.nock` (WREN 0.45 s, SKADI 0.3 s, both scaled by QUICKDRAW and loose ranks), and no draw can begin
-while that runs. Below the ceiling, `p.fletchT` accumulates and hands back one arrow every
-`kit.fletch` (starts at `QUIVER_REGEN` 2.4 s, shortened by fletch ranks) through `gainArrow` — the floor that keeps a player who never picks
-anything up throttled rather than disarmed. Bow-fishing is the one shot that costs nothing: it
-never leaves the bow, so it takes the renock but not the arrow.
+Arrows are a resource, and they are the ammunition for **every** projectile bit, not just the
+plain one — which is what keeps an exotic loadout honest. `p.quiver` starts at `QUIVER_MAX` (6);
+`fireTool` spends one per projectile bit fired (so DUPLICATE costs two) and sets
+`p.nockT = toolRof(p, cell)` — the tool's own `rof`, scaled by the same `kit.nock` factors QUICKDRAW
+and the loose ranks always moved — and no draw can begin while that runs. Below the ceiling,
+`p.fletchT` accumulates and hands back one arrow every `kit.fletch` (starts at `QUIVER_REGEN`
+2.4 s, shortened by fletch ranks) through `gainArrow` — the floor that keeps a player who never
+picks anything up throttled rather than disarmed. Bow-fishing is the one press that costs nothing:
+it never leaves the tool, so it takes the cycle but not the arrow.
 
-Spent arrows land in **`shafts`** (`{x, y, nx, ny, team, t}`), one per arrow that ends its flight,
-however it ends — miss, wall, body, or expiry. `stickArrow` places it 3 px back along the flight
+Only a bit with `stick` comes back: the plain ARROW and the BARBED SHOT do, and a thrown log or a
+conjured wisp plainly does not, which is a real cost on the heavy bits over and above their
+weight. Spent shots land in **`shafts`** (`{x, y, nx, ny, team, t}`), one per sticking shot that
+ends its flight, however it ends — miss, wall, body, or expiry. `stickArrow` places it 3 px back along the flight
 (so it is never inside the tile that stopped it), drops it entirely if the tile is open water, and
 trims the oldest past `SHAFT_MAX` (90). A shaft lives `SHAFT_LIFE` (30 s), is inert for
 `SHAFT_ARM` (0.3 s), and is then **neutral**: any player inside `SHAFT_R` (10 px) whose quiver
@@ -210,17 +424,19 @@ someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s l
 shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
 quiver as shafts around the body, the same way `spillInventory` spills the bag.
 
-Four indicators carry it, and none of them is a word:
+Five indicators carry it, and none of them is a word:
 
-- **The hud strip** (`drawHudStrip`, bottom-centre). Four ability wells sit above a gold xp bar
-  (lifetime gold, filling left to right, dark-outlined so it silhouettes against the plate). A
-  plus-square perches on the plate's top rim while a skill point can land there, and is gone the
-  moment one cannot; three pips on the well itself count the rank. Lit pip counts and a 1px
-  cooldown wipe are the combat readout; keys 1–4 sit in the corner of each well (those keys buy
-  gear, not ranks). A gained arrow (`quiverFlash`) and a completed renock (`readyFlash`) flash
-  the bow well; a press on an empty bow (`dryT`, set by `dryFire`) shakes that well and reddens
-  its rim. The fletching on the bow and knife icons is the local team's colour, the same colour
-  on every shaft in the snow.
+- **The hud strip's rail** (`drawHudStrip`, bottom-centre). The four wells above it are the weapon
+  slots ([above](#tools-and-bits)); between them and the gold xp bar sits a thin rail carrying the
+  two numbers a firefight is actually read off — what is left in the quiver, with the arrow that
+  spends it, on the left, and the dodge charges as pips on the right. Both used to live on the
+  ability wells that moved into the backpack, and both are needed with the pack shut. A gained
+  arrow (`quiverFlash`) inks the count gold; an empty one reddens it and dims the icon, and a
+  press on a tool that cannot answer (`dryT`, set by `dryFire`) reddens the selected slot's rim.
+- **The ability row in the backpack** (`drawAbilityRow`) keeps the rest of that readout: the
+  renock, dodge and fletch cooldowns still wipe their wells top-down, rank is three pips along the
+  bottom edge, and an ability a skill point can land on wears a pulsing gold rim and a plus badge
+  in its corner — gone the moment one cannot. The pack's own column counts the unspent points.
 - **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
   *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
   geometry either way, so it never jumps.
@@ -237,15 +453,20 @@ Four indicators carry it, and none of them is a word:
 Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot),
 `SFX.dryFire()` on an empty press, `SFX.shaftPull()` on a retrieval.
 
-An arrow in flight is drawn in its own pass (using `ex`/`ey`) and **rasterised pixel by pixel**
-rather than stroked, so it stays opaque and crisp at any angle: an 8 px shaft, two barbs 2 px back
-that keep the head pointing whatever direction it flies, and 4 px of fletching at the tail in
-`TEAMS[a.team].mark` — whose shot it is is readable from the arrow itself. Every one of those
+A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodies of their own —
+a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
+with no bearing at all (`drawMote`) — and everything else is the arrow silhouette, **rasterised
+pixel by pixel** rather than stroked so it stays opaque and crisp at any angle: an 8 px shaft in
+the bit's own `col`, two barbs 2 px back that keep the head pointing whatever direction it flies,
+and 4 px of fletching at the tail in `TEAMS[a.team].mark` — so the bit is readable from the shaft
+and whose shot it is from the tail. Every one of those
 pixels is dilated into `ARROW_RIM` first (a plus-shaped 1 px dark edge) so the shaft reads over
 snow, and the tip is left pure white. The body is built into the `ARROW_PX` scratch array, and a
 shot off the edge of the view is skipped before any of it runs.
 
-Behind it, each arrow lays a **trail of team-coloured motes** into `particles`, one every
+Behind it, each shot lays a **trail of team-coloured motes** into `particles` (fire instead, if a
+FLAME modifier is riding it — the burn is the more urgent fact about that shot than whose it is),
+one every
 `ARROW_TRAIL_STEP` (4) px of *flight distance* — not per tick, so a slow arrow streaks as evenly
 as a fast one, and a long frame is subdivided instead of leaving a gap. Motes are dropped at the
 distance behind the head they are owed (`a.trailD` banks the remainder), drift back at 8 px/s and
@@ -256,24 +477,33 @@ opaque it ever gets. Particles draw before the arrows, so a trail always sits un
 Switching tools, opening an overlay, or dying drops the draw without firing (and clears
 `fireArmed` with it); `BOW_CHARGE` (0.9 s) is a full draw.
 
-While the bow is drawn, `drawAimLine()` (called from `render()` right before the arrows pass,
-using `ex`/`ey`) shows the shot: a static line of 2×2 drop-shadowed dots from the arrow's spawn
-point along the exact direction `fireArrow()` uses. Both aim from `player.y - BOW_Y` (6 px above
-the feet, where the arrow spawns) — not the feet — so the line and the flight pass exactly
-through the cursor instead of running parallel a few px above it. The
-line is **truthful, not decorative** — it runs exactly as far as the arrow would fly
-(`(170 + 190p) × 0.85`, so it lengthens with the draw), stops at the first `isSolidTile`
-along the path *or the first animal the arrow would hit* (the same 8 px body test as the arrow
-update) with an impact cross — line-coloured on a solid, hunt-amber on a body — and otherwise
-ends in a short perpendicular range-cap bar. Colour follows the draw meter: yellow charging, hot orange at
-full. If the player stands on ice with a fish inside `FISH_CATCH_R` the line is replaced by
-four ticks closing over that fish, because that shot becomes the catch and never flies.
+While a tool is drawn, `drawAimLine()` (called from `render()` right before the shots pass, using
+`ex`/`ey`) shows the shot: a static line of 2×2 drop-shadowed dots from the spawn point along the
+exact direction `emitBit()` uses. Both aim from `player.y - BOW_Y` (6 px above the feet, where the
+shot spawns) — not the feet — so the line and the flight pass exactly through the cursor instead
+of running parallel a few px above it.
 
-The selected tool is also drawn **on the player** by `drawHeldTool()` (called from
-`drawPlayer()`): carried at the hand while idle/walking (mirrored via a `scale(-1,1)` transform
-for `left`, drawn *before* the body sprite for `up` so it's occluded, 1px walk bob), swept along
-the same arc as the swing effect during a melee swing, and rotated toward the mouse while the
-bow is drawn — the bow icon fires along −x (arc on the left), so aim rotation is `a + PI`.
+The line is **truthful, not decorative**, and it is truthful about the **bit that is up next**
+(`peekBit`), not about a bow in general: it runs exactly as far as that bit would fly
+(`speed × life`, both through the tool's modifiers), and only stops at an `isSolidTile` if that
+bit is one a wall stops. It still stops at the first animal it would hit (the same 8 px body test
+as the arrow update) with an impact cross — line-coloured on a solid, hunt-amber on a body — and
+otherwise ends in a short perpendicular range-cap bar. A `lob` gets only the first 35% of its
+flight, where it is still on the bearing; a `boomer` or an `orbit` gets **no line at all**, since
+the only honest straight line for those is none — what they do is shown by the shot itself the
+moment it leaves. Colour follows the draw meter: yellow charging, hot orange at full. If the
+player stands on ice with a fish inside `FISH_CATCH_R` the line is replaced by four ticks closing
+over that fish, because that press becomes the catch and never flies.
+
+The weapon is also drawn **on the player** by `drawHeldTool()` (called from `drawPlayer()`): at
+rest the hands hold the tool on the *selected slot*, in its own tier colour, so what someone is
+carrying reads off their sprite from across the snow — and an empty slot reads as empty hands.
+It is carried at the hand while idle/walking (mirrored via a `scale(-1,1)` transform for `left`,
+drawn *before* the body sprite for `up` so it's occluded, 1px walk bob), and rotated toward the
+mouse while drawn — the bow art fires along −x (arc on the left), so aim rotation is `a + PI`.
+Mid-swing the axe or pick takes over, swept along the same arc as the swing effect. Both sizes go
+through the same code: the icon is centred on its own half-width, 8×8 for a swing tool and 12×12
+for a weapon.
 
 ## Dodge roll
 
@@ -401,7 +631,7 @@ that made it — and it is the counterplay: a line like that leads straight to t
 ### The ambush shot
 
 `ambushReady(p)` is `prone && hide >= 1 && !moving`: **full** cover, and dead still while it goes.
-`fireArrow` reads it before anything else can break the cover, multiplies the whole damage roll
+`fireTool` reads it before anything else can break the cover, multiplies the whole damage roll
 (champion + power + speed + level) by `kit.ambushMul` (starts at `AMBUSH_MUL` 2.5, grown by ambush
 ranks), tags the arrow `ambush: true`, and calls
 `risePlayer` after the loose — one ambush per burrow, then you are a player lying in the open with
@@ -543,16 +773,16 @@ rather than a different resource (the League model: one number, many ways to ear
 
 | Source | Pays | Profile |
 | --- | --- | --- |
-| tree (4 hp) | `treeHit` 1 per swing + `treeFall` 1 → 5 | slow, safe, everywhere; leaves a stump |
+| tree (4 hp) | `treeHit` 1 per swing + `treeFall` 1 → 5 | slow, safe, everywhere; leaves a stump, and 1 in 25 leaves a tier-0 [find](#where-tools-and-bits-come-from) |
 | dead tree (3 hp) | `deadTreeHit` 1 per swing + `deadTreeFall` 2 → 5 | a tree in fewer swings, but only at a rookery |
 | rare tree (8%) | + `treeRare` 6 → 11 | jackpot roll, see `treeRare()` |
-| rock (5 hp) | `rockHit` 1 per swing + `rockBreak` 4 → 9 | a bit more than a tree, back-loaded |
+| rock (5 hp) | `rockHit` 1 per swing + `rockBreak` 4 → 9 | a bit more than a tree, back-loaded, and 1 in 5 hides a tier-0 tool or bit |
 | rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached |
 | deer | `deer` 3 coins × 6 → 18 | the big mobile target |
 | wolf | `wolf` 3 coins × 8 → 24 | the biggest kill, and it bites back |
 | bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
 | generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, deposited to its owner |
-| chest | `CHEST_GOLD_MIN`–`MAX` (8–20) + a card | ~14 caches along the treeline, one free E press |
+| chest | `CHEST_GOLD_MIN`–`MAX` (8–20) + a card, and 3 in 4 a **top-tier** tool or bit | ~14 caches along the treeline, one free E press — the only source of the best weapons |
 
 **Gold is never a physical drop.** Every source pays the earner on the spot through
 `awardGold(p, n, x, y)` (`players` banner, js/player.js, beside `gainGold` — which it wraps, so
@@ -592,34 +822,47 @@ cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than e
 ## Inventory and the backpack
 
 Everything a slot carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
-or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 10**
-(`BAG_CAP`); a second bag is a bigger `bagCap` and a longer array, nothing else. The table:
+or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 25**
+(`BAG_CAP`, five rows of `BAG_COLS`); a second bag is a bigger `bagCap` and a longer array,
+nothing else. The table:
 
 | Item | Icon | Stack | Used by |
 | --- | --- | --- | --- |
 | `berry` | `itemBerry` | 3 | Q, or clicking its cell — eats it |
 | `fish` | `itemFish` | 2 | F, or clicking its cell — eats it |
 | `cardWhite`/`cardGreen`/`cardBlue`/`cardPurple`/`cardGold` | `itemCard<Rarity>` | 5 each | clicking its cell — opens the pick-1-of-3 draft (see [Roguelike cards](#roguelike-cards)) instead of eating |
+| `tool:<id>` | `toolArt_<shape>_<tier>` | 1 | dragged onto one of the four weapon slots (see [Tools and bits](#tools-and-bits)) |
+| `bit:<id>` | `bitArt_<id>` | 4 each | dragged into a cell of a tool's bit column |
 
 An unopened card is a completely ordinary `ITEMS` entry — one per rarity, since a stack has to be
 homogeneous and a white card and a gold card are not interchangeable — which is what makes bag
 storage, the drop pickup, the refusal flash and death-spill (see
-[Death is final](#death-is-final)) all free for it, same as any other carried item.
+[Death is final](#death-is-final)) all free for it, same as any other carried item. Tools and bits
+register their rows the same way, from [js/tools.js](../../js/tools.js), under namespaced keys so
+a kind can never collide with a berry.
+
+A tool is the **one instanced** item: its cell carries the bits loaded into it, so it stacks to 1
+and moves as a whole object (`bagPut(p, cell)`, and `spawnDrop`'s `it` payload) rather than being
+rebuilt from `s.type`. `bagAdd` cannot make one and must not be asked to — the drop pickup
+branches on `d.it` for exactly this reason. Everything else in the bag is stateless.
 
 **The slot is the unit of capacity**, which is the whole reason this is an array and not a pair of
 counters: two half stacks cost two cells, so a bag genuinely fills and the pickup path can
-genuinely refuse. Five helpers in the `players` banner are the entire API — `bagCount(p, type)`,
+genuinely refuse. Six helpers in the `players` banner are the entire API — `bagCount(p, type)`,
 `bagUsed(p)`, `bagRoom(p, type)` (room in partial stacks + a full stack per empty cell),
-`bagAdd(p, type, n)` (tops up partial stacks before opening a cell, returns how many went in) and
+`bagAdd(p, type, n)` (tops up partial stacks before opening a cell, returns how many went in),
 `bagTake(p, type, n)` (spends from the **last** stack backwards, so partials empty and free their
-cell). Nothing outside them touches `p.bag` — `eatBerry`/`eatFish`, the fish catch, the drop
-pickup, the AI's food check and `spillInventory` all go through the five.
+cell) and `bagPut(p, cell)` (an instanced cell into the first free slot, or false). Nothing outside
+them touches `p.bag` — `eatBerry`/`eatFish`, the fish catch, the drop pickup, the AI's food check
+and `spillInventory` all go through the six. The one deliberate exception is the **drag**
+([UI banner](../../js/ui.js)), which is moving cells between wells rather than storing items, and
+owns `p.bag[i]` directly for exactly the length of one gesture.
 
 **Refusing is a real outcome**, and every path that cannot store something says so the same way:
 `bagDenied()` reddens and shakes the whole backpack frame for 0.6 s with one `SFX.deny()`, and re-firing while
 it is already up does nothing, so standing on a drop you cannot carry is one flash and not sixty a
-second. A bow-fishing swing with a full bag denies **and returns** (the bow still renocks) rather
-than falling through to loose the arrow at the floor.
+second. A bow-fishing press with a full bag denies **and returns** (the tool still cycles) rather
+than falling through and firing at the floor.
 
 The HUD is in the `UI` › `backpack` banner — see
 [the backpack](rendering.md#the-gear-row-and-the-backpack).
@@ -654,7 +897,7 @@ iron → steel → gold at a glance, the same materials the HUD plates wear.
 **Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
 `refreshKit(p)` copies the champion kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
 `nightHeal`, `walkMul`, `harvest`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
-returns that cache, so every existing kit read site (movement, `fireArrow`, dodge timing, the AI,
+returns that cache, so every existing kit read site (movement, `emitBit`, dodge timing, the AI,
 the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
 Sites that read the gear-only fields: `damagePlayer` (`dr`), `eatBerry`/`eatFish` and the daylight
 regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvest`), `animalDies`
@@ -666,9 +909,10 @@ player instead of only against wolves and turrets), and the three dodge-refill s
 **Buying** goes through `input.cmd = {kind:'gear', piece}` → `runCmd` → `buyGear(p, i)` — the one
 entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
 bump on the spot like a hero level. No tile, no reach, no contest — it only touches the buyer's
-own wallet. The human sends it from keys **1–4** or by clicking the **gear row**: four 18 px
-cells — **cells 1–4 of the backpack's icon row**, bottom right (`gearRects`/`gearHit`/
-`drawGearCells`, UI banner), one per piece head-to-toe after the pack button.
+own wallet. The human sends it by clicking the **gear row**: four 18 px cells — **cells 1–4 of the
+backpack's top row**, bottom right (`gearRects`/`gearHit`/`drawGearCells`, UI banner), one per
+piece head-to-toe after the pack button. There is no keyboard shortcut for it any more: keys 1-4
+select a weapon slot ([Tools and bits](#tools-and-bits)), and gear is bought where gear is.
 A plate shows **your variant's own icon** in the **material of its level** (leather → iron →
 steel → gold), pips **above** the icon count the buys, an affordable piece grows a bobbing gold
 chevron over the plate, hover lifts the plate and shows the cost (coin + number, nothing else),
@@ -680,7 +924,8 @@ chevron already answers that, on the piece it applies to, only when the answer i
 `gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
 can never disagree, and it is asked **before** `bagHit` everywhere because `bagHit` deliberately
 does not report the four gear cells. The click is swallowed **before** `clickAction` — the
-backpack widget and the hud strip are the left-clickable HUD in play. Living in that widget is also what
+backpack widget, the weapon strip and a raised bit column are the left-clickable HUD in play.
+Living in that widget is also what
 keeps the chevrons legible: see
 [the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
 float so they still build.
@@ -708,7 +953,7 @@ clicked card — `bagTake` the one card, push `{ rarity, id }` onto `p.cards`, `
 for a click anywhere else (or ESC), just closes the draft; either way the click never reaches the
 world underneath. `refreshKit` folds every entry in `p.cards` in after gear and skill, cumulatively
 (`for (const c of p.cards) CARDS[c.rarity][c.id].mod(k);`), so picking the same effect twice stacks
-it, and every existing kit-reading site in the sim — movement, `fireArrow`, dodge timing, the AI,
+it, and every existing kit-reading site in the sim — movement, `emitBit`, dodge timing, the AI,
 `seenAt`'s stealth — picks a card up for free, the same way it already does for gear. `p.cards` is
 set once in the `Player` constructor and never touched by `reset()`, so a build survives every
 respawn within a match.
@@ -1031,8 +1276,13 @@ backpack empties too**, one drop per stack — a stack is already the unit the b
 killer whose own bag is full simply leaves them lying; this is also, for free, how an **unopened
 roguelike card drops on death** (see [Roguelike cards](#roguelike-cards)) — a picked card is
 already baked into the kit, not an item, so only what's still sitting unopened in the bag spills.
-Both loops are generic per type, so a future resource spills without touching death code (`itemFish`
-is already in the drop draw pass). The standings are unaffected because `scoreOf` ranks lifetime
+**And the four weapon slots empty with it**, each tool going down *loaded*: a build lies where its
+owner fell, for whoever walks over it, and `reset()` hands the dead slot its champion's starting
+loadout back — so a respawn is armed but is not the player it was. (An item riding the cursor
+mid-drag goes back in the bag first, so it spills with the rest instead of vanishing with the hand
+holding it.) All three loops are generic per type, so a future resource spills without touching
+death code, and an instanced tool travels as the same object it always was
+(`spawnDrop`'s `it`). The standings are unaffected because `scoreOf` ranks lifetime
 `xp`, not the purse, so a looted slot keeps the place it earned. `die` also credits the kill (and
 heals the killer if their kit carries `killHeal`, off a card) and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then checks

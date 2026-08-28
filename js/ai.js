@@ -236,7 +236,13 @@ function updateAI(p, dt) {
   }
   if (!loot) ai.lootT = 0;
 
-  // 8. spend the purse: gear first when the purse is fat enough to keep a
+  // 8. put the loot to work: bits into the tool being fired, a spare tool onto
+  //    a free key (botFitLoadout, js/tools.js). On a slow timer because it is
+  //    housekeeping, not a decision - nothing about the fight waits on it.
+  ai.fitT -= dt;
+  if (ai.fitT <= 0) { ai.fitT = 2.5; botFitLoadout(p); }
+
+  // 9. spend the purse: gear first when the purse is fat enough to keep a
   //    building float (buyGear re-validates, so a stale order is harmless),
   //    then a stump to build on, then its own work to upgrade
   if (!inp.cmd) {
@@ -305,7 +311,7 @@ function updateAI(p, dt) {
     ai.buildT = 4; // nothing worth spending on nearby; look again shortly
   }
 
-  // 9. harvest: walk to a tree/rock/berry bush/chest and hold E on it
+  // 10. harvest: walk to a tree/rock/berry bush/chest and hold E on it
   // (a stripped bush stops being work, so drop it the moment it empties)
   if (ai.tgt && (objects[idx(ai.tgt.tx, ai.tgt.ty)] !== ai.tgt ||
     (ai.tgt.type === 'bush' && ai.tgt.berries <= 0))) ai.tgt = null;
@@ -335,7 +341,7 @@ function updateAI(p, dt) {
     return;
   }
 
-  // 10. nothing to do: roam between its camp and the middle of the map
+  // 11. nothing to do: roam between its camp and the middle of the map
   ai.roam -= dt;
   if (ai.roam <= 0) {
     ai.roam = rand(3, 7);

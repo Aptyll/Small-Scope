@@ -75,6 +75,14 @@ const state = {
   paused: false,
   mapOpen: false,
   bagOpen: false,      // the backpack grid (B, or the bag bar): HUD, it does NOT stop the sim
+  // an item riding the pointer between the grid, the four weapon slots and a
+  // tool's bit column: { cell, from } - see the drag banner in js/ui.js. The
+  // cell is the same object the bag held, so a tool keeps its bits across it.
+  drag: null,
+  // a press on a holdable cell that has not travelled far enough to become a
+  // drag yet: { src, x, y }. Resolves as a plain click if the button comes
+  // back up without moving - see the drag banner in js/ui.js.
+  dragPend: null,
   draft: null,         // the pick-1-of-3 card draft: { rarity, options: [id,id,id] } - HUD, does NOT stop the sim
   settingsOpen: false,
   wheel: null, // radial menu: { kind: 'build'|'manage', tx, ty, seg, ax, ay } - ax/ay is the press point
@@ -84,7 +92,11 @@ const state = {
   flagAim: false,
   // main menu (mode === 'title'): keyboard selection, per-item hover eases,
   // the open sub-panel ('settings' | 'help' | 'patch' | 'name' | null) and its slide progress
-  menu: { sel: 0, hover: [0, 0, 0, 0, 0], t: 0, // one hover ease per MENU_ITEMS entry + the seed row
+  // one hover ease per MENU_ITEMS entry + the seed row. That length is a
+  // coupling to a table in a file that loads later, so the ease loop tops up a
+  // missing cell rather than trusting it - a short array turned into NaN and
+  // silently deleted the seed row when the fifth plank arrived.
+  menu: { sel: 0, hover: [0, 0, 0, 0, 0, 0], t: 0,
     panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
     // the PLAYER panel (the `player profile` banner): the name being typed,
     // whether this is the first-launch prompt (SKIP) or an edit (CANCEL),
@@ -96,8 +108,11 @@ const state = {
     iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
     // champion select: which screen the menu shows, its cross-fade, the
     // highlighted champion, per-card hover eases, swap pop, lock-in hold
+    // screen: 'menu' | 'select' | 'gear' | 'tech'. select and gear cross-fade
+    // into each other inside screenT; the tech tree is a surface of its own on
+    // techT, with tsel the keyboard cursor into its flat node list.
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
-    gearT: 0, grow: 0 },
+    gearT: 0, grow: 0, techT: 0, tsel: 0 },
   intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from
@@ -218,9 +233,13 @@ function burst(x, y, color, n, spd, life, grav) {
 
 // n = how much the pickup is worth. type is always an ITEMS key now (berry,
 // fish, a card) - gold is paid on the spot through awardGold, never dropped.
-function spawnDrop(x, y, type, n) {
+// `it` is the instanced cell an item with state of its own travels as - a
+// tool and the bits loaded into it. It is the SAME object the bag held and the
+// same one the bag gets back, so a tool never loses its build to a throw, a
+// death or a hand-off. Plain stacking items leave it undefined.
+function spawnDrop(x, y, type, n, it) {
   const a = rng() * Math.PI * 2;
-  drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, n: n || 1, t: 0 });
+  drops.push({ x, y, vx: Math.cos(a) * rand(20, 45), vy: Math.sin(a) * rand(20, 45) - 30, z: 0, vz: rand(30, 60), type, n: n || 1, t: 0, it: it || null });
 }
 
 // wallets are per player: every cost check and payment names whose it is

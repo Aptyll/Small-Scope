@@ -45,14 +45,17 @@ window.addEventListener('keydown', (e) => {
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and
   // ESC it neither stops the sim nor swallows anything but its own clicks.
   if (e.key.toLowerCase() === 'b') state.bagOpen = !state.bagOpen;
-  // 1-4 buy the next level of that gear piece, left to right like the HUD row
-  // (sampleHumanInput zeroes cmd while an overlay is up, so no guard needed)
-  if (e.key >= '1' && e.key <= '4') player.input.cmd = { kind: 'gear', piece: e.key.charCodeAt(0) - 49 };
+  // 1-4 select a weapon slot, left to right like the hud strip. Holding one
+  // past TOOL_HOLD_T raises that tool's bit column - the held level is read in
+  // sampleHumanInput, so the repeat this handler gets is harmless. Gear is
+  // bought from the backpack now, not from a number key.
+  if (e.key >= '1' && e.key <= '4' && !e.repeat) player.input.toolPick = e.key.charCodeAt(0) - 49;
   if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
   if (e.key.toLowerCase() === 'escape') {
-    // the flag aim goes first: it is the most transient thing on screen, and
-    // dropping it here is what lets a held middle button be thought better of
-    if (state.flagAim) state.flagAim = false;
+    // a carried item goes back first, then the flag aim: both are gestures
+    // half-finished, and Escape is how either is thought better of
+    if (state.drag) { dragReturn(); state.dragPend = null; }
+    else if (state.flagAim) state.flagAim = false;
     else if (state.wheel) state.wheel = null;
     else if (state.draft) state.draft = null; // closes without picking
     else if (state.mapOpen) state.mapOpen = false;
@@ -65,7 +68,14 @@ window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
 // a key - or the middle button - held while the window loses focus never sends
 // its keyup/mouseup: alt-tabbing out would otherwise leave the scoreboard (or
 // a walk direction, or the flag preview) stuck on
-window.addEventListener('blur', () => { for (const k in keys) keys[k] = false; state.flagAim = false; });
+// - and an item on the cursor goes back where it came from rather than
+// hanging there over a game that has stopped listening
+window.addEventListener('blur', () => {
+  for (const k in keys) keys[k] = false;
+  state.flagAim = false;
+  state.dragPend = null;
+  if (state.drag) dragReturn();
+});
 
 canvas.addEventListener('mousemove', (e) => {
   const r = canvas.getBoundingClientRect();
@@ -73,6 +83,9 @@ canvas.addEventListener('mousemove', (e) => {
   mouse.y = (e.clientY - r.top) / scale;
   mouse.inside = true;
   state.menu.moved = true; // the menu only lets the mouse steal the selection when it actually moves
+  // a press on a bag/slot/bit cell only becomes a DRAG once it travels: that
+  // is what lets one gesture both use an item and move it (see hudMove, ui.js)
+  if (state.dragPend) hudMove(mouse.x, mouse.y);
 });
 // the in-canvas cursor must vanish when the pointer leaves the page
 canvas.addEventListener('mouseleave', () => { mouse.inside = false; });
@@ -86,7 +99,8 @@ canvas.addEventListener('mousedown', (e) => {
   mouse.inside = true;
   if (e.button === 2) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel || state.draft) return;
-    if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0 || abHit(mouse.x, mouse.y)) return; // no build wheel through the HUD
+    if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0 || stripHit(mouse.x, mouse.y) ||
+        bitColHit(mouse.x, mouse.y) >= 0) return; // no build wheel through the HUD
     SFX.unlock();
     const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
     const o = structOf(objAt(tx, ty));
@@ -123,22 +137,17 @@ canvas.addEventListener('mousedown', (e) => {
   if (state.draft) { SFX.unlock(); draftClick(); return; } // a card, or anywhere else: closes either way
   if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
   if (state.mapOpen) return;
-  // the backpack widget and the hud strip swallow every click over themselves
-  // before the bow ever sees them. Gear is asked first because gearHit owns
-  // those four cells and bagHit does not report them; a piece that can't sell
-  // just denies. The strip's upgrade squares (and their wells, while a point
-  // is free) spend a skill point the same way.
+  // The backpack widget, the weapon slots and an open bit column swallow every
+  // press over themselves before the tool ever sees them. Gear is asked first
+  // because gearHit owns those four cells and bagHit does not report them; a
+  // piece that can't sell just denies. Everything else goes through hudPress,
+  // which arms a drag the mouseup below either completes or reads as a click.
   const gi = gearHit(mouse.x, mouse.y);
   if (gi >= 0) { SFX.unlock(); player.input.cmd = { kind: 'gear', piece: gi }; return; }
-  const bh = bagHit(mouse.x, mouse.y);
-  if (bh) { SFX.unlock(); bagClick(bh); return; }
-  const ah = abHit(mouse.x, mouse.y);
-  if (ah) {
-    SFX.unlock();
-    if ((ah.kind === 'up' || ah.kind === 'slot') && abCanBuy(player, ah.i))
-      player.input.cmd = { kind: 'skill', i: ah.i };
-    return;
-  }
+  if (hudPress(mouse.x, mouse.y)) { SFX.unlock(); return; }
+  // pressing on the world while carrying something: the release throws it,
+  // and nothing is fired
+  if (state.drag) return;
   mouse.down = true;
   clickAction(player);
 });
@@ -160,8 +169,18 @@ window.addEventListener('mouseup', (e) => {
     plantFlag(player, Math.floor(mouseWX() / TILE), Math.floor(mouseWY() / TILE));
     return;
   }
-  // releasing the button just drops the held intent; updatePlayer looses the
-  // arrow on that falling edge, the same way an AI's shot is timed
+  // a carried item is put down (or thrown), and an armed press that never
+  // travelled resolves as the plain click it was - both before the tool's own
+  // release, so a drag never also looses a shot
+  if (e.button === 0 && state.mode === 'play' && (state.drag || state.dragPend)) {
+    hudRelease(mouse.x, mouse.y);
+    player.input.fire = false;
+    mouse.down = false;
+    dragSlider = null;
+    return;
+  }
+  // releasing the button just drops the held intent; updatePlayer fires the
+  // tool on that falling edge, the same way an AI's shot is timed
   if (e.button === 0) player.input.fire = false;
   // letting go of a dial: the two sound tracks answer with a real sampled cue
   // at the level just set, so the slider demonstrates itself instead of
@@ -216,6 +235,7 @@ function sampleHumanInput(p) {
     inp.slide = !!keys['shift'];
     inp.fire = inp.work = false;
     inp.eatBerry = inp.eatFish = false;
+    inp.toolPick = -1; inp.toolHold = false;
     inp.cmd = null;
     if (p.charging) { p.charging = false; p.chargeT = 0; }
     p.firePrev = false;
@@ -228,6 +248,7 @@ function sampleHumanInput(p) {
     inp.mx = inp.my = 0;
     inp.fire = inp.work = inp.slide = false;
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.toolPick = -1; inp.toolHold = false;
     inp.cmd = null;
     if (p.charging) { p.charging = false; p.chargeT = 0; }
     p.firePrev = false;
@@ -239,6 +260,10 @@ function sampleHumanInput(p) {
   inp.mx = mx; inp.my = my;
   inp.slide = !!keys['shift'];
   inp.work = !!keys['e'] && !state.wheel;
-  if (state.wheel) { inp.fire = false; inp.dodge = false; } // the wheel swallows the bow
+  // the selected slot's own key, still down: past TOOL_HOLD_T that raises its
+  // bit column. It is a held LEVEL rather than an edge because the column is
+  // up exactly as long as the finger is - see bitEditSlot (js/tools.js).
+  inp.toolHold = !state.wheel && !!keys[String(p.toolSel + 1)];
+  if (state.wheel) { inp.fire = false; inp.dodge = false; } // the wheel swallows the shot
 }
 
