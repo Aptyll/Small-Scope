@@ -26,6 +26,9 @@ function wheelOptions() {
   // special-cased either - wheelSpan(1) is the whole circle, so any direction
   // out of the hub picks it and the hub still cancels.
   if (w.kind === 'build') return buildOptionsAt(w.tx, w.ty).map((type) => ({ id: type }));
+  // the practice rack offers every tool in the game, in table (tier) order -
+  // the arena is the one place trying an unearned weapon costs nothing
+  if (w.kind === 'rack') return Object.keys(TOOLS).map((id) => ({ id }));
   const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
   // so a type's extra option lands between them instead of displacing either
@@ -74,7 +77,10 @@ function resolveWheel() {
   const w = state.wheel;
   const L = wheelLayout();
   if (L.seg < 0) return; // released in the hub = cancel
-  player.input.cmd = { kind: w.kind === 'build' ? 'build' : L.opts[L.seg].id, tx: w.tx, ty: w.ty, id: L.opts[L.seg].id };
+  player.input.cmd = {
+    kind: w.kind === 'build' ? 'build' : w.kind === 'rack' ? 'rack' : L.opts[L.seg].id,
+    tx: w.tx, ty: w.ty, id: L.opts[L.seg].id,
+  };
 }
 
 // run a queued build/manage/gear order for any player
@@ -82,6 +88,7 @@ function runCmd(p, c) {
   if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
   if (c.kind === 'skill') { buySkill(p, c.i); return; }
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
+  if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
   const o = structOf(objAt(c.tx, c.ty));
   if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
@@ -104,14 +111,17 @@ function drawSelection(ox, oy, now) {
     // a bare open hole brackets too: it is a build site with nothing on it,
     // and the brackets are the only thing that says so
     if (!o) { if (!buildSiteAt(tx, ty)) return; }
-    else if (o.type !== 'stump' && !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
+    else if (o.type !== 'stump' && o.type !== 'rack' &&
+             !(STRUCTS[o.type] && !o.building && o.team === player.team)) return;
     if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) return;
   }
-  // a big building brackets its whole footprint, from its anchor
+  // a big building brackets its whole footprint, from its anchor - and the
+  // practice rack its whole two-tile pair, from its lead
   const o2 = structOf(objAt(tx, ty));
   const big = o2 && STRUCTS[o2.type] && (structW(o2.type) > 1 || structH(o2.type) > 1);
-  const bx = (big ? o2.tx : tx) * TILE - ox, by = (big ? o2.ty : ty) * TILE - oy;
-  const bw = (big ? structW(o2.type) : 1) * TILE, bh = (big ? structH(o2.type) : 1) * TILE;
+  const rk = o2 && o2.type === 'rack' ? (o2.lead ? o2 : objAt(o2.tx - 1, o2.ty)) : null;
+  const bx = (rk ? rk.tx : big ? o2.tx : tx) * TILE - ox, by = (big ? o2.ty : ty) * TILE - oy;
+  const bw = rk ? TILE * 2 : (big ? structW(o2.type) : 1) * TILE, bh = (big ? structH(o2.type) : 1) * TILE;
   ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now * 6);
   // four 3px corner brackets, dark shadow first so white reads on snow
   const corners = (c, px, py) => {
@@ -294,6 +304,10 @@ function renderWheel(now) {
         ctx.fillRect(Math.round(ix - 8), Math.round(iy - 8), 16, 16);
       }
       ctx.globalAlpha = 1;
+    } else if (w.kind === 'rack') {
+      // a tool's own strip icon: the family silhouette in its tier's metal
+      const T = TOOLS[opt.id];
+      ctx.drawImage(SPRITES['toolArt_' + T.art + '_' + T.tier], Math.round(ix - 6), Math.round(iy - 6));
     } else {
       const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'CARD';
       drawPixelTextOutline(ctx, label,
@@ -314,6 +328,9 @@ function renderWheel(now) {
       const t0 = STRUCTS[opt.id].tiers[0];
       label = STRUCTS[opt.id].name + ' : ' + costText(t0.cost);
       color = canAfford(t0.cost) ? '#ffd95c' : '#ff8a7a';
+    } else if (w.kind === 'rack') {
+      label = TOOLS[opt.id].name;
+      color = TOOL_TIERS[TOOLS[opt.id].tier].rim; // the name in its tier's metal
     } else if (opt.id === 'upgrade') {
       if (!o || o.tier >= STRUCTS[o.type].tiers.length - 1) { label = 'MAX TIER'; color = '#9fb6d8'; }
       else {

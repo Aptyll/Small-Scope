@@ -76,6 +76,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the practice arena: its gen, the dummy's numbers, the grounds' clock | `PRACTICE` (core.js, above `WORLD` — practice worlds are 64 tiles), `genPracticeWorld`, `PR_W`/`PR_H`/`PR_SPAWN`, `DUMMY_HP`/`DUMMY_WORK_DMG`/`DUMMY_RESET_T`, `practiceDummies`, `updatePractice` | `practice arena` (the hits: `hitDummy`, actions.js; sprite: `DUMMY_SPR`, draw-world.js) |
 | the archery targets: the three habits, the shared face geometry, a hit and its respawn | `ptargets`, `addPTarget`, `ptFace`, `ptLive`, `hitPTarget`, `PT_HIT_R`/`PT_RESPAWN`/`PT_POP`/`PT_ALTS` | `practice arena` (the arrow test: the PRACTICE branch, `update`, sim.js; pixels: `drawPTarget`, draw-world.js) |
 | the ice parkour: the loop's centreline, the carve, the lap clock's state and rules | `PK_PATH`, `PK_LINE_Y`/`PK_LINE_X1`/`PK_CP_X0`/`PK_OFF_T`/`PK_GATE`, `parkour`, the parkour block of `updatePractice` | `practice arena` (pixels: `drawParkourLine`/`drawParkour`, draw-world.js) |
+| the armory: taking a tool off the practice rack | `rackEquip` (the wheel that orders it: kind `'rack'` in input.js / `wheelOptions` / `runCmd`, ui.js) | `practice arena` |
 
 ## js/nav.js
 

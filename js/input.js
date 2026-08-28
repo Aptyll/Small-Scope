@@ -109,6 +109,7 @@ canvas.addEventListener('mousedown', (e) => {
     if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
     // ax/ay: the press point every later pointer move is measured against
     if (site) state.wheel = { kind: 'build', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
+    else if (o.type === 'rack') state.wheel = { kind: 'rack', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y }; // the practice armory: pick a tool off it
     else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
     else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
     return;

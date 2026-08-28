@@ -649,6 +649,25 @@ const PK_GATE = { x: 9.5 * TILE, y: 27.5 * TILE }; // where the BEST/LAST plate 
 // while `last` is this session's only
 const parkour = { on: false, t: 0, cp: false, wasLine: false, offT: 0, last: 0, best: 0 };
 
+// The rack is the practice armory: right-clicking either of its tiles opens
+// a radial wheel of every tool in the game (kind 'rack' - input.js opens it,
+// wheelOptions/renderWheel list and draw it, and the pick lands here through
+// the same input.cmd -> runCmd path a build order takes). The selected slot
+// becomes a fresh instance of the picked tool with a plain arrow seated, so
+// it fires the moment it is taken. PRACTICE-gated: a rack in a match world
+// must never be a free-weapons kiosk.
+function rackEquip(p, c) {
+  if (!PRACTICE) return;
+  const o = objAt(c.tx, c.ty);
+  if (!o || o.type !== 'rack' || !TOOLS[c.id]) return;
+  if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
+  const cell = makeTool(c.id);
+  cell.bits[0] = 'arrow';
+  p.tools[p.toolSel] = cell;
+  burst(p.x, p.y - 8, '#e8dcb4', 6, 40, 0.4, true);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+
 function genPracticeWorld() {
   const ax = PR_X0, ay = PR_Y0;
   // solid forest everywhere, then the field carved out of it - the rim

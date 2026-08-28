@@ -168,7 +168,11 @@ nothing glows (`rebuildLights` currently finds no light-emitting object in any w
 The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
 **dummy** on a small packed-earth pad in the middle, the spawn just south of it, the two-tile
 bow **rack** beside the spawn (`lead` on the left tile, a solid silent follower right;
-`RACK_SPR`, baked per-pixel in js/draw-world.js so the strung staves get true curves), and the
+`RACK_SPR`, baked per-pixel in js/draw-world.js so the strung staves get true curves) — **the
+rack is the armory**: right-clicking either tile within reach opens a radial wheel of every
+tool in the game (`state.wheel` kind `'rack'`, the ordinary wheel pipeline; the pick lands in
+`rackEquip`, `PRACTICE`-gated in the practice banner), replacing the selected slot with a fresh
+instance of the picked tool, a plain arrow seated so it fires the moment it is taken — and the
 **targets standing in the open along the field's edges** near the trees — statics on posts of
 all three heights, pop-ups working the corners, two sliders patrolling the north edge. No
 fences, no wildlife, no chests, no pond, no harvest, and nothing spawns or restocks. `PRACTICE`
