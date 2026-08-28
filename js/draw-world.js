@@ -322,44 +322,95 @@ const BRAZIER_SPR = bakeGrid([
   '.o........o...',
 ], { o: '#241a12', i: '#3c4250', I: '#5a637a', h: '#8b93a8', c: '#1c1208' }, 14);
 
-// the weapon rack: a rail two practice bows stand leaned against, strings
-// out, with a quiver of shafts hung on the end post
-const RACK_SPR = bakeGrid([
-  '.oo.............oo',
-  '.wooooooooooooooW.',
-  '.wWWWWWWWWWWWWWWw.',
-  '.w..mM...mM..ss.w.',
-  '.w.mM.s.mM.s.sS.w.',
-  '.wmM..smM..s.qq.w.',
-  '.wmM..smM..s.qQ.w.',
-  '.wmM..smM..s.qQ.w.',
-  '.wmM..smM..s.qQ.w.',
-  '.w.mM.s.mM.s.qq.w.',
-  '.w..mM...mM..oo.w.',
-  '.w..............w.',
-  'owo............owo',
-], { o: '#241a12', w: '#5c4226', W: '#8a6142',
-     m: '#6b4a30', M: '#a3794f', s: '#e8dcb4', S: '#8b93a8', q: '#6e4f2f', Q: '#93744a' }, 18);
-
-// the canvas tent by the spawn: ridge pole, lit and shaded slopes, a dark
-// mouth, guy ropes out to their stakes and snow along the ridge
-const TENT_SPR = bakeGrid([
-  '..............ss..............',
-  '...........sssoosss...........',
-  '.........ssoLLLLDDoss.........',
-  '........soLLLLLLDDDDos........',
-  '.......oLLLLLLLLDDDDDDo.......',
-  '......oLLLLLLLLLLDDDDDDo......',
-  '.....oLLLLLLooooDDDDDDDDo.....',
-  '....oLLLLLLommmoDDDDDDDDDo....',
-  '...oLLLLLLommmmmoDDDDDDDDDo...',
-  '..oLLLLLLommmmmmmoDDDDDDDDDo..',
-  '.roLLLLLLommmmmmmoDDDDDDDDor..',
-  'r.oooooooooooooooooooooooo..r.',
-  'r...........................r',
-  'x...........................x',
-], { o: '#241a12', L: '#dcd6c6', D: '#b0aa9a', m: '#1c1208',
-     s: '#f4f7ff', r: '#93744a', x: '#5c4226' }, 30);
+// The weapon racks, one per station and TWO TILES wide (the `rack` entry in
+// js/world.js carries the lead/follower pair). Baked per-pixel like the
+// target face rather than from a grid, because a strung bow stave wants a
+// true curve. Variant 0 is the BOW rack on the archery platform: an A-frame
+// of posts and rails with three strung longbows leaned against the top rail
+// and a hung quiver of fletched shafts. Variant 1 is the WORK rack by the
+// quarry path: the same frame racked with two axes and a pick, a coiled rope
+// on the end post. Snow rides the rail and the post caps of both.
+const RACK_W = 34, RACK_H = 28;
+function bakeRack(variant) {
+  const c = document.createElement('canvas');
+  c.width = RACK_W; c.height = RACK_H;
+  const g = c.getContext('2d');
+  const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  const rect = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
+  const O = '#241a12', wd = '#5c4226', wl = '#8a6142', wp = '#a3794f';
+  // the two posts, into flared feet
+  for (const x0 of [1, 29]) {
+    rect(x0, 2, 4, 23, O);
+    rect(x0 + 1, 3, 1, 21, wl);
+    rect(x0 + 2, 3, 1, 21, wd);
+    rect(x0 - 1, 24, 6, 3, O);       // the foot block
+    rect(x0, 25, 4, 1, wd);
+    px(x0, 25, wl);
+  }
+  // rails: the heavy top rail the gear leans on, a thin keeper rail below
+  rect(0, 5, 34, 4, O);
+  rect(1, 6, 32, 1, wl); rect(1, 7, 32, 1, wd);
+  px(0, 6, wp); px(33, 6, wp);       // end-grain glints on the overhang
+  rect(1, 18, 32, 3, O);
+  rect(2, 19, 30, 1, wd);
+  if (variant === 0) {
+    // three strung longbows, tips hooked over the top rail. The stave bends
+    // left off the straight string, each with its own height and draw
+    const bows = [[9, 2, 3], [16, 4, 2], [23, 2, 3]]; // centre, top y, belly
+    for (const [cx2, ty0, bend] of bows) {
+      rect(cx2, ty0 + 1, 1, 23 - ty0 - 1, '#f0e6cc');            // the string
+      for (let y = ty0; y <= 23; y++) {                           // the stave
+        const u = (y - ty0) / (23 - ty0);
+        const b = Math.round(Math.sin(u * Math.PI) * bend);
+        px(cx2 - b, y, '#6b4a30');
+        px(cx2 - b - 1, y, '#c9a874');
+      }
+      rect(cx2 - bend - 1, 11, 2, 3, '#5c4226');                  // the grip wrap
+    }
+    // the quiver, leaned inside the right post, shafts fletched red and straw
+    rect(25, 10, 4, 13, O);
+    rect(26, 11, 1, 11, '#93744a'); rect(27, 11, 1, 11, '#6e4f2f');
+    rect(26, 13, 2, 1, '#8b93a8');                                // iron band
+    rect(26, 20, 2, 1, '#8b93a8');
+    for (const [sx2, sy0, f] of [[26, 6, '#d0453a'], [28, 7, '#e0c890'], [27, 5, '#d0453a']]) {
+      rect(sx2, sy0 + 2, 1, 10 - sy0, wp);                        // shaft into the mouth
+      px(sx2, sy0, f); px(sx2, sy0 + 1, f);                       // the fletching
+    }
+  } else {
+    // two axes and a pick leaned into the rail, heads up in the clear above
+    // it so the iron reads against the snow, bright hafts down to the ground
+    for (const [hx, hy] of [[8, 2], [14, 3]]) {                   // the axes
+      rect(hx, hy + 2, 1, 21 - hy, '#c9a874'); rect(hx + 1, hy + 2, 1, 21 - hy, '#6b4a30');
+      rect(hx - 3, hy, 4, 5, O);                                  // the head, edge left
+      rect(hx - 2, hy + 1, 2, 3, '#8b93a8');
+      px(hx, hy + 1, '#3c4250'); px(hx, hy + 3, '#3c4250');       // the poll in shade
+      px(hx - 3, hy + 1, '#c6cddc'); px(hx - 3, hy + 2, '#c6cddc'); px(hx - 3, hy + 3, '#c6cddc');
+    }
+    rect(21, 4, 1, 19, '#c9a874'); rect(22, 4, 1, 19, '#6b4a30'); // the pick's haft
+    for (const [dx2, dy2] of [[-4, 3], [-3, 2], [-2, 1], [-1, 0], [0, 0], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3]]) {
+      px(21 + dx2, 1 + dy2, O);                                   // the curved head
+      px(21 + dx2, 2 + dy2, '#8b93a8');
+      px(21 + dx2, 3 + dy2, '#3c4250');
+    }
+    // a coiled rope hung on the right post
+    for (let a = 0; a < 16; a++) {
+      const th = a / 16 * Math.PI * 2;
+      px(Math.round(26.5 + Math.cos(th) * 2.4), Math.round(13.5 + Math.sin(th) * 3),
+         a % 3 ? '#93744a' : '#6e4f2f');
+    }
+    // a pair of split-log rounds by the right foot
+    rect(24, 21, 4, 4, O); rect(25, 22, 2, 2, wp); px(25, 22, '#c9a874');
+    rect(27, 20, 4, 4, O); rect(28, 21, 2, 2, wp); px(28, 21, '#c9a874');
+  }
+  // snow: a broken run along the top rail and caps on both posts
+  for (let x = 0; x < 34; x++) {
+    if (hash2(x * 7 + variant * 3, 91) > 0.45) px(x, 4, '#f4f7ff');
+    if (hash2(x * 5 + variant * 3, 93) > 0.75) px(x, 5, '#c4d4ea');
+  }
+  for (const x0 of [1, 29]) { rect(x0, 1, 4, 1, '#f4f7ff'); px(x0 + 3, 2, '#c4d4ea'); }
+  return c;
+}
+const RACK_BOW_SPR = bakeRack(0), RACK_TOOL_SPR = bakeRack(1);
 
 // The damage meter over a dummy's head: LAST HIT / DPS / TOTAL for the combo
 // in progress, on a small frost plate in the overhead frame's language. A

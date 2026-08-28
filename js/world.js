@@ -48,8 +48,10 @@ const OBJECTS = {
   fence:    { solid: true,  mm: [150, 118, 84],  map: [140, 110, 76] },
   brazier:  { solid: true,  mm: [214, 142, 66],  map: [178, 118, 58] },
   banner:   { solid: true,  mm: [214, 88, 76],   map: [186, 74, 62] },
+  // a rack spans TWO tiles: the left one carries `lead` (and `variant` - 0
+  // bows, 1 axes and picks) and draws the whole sprite; the right tile is a
+  // plain solid follower the draw pass skips
   rack:     { solid: true,  mm: [168, 132, 92],  map: [150, 116, 80] },
-  tent:     { solid: true,  mm: [200, 196, 186], map: [176, 168, 150] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
   // solid to walkers and a work target for RIVAL E swings only - workTarget
@@ -520,13 +522,20 @@ function landmarkAt(x, y) {
 // ------------------------------------------------------------ practice arena
 // The TRAINING GROUNDS behind the PRACTICE TOOL plank: a hand-built campus,
 // not a wilderness clearing. A 64x36-tile frame (16:9, the view's own shape)
-// carved out of solid forest holds a packed-earth central yard with the two
-// melee dummies, a fenced archery range of two lanes east (static targets at
-// graded distances, then a pop-up lane), a moving-target gallery along the
-// north wall, a pendulum frame south-east, the ice pond kept west, a harvest
-// corner (trees, a snag, rocks, bushes), stumps to build on, two chests, and
-// the dressing that makes it read as BUILT: rail fences, red banners, iron
-// braziers (live lights), a weapon rack and a tent by the spawn.
+// carved out of solid forest, laid out like a real camp - every piece of
+// dressing marks something. The packed-earth parade yard holds the two melee
+// dummies with braziers at its four corners; a south gate (banner pair over
+// an earth stub) is where you walked in. East, a firing platform fronts two
+// fully fenced archery lanes - statics, then pop-ups - each entered through a
+// one-tile gate that IS the firing slot, with the bow rack standing on the
+// platform and a banner at each lane mouth; a tree windbreak splits the
+// lanes. North, the moving-target gallery hangs off the wall, its entry
+// flanked by banners and its end caps lit by braziers OUTSIDE the lane. The
+// pendulum swings on a fenced-backstop pad south-east. West is the camp's
+// larder: the ice pond with its shoal, a berry hedge on the north shore with
+// the rabbits, and past it the work side - tool rack and stumps, the woodlot
+// grove north-west, the rock quarry south-west. Rail fences stop arrows like
+// any solid tile, so a lane can only be shot down its own gate.
 //
 // Boots only under PRACTICE (js/core.js pins the seed to PRACTICE_SEED, so
 // ?seed can never reshape it) and replaces genWorld outright: no landmarks,
@@ -644,40 +653,57 @@ function genPracticeWorld() {
       if (!objects[idx(ax + tx, ay + ty)]) ground[idx(ax + tx, ay + ty)] = 3;
     }
   };
-  earth(22, 13, 39, 24);        // the central yard
+  earth(22, 13, 39, 24);        // the parade yard
+  earth(30, 25, 31, 27);        // the south gate: the road you walked in on
+  earth(31, 6, 32, 12);         // gallery approach, yard -> the north wall
+  earth(14, 3, 49, 5);          // the moving-target gallery floor
   earth(16, 18, 21, 19);        // west path, yard -> pond shore
-  earth(40, 17, 41, 19);        // east path, yard -> the range
-  earth(42, 11, 61, 13);        // lane A: the static range
-  earth(42, 21, 61, 23);        // lane B: the pop-up range
-  earth(14, 3, 49, 5);          // the moving-target gallery, north wall
-  earth(30, 6, 33, 12);         // gallery entry, down into the yard's reach
-  earth(44, 27, 51, 31);        // the pendulum pad, south-east
+  earth(40, 11, 42, 23);        // the firing platform fronting both lanes
+  earth(43, 12, 43, 12);        // lane A's gate tile
+  earth(43, 22, 43, 22);        // lane B's gate tile
+  earth(44, 11, 61, 13);        // lane A: the static range
+  earth(44, 21, 61, 23);        // lane B: the pop-up range
+  earth(40, 24, 41, 27);        // pendulum approach, platform -> the pad...
+  earth(42, 27, 43, 28);        // ...turning east
+  earth(44, 27, 50, 31);        // the pendulum pad, south-east
   // the yard's corners knocked off so the plaza reads worn, not stamped
   for (const [cx2, cy2] of [[22, 13], [39, 13], [22, 24], [39, 24]]) {
     if (hash2(cx2 * 7, cy2 * 5) > 0.5) ground[idx(ax + cx2, ay + cy2)] = 0;
   }
-  // ---- the pond, west (kept from the old room) ---------------------------
+  // ---- the pond, west: the camp's larder ---------------------------------
   const pcx = ax + 9, pcy = ay + 21;
   for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
     if ((dx * dx) / 33 + (dy * dy) / 15 > 1) continue;
     if (!objects[idx(pcx + dx, pcy + dy)]) ground[idx(pcx + dx, pcy + dy)] = 1;
   }
-  // ---- fences: the rails that make it read as built ----------------------
+  // ---- fences: solid rails, so a lane can only be shot down its gate -----
   const fenceRow = (x0, x1, y) => { for (let tx = x0; tx <= x1; tx++) if (!objects[idx(ax + tx, ay + y)]) placeObj(ax + tx, ay + y, 'fence'); };
   const fenceCol = (x, y0, y1) => { for (let ty = y0; ty <= y1; ty++) if (!objects[idx(ax + x, ay + ty)]) placeObj(ax + x, ay + ty, 'fence'); };
-  fenceRow(42, 61, 10); fenceRow(42, 61, 14); fenceCol(62, 10, 14); // lane A
-  fenceRow(42, 61, 20); fenceRow(42, 61, 24); fenceCol(62, 20, 24); // lane B
-  fenceRow(14, 49, 2);                                              // gallery, north rail
-  fenceRow(14, 29, 6); fenceRow(34, 49, 6);                         // ...south rail, entry gap
+  // lane A, closed on all four sides but its one-tile gate at (43,12)
+  fenceRow(43, 61, 10); fenceRow(43, 61, 14); fenceCol(62, 10, 14);
+  fenceCol(43, 11, 11); fenceCol(43, 13, 13);
+  // lane B, the same box with its gate at (43,22)
+  fenceRow(43, 61, 20); fenceRow(43, 61, 24); fenceCol(62, 20, 24);
+  fenceCol(43, 21, 21); fenceCol(43, 23, 23);
+  fenceRow(14, 49, 2);                                              // gallery, north backstop
+  fenceRow(14, 30, 6); fenceRow(33, 49, 6);                         // ...south rail, entry gap
   fenceCol(13, 2, 6); fenceCol(50, 2, 6);                           // ...end caps
-  // ---- the dressing ------------------------------------------------------
+  fenceRow(44, 51, 32); fenceCol(51, 28, 31);                       // pendulum backstop, south + east
+  // ---- the dressing: everything marks something --------------------------
   const put = (tx, ty, type, extra) => { if (!objects[idx(ax + tx, ay + ty)]) return placeObj(ax + tx, ay + ty, type, extra); return null; };
-  for (const [tx, ty] of [[22, 13], [39, 13], [22, 24], [39, 24], [14, 4], [49, 4]]) put(tx, ty, 'brazier');
-  for (const [tx, ty] of [[21, 17], [40, 16], [42, 9], [42, 19], [33, 7], [44, 26]]) put(tx, ty, 'banner');
-  put(33, 26, 'rack'); put(35, 26, 'rack');
-  put(26, 27, 'tent');
-  // ---- the melee yard: two dummies, mid-plaza ----------------------------
-  for (const [tx, ty] of [[27, 17], [34, 20]]) {
+  // braziers: the yard's four corners, the gallery's end caps (outside the
+  // lane), and the firing platform - lit stations, dark wilds
+  for (const [tx, ty] of [[22, 13], [39, 13], [22, 24], [39, 24], [12, 4], [51, 4], [40, 13], [40, 21]]) put(tx, ty, 'brazier');
+  // banners: gate markers - the south gate pair, the gallery entry pair, one
+  // at each lane mouth, one at the pendulum pad's turn-in
+  for (const [tx, ty] of [[29, 25], [32, 25], [30, 7], [33, 7], [42, 10], [42, 24], [43, 29]]) put(tx, ty, 'banner');
+  // the racks, two tiles each: bows on the firing platform, axes and picks
+  // at the work corner off the pond path
+  const rack2 = (tx, ty, variant) => { put(tx, ty, 'rack', { lead: true, variant }); put(tx + 1, ty, 'rack', { variant }); };
+  rack2(40, 16, 0);
+  rack2(17, 22, 1);
+  // ---- the melee yard: the dummy pair, square with the south gate --------
+  for (const [tx, ty] of [[26, 17], [35, 17]]) {
     const d = put(tx, ty, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
       mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
     if (d) practiceDummies.push(d);
@@ -697,20 +723,34 @@ function genPracticeWorld() {
   addPTarget('slide', ax + 33, ay + 4, { alt: PT_ALTS[2], x0: (ax + 33) * TILE, x1: (ax + 46) * TILE, spd: 44 });
   // the pendulum, swinging from its frame on the pad
   addPTarget('swing', ax + 47, ay + 29, { alt: PT_ALTS[2], len: 20, amp: 0.85, om: 1.7 });
-  // ---- the harvest corner and the rest of the old room -------------------
-  for (const [tx, ty] of [[6, 8], [8, 10], [11, 7], [13, 10], [7, 12], [10, 13]]) {
+  // ---- the windbreak: a tree line splitting the two archery lanes --------
+  for (const [tx, ty] of [[46, 16], [49, 18], [52, 16], [55, 18], [58, 16]]) {
     put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
   }
-  put(13, 8, 'deadTree', { hp: 3, variant: 0 });
-  for (const [tx, ty] of [[6, 29], [8, 31], [11, 30], [7, 33], [10, 33]]) {
+  // ---- the woodlot grove, north-west, ringing its snag ------------------
+  for (const [tx, ty] of [[6, 5], [8, 4], [11, 5], [13, 6], [6, 8], [9, 9], [12, 8], [8, 11]]) {
+    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
+  }
+  put(10, 6, 'deadTree', { hp: 3, variant: 0 });
+  // ---- the quarry, south-west --------------------------------------------
+  for (const [tx, ty] of [[6, 29], [8, 31], [10, 29], [7, 33], [9, 27]]) {
     put(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
   }
-  for (const [tx, ty] of [[16, 12], [19, 13], [17, 15]]) put(tx, ty, 'bush', { berries: 2, regrow: 0 });
-  put(18, 26, 'stump'); put(20, 27, 'stump');
+  // ---- the pond shore: berry hedge north, framing rocks, the work corner -
+  for (const [tx, ty] of [[12, 14], [14, 15], [16, 16]]) put(tx, ty, 'bush', { berries: 2, regrow: 0 });
+  put(4, 16, 'rock', { hp: 5, variant: 0 });
+  put(14, 25, 'rock', { hp: 5, variant: 1 });
+  put(16, 24, 'stump'); put(19, 24, 'stump');
+  // loose singles so the open snow reads wild, not unfinished
+  for (const [tx, ty] of [[18, 9], [25, 30], [36, 29], [57, 5], [60, 8]]) {
+    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
+  }
+  put(24, 10, 'rock', { hp: 5, variant: 0 });
+  put(34, 31, 'rock', { hp: 5, variant: 1 });
   put(2, 2, 'chest', { hp: 1 });
   put(61, 33, 'chest', { hp: 1 });
-  // moving targets of the furred kind, and the shoal under the pond
-  for (const [tx, ty] of [[17, 8], [26, 31], [45, 17]]) {
+  // the warren: rabbits browse the hedge and the west meadow
+  for (const [tx, ty] of [[13, 13], [18, 22], [10, 27]]) {
     animals.push(makeAnimal('rabbit', (ax + tx + 0.5) * TILE, (ay + ty + 0.5) * TILE));
   }
   for (let i = 0; i < PR_FISH; i++) {

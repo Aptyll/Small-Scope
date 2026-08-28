@@ -159,15 +159,24 @@ The TRAINING GROUNDS behind the title's PRACTICE TOOL plank (three knocks break 
 `practice arena` banner, js/world.js) **instead of** `genWorld()`, and js/boot.js skips
 landmarks, chests, wildlife spawns and the eagle drop entirely — the arena stocks itself. It is
 a hand-built campus, not a clearing: a **64×36-tile frame** (`PR_W`/`PR_H`, deliberately 16:9 —
-the view's own shape) carved out of solid forest, laid out as a packed-earth central yard with
-the two melee **dummies**, a fenced archery range of two lanes east (static targets at graded
-distances, then a pop-up lane), a moving-target gallery along the north wall, a pendulum frame
-south-east, the ice pond west with `PR_FISH` fish (the shoal trickle caps there instead of
-`FISH_MAX`, js/wildlife.js), a harvest corner (trees, a snag, rocks, bushes), two stumps, two
-chests, three rabbits — and the dressing that makes it read as built: rail **fences**, red
-**banners**, iron **braziers** (real `lights` entries — `rebuildLights` scans for the type, the
-first glowing object since the campfires went), a weapon **rack** pair and a **tent** by the
-spawn, all inert `OBJECTS` entries like the den. `PRACTICE` (js/core.js) pins `SEED` to
+the view's own shape) carved out of solid forest, laid out like a real camp where every piece of
+dressing marks something. The packed-earth parade yard holds the two melee **dummies** square
+with a south gate (a banner pair over an earth stub — where you walked in), braziers at its four
+corners. East, a firing platform fronts two **fully fenced archery lanes** (statics at graded
+distances, then the pop-up lane), each entered through a **one-tile gate that is the firing
+slot** — the rail fences are ordinary solid tiles, so arrows die on them and a lane can only be
+shot down its own gate; a tree windbreak splits the lanes. North, the moving-target gallery hangs
+off the wall, entry flanked by banners, its end caps lit by braziers *outside* the lane. The
+pendulum swings on a fenced-backstop pad south-east. West is the camp's larder and works: the ice
+pond with `PR_FISH` fish (the shoal trickle caps there instead of `FISH_MAX`, js/wildlife.js), a
+berry hedge and the three rabbits on its north shore, the tool rack and two stumps at a work
+corner off the pond path, a woodlot grove (trees around a snag) north-west and a rock quarry
+south-west, plus two chests tucked in the treeline. The dressing is all inert `OBJECTS` entries
+like the den: rail **fences**, red **banners** (gate markers, never scattered), iron **braziers**
+(real `lights` entries — `rebuildLights` scans for the type, the first glowing object since the
+campfires went), and the two-tile weapon **racks** — `lead`/`variant` on the left tile, a solid
+silent follower right (variant 0 the bow rack on the platform, 1 the axes-and-picks rack at the
+work corner; `bakeRack` in js/draw-world.js). `PRACTICE` (js/core.js) pins `SEED` to
 `PRACTICE_SEED` *above* the `?seed` parse, so the campus is bit-identical on every visit and no
 seed can reshape it.
 

@@ -257,9 +257,14 @@ function render() {
     } else if (o.type === 'banner') {
       drawBanner(o, px + sh, py, now);
     } else if (o.type === 'rack') {
-      drawSpriteFlash(RACK_SPR, px + sh + ((TILE - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
-    } else if (o.type === 'tent') {
-      drawSpriteFlash(TENT_SPR, px + sh + ((TILE - TENT_SPR.width) >> 1), py + TILE - TENT_SPR.height + 2, o.flash);
+      // two tiles per rack: the lead (left) tile draws the whole sprite
+      // centred over the pair; the follower tile is solid and silent
+      if (o.lead) {
+        const spr = o.variant ? RACK_TOOL_SPR : RACK_BOW_SPR;
+        ctx.fillStyle = 'rgba(40,60,100,0.25)';
+        ctx.fillRect(px + sh + 2, py + TILE - 2, TILE * 2 - 4, 2);
+        drawSpriteFlash(spr, px + sh + ((TILE * 2 - spr.width) >> 1), py + TILE - spr.height + 1, o.flash);
+      }
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {
