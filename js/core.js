@@ -127,7 +127,9 @@ const state = {
     // the third knock breaks the sheet for good (menu.js iceRefuse)
     iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [], iceMarks: [],
     // class select: which screen the menu shows, its cross-fade, the chosen
-    // class, per-figure hover eases, swap pop, lock-in hold.
+    // class, per-portrait hover eases (a seed pair - updateTitle's `|| 0`
+    // grows it with the roster, since CLASSES loads after this file), swap
+    // pop, lock-in hold.
     // screen: 'menu' | 'select' | 'gear' | 'tech'. 'gear' is the pop-up over
     // the still-lit select screen (gearT its ease, grow the keyboard row,
     // gearFxT/gearFxSlot the equip flash); the tech tree is a surface of its

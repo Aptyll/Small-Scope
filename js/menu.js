@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.98'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.99'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.99', 'CLASS SELECT IS BUILT FOR A GROWING ROSTER NOW - CLASS PORTRAITS LINE THE TOP LEFT AND THE CHOSEN ONE STANDS ALONE ON STAGE IN FULL GLORY, SO NEW CLASSES CAN JOIN WITHOUT THE SCREEN EVER CHANGING SHAPE.'],
   ['1.98', 'THE GEAR POP-UP IS A REAL FITTING ROOM NOW - TWELVE DETAILED GEAR ICONS AROUND A LIVE PREVIEW OF YOUR CLASS IN ITS GEAR, EVERY STAT AS A REAL NUMBER, HOVERING A PIECE SHOWS EXACTLY WHAT CHANGES IN GREEN OR RED, AND EQUIPPING FLASHES IT ONTO THE BODY.'],
   ['1.97', 'CLASS SELECT IS ONE SCREEN UNDER ITS OWN AURORA NIGHT - BOTH CLASSES STAND FACING EACH OTHER WITH WEAPON AND ABILITY ICONS, LOCK IN FLIES STRAIGHT TO THE EAGLE, AND GEAR IS A SMALL WIDGET THAT OPENS INTO A POP-UP.'],
   ['1.96', 'THE STRIP SHOWS YOUR WHOLE KIT NOW - FOUR DETAILED ABILITY ICONS FLANK THE WEAPON WITH COOLDOWN WIPES, CAST AND ACTIVE TELLS AND THEIR KEYS IN THE CORNER, AND A CLICK ON A WELL CASTS IT LIKE THE KEY DOES.'],
@@ -432,8 +433,10 @@ function updateTitle(dt) {
   m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
   const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
   for (let i = 0; i < CLASSES.length; i++) {
+    // `|| 0`: the seed literal in core.js is two cells; a grown roster's
+    // extra portraits start their hover ease from nothing, not from NaN
     const target = (m.csel === i || sh === i) ? 1 : 0;
-    m.chover[i] += (target - m.chover[i]) * Math.min(1, dt * 14);
+    m.chover[i] = (m.chover[i] || 0) + (target - (m.chover[i] || 0)) * Math.min(1, dt * 14);
   }
   if (m.lockT > 0) {
     m.lockT -= dt;
@@ -880,28 +883,33 @@ function drawPatchBar(ox, oy) {
 
 // ---- class select --------------------------------------------------------
 // PLAY goes here (menu.screen = 'select'): ONE screen with its own painted
-// night - never the live world - where both classes stand side by side and
-// are read from silhouette, pose and weapon: the chosen figure walks in
-// place under its own light, the class weapon rides at the hand, and the
-// four ability icons under each figure are the kit (classAbIcon,
-// js/abilities.js). Click a figure (or the arrows) to choose; LOCK IN flies
-// straight to the eagle (lockIn -> lockT -> beginDrop). The small plaque
-// beside the plank is the COLLAPSED GEAR WIDGET - the four picked variants -
-// and clicking it opens the gear pop-up over this screen (beginGear; ESC, the
-// X, or a click outside close it). Nothing on the screen is instructions:
-// the shapes carry it.
+// night - never the live world. The ROSTER runs down the top-left as sprite
+// portraits - one well per CLASSES entry, a column of SEL_P_PER wrapping
+// into further columns as the roster grows, so the screen never has to be
+// redrawn for a new class - and the STAGE holds the chosen class alone in
+// full glory: walking in place under its warm light and gold ring, the
+// class weapon at its hand, its name, and its four ability icons in the
+// strip's own wells (classAbIcon, js/abilities.js). Click a portrait (or
+// the arrows) to put a class on stage; LOCK IN flies straight to the eagle
+// (lockIn -> lockT -> beginDrop). The small plaque beside the plank is the
+// COLLAPSED GEAR WIDGET - the four picked variants - and clicking it opens
+// the gear pop-up over this screen (beginGear; ESC, the X, or a click
+// outside close it). Nothing on the screen is instructions: the shapes
+// carry it.
+const SEL_P_CELL = 36, SEL_P_GAP = 4; // a portrait well and its gap
+const SEL_P_PER = 4;                  // portraits per column before wrapping right
 function selectLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  // one column per class: the figure, its name, its four ability wells
-  const figs = CLASSES.map((_, i) => {
-    const fx = cx + (i === 0 ? -105 : 105);
-    return { x: fx - 72, y: toy + 56, w: 145, h: 162, cx: fx };
-  });
+  const ports = CLASSES.map((_, i) => ({
+    x: 24 + Math.floor(i / SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
+    y: toy + 52 + (i % SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
+    w: SEL_P_CELL, h: SEL_P_CELL,
+  }));
   const lock = { x: cx - 56, y: toy + 232, w: 112, h: 20 };
   // the collapsed gear widget, riding beside LOCK IN
   const loadout = { x: cx + 78, y: toy + 234, w: 4 * 17 - 3, h: 16 };
-  return { toy, cx, figs, lock, loadout };
+  return { toy, cx, ports, lock, loadout };
 }
 
 // The screen's own painted night, fully opaque at rest so the live ambient
@@ -1548,16 +1556,16 @@ function gearClick() {
   pickGear(h.row, h.v);
 }
 
-// what the pointer is over: figure index, CLASSES.length for LOCK IN,
+// what the pointer is over: portrait index, CLASSES.length for LOCK IN,
 // CLASSES.length + 1 for the collapsed gear widget, -1 for nothing
 function selectHit() {
-  const { figs, lock, loadout } = selectLayout();
-  for (let i = 0; i < figs.length; i++) {
-    const r = figs[i];
-    if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
+  const { ports, lock, loadout } = selectLayout();
+  for (let i = 0; i < ports.length; i++) {
+    const r = ports[i];
+    if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 2 && mouse.y < r.y + r.h + 2) return i;
   }
-  if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return figs.length;
-  if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 3 && mouse.y < loadout.y + loadout.h + 3) return figs.length + 1;
+  if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return ports.length;
+  if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 3 && mouse.y < loadout.y + loadout.h + 3) return ports.length + 1;
   return -1;
 }
 
@@ -1608,78 +1616,87 @@ function selectClick() {
   else selectClass(h);
 }
 
-// One class column: the figure walking in place (the chosen one under its
-// own warm light and gold ring), the class weapon riding at the hand, the
-// name, and the kit - four ability icons in the same wells the strip wears
-// in play. hv is that column's hover ease; sw the swap rise.
-function drawSelectFigure(i, now, a, hv, sw, slide) {
+// One roster portrait: the class's own sprite at 2x in a small well. The
+// chosen one wears the gold rim; a hover lifts and lightens (hv is that
+// portrait's ease). Silhouette only - the stage carries every word.
+function drawSelectPortrait(i, r, hv, chosen, now) {
+  const lift = chosen ? 0 : Math.round(hv * 1.5);
+  const y = r.y - lift;
+  ctx.fillStyle = 'rgba(4,6,18,0.55)';
+  ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
+  ctx.fillStyle = chosen ? '#c89a3c' : hv > 0.5 ? '#8fa0c8' : '#2c3560';
+  ctx.fillRect(r.x, y, r.w, r.h);
+  ctx.fillStyle = chosen ? '#1a2142' : '#0f1632';
+  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+  const a0 = ctx.globalAlpha;
+  ctx.globalAlpha = a0 * (chosen ? 1 : 0.6 + hv * 0.4);
+  ctx.drawImage(SPRITES.champ[i][0].down[0], r.x + 2, y + 2, 32, 32);
+  ctx.globalAlpha = a0;
+}
+
+// The stage: the chosen class alone in full glory - walking in place inside
+// a warm pool of light with a gold ring turning on the snow, the class
+// weapon's own art at the hand, the name, and the kit as four ability icons
+// in the same wells the strip wears in play. sw is the swap-pop ease.
+function drawSelectStage(now, a, sw) {
   const m = state.menu;
-  const { toy, figs } = selectLayout();
-  const f = figs[i];
-  const fx = f.cx + slide;
-  const chosen = m.csel === i;
-  const va = a * (chosen ? 1 : 0.5 + hv * 0.4);
+  const { toy, cx } = selectLayout();
   const feet = toy + 158;
-  ctx.globalAlpha = a * 0.4; // the ground holds every figure
+  ctx.globalAlpha = a * 0.4;
   ctx.fillStyle = '#04060f';
-  ctx.beginPath(); ctx.ellipse(fx, feet, 34, 7, 0, 0, Math.PI * 2); ctx.fill();
-  if (chosen) {
-    // the pick: a warm pool of light, and a gold ring turning on the snow
-    ctx.globalCompositeOperation = 'lighter';
-    const g = ctx.createRadialGradient(fx, feet - 40, 4, fx, feet - 40, 78);
-    g.addColorStop(0, 'rgba(255,170,80,' + (0.14 * a * sw).toFixed(3) + ')');
-    g.addColorStop(1, 'rgba(255,140,60,0)');
-    ctx.fillStyle = g; ctx.fillRect(fx - 80, feet - 120, 160, 160);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = a * sw;
-    ctx.fillStyle = '#c89a3c';
-    for (let k = 0; k < 24; k += 2) {
-      const an = (k / 24) * Math.PI * 2 + now * 0.5;
-      ctx.fillRect(fx + Math.round(Math.cos(an) * 40), feet + Math.round(Math.sin(an) * 8), 2, 1);
-    }
+  ctx.beginPath(); ctx.ellipse(cx, feet, 34, 7, 0, 0, Math.PI * 2); ctx.fill();
+  // the pick's light, and the gold ring turning on the snow
+  ctx.globalCompositeOperation = 'lighter';
+  const g = ctx.createRadialGradient(cx, feet - 40, 4, cx, feet - 40, 78);
+  g.addColorStop(0, 'rgba(255,170,80,' + (0.14 * a * sw).toFixed(3) + ')');
+  g.addColorStop(1, 'rgba(255,140,60,0)');
+  ctx.fillStyle = g; ctx.fillRect(cx - 80, feet - 120, 160, 160);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = a * sw;
+  ctx.fillStyle = '#c89a3c';
+  for (let k = 0; k < 24; k += 2) {
+    const an = (k / 24) * Math.PI * 2 + now * 0.5;
+    ctx.fillRect(cx + Math.round(Math.cos(an) * 40), feet + Math.round(Math.sin(an) * 8), 2, 1);
   }
-  // the body: the two face each other; the chosen one walks in place
-  const set = SPRITES.champ[i][0];
-  const dir = i === 0 ? 'right' : 'left';
-  const frame = chosen ? set[dir][1 + (Math.floor(now * 4) % 2)] : set[dir][0];
-  const rise = chosen ? Math.round((1 - sw) * 8) : 0;
-  ctx.globalAlpha = va;
-  ctx.drawImage(frame, fx - 48, toy + 62 + rise, 96, 96);
+  // the body, walking toward you; a swap pops it up through the light
+  const rise = Math.round((1 - sw) * 8);
+  ctx.globalAlpha = a;
+  ctx.drawImage(SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)], cx - 48, toy + 62 + rise, 96, 96);
   // the weapon at the hand: the class tool's own art, big enough to read
-  const L = CLASS_LOADOUT[i] || CLASS_LOADOUT[0];
+  const L = CLASS_LOADOUT[m.csel] || CLASS_LOADOUT[0];
   const im = SPRITES[ITEMS[toolType(L.tool)].icon];
-  const bob = chosen ? Math.round(Math.sin(now * 2.2 + i) * 2) : 0;
-  ctx.drawImage(im, i === 0 ? fx + 24 : fx - 24 - 36, toy + 104 + rise + bob, 36, 36);
-  const nm = CLASSES[i].name;
-  drawPixelTextShadow(ctx, nm, fx - Math.round(pixelTextWidth(nm, 2) / 2), toy + 166,
-    chosen ? '#ffd95c' : '#8fa8d0', '#0a0e23', 2);
+  ctx.drawImage(im, cx + 26, toy + 104 + rise + Math.round(Math.sin(now * 2.2) * 2), 36, 36);
+  const nm = CLASSES[m.csel].name;
+  drawPixelTextShadow(ctx, nm, cx - Math.round(pixelTextWidth(nm, 2) / 2), toy + 166, '#ffd95c', '#0a0e23', 2);
   for (let k = 0; k < 4; k++) { // the kit, said in the strip's own wells
-    const r = { x: f.x + slide + k * 37, y: toy + 184 };
-    ctx.globalAlpha = va;
-    ctx.fillStyle = chosen ? '#35426e' : '#232c52';
+    const r = { x: cx - 72 + k * 37, y: toy + 184 };
+    ctx.fillStyle = '#35426e';
     ctx.fillRect(r.x, r.y, 34, 34);
     ctx.fillStyle = BAG_WELL;
     ctx.fillRect(r.x + 1, r.y + 1, 32, 32);
-    ctx.drawImage(classAbIcon(i, k), r.x + 1, r.y + 1);
+    ctx.drawImage(classAbIcon(m.csel, k), r.x + 1, r.y + 1);
   }
-  ctx.globalAlpha = a;
 }
 
 // a (0..1) is the screen's own visibility; the whole surface rides it
 function renderSelect(now, a) {
   const m = state.menu;
-  const { toy, cx, lock, loadout } = selectLayout();
+  const { toy, cx, ports, lock, loadout } = selectLayout();
   drawSelectBackdrop(now, a);
   ctx.globalAlpha = a;
   const t0 = 'CLASS SELECT';
   drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 22, '#ffd95c', '#3c2a1e', 2);
   drawGoldRule(cx, toy + 37, Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-  // the figures slide in from their own sides; the chosen one draws last so
-  // its light lies over both
+  // the roster, sliding in from the left; then the stage under its light
   const sw = easeOut(m.cswapT);
   const slide = Math.round((1 - a) * 26);
-  drawSelectFigure(1 - m.csel, now, a, m.chover[1 - m.csel], sw, (1 - m.csel) === 0 ? -slide : slide);
-  drawSelectFigure(m.csel, now, a, 1, sw, m.csel === 0 ? -slide : slide);
+  for (let i = 0; i < ports.length; i++) {
+    ctx.globalAlpha = a;
+    drawSelectPortrait(i, { x: ports[i].x - slide, y: ports[i].y, w: ports[i].w, h: ports[i].h },
+      m.chover[i] || 0, m.csel === i, now);
+  }
+  ctx.globalAlpha = a;
+  drawSelectStage(now, a, sw);
   // LOCK IN - the plank is the whole ask, and it flies straight to the eagle
   const hover = m.screenT >= 1 && m.gearT <= 0 ? selectHit() : -1;
   const pressed = m.pressT > 0 || m.lockT > 0;

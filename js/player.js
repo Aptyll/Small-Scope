@@ -500,7 +500,9 @@ function initPlayers() {
   // so a replayed world fields the same roster in the same loadouts
   for (const p of players) if (p.control === 'ai') {
     for (let i = 0; i < GEAR_SLOTS.length; i++) p.gear[i] = Math.floor(hash2(p.id * 29 + i * 13 + 5, 191) * 3) % 3;
-    setClass(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1); // refreshes the kit too
+    // floor(hash * N): even over however many classes exist (for two it maps
+    // exactly as the old `< 0.5` coin, so old seeds keep their rosters)
+    setClass(p, Math.floor(hash2(p.id * 17 + 3, 77) * CLASSES.length)); // refreshes the kit too
   }
   player = players[0];
   inv = player.inv;

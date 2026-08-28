@@ -963,13 +963,17 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
   vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock, the
   cinematic band; fully opaque at rest, so the live ambient world is never this screen's
-  backdrop). Both classes stand facing each other as 6× figures (`drawSelectFigure`): the chosen
-  one walks in place under a warm pool of light with a gold ring turning on the snow, the class
-  weapon's own tool art rides at the hand, the name sits below, and under each figure its four
-  ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as it
-  will be worn. The unchosen figure stands at ease, dimmed, warming on hover (`menu.chover`).
-  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a figure
-  click or the arrows move `menu.csel` (`menu.cswapT` rises the pick), Enter or the **LOCK IN**
+  backdrop). The **roster** runs down the top-left as sprite portraits (`drawSelectPortrait`) —
+  one 36px well per `CLASSES` entry, the class's own 16×16 sprite at 2×, a column of
+  `SEL_P_PER` (4) wrapping into further columns as the roster grows, so a new class costs this
+  screen nothing — and the **stage** holds the chosen class alone in full glory
+  (`drawSelectStage`): walking in place at 6× under a warm pool of light with a gold ring
+  turning on the snow, the class weapon's own tool art at the hand, the name below, and its
+  four ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as
+  it will be worn. The chosen portrait wears the gold rim; the others sit dim and warm on hover
+  (`menu.chover` — seeded as a pair in core.js and grown with `|| 0` for any roster size).
+  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a portrait
+  click or the arrows move `menu.csel` (`menu.cswapT` pops the stage), Enter or the **LOCK IN**
   plank call `lockIn()` — `setClass`, `menu.lockT`, then straight to `beginDrop()` (the eagle
   ride, below) — and Esc/Backspace go back to the menu. Beside the plank sits the **collapsed
   gear widget** (the four picked variant icons); clicking it opens the gear pop-up. No

@@ -157,6 +157,27 @@ branch in `steerBit`, and a body of its own in the shots pass (`drawTumbler`/`dr
 js/render.js) if the arrow silhouette would misread it — plus a line in `drawAimLine`'s honesty
 rule, which refuses to draw a straight line for a path that does not fly straight.
 
+**Adding a class** — the tables make most of it mechanical, and every screen picks the new
+entry up with no edit: the select roster grows a portrait (the column wraps right past
+`SEL_P_PER`), the strip, the gear pop-up's preview/ledger and the bot class hash
+(`initPlayers`, already `floor(hash × CLASSES.length)`) are all generic over the tables. What a
+new class needs written:
+
+1. a `CLASSES` entry ([js/player.js](../../js/player.js)) — `name` and the `kit` numbers are
+   the load-bearing halves;
+2. the full sprite set in the byte-fragile [js/sprites.js](../../js/sprites.js) —
+   4 directions × 3 frames plus the 5-pose prone set, baked into `SPRITES.champ[c]` per team
+   via the `TEAM_SKINS` bakes ([sprites.md](sprites.md)) — **this is the expensive part**;
+3. a `CLASS_AB` row of four actives ([js/abilities.js](../../js/abilities.js)): each ability's
+   `cd`/`cast`/`blurb`/`use(p)` (plus `acol`/`activeF` if a state runs on the body), its
+   `abilityPose` case, any world entities it leaves and their tick/draw, and its on-body draw
+   in `drawAbilityOnPlayer` if it leaves a visible state;
+4. four detailed 32×32 icons in `AB32` (on `AB32_PAL` — one palette across every big icon);
+5. a `CLASS_LOADOUT` entry ([js/tools.js](../../js/tools.js));
+6. a fight rung in `updateAI` ([js/ai.js](../../js/ai.js)) that spends the four keys at the
+   ranges the kit is good at — the class branch there is per-class content and the one `if`
+   that must grow.
+
 **Adding a stored profile field** — the field goes in `blank()` in
 [js/profile.js](../../js/profile.js) *and* in the repair loop `PROFILE.load()` runs over an
 existing save, or an old profile reaches its readers without it. Give it an accessor on the
