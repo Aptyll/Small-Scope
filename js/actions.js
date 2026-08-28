@@ -557,6 +557,12 @@ function hitObject(o, p) {
 // breaks: the pool floors at zero and updatePractice (js/world.js) mends it
 // after DUMMY_RESET_T of quiet, which is what makes it a combo readout.
 function hitDummy(o, dmg, hx, hy) {
+  // the meter's ledger: a hit after the quiet (the mend window) is a new
+  // combo, so the totals start over from this blow
+  if (o.hitT > DUMMY_RESET_T) { o.mTotal = 0; o.mT0 = state.elapsed; }
+  o.mLast = dmg;
+  o.mTotal = (o.mTotal || 0) + dmg;
+  o.mT1 = state.elapsed;
   o.hp = Math.max(0, o.hp - dmg);
   o.hitT = 0;
   o.flash = 0.1;

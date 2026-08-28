@@ -545,6 +545,13 @@ const PR_SPAWN = { tx: PR_X0 + 30, ty: PR_Y0 + 22 }; // south yard, facing the d
 const DUMMY_HP = 60;
 const DUMMY_WORK_DMG = 10;   // what one E swing chips off it (the eagle's own number)
 const DUMMY_RESET_T = 2.5;   // s unhit before a dummy mends itself back to full
+// the damage meter over a dummy's head (drawDummyMeter, js/draw-world.js):
+// LAST HIT / DPS / TOTAL for the combo in progress - the string of hits since
+// the dummy last went quiet (hitDummy starts the ledger over, js/actions.js).
+// It hangs on this long after the mend so the final numbers can be read,
+// then fades. DPS is total over first-to-last hit, floored at one second, so
+// a single hit reads as itself instead of infinity.
+const DUMMY_METER_LINGER = 2.5;
 const PR_FISH = 6;           // the pond's shoal, and the ceiling the trickle refills to
 const practiceDummies = [];  // every dummy standing, for updatePractice's mend clock
 
@@ -671,7 +678,8 @@ function genPracticeWorld() {
   put(26, 27, 'tent');
   // ---- the melee yard: two dummies, mid-plaza ----------------------------
   for (const [tx, ty] of [[27, 17], [34, 20]]) {
-    const d = put(tx, ty, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99 });
+    const d = put(tx, ty, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
+      mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
     if (d) practiceDummies.push(d);
   }
   // ---- the targets -------------------------------------------------------

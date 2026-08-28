@@ -248,6 +248,8 @@ function render() {
       const dy = py + TILE - DUMMY_SPR.height;
       drawSpriteFlash(DUMMY_SPR, dx, dy, o.flash);
       if (o.hp < o.maxHp) drawHealthBar(px + 8 + sh, dy - 6, o.hp, o.maxHp, 20);
+      // the combo readout, above the bar's slot so neither ever covers the other
+      drawDummyMeter(o, px + 8, dy - 10);
     } else if (o.type === 'fence') {
       drawFence(o, px + sh, py);
     } else if (o.type === 'brazier') {

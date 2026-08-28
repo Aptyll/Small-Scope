@@ -209,6 +209,13 @@ while it is hurt, and `updatePractice` (called from `updatePlay` under `PRACTICE
 back to `DUMMY_HP` after `DUMMY_RESET_T` seconds unhit, with a shimmer for the announcement.
 `updatePractice` is also the grounds' clock: it ticks every target's habit and respawn.
 
+Over a dummy's head hangs its **damage meter** — LAST HIT / DPS / TOTAL for the combo in
+progress, a recorded labelled-row carve-out from show-don't-label (CLAUDE.md). `hitDummy`
+keeps the ledger (`mLast`/`mTotal`/`mT0`/`mT1` on the object; a hit after the mend window
+starts it over), DPS is total over first-to-last hit floored at one second, and
+`drawDummyMeter` (js/draw-world.js) draws the plate — visible only while a combo is live,
+lingering `DUMMY_METER_LINGER` past the mend so the final read stands, then fading.
+
 ## Determinism and noise
 
 Every run picks a fresh `SEED` at boot from `Date.now() ^ Math.random()`, and **everything random

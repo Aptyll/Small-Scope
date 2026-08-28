@@ -132,7 +132,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` |
 | the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` |
 | one blow against a building on another team (E swing and worker axe alike) | `hurtStruct`, `STRUCT_HIT_DMG`, `destroyStructure` | `actions` (its tail) |
-| every way of hurting the practice dummy (E, every bit, the tackle) | `hitDummy` | `actions` (its tail; the dummy itself: `practice arena`, world.js) |
+| every way of hurting the practice dummy (E, every bit, the tackle), and the meter's combo ledger | `hitDummy` | `actions` (its tail; the dummy itself: `practice arena`, world.js; the plate: `drawDummyMeter`, draw-world.js) |
 
 ## js/tools.js
 
@@ -173,6 +173,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround`, `hash2`, `vnoise` | `ground prerender` |
 | the treasure chest's and the practice dummy's baked sprites | `CHEST_SPR`, `DUMMY_SPR` | `entity draw` (its head; drawn in the y-sorted pass, render.js) |
+| the dummy's LAST HIT / DPS / TOTAL plate | `drawDummyMeter` (its linger: `DUMMY_METER_LINGER`, world.js) | `entity draw` |
 | the training grounds' pixels: the 32x32 target face, a target in any habit, the fence/brazier/banner draws and the rack/tent bakes | `TARGET_SPR`, `drawPTarget`, `drawFence`, `drawBrazier`, `drawBanner`, `BRAZIER_SPR`, `RACK_SPR`, `TENT_SPR` | `entity draw` (the records they draw: `practice arena`, world.js) |
 | the packed-earth floor's painting | `paintGroundTile` (the `gv === 3` branch) | `ground prerender` |
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |

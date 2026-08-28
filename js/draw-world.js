@@ -361,6 +361,42 @@ const TENT_SPR = bakeGrid([
 ], { o: '#241a12', L: '#dcd6c6', D: '#b0aa9a', m: '#1c1208',
      s: '#f4f7ff', r: '#93744a', x: '#5c4226' }, 30);
 
+// The damage meter over a dummy's head: LAST HIT / DPS / TOTAL for the combo
+// in progress, on a small frost plate in the overhead frame's language. A
+// deliberate labelled-row carve-out from show-don't-label (recorded in
+// CLAUDE.md beside the settings and PLAYER panels): a training instrument's
+// whole job is comparing numbers, and no shape does that. Visible only while
+// a combo is live, hanging on DUMMY_METER_LINGER past the mend so the final
+// read stands, then fading - Shadow text throughout, since the plate rides a
+// globalAlpha fade. `botY` is where the plate's bottom edge sits.
+function drawDummyMeter(o, cxp, botY) {
+  if (!o.mTotal) return;
+  const over = o.hitT - DUMMY_RESET_T;
+  const a = over <= DUMMY_METER_LINGER - 0.8 ? 1 : (DUMMY_METER_LINGER - over) / 0.8;
+  if (a <= 0) return;
+  const dps = Math.round(o.mTotal / Math.max(1, o.mT1 - o.mT0));
+  const rows = [
+    ['LAST HIT', String(Math.round(o.mLast)), '#ffd95c'],
+    ['DPS',      String(dps),                 '#f4f7ff'],
+    ['TOTAL',    String(Math.round(o.mTotal)), '#e0c890'],
+  ];
+  const W = 60, H = 25;
+  const x = Math.round(cxp - W / 2), y = Math.round(botY - H);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = 'rgba(12,18,42,0.85)';
+  ctx.fillRect(x - 1, y - 1, W + 2, H + 2);
+  ctx.fillStyle = '#3a4470';
+  ctx.fillRect(x, y, W, 1); ctx.fillRect(x, y + H - 1, W, 1);
+  ctx.fillRect(x, y, 1, H); ctx.fillRect(x + W - 1, y, 1, H);
+  for (let i = 0; i < 3; i++) {
+    const ry = y + 3 + i * 7;
+    drawPixelTextShadow(ctx, rows[i][0], x + 3, ry, '#9fb6d8', 'rgba(8,12,28,0.9)');
+    const v = rows[i][1];
+    drawPixelTextShadow(ctx, v, x + W - 3 - pixelTextWidth(v), ry, rows[i][2], 'rgba(8,12,28,0.9)');
+  }
+  ctx.globalAlpha = 1;
+}
+
 // One practice target, whatever its habit: rails or hatch or frame first,
 // then the post, then the face (or the bare splintered post while broken).
 // ptFace() (js/world.js) is the same geometry the arrow test reads, so what
