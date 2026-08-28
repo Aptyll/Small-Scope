@@ -173,8 +173,10 @@ new class needs written:
    `abilityPose` case, any world entities it leaves and their tick/draw, and its on-body draw
    in `drawAbilityOnPlayer` if it leaves a visible state;
 4. four detailed 32×32 icons in `AB32` (on `AB32_PAL` — one palette across every big icon);
-5. a `CLASS_LOADOUT` entry ([js/tools.js](../../js/tools.js));
-6. a fight rung in `updateAI` ([js/ai.js](../../js/ai.js)) that spends the four keys at the
+5. a 32×32 class **emblem** in `CLASS32` ([js/menu.js](../../js/menu.js), same palette) — the
+   symbolic mark the select roster reads the class by;
+6. a `CLASS_LOADOUT` entry ([js/tools.js](../../js/tools.js));
+7. a fight rung in `updateAI` ([js/ai.js](../../js/ai.js)) that spends the four keys at the
    ranges the kit is good at — the class branch there is per-class content and the one `if`
    that must grow.
 

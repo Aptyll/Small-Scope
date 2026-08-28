@@ -1846,17 +1846,19 @@ function tipAbility(i) {
     : player.skill[i] >= AB_RANK_MAX ? 'MAXED OUT' : 'NO POINTS TO SPEND', TIP_DIM]);
   return d;
 }
-// a class ability well on the strip: the numbers behind the wipe the well
-// itself is showing
-function tipClassAb(i) {
-  const ab = CLASS_AB[player.cls][i];
-  const d = { title: ab.name, tcol: '#f4f7ff', kind: CLASSES[player.cls].name + ' ABILITY',
-    rows: [], notes: [], icon: classAbIcon(player.cls, i), plate: BAG_WELL, rim: '#35426e' };
+// a class ability well - the strip's in play (cls omitted: the local slot's
+// class, live cooldown, the cast hint), or class select's stage (cls given:
+// the previewed class, before it is ever locked, with nothing castable yet)
+function tipClassAb(i, cls) {
+  const c = cls == null ? player.cls : cls;
+  const ab = CLASS_AB[c][i];
+  const d = { title: ab.name, tcol: '#f4f7ff', kind: CLASSES[c].name + ' ABILITY',
+    rows: [], notes: [], icon: classAbIcon(c, i), plate: BAG_WELL, rim: '#35426e' };
   d.rows.push(['COOLDOWN', tipSec(ab.cd), '#f4f7ff']);
   d.rows.push(['CAST', tipSec(ab.cast), '#f4f7ff']);
-  if (player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
+  if (cls == null && player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
   for (const s of ab.blurb.split('. ')) d.notes.push([s.replace(/\.$/, ''), TIP_DIM]);
-  d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
+  if (cls == null) d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
   return d;
 }
 // A TECH NODE on the title screen's tree - the one tooltip that is not about
@@ -1896,8 +1898,18 @@ function tipTech(id) {
 function tipAt(mx, my) {
   if (window.DBG.hideUI || !mouse.inside) return null;
   if (state.mode === 'title') {
-    const t = state.menu.screen === 'tech' && state.menu.techT >= 1 ? techHit(mx, my) : null;
-    return t ? tipTech(t) : null;
+    const m = state.menu;
+    if (m.screen === 'tech' && m.techT >= 1) {
+      const t = techHit(mx, my);
+      return t ? tipTech(t) : null;
+    }
+    // the stage's ability wells on class select: the strip's own tooltip,
+    // readable before the class is ever locked
+    if (m.screen === 'select' && m.screenT >= 1 && m.gearT <= 0) {
+      const i = selectAbilHit(mx, my);
+      return i >= 0 ? tipClassAb(i, m.csel) : null;
+    }
+    return null;
   }
   if (state.mode !== 'play') return null;
   if (state.drag) return tipCell(state.drag.cell, null);

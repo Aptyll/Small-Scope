@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.99'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.00'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.00', 'CLASS SELECT TEACHES NOW - HOVER ANY ABILITY ON THE STAGE TO READ ITS FULL TOOLTIP BEFORE YOU EVER LOCK IN, AND THE ROSTER WEARS SYMBOLIC CLASS EMBLEMS: THE HUNTER BOW AND THE WARRIOR GAUNTLET.'],
   ['1.99', 'CLASS SELECT IS BUILT FOR A GROWING ROSTER NOW - CLASS PORTRAITS LINE THE TOP LEFT AND THE CHOSEN ONE STANDS ALONE ON STAGE IN FULL GLORY, SO NEW CLASSES CAN JOIN WITHOUT THE SCREEN EVER CHANGING SHAPE.'],
   ['1.98', 'THE GEAR POP-UP IS A REAL FITTING ROOM NOW - TWELVE DETAILED GEAR ICONS AROUND A LIVE PREVIEW OF YOUR CLASS IN ITS GEAR, EVERY STAT AS A REAL NUMBER, HOVERING A PIECE SHOWS EXACTLY WHAT CHANGES IN GREEN OR RED, AND EQUIPPING FLASHES IT ONTO THE BODY.'],
   ['1.97', 'CLASS SELECT IS ONE SCREEN UNDER ITS OWN AURORA NIGHT - BOTH CLASSES STAND FACING EACH OTHER WITH WEAPON AND ABILITY ICONS, LOCK IN FLIES STRAIGHT TO THE EAGLE, AND GEAR IS A SMALL WIDGET THAT OPENS INTO A POP-UP.'],
@@ -909,7 +910,20 @@ function selectLayout() {
   const lock = { x: cx - 56, y: toy + 232, w: 112, h: 20 };
   // the collapsed gear widget, riding beside LOCK IN
   const loadout = { x: cx + 78, y: toy + 234, w: 4 * 17 - 3, h: 16 };
-  return { toy, cx, ports, lock, loadout };
+  // the stage's four ability wells - one rect source for the draw, the hover
+  // and the tooltip (tipAt asks selectAbilHit, ui.js), so they cannot disagree
+  const abils = [];
+  for (let k = 0; k < 4; k++) abils.push({ x: cx - 72 + k * 37, y: toy + 184, w: 34, h: 34 });
+  return { toy, cx, ports, lock, loadout, abils };
+}
+// which of the stage's ability wells (mx, my) is on, or -1
+function selectAbilHit(mx, my) {
+  const { abils } = selectLayout();
+  for (let i = 0; i < abils.length; i++) {
+    const r = abils[i];
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return i;
+  }
+  return -1;
 }
 
 // The screen's own painted night, fully opaque at rest so the live ambient
@@ -1616,9 +1630,108 @@ function selectClick() {
   else selectClass(h);
 }
 
-// One roster portrait: the class's own sprite at 2x in a small well. The
+// The class EMBLEMS: one symbolic 32x32 mark per CLASSES entry - the
+// hunter's drawn bow, the warrior's gauntlet - on the shared big-icon
+// palette (AB32_PAL, js/abilities.js), baked lazily beside their drawer
+// like every other big icon. A new class brings a CLASS32 grid with it
+// (checklists.md, "Adding a class"): the roster reads by SYMBOL, and the
+// stage is where the body itself is seen.
+const CLASS32 = [
+  [ // HUNTER: the drawn bow, arrow nocked and level
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '.......ooo......................',
+    '.......ot..owwo.................',
+    '.......ot....owwo...............',
+    '.......ot......owwo.............',
+    '.......ot.......owwo............',
+    '.......ot........owwo...........',
+    '.......ot.........owwo..........',
+    '.......ot..........owwo.........',
+    '.......ot...........owwo........',
+    '.......ot...........owwo........',
+    '...orroot............oWWo.......',
+    '..orrttttttttttttttttWWWWWo.....',
+    '..orrddddddddddddddddWWWWWo.....',
+    '...orroot............oWWo.......',
+    '.......ot...........owwo........',
+    '.......ot...........owwo........',
+    '.......ot..........owwo.........',
+    '.......ot.........owwo..........',
+    '.......ot........owwo...........',
+    '.......ot.......owwo............',
+    '.......ot......owwo.............',
+    '.......ot....owwo...............',
+    '.......ot..owwo.................',
+    '.......ooo......................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+  ],
+  [ // WARRIOR: the iron gauntlet, knuckles first
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '........ooo.ooo.ooo.ooo.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '........oCs.oCs.oCs.oCs.........',
+    '.......ooooooooooooooooo........',
+    '.......osCCsCCsCCsCCssso........',
+    '.......osssssssssssssssoCso.....',
+    '.......osssssssssssssssoCso.....',
+    '.......osssssssssssssssoCso.....',
+    '.......osssssssssssssssoo.......',
+    '.......ossssssssssssssso........',
+    '.......oSSSSSSSSSSSSSSSo........',
+    '........ooooooooooooooo.........',
+    '.........oggggggggggggo.........',
+    '.........oSSSSSSSSSSSSo.........',
+    '.........oSSSSSSSSSSSSo.........',
+    '..........oooooooooooo..........',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+    '................................',
+  ],
+];
+const class32Cache = new Map();
+// the baked 32x32 emblem for class i
+function classIcon32(i) {
+  let cv = class32Cache.get(i);
+  if (!cv) {
+    cv = document.createElement('canvas');
+    cv.width = cv.height = 32;
+    const g = cv.getContext('2d');
+    const rows = CLASS32[i];
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r];
+      for (let c = 0; c < row.length; c++) {
+        const col = AB32_PAL[row[c]];
+        if (!col) continue;
+        g.fillStyle = col;
+        g.fillRect(c, r, 1, 1);
+      }
+    }
+    class32Cache.set(i, cv);
+  }
+  return cv;
+}
+
+// One roster portrait: the class's symbolic emblem in a small well. The
 // chosen one wears the gold rim; a hover lifts and lightens (hv is that
-// portrait's ease). Silhouette only - the stage carries every word.
+// portrait's ease). Symbol only - the stage carries the body and every word.
 function drawSelectPortrait(i, r, hv, chosen, now) {
   const lift = chosen ? 0 : Math.round(hv * 1.5);
   const y = r.y - lift;
@@ -1630,7 +1743,7 @@ function drawSelectPortrait(i, r, hv, chosen, now) {
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
   const a0 = ctx.globalAlpha;
   ctx.globalAlpha = a0 * (chosen ? 1 : 0.6 + hv * 0.4);
-  ctx.drawImage(SPRITES.champ[i][0].down[0], r.x + 2, y + 2, 32, 32);
+  ctx.drawImage(classIcon32(i), r.x + 2, y + 2);
   ctx.globalAlpha = a0;
 }
 
@@ -1668,9 +1781,13 @@ function drawSelectStage(now, a, sw) {
   ctx.drawImage(im, cx + 26, toy + 104 + rise + Math.round(Math.sin(now * 2.2) * 2), 36, 36);
   const nm = CLASSES[m.csel].name;
   drawPixelTextShadow(ctx, nm, cx - Math.round(pixelTextWidth(nm, 2) / 2), toy + 166, '#ffd95c', '#0a0e23', 2);
-  for (let k = 0; k < 4; k++) { // the kit, said in the strip's own wells
-    const r = { x: cx - 72 + k * 37, y: toy + 184 };
-    ctx.fillStyle = '#35426e';
+  // the kit, said in the strip's own wells; hovering one lightens its rim
+  // and raises the ability tooltip (tipClassAb via tipAt, ui.js)
+  const { abils } = selectLayout();
+  const ah = m.screenT >= 1 && m.gearT <= 0 && mouse.inside ? selectAbilHit(mouse.x, mouse.y) : -1;
+  for (let k = 0; k < 4; k++) {
+    const r = abils[k];
+    ctx.fillStyle = ah === k ? '#8fa0c8' : '#35426e';
     ctx.fillRect(r.x, r.y, 34, 34);
     ctx.fillStyle = BAG_WELL;
     ctx.fillRect(r.x + 1, r.y + 1, 32, 32);

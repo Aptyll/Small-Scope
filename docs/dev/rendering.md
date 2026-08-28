@@ -308,8 +308,9 @@ The builders, one per kind: `tipTool` (rate of fire, bit slots, max weight, then
 **firing order** with `>` on the one up next), `tipBit` (damage, weight, speed, lifespan, flight —
 then only the flags that are *true*, because four rows of NO would drown the three that matter),
 `tipStack` (food, cards), `tipGear`, `tipAbility` (the pack's skill row), `tipClassAb` (a strip
-ability well), and `tipTech`, which strips the "what is loaded in it" half and adds the node's
-price and state instead.
+ability well in play, or class select's stage wells with `cls` passed — the in-play cooldown
+and cast-hint rows only appear in play), and `tipTech`, which strips the "what is loaded in it"
+half and adds the node's price and state instead.
 
 ### The tech tree screen
 
@@ -963,14 +964,17 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
   vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock, the
   cinematic band; fully opaque at rest, so the live ambient world is never this screen's
-  backdrop). The **roster** runs down the top-left as sprite portraits (`drawSelectPortrait`) —
-  one 36px well per `CLASSES` entry, the class's own 16×16 sprite at 2×, a column of
-  `SEL_P_PER` (4) wrapping into further columns as the roster grows, so a new class costs this
-  screen nothing — and the **stage** holds the chosen class alone in full glory
-  (`drawSelectStage`): walking in place at 6× under a warm pool of light with a gold ring
-  turning on the snow, the class weapon's own tool art at the hand, the name below, and its
+  backdrop). The **roster** runs down the top-left as symbolic class emblems
+  (`drawSelectPortrait`) — one 36px well per `CLASSES` entry wearing its 32×32 `CLASS32` mark
+  (the hunter's drawn bow, the warrior's gauntlet; baked on `AB32_PAL` like every big icon), a
+  column of `SEL_P_PER` (4) wrapping into further columns as the roster grows, so a new class
+  costs this screen nothing but its emblem — and the **stage** holds the chosen class alone in
+  full glory (`drawSelectStage`): walking in place at 6× under a warm pool of light with a gold
+  ring turning on the snow, the class weapon's own tool art at the hand, the name below, and its
   four ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as
-  it will be worn. The chosen portrait wears the gold rim; the others sit dim and warm on hover
+  it will be worn, and **hovering a well raises the ability tooltip** (`selectAbilHit` →
+  `tipClassAb(i, csel)`, the strip's own panel minus the in-play rows, so the kit is *readable*
+  before it is ever locked). The chosen emblem wears the gold rim; the others sit dim and warm on hover
   (`menu.chover` — seeded as a pair in core.js and grown with `|| 0` for any roster size).
   `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a portrait
   click or the arrows move `menu.csel` (`menu.cswapT` pops the stage), Enter or the **LOCK IN**

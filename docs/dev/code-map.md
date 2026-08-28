@@ -247,7 +247,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | the title screen: buttons, die, panels, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `beginIntro`, `renderTitle` | `main menu` |
-| class select: the painted night, the portrait roster (top-left, wraps as it grows), the one-class stage, lock-in straight to the eagle | `selectLayout`, `selectHit`, `drawSelectBackdrop`, `drawSelectPortrait`, `drawSelectStage`, `renderSelect`, `selectClass`, `lockIn` | `main menu` › `class select` |
+| class select: the painted night, the emblem roster (top-left, wraps as it grows), the one-class stage with hoverable ability tooltips, lock-in straight to the eagle | `selectLayout`, `selectHit`, `selectAbilHit`, `CLASS32`/`classIcon32`, `drawSelectBackdrop`, `drawSelectPortrait`, `drawSelectStage`, `renderSelect`, `selectClass`, `lockIn` | `main menu` › `class select` |
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
 | picking variants pre-match: the pop-up over class select - live preview, stat ledger with hover deltas, twelve 32×32 icon wells, the equip flash | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearWell`, `drawGearPreview`, `gearPreviewKit`, `GEAR_STATS`, `GEAR32`/`gearIcon32`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the numbers' base: `baseKit`, player.js) |
