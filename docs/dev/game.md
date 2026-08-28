@@ -76,7 +76,7 @@ ground, every source pays the earner on the spot. Every payout levels you as a s
 out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 
 **Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
-gear page is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
+gear pop-up is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
 
 **Your eagle is your life.** The bird that carried the team in crashes into a patch of trees at
 the end of its line and roosts there, armoured in team colour. Its hp pool is its **nerve**:

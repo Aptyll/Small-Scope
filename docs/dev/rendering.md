@@ -959,22 +959,29 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   (an outside click does nothing) and its second plank reads SKIP — the default name — where an
   edit reads CANCEL.
   Any open panel ducks the logo to zero alpha.
-- **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
-  over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CLASSES` entry on
-  the left (`drawClassCard`: portrait well + name + role), the highlighted one drawn 6× in the
-  middle over a plinth with name, role, blurb lines and four stat-pip rows, and a LOCK IN plank.
-  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
-  card clicks move `menu.csel` (`menu.cswapT` pops the big sprite, which walks in place), and the
-  **loadout strip** (the four picked variant icons under the stat pips) is a button. Enter/Space,
-  LOCK IN or the strip call `beginGear()` — class locked, on to the **gear page**;
-  Esc/Backspace go back to the menu.
-- **Gear page** (`menu.screen = 'gear'`, cross-faded from select on `menu.gearT`): the full-page
-  loadout picker — all 12 variants at once as four rows of three cards (`gearLayout()`/
+- **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): ONE screen on
+  its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
+  vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock, the
+  cinematic band; fully opaque at rest, so the live ambient world is never this screen's
+  backdrop). Both classes stand facing each other as 6× figures (`drawSelectFigure`): the chosen
+  one walks in place under a warm pool of light with a gold ring turning on the snow, the class
+  weapon's own tool art rides at the hand, the name sits below, and under each figure its four
+  ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as it
+  will be worn. The unchosen figure stands at ease, dimmed, warming on hover (`menu.chover`).
+  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a figure
+  click or the arrows move `menu.csel` (`menu.cswapT` rises the pick), Enter or the **LOCK IN**
+  plank call `lockIn()` — `setClass`, `menu.lockT`, then straight to `beginDrop()` (the eagle
+  ride, below) — and Esc/Backspace go back to the menu. Beside the plank sits the **collapsed
+  gear widget** (the four picked variant icons); clicking it opens the gear pop-up. No
+  instructional text anywhere on the screen.
+- **Gear pop-up** (`menu.screen = 'gear'`, easing over the still-lit select screen on
+  `menu.gearT`): a dim, then a floating panel — the ARMS strip (the class's tool and loaded
+  bits in their HUD wells), then all 12 variants as four rows of three cards (`gearLayout()`/
   `gearScreenHit()`/`drawGearCard`), each card its variant's own icon + name + blurb, the picked
   one gold-trimmed, the keyboard focus (`menu.grow`, W/S rows, A/D or Left/Right picks) wearing
-  pulsing corner ticks. Clicks pick via `pickGear()`; Enter or the **FLY** plank (the class
-  sprite waits beside it) calls `lockIn()` — `setClass`, `menu.lockT`, then `beginDrop()` (the
-  eagle ride, below); Esc returns to the class screen. See [gameplay.md](gameplay.md#gear).
+  pulsing corner ticks. Clicks pick via `pickGear()`; ESC, Enter, the **X** in the corner, or a
+  click anywhere off the panel close it back to select (`leaveGear`) — lock-in stays on the
+  select screen behind it. See [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
   is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over

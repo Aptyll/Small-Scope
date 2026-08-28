@@ -246,10 +246,11 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| the title screen: buttons, die, panels, class select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
+| the title screen: buttons, die, panels, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `beginIntro`, `renderTitle` | `main menu` |
+| class select: the painted night, the two figures, lock-in straight to the eagle | `selectLayout`, `selectHit`, `drawSelectBackdrop`, `drawSelectFigure`, `renderSelect`, `selectClass`, `lockIn` | `main menu` › `class select` |
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
-| picking variants pre-match: the full-page picker, and the weapon the class flies in with above it | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard`, `drawArmsStrip` | `main menu` › `the gear screen` (the loadout itself: `CLASS_LOADOUT`, tools.js) |
+| picking variants pre-match: the pop-up over class select, and the weapon the class flies in with above its cards | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard`, `drawArmsStrip`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the loadout itself: `CLASS_LOADOUT`, tools.js) |
 | the tech tree page: its 7x3 grid, the edges, a node's three states, and the one spend | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techBuy`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
 
 ## js/screens.js

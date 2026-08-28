@@ -280,7 +280,7 @@ bot cannot read a boomerang or an orbit and leaves those for someone who can.
 slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
 BARBED SHOT; the WARRIOR with a SLING loaded ARROW + HEFT. Death **spills the equipped tool** with
 the bag (`spillInventory`), so a build lies where its owner fell and the Keep hands back the
-starting one — you come back armed, but not as the player you were. The gear screen draws the pair
+starting one — you come back armed, but not as the player you were. The gear pop-up draws the pair
 above the armour cards (`drawArmsStrip`, js/menu.js): the tool's well, its bit cells in firing
 order, the tool's tensile as pips, and one caption naming them.
 
@@ -930,8 +930,9 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 
 The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
 (4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
-(every boot builds fresh `Player`s). The human picks variants on the **gear page** — a full
-screen after class select showing all 12 variants at once as cards (League runes-style; see
+(every boot builds fresh `Player`s). The human picks variants in the **gear pop-up** — opened
+from class select's collapsed gear widget, all 12 variants at once as cards over the still-lit
+select screen (League runes-style; see
 [Main menu](rendering.md#main-menu-title)); `pickGear()` writes straight to `player.gear`. AI
 slots hash all four variants from the seed in `initPlayers()`. **Every variant has its own
 12×12 icon** (`SPRITES.gearIcons[slot][variant][material]`), so a pick is a distinct picture,
@@ -995,7 +996,7 @@ kill-credit line the same way `eatBerry` applies its heal.
 take) calls `openDraft(rarity)`, which sets `state.draft = { rarity, options }` — three distinct
 entries drawn at random from `CARDS[rarity]` (`pick3Distinct`). `renderDraft`/`draftLayout`/
 `draftHit` draw and hit-test three cards centred on screen, in the same idiom the pre-match
-[gear page](rendering.md#main-menu-title) draws its variant cards, but as an in-match overlay like
+[gear pop-up](rendering.md#main-menu-title) draws its variant cards, but as an in-match overlay like
 the bag or the map — **it does not pause the sim**, same as every other HUD overlay here, so a
 draft is read at real risk, not in a safe pause. `draftClick()` (the mousedown handler routes to it
 first, ahead of the wheel/settings/map/bag, whenever `state.draft` is set) either applies the
@@ -1564,7 +1565,7 @@ through five minutes of a track.
 | Track | Plays from | Loops |
 | --- | --- | --- |
 | `intro` — FROZEN NORTH RUN INTRO | boot, and `leaveSelect()` back to the menu | yes |
-| `select` — FROZEN NORTH RUN CLASS SELECTION | `beginSelect()`; the gear page keeps it | yes |
+| `select` — FROZEN NORTH RUN CLASS SELECTION | `beginSelect()`; the gear pop-up keeps it | yes |
 | `eagle` — FLYING ON EAGLE | `beginDrop()` | yes |
 | `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
 | `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |

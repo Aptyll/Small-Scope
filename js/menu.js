@@ -1,7 +1,8 @@
 'use strict';
 // The title screen: the frost-plank menu over the living world, the reroll
-// die, the tutorial and patch-notes panels, champion select and the gear
-// screen, and the intro that hands the locked-in champion to the eagle.
+// die, the tutorial and patch-notes panels, class select on its own painted
+// night with its gear pop-up, and the intro that hands the locked-in class
+// to the eagle.
 // ------------------------------------------------------------ main menu
 // The title screen is a real menu over the living world: the camera drifts
 // around the interior while animals, fish and snow keep running, the items
@@ -23,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.96'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.97'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.97', 'CLASS SELECT IS ONE SCREEN UNDER ITS OWN AURORA NIGHT - BOTH CLASSES STAND FACING EACH OTHER WITH WEAPON AND ABILITY ICONS, LOCK IN FLIES STRAIGHT TO THE EAGLE, AND GEAR IS A SMALL WIDGET THAT OPENS INTO A POP-UP.'],
   ['1.96', 'THE STRIP SHOWS YOUR WHOLE KIT NOW - FOUR DETAILED ABILITY ICONS FLANK THE WEAPON WITH COOLDOWN WIPES, CAST AND ACTIVE TELLS AND THEIR KEYS IN THE CORNER, AND A CLICK ON A WELL CASTS IT LIKE THE KEY DOES.'],
   ['1.95', 'CHAMPIONS ARE CLASSES NOW - HUNTER AND WARRIOR - AND KEYS 1-4 CAST FOUR REAL ABILITIES EACH: TRAPS, NETS, A FALCON AND A VOLLEY AGAINST A SHIELD, A RUSH, A STOMP AND A JUGGERNAUT - WHILE THE WEAPON LIVES IN ONE CENTRE SLOT AND ITS BIT COLUMN RISES ON HOVER.'],
   ['1.94', 'THE ARMORY RACK STANDS SQUARE BELOW THE DUMMY NOW, AND IT WORKS ON E - AN E PROMPT RISES WHEN YOU WALK UP, HOLDING E OPENS THE WEAPON WHEEL, AND LETTING GO TAKES THE ONE YOU ARE POINTING AT.'],
@@ -417,8 +419,8 @@ function updateTitle(dt) {
     s.vy += 260 * dt; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
     if (s.life <= 0) m.shards.splice(i, 1);
   }
-  // champion select cross-fade and its own hovers; the gear page rides a
-  // second ease (gearT) so select <-> gear cross-fade inside the surface
+  // class select cross-fade and its own hovers; the gear pop-up rides a
+  // second ease (gearT) over the still-lit select screen
   const st = m.screen === 'select' || m.screen === 'gear' ? 1 : 0;
   m.screenT = Math.max(0, Math.min(1, m.screenT + (st ? 1 : -1) * dt / 0.35));
   const gt = m.screen === 'gear' ? 1 : 0;
@@ -873,48 +875,128 @@ function drawPatchBar(ox, oy) {
   tri(up, -1); tri(down, 1);
 }
 
-// ---- champion select ----------------------------------------------------
-// PLAY goes here first (menu.screen = 'select'): champion cards on the left,
-// the chosen one big in the middle with name, role, blurb and stat pips, and
-// a LOCK IN plank. Up/Down browse, Enter/Space lock, Esc returns to the menu;
-// the mouse does the same through selectHit(). Lock-in stamps player.cls
-// and hands off to beginDrop() (the eagle ride; see the eagle drop banner).
-const SEL_CARD_W = 78, SEL_CARD_H = 28;
-
+// ---- class select --------------------------------------------------------
+// PLAY goes here (menu.screen = 'select'): ONE screen with its own painted
+// night - never the live world - where both classes stand side by side and
+// are read from silhouette, pose and weapon: the chosen figure walks in
+// place under its own light, the class weapon rides at the hand, and the
+// four ability icons under each figure are the kit (classAbIcon,
+// js/abilities.js). Click a figure (or the arrows) to choose; LOCK IN flies
+// straight to the eagle (lockIn -> lockT -> beginDrop). The small plaque
+// beside the plank is the COLLAPSED GEAR WIDGET - the four picked variants -
+// and clicking it opens the gear pop-up over this screen (beginGear; ESC, the
+// X, or a click outside close it). Nothing on the screen is instructions:
+// the shapes carry it.
 function selectLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  const cards = CLASSES.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
-  const lock = { x: cx - 56, y: toy + 228, w: 112, h: 20 };
-  // the current loadout, shown as its four variant icons under the stat pips;
-  // the strip is a button into the gear screen
-  const loadout = { x: cx + 120, y: toy + 168, w: 4 * 17 - 3, h: 16 };
-  return { toy, cx, cards, lock, loadout };
+  // one column per class: the figure, its name, its four ability wells
+  const figs = CLASSES.map((_, i) => {
+    const fx = cx + (i === 0 ? -105 : 105);
+    return { x: fx - 72, y: toy + 56, w: 145, h: 162, cx: fx };
+  });
+  const lock = { x: cx - 56, y: toy + 232, w: 112, h: 20 };
+  // the collapsed gear widget, riding beside LOCK IN
+  const loadout = { x: cx + 78, y: toy + 234, w: 4 * 17 - 3, h: 16 };
+  return { toy, cx, figs, lock, loadout };
 }
 
-// ---- the gear screen: the full-page loadout picker (League runes-style) ---
-// Entered from champ select's LOCK IN (or its loadout strip). All 12
-// variants are on screen at once as cards - four rows, one per piece, three
-// options each - so the choice is a read, not a cycle. Clicking a card picks
-// it (writes straight to player.gear); FLY launches the match via lockIn().
-//
-// Above the cards is the ARMS strip: the tool this champion flies in with and
-// the bits already loaded into it, drawn in exactly the wells they will wear
-// in the HUD - tier plate and all - so what comes out of the eagle is read
-// here rather than discovered on the ground. It is not a choice: the two
-// champions carry different weapons, and that is part of picking one.
+// The screen's own painted night, fully opaque at rest so the live ambient
+// world is never the backdrop here: a starfield under two aurora ribbons, a
+// snow-crested ridge over a pine line, a lit snow floor, slow snowfall, and
+// the cinematic band. All procedural - hash2/vnoise for the stillness, now
+// for the drift - and everything takes the caller's fade.
+function drawSelectBackdrop(now, a) {
+  const toy = Math.round((VIEW_H - 270) / 2);
+  const hz = toy + 150; // the horizon the figures stand against
+  ctx.globalAlpha = a;
+  const sky = ctx.createLinearGradient(0, 0, 0, hz);
+  sky.addColorStop(0, '#04060f'); sky.addColorStop(0.7, '#0a1024'); sky.addColorStop(1, '#141c3c');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, VIEW_W, hz);
+  const gr = ctx.createLinearGradient(0, hz, 0, VIEW_H);
+  gr.addColorStop(0, '#1b2650'); gr.addColorStop(0.5, '#141c3c'); gr.addColorStop(1, '#0a0f26');
+  ctx.fillStyle = gr; ctx.fillRect(0, hz, VIEW_W, VIEW_H - hz);
+  for (let i = 0; i < 70; i++) { // stars, twinkling out of phase
+    const sx = Math.floor(hash2(i, 11) * VIEW_W), sy = Math.floor(hash2(i, 23) * (hz - 34));
+    const tw = 0.35 + 0.65 * Math.abs(Math.sin(now * (0.6 + hash2(i, 7)) + i));
+    ctx.globalAlpha = a * tw * 0.8;
+    ctx.fillStyle = hash2(i, 3) > 0.8 ? '#9fd8ff' : '#dfe8f4';
+    ctx.fillRect(sx, sy, 1, 1);
+  }
+  ctx.globalCompositeOperation = 'lighter'; // the aurora breathes over the stars
+  for (let b = 0; b < 2; b++) {
+    const ay = toy + 44 + b * 26;
+    ctx.fillStyle = b ? '#2c6ec8' : '#2cc890';
+    for (let x = 0; x < VIEW_W; x += 2) {
+      const yy = ay + Math.sin(x * 0.018 + now * (0.4 + b * 0.15) + b * 2.4) * 13;
+      const hgt = 14 + Math.sin(x * 0.03 + now * 0.5) * 5;
+      ctx.globalAlpha = a * 0.05;
+      ctx.fillRect(x, Math.round(yy - hgt), 2, Math.round(hgt * 1.6));
+      ctx.fillRect(x, Math.round(yy - hgt * 0.4), 2, Math.round(hgt * 0.7));
+    }
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = a;
+  for (let x = 0; x < VIEW_W; x++) { // the ridge, its crest catching the sky
+    const h = 16 + vnoise(x * 0.028, 7.3) * 34 + vnoise(x * 0.11, 3.1) * 8;
+    ctx.fillStyle = '#0b1128';
+    ctx.fillRect(x, hz - Math.round(h), 1, Math.round(h));
+    ctx.fillStyle = '#2a3a6e';
+    ctx.fillRect(x, hz - Math.round(h), 1, 1);
+  }
+  ctx.fillStyle = '#070b1c';
+  for (let x = 0; x < VIEW_W; x += 7) { // the pine line at the ridge's feet
+    const ph = 6 + Math.floor(hash2(x, 91) * 8);
+    const px = x + Math.floor(hash2(x, 17) * 5);
+    for (let k = 0; k < ph; k++) {
+      const w = Math.max(1, Math.round((k / ph) * 5));
+      ctx.fillRect(px - w, hz - ph + k, w * 2 + 1, 1);
+    }
+  }
+  ctx.fillStyle = '#9fb6d8';
+  for (let i = 0; i < 60; i++) { // glints in the snow floor
+    const gx = Math.floor(hash2(i, 41) * VIEW_W);
+    const gy = hz + 4 + Math.floor(hash2(i, 43) * Math.max(1, VIEW_H - hz - 6));
+    ctx.globalAlpha = a * (0.1 + 0.18 * hash2(i, 5));
+    ctx.fillRect(gx, gy, 1, 1);
+  }
+  ctx.fillStyle = '#dfe8f4';
+  for (let i = 0; i < 46; i++) { // slow snowfall, stateless off the clock
+    const fx = (hash2(i, 63) * VIEW_W + now * (4 + hash2(i, 67) * 8)) % VIEW_W;
+    const fy = (hash2(i, 65) * VIEW_H + now * (12 + hash2(i, 61) * 16)) % VIEW_H;
+    ctx.globalAlpha = a * 0.5;
+    ctx.fillRect(Math.floor(fx), Math.floor(fy), 1, 1);
+  }
+  ctx.globalAlpha = a; // the cinematic band, heavier top and bottom
+  const v = ctx.createLinearGradient(0, 0, 0, VIEW_H);
+  v.addColorStop(0, 'rgba(3,5,16,0.8)'); v.addColorStop(0.16, 'rgba(3,5,16,0)');
+  v.addColorStop(0.85, 'rgba(3,5,16,0)'); v.addColorStop(1, 'rgba(3,5,16,0.9)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  ctx.globalAlpha = 1;
+}
+
+// ---- the gear pop-up (League runes-style) --------------------------------
+// Opened from the select screen's collapsed gear widget (beginGear). The
+// select screen stays lit underneath; the pop-up dims it and floats a panel:
+// the ARMS strip (the tool this class flies in with and the bits loaded in
+// it, in exactly the wells they wear in the HUD), then all 12 variants as
+// cards - four rows, one per piece, three options each - so the choice is a
+// read, not a cycle. Clicking a card picks it (writes straight to
+// player.gear); ESC, the X, or a click outside the panel closes it. Lock-in
+// stays on the select screen behind it.
 function gearLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  // the cards lost 4px of height to the arms strip above them; everything
-  // inside drawGearCard still clears its rim at 30
   const w = 132, h = 30, gapx = 6, gapy = 3;
-  const x0 = cx - Math.round((3 * w + 2 * gapx) / 2);
-  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: toy + 88 + i * (h + gapy), w, h })));
-  const fly = { x: cx - 56, y: toy + 224, w: 112, h: 20 };
-  return { toy, cx, rows, fly, arms: { x: cx, y: toy + 58, w: 200, h: 22 } };
+  const pw = 3 * w + 2 * gapx + 16;
+  const ph = 48 + 4 * (h + gapy) - gapy + 8;
+  const px = cx - (pw >> 1), py = Math.round((VIEW_H - ph) / 2);
+  const x0 = px + 8;
+  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: py + 48 + i * (h + gapy), w, h })));
+  return { toy, cx, panel: { x: px, y: py, w: pw, h: ph }, rows,
+    xr: { x: px + pw - 15, y: py + 5, w: 10, h: 10 }, arms: { x: cx, y: py + 18 } };
 }
-// The champion's starting weapon, laid out flat: the tool's well, then its bit
+// The class's starting weapon, laid out flat: the tool's well, then its bit
 // cells left to right in firing order - the bit column of the HUD, tipped on
 // its side because there is no key to hold here. One caption names them, the
 // one place the tool and its bits are spelled out, since a menu is where a
@@ -950,16 +1032,18 @@ function drawArmsStrip(cx, y, champ, now) {
   }
 }
 
-// what the pointer is over on the gear screen: {row, v}, 'fly', or null
+// what the pointer is over on the gear pop-up: {row, v}, 'x', 'panel' (the
+// slab itself - inert, swallows the press), or null (outside: a click closes)
 function gearScreenHit() {
-  const { rows, fly } = gearLayout();
+  const { rows, panel, xr } = gearLayout();
+  if (mouse.x >= xr.x - 3 && mouse.x < xr.x + xr.w + 3 && mouse.y >= xr.y - 3 && mouse.y < xr.y + xr.h + 3) return 'x';
   for (let i = 0; i < rows.length; i++) {
     for (let v = 0; v < rows[i].length; v++) {
       const r = rows[i][v];
       if (mouse.x >= r.x && mouse.x < r.x + r.w && mouse.y >= r.y - 1 && mouse.y < r.y + r.h + 1) return { row: i, v };
     }
   }
-  if (mouse.x >= fly.x - 2 && mouse.x < fly.x + fly.w + 2 && mouse.y >= fly.y - 3 && mouse.y < fly.y + fly.h + 3) return 'fly';
+  if (mouse.x >= panel.x && mouse.x < panel.x + panel.w && mouse.y >= panel.y && mouse.y < panel.y + panel.h) return 'panel';
   return null;
 }
 
@@ -986,34 +1070,33 @@ function pickGear(i, v) {
 function gearKey(k) {
   const m = state.menu;
   if (m.lockT > 0) return;
-  if (k === 'escape' || k === 'backspace') leaveGear();
+  if (k === 'escape' || k === 'backspace' || k === 'enter' || k === ' ') leaveGear();
   else if (k === 'arrowup' || k === 'w') { m.grow = (m.grow + 3) % 4; SFX.pickup(); }
   else if (k === 'arrowdown' || k === 's') { m.grow = (m.grow + 1) % 4; SFX.pickup(); }
   else if (k === 'arrowleft' || k === 'a') pickGear(m.grow, (player.gear[m.grow] + 2) % 3);
   else if (k === 'arrowright' || k === 'd') pickGear(m.grow, (player.gear[m.grow] + 1) % 3);
-  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); }
 }
 
 function gearClick() {
   const m = state.menu;
   if (m.lockT > 0 || m.gearT < 1) return;
   const h = gearScreenHit();
-  if (!h) return;
-  if (h === 'fly') { m.pressT = 0.12; lockIn(); return; }
+  if (!h || h === 'x') { leaveGear(); return; } // the X, or anywhere off the panel
+  if (h === 'panel') return;                    // the slab swallows it
   m.grow = h.row;
   pickGear(h.row, h.v);
 }
 
-// what the pointer is over: card index, CLASSES.length for LOCK IN,
-// CLASSES.length + 1 for the loadout strip, -1 for nothing
+// what the pointer is over: figure index, CLASSES.length for LOCK IN,
+// CLASSES.length + 1 for the collapsed gear widget, -1 for nothing
 function selectHit() {
-  const { cards, lock, loadout } = selectLayout();
-  for (let i = 0; i < cards.length; i++) {
-    const r = cards[i];
+  const { figs, lock, loadout } = selectLayout();
+  for (let i = 0; i < figs.length; i++) {
+    const r = figs[i];
     if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3) return i;
   }
-  if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return cards.length;
-  if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 2 && mouse.y < loadout.y + loadout.h + 2) return cards.length + 1;
+  if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return figs.length;
+  if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 3 && mouse.y < loadout.y + loadout.h + 3) return figs.length + 1;
   return -1;
 }
 
@@ -1049,9 +1132,9 @@ function selectKey(k) {
   const m = state.menu;
   if (m.lockT > 0) return;
   if (k === 'escape' || k === 'backspace') leaveSelect();
-  else if (k === 'arrowup' || k === 'w') selectClass(m.csel - 1);
-  else if (k === 'arrowdown' || k === 's') selectClass(m.csel + 1);
-  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; beginGear(); } // champion locked: on to the gear page
+  else if (k === 'arrowleft' || k === 'a' || k === 'arrowup' || k === 'w') selectClass(m.csel - 1);
+  else if (k === 'arrowright' || k === 'd' || k === 'arrowdown' || k === 's') selectClass(m.csel + 1);
+  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); } // locked: straight to the eagle
 }
 
 function selectClick() {
@@ -1059,117 +1142,106 @@ function selectClick() {
   if (m.lockT > 0 || m.screenT < 1 || m.gearT > 0) return;
   const h = selectHit();
   if (h < 0) return;
-  if (h >= CLASSES.length) { m.pressT = 0.12; beginGear(); } // LOCK IN or the loadout strip
-  else { selectClass(h); if (h === m.csel) m.csel = h; }
+  if (h === CLASSES.length) { m.pressT = 0.12; lockIn(); }        // LOCK IN: straight to the eagle
+  else if (h === CLASSES.length + 1) { m.pressT = 0.12; beginGear(); } // the gear widget opens its pop-up
+  else selectClass(h);
 }
 
-// a champion card: small plank with the portrait sprite and name; hot = gold
-function drawClassCard(r, ci, hv, now, chosen) {
-  const lift = Math.round(hv * 2);
-  const x = r.x, y = r.y - lift, w = r.w, h = r.h;
-  ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(x + 2, r.y + 2, w, h);
-  ctx.fillStyle = '#0a0e23'; chamRect(x, y, w, h);
-  ctx.fillStyle = chosen ? '#1f2b5c' : '#141c3c'; chamRect(x + 1, y + 1, w - 2, h - 2);
-  ctx.fillStyle = chosen ? '#5a7fb8' : '#35426e';
-  ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
-  ctx.fillStyle = '#080c1c';
-  ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
+// One class column: the figure walking in place (the chosen one under its
+// own warm light and gold ring), the class weapon riding at the hand, the
+// name, and the kit - four ability icons in the same wells the strip wears
+// in play. hv is that column's hover ease; sw the swap rise.
+function drawSelectFigure(i, now, a, hv, sw, slide) {
+  const m = state.menu;
+  const { toy, figs } = selectLayout();
+  const f = figs[i];
+  const fx = f.cx + slide;
+  const chosen = m.csel === i;
+  const va = a * (chosen ? 1 : 0.5 + hv * 0.4);
+  const feet = toy + 158;
+  ctx.globalAlpha = a * 0.4; // the ground holds every figure
+  ctx.fillStyle = '#04060f';
+  ctx.beginPath(); ctx.ellipse(fx, feet, 34, 7, 0, 0, Math.PI * 2); ctx.fill();
   if (chosen) {
+    // the pick: a warm pool of light, and a gold ring turning on the snow
+    ctx.globalCompositeOperation = 'lighter';
+    const g = ctx.createRadialGradient(fx, feet - 40, 4, fx, feet - 40, 78);
+    g.addColorStop(0, 'rgba(255,170,80,' + (0.14 * a * sw).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = g; ctx.fillRect(fx - 80, feet - 120, 160, 160);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = a * sw;
     ctx.fillStyle = '#c89a3c';
-    ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
+    for (let k = 0; k < 24; k += 2) {
+      const an = (k / 24) * Math.PI * 2 + now * 0.5;
+      ctx.fillRect(fx + Math.round(Math.cos(an) * 40), feet + Math.round(Math.sin(an) * 8), 2, 1);
+    }
   }
-  // portrait well
-  ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 4, y + 5, 20, 19);
-  ctx.fillStyle = chosen ? '#2a3a6e' : '#1c2750'; ctx.fillRect(x + 5, y + 6, 18, 17);
-  ctx.drawImage(SPRITES.champ[ci][0].down[0], x + 6, y + 6);
-  drawPixelTextShadow(ctx, CLASSES[ci].name, x + 28, y + 8, chosen ? '#ffd95c' : '#cfe0ff', '#0a0e23');
-  drawPixelTextShadow(ctx, CLASSES[ci].role, x + 28, y + 16, chosen ? '#9fb6d8' : '#5a6690', '#0a0e23');
+  // the body: the two face each other; the chosen one walks in place
+  const set = SPRITES.champ[i][0];
+  const dir = i === 0 ? 'right' : 'left';
+  const frame = chosen ? set[dir][1 + (Math.floor(now * 4) % 2)] : set[dir][0];
+  const rise = chosen ? Math.round((1 - sw) * 8) : 0;
+  ctx.globalAlpha = va;
+  ctx.drawImage(frame, fx - 48, toy + 62 + rise, 96, 96);
+  // the weapon at the hand: the class tool's own art, big enough to read
+  const L = CLASS_LOADOUT[i] || CLASS_LOADOUT[0];
+  const im = SPRITES[ITEMS[toolType(L.tool)].icon];
+  const bob = chosen ? Math.round(Math.sin(now * 2.2 + i) * 2) : 0;
+  ctx.drawImage(im, i === 0 ? fx + 24 : fx - 24 - 36, toy + 104 + rise + bob, 36, 36);
+  const nm = CLASSES[i].name;
+  drawPixelTextShadow(ctx, nm, fx - Math.round(pixelTextWidth(nm, 2) / 2), toy + 166,
+    chosen ? '#ffd95c' : '#8fa8d0', '#0a0e23', 2);
+  for (let k = 0; k < 4; k++) { // the kit, said in the strip's own wells
+    const r = { x: f.x + slide + k * 37, y: toy + 184 };
+    ctx.globalAlpha = va;
+    ctx.fillStyle = chosen ? '#35426e' : '#232c52';
+    ctx.fillRect(r.x, r.y, 34, 34);
+    ctx.fillStyle = BAG_WELL;
+    ctx.fillRect(r.x + 1, r.y + 1, 32, 32);
+    ctx.drawImage(classAbIcon(i, k), r.x + 1, r.y + 1);
+  }
+  ctx.globalAlpha = a;
 }
 
-function drawStatPips(x, y, label, n, col) {
-  drawPixelTextShadow(ctx, label, x, y, '#9fb6d8', 'rgba(15,22,50,0.9)');
-  for (let i = 0; i < 5; i++) {
-    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + i * 8, y + 8, 6, 4);
-    ctx.fillStyle = i < n ? col : '#1c2750'; ctx.fillRect(x + i * 8 + 1, y + 9, 4, 2);
-  }
-}
-
-// a (0..1) is the screen's own visibility; out is the play-intro exit
+// a (0..1) is the screen's own visibility; the whole surface rides it
 function renderSelect(now, a) {
   const m = state.menu;
-  const { toy, cx, cards, lock, loadout } = selectLayout();
-  const c = CLASSES[m.csel];
-  const slideIn = 1 - a;
-
-  // header
+  const { toy, cx, lock, loadout } = selectLayout();
+  drawSelectBackdrop(now, a);
   ctx.globalAlpha = a;
-  const t0 = 'CHOOSE YOUR CLASS';
-  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 30 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
-  drawGoldRule(cx, toy + 45 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-
-  // cards, from the left
-  for (let i = 0; i < cards.length; i++) {
-    const r = cards[i];
-    const rr = { x: r.x - Math.round(slideIn * 80), y: r.y, w: r.w, h: r.h };
-    ctx.globalAlpha = a;
-    drawClassCard(rr, i, m.chover[i], now, m.csel === i);
-  }
-  ctx.globalAlpha = a;
-
-
-  // the champion, big: 6x sprite over a soft plinth, swapping with a quick rise
+  const t0 = 'CLASS SELECT';
+  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 22, '#ffd95c', '#3c2a1e', 2);
+  drawGoldRule(cx, toy + 37, Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+  // the figures slide in from their own sides; the chosen one draws last so
+  // its light lies over both
   const sw = easeOut(m.cswapT);
-  const bx = cx - 48, by = toy + 52 + Math.round((1 - sw) * 10);
-  ctx.globalAlpha = a * 0.35;
-  ctx.fillStyle = '#0a0e23';
-  ctx.beginPath(); ctx.ellipse(cx, toy + 150, 46, 8, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.globalAlpha = a * sw;
-  // the big sprite walks in place - a living pick, not a poster
-  const spr = SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)];
-  ctx.drawImage(spr, bx, by, 96, 96);
-  // name + role
-  const nm = c.name;
-  drawPixelTextShadow(ctx, nm, Math.round((VIEW_W - pixelTextWidth(nm, 3)) / 2), toy + 160, '#ffd95c', '#3c2a1e', 3);
-  drawPixelTextShadow(ctx, c.role, Math.round((VIEW_W - pixelTextWidth(c.role)) / 2), toy + 180, '#cfe0ff', 'rgba(15,22,50,0.9)');
-  let ly = toy + 194;
-  for (const l of c.blurb) {
-    drawPixelTextShadow(ctx, l, Math.round((VIEW_W - pixelTextWidth(l)) / 2), ly, '#9fb6d8', 'rgba(15,22,50,0.9)');
-    ly += 10;
-  }
-  // stat pips, right column
-  const sx = cx + 120 + Math.round(slideIn * 80);
-  drawStatPips(sx, toy + 80, 'ICE', c.stats.ice, '#8fd8ff');
-  drawStatPips(sx, toy + 100, 'DRAW', c.stats.draw, '#ffd95c');
-  drawStatPips(sx, toy + 120, 'POWER', c.stats.power, '#ff8a3c');
-  drawStatPips(sx, toy + 140, 'TOUGH', c.stats.tough, '#9fe0a8');
+  const slide = Math.round((1 - a) * 26);
+  drawSelectFigure(1 - m.csel, now, a, m.chover[1 - m.csel], sw, (1 - m.csel) === 0 ? -slide : slide);
+  drawSelectFigure(m.csel, now, a, 1, sw, m.csel === 0 ? -slide : slide);
+  // LOCK IN - the plank is the whole ask, and it flies straight to the eagle
+  const hover = m.screenT >= 1 && m.gearT <= 0 ? selectHit() : -1;
+  const pressed = m.pressT > 0 || m.lockT > 0;
   ctx.globalAlpha = a;
-
-  // the loadout strip: your four picked variants as icons, right where the
-  // pips end. It is a button - clicking it (or LOCK IN) opens the gear page.
-  const hover = m.screenT >= 1 && !m.gearT ? selectHit() : -1;
-  const lox = loadout.x + Math.round(slideIn * 80);
+  drawMenuButton(lock, 'LOCK IN', hover === CLASSES.length ? 1 : 0.7, now, pressed);
+  // the collapsed gear widget: the four picked variants; its pop-up opens off
+  // a click (beginGear). Hover lifts it - the this-is-a-button grammar.
   const lolift = hover === CLASSES.length + 1 ? 1 : 0;
   for (let i = 0; i < GEAR_SLOTS.length; i++) {
-    const x = lox + i * 17, y = loadout.y - lolift;
+    const x = loadout.x + i * 17, y = loadout.y - lolift;
+    ctx.fillStyle = 'rgba(4,6,18,0.55)';
+    ctx.fillRect(x + 1, loadout.y + 2, 14, 16);
     ctx.fillStyle = lolift ? '#8fa0c8' : '#35426e';
     ctx.fillRect(x, y, 14, 16);
     ctx.fillStyle = '#0f1632';
     ctx.fillRect(x + 1, y + 1, 12, 14);
     ctx.drawImage(SPRITES.gearIcons[i][player.gear[i]][0], x + 1, y + 2);
   }
-
-  // lock in
-  const over = hover === CLASSES.length;
-  const pressed = m.pressT > 0 || m.lockT > 0;
-  drawMenuButton({ x: lock.x, y: lock.y + Math.round(slideIn * 20), w: lock.w, h: lock.h }, 'LOCK IN', over ? 1 : 0.7, now, pressed);
-  const t3 = 'ENTER LOCK IN - ESC BACK';
-  drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 258, '#5a6690', 'rgba(15,22,50,0.9)');
   ctx.globalAlpha = 1;
 }
 
-// the gear page: four rows of three cards, every variant visible at once.
-// A card is icon + name + blurb; the picked one is gold-trimmed, the
-// keyboard-focused row's pick wears pulsing corner ticks. FLY launches.
+// a gear card: icon + name + blurb; the picked one is gold-trimmed, the
+// keyboard-focused row's pick wears pulsing corner ticks
 function drawGearCard(r, slot, v, hot, picked, focused, now) {
   const lift = hot ? 2 : 0;
   const x = r.x, y = r.y - lift, w = r.w, h = r.h;
@@ -1202,37 +1274,48 @@ function drawGearCard(r, slot, v, hot, picked, focused, now) {
   }
 }
 
+// the pop-up itself: a dim over the still-lit select screen, then the panel
+// slab rising a few px as it eases in - arms strip, twelve cards, the X
 function renderGear(now, a) {
   const m = state.menu;
-  const { toy, cx, rows, fly, arms } = gearLayout();
-  const slideIn = 1 - a;
-
+  const { cx, panel, rows, xr, arms } = gearLayout();
+  ctx.fillStyle = 'rgba(4,6,18,' + (0.62 * a).toFixed(3) + ')';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  const rise = Math.round((1 - a) * 12);
+  const py = panel.y + rise;
   ctx.globalAlpha = a;
-  const t0 = 'CHOOSE YOUR GEAR';
-  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 26 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
-  drawGoldRule(cx, toy + 41 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-  // what this champion is armed with, above the pieces it is being armoured in
-  drawArmsStrip(cx, arms.y - Math.round(slideIn * 20), m.csel, now);
+  // the slab, in the planks' own chrome
+  ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(panel.x + 3, py + 3, panel.w, panel.h);
+  ctx.fillStyle = '#0a0e23'; chamRect(panel.x, py, panel.w, panel.h);
+  ctx.fillStyle = '#10173a'; chamRect(panel.x + 1, py + 1, panel.w - 2, panel.h - 2);
+  ctx.fillStyle = '#35426e';
+  ctx.fillRect(panel.x + 2, py + 1, panel.w - 4, 1); ctx.fillRect(panel.x + 1, py + 2, 1, panel.h - 4);
+  ctx.fillStyle = '#080c1c';
+  ctx.fillRect(panel.x + 2, py + panel.h - 2, panel.w - 4, 1); ctx.fillRect(panel.x + panel.w - 2, py + 2, 1, panel.h - 4);
+  // what this class is armed with, above the pieces it is being armoured in
+  drawArmsStrip(cx, arms.y + rise, m.csel, now);
   ctx.globalAlpha = a;
-
   const gh = m.gearT >= 1 && mouse.inside ? gearScreenHit() : null;
   for (let i = 0; i < rows.length; i++) {
     for (let v = 0; v < rows[i].length; v++) {
       const r = rows[i][v];
-      const rr = { x: r.x + Math.round(slideIn * (v - 1) * 40), y: r.y, w: r.w, h: r.h };
-      drawGearCard(rr, i, v, gh && gh !== 'fly' && gh.row === i && gh.v === v,
+      drawGearCard({ x: r.x, y: r.y + rise, w: r.w, h: r.h }, i, v,
+        gh && gh.row === i && gh.v === v,
         player.gear[i] === v, m.grow === i && player.gear[i] === v, now);
       ctx.globalAlpha = a;
     }
   }
-
-  // fly: the champion, locked and loaded, takes the eagle
-  const over = gh === 'fly';
-  const pressed = m.pressT > 0 || m.lockT > 0;
-  drawMenuButton({ x: fly.x, y: fly.y + Math.round(slideIn * 20), w: fly.w, h: fly.h }, 'FLY', over ? 1 : 0.7, now, pressed);
-  ctx.drawImage(SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)], fly.x - 24, fly.y + 2);
-  const t3 = 'ENTER FLY - ESC BACK';
-  drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 258, '#5a6690', 'rgba(15,22,50,0.9)');
+  // the X: the one way out that is drawn (ESC and a click outside also close)
+  const hot = gh === 'x';
+  ctx.fillStyle = hot ? '#8fa0c8' : '#35426e';
+  ctx.fillRect(xr.x, xr.y + rise, xr.w, xr.h);
+  ctx.fillStyle = '#0f1632';
+  ctx.fillRect(xr.x + 1, xr.y + rise + 1, xr.w - 2, xr.h - 2);
+  ctx.fillStyle = hot ? '#f4f7ff' : '#8fa8d0';
+  for (let k = 0; k < 4; k++) {
+    ctx.fillRect(xr.x + 3 + k, xr.y + rise + 3 + k, 1, 1);
+    ctx.fillRect(xr.x + xr.w - 4 - k, xr.y + rise + 3 + k, 1, 1);
+  }
   ctx.globalAlpha = 1;
 }
 
@@ -1418,7 +1501,7 @@ function renderTitle(now) {
   const tintA = 0.55 * (1 - easeOut(outQ / 0.45));
   if (tintA > 0.005) drawTitleBackdrop(tintA);
   const out = easeOut(outQ / 0.22);           // menu chrome drops away first
-  const sc = easeInOut(m.screenT);             // champion select cross-fade
+  const sc = easeInOut(m.screenT);             // class select cross-fade
   const tc = easeInOut(m.techT);               // ...and the tech tree's own
   const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc, tc); // chrome ducks under a panel or either full screen
   const { toy, rects } = menuLayout();
@@ -1512,9 +1595,9 @@ function renderTitle(now) {
     ctx.globalAlpha = 1;
   }
 
-  // the two pick screens cross-fade into each other on gearT
+  // class select stays fully lit under its gear pop-up; the pop-up rides gearT
   const gc = easeInOut(state.menu.gearT);
-  if (sc > 0.005 && gc < 0.995) renderSelect(now, sc * (1 - out) * (1 - gc));
+  if (sc > 0.005) renderSelect(now, sc * (1 - out));
   if (sc > 0.005 && gc > 0.005) renderGear(now, sc * (1 - out) * gc);
   if (tc > 0.005) renderTech(now, tc * (1 - out));
 
