@@ -166,13 +166,19 @@ never advances it under `PRACTICE` — crisp daylight forever, no dusk, no dawn 
 nothing glows (`rebuildLights` currently finds no light-emitting object in any world).
 
 The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
-**dummy** on a small packed-earth pad in the middle, the spawn just south of it, the two-tile
-bow **rack** beside the spawn (`lead` on the left tile, a solid silent follower right;
-`RACK_SPR`, baked per-pixel in js/draw-world.js so the strung staves get true curves) — **the
-rack is the armory**: right-clicking either tile within reach opens a radial wheel of every
-tool in the game (`state.wheel` kind `'rack'`, the ordinary wheel pipeline; the pick lands in
-`rackEquip`, `PRACTICE`-gated in the practice banner), replacing the selected slot with a fresh
-instance of the picked tool, a plain arrow seated so it fires the moment it is taken — and the
+**dummy** on a small packed-earth pad in the middle, the two-tile bow **rack** squared directly
+under the pad on the dummy's own axis (`lead` on the left tile, a solid silent follower right;
+a two-tile pair can only centre on a tile boundary, so the lead carries `dx: -8` and the sprite,
+brackets and prompt all draw nudged onto the centre line — `RACK_SPR` itself is baked per-pixel
+in js/draw-world.js so the strung staves get true curves), the spawn just south of the rack —
+**the rack is the armory**: standing within E's own reach of it (`rackNear`) raises an `E ARM`
+key-cap over it (`drawRackHint`, ui.js — proximity, not hover), **holding E opens a radial
+wheel** of every tool in the game (`state.wheel` kind `'rack'`, the ordinary wheel pipeline),
+the pointer picks, and **releasing E takes** — the right-click wheel's hold-and-release grammar
+moved onto the key (a real work target in reach keeps E's day job, the same rule that decides
+which prompt shows). The pick lands in `rackEquip` (`PRACTICE`-gated, the practice banner),
+replacing the selected slot with a fresh instance of the picked tool, a plain arrow seated so
+it fires the moment it is taken — and the
 **targets standing in the open along the field's edges** near the trees — statics on posts of
 all three heights, pop-ups working the corners, two sliders patrolling the north edge. No
 fences, no wildlife, no chests, no pond, no harvest, and nothing spawns or restocks. `PRACTICE`

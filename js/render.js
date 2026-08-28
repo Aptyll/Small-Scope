@@ -259,9 +259,12 @@ function render() {
       // two tiles per rack: the lead (left) tile draws the whole sprite
       // centred over the pair; the follower tile is solid and silent
       if (o.lead) {
+        // `dx` nudges the picture off the tile grid (the practice rack sits
+        // half a tile left of its pair, square under the dummy's axis)
+        const rx = px + sh + (o.dx || 0);
         ctx.fillStyle = 'rgba(40,60,100,0.25)';
-        ctx.fillRect(px + sh + 2, py + TILE - 2, TILE * 2 - 4, 2);
-        drawSpriteFlash(RACK_SPR, px + sh + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
+        ctx.fillRect(rx + 2, py + TILE - 2, TILE * 2 - 4, 2);
+        drawSpriteFlash(RACK_SPR, rx + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
       }
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);

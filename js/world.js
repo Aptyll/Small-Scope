@@ -550,7 +550,7 @@ function landmarkAt(x, y) {
 // writes it.
 const PR_W = 40, PR_H = 23;                      // the open field, in tiles
 const PR_X0 = (WORLD - PR_W) >> 1, PR_Y0 = (WORLD - PR_H) >> 1;
-const PR_SPAWN = { tx: PR_X0 + 20, ty: PR_Y0 + 15 }; // just south of the pad, facing the dummy
+const PR_SPAWN = { tx: PR_X0 + 20, ty: PR_Y0 + 17 }; // south of the rack, facing it and the dummy behind
 const DUMMY_HP = 60;
 const DUMMY_WORK_DMG = 10;   // what one E swing chips off it (the eagle's own number)
 const DUMMY_RESET_T = 2.5;   // s unhit before a dummy mends itself back to full
@@ -668,6 +668,18 @@ function rackEquip(p, c) {
   if (nearPlayer(p.x, p.y)) SFX.place();
 }
 
+// the rack the player is standing at - Chebyshev 1 of any of its tiles, E's
+// own WORK_REACH - resolved to its lead. What the E ARM prompt, the E-opens
+// gesture and the hover brackets all agree on.
+function rackNear(p) {
+  const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const o = objAt(ptx + dx, pty + dy);
+    if (o && o.type === 'rack') return o.lead ? o : objAt(o.tx - 1, o.ty);
+  }
+  return null;
+}
+
 function genPracticeWorld() {
   const ax = PR_X0, ay = PR_Y0;
   // solid forest everywhere, then the field carved out of it - the rim
@@ -689,12 +701,16 @@ function genPracticeWorld() {
   for (const [cx2, cy2] of [[17, 10], [23, 10], [17, 14], [23, 14]]) {
     ground[idx(ax + cx2, ay + cy2)] = 0;
   }
-  // ---- the dummy on its pad, the rack by the spawn -----------------------
+  // ---- the dummy on its pad, the armory rack squared under it ------------
   const put = (tx, ty, type, extra) => { if (!objects[idx(ax + tx, ay + ty)]) return placeObj(ax + tx, ay + ty, type, extra); return null; };
   const d = put(20, 12, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
     mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
   if (d) practiceDummies.push(d);
-  put(14, 14, 'rack', { lead: true }); put(15, 14, 'rack', {});
+  // centred below the pad, on the dummy's own axis: a two-tile pair can only
+  // centre on a tile boundary, so the pair sits at (20,15)-(21,15) and `dx`
+  // nudges the drawn sprite (and its brackets and prompt) 8px left onto the
+  // dummy's centre line - the tiles stay honest, the picture stays square
+  put(20, 15, 'rack', { lead: true, dx: -8 }); put(21, 15, 'rack', {});
   // ---- the targets: in the open, spread along the treeline ---------------
   // two sliders patrol the north edge, statics of all three heights hold
   // the middles, pop-ups work the corners - shoot any of them from anywhere

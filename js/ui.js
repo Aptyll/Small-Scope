@@ -120,7 +120,8 @@ function drawSelection(ox, oy, now) {
   const o2 = structOf(objAt(tx, ty));
   const big = o2 && STRUCTS[o2.type] && (structW(o2.type) > 1 || structH(o2.type) > 1);
   const rk = o2 && o2.type === 'rack' ? (o2.lead ? o2 : objAt(o2.tx - 1, o2.ty)) : null;
-  const bx = (rk ? rk.tx : big ? o2.tx : tx) * TILE - ox, by = (big ? o2.ty : ty) * TILE - oy;
+  const bx = rk ? rk.tx * TILE + (rk.dx || 0) - ox : (big ? o2.tx : tx) * TILE - ox;
+  const by = (big ? o2.ty : ty) * TILE - oy;
   const bw = rk ? TILE * 2 : (big ? structW(o2.type) : 1) * TILE, bh = (big ? structH(o2.type) : 1) * TILE;
   ctx.globalAlpha = 0.6 + 0.3 * Math.sin(now * 6);
   // four 3px corner brackets, dark shadow first so white reads on snow
@@ -145,7 +146,7 @@ function drawWorkHint(ox, oy) {
   if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
   if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
   const t = workTarget(player);
-  if (!t || !t.near) return;
+  if (!t || !t.near) { drawRackHint(ox, oy); return; } // no work target: the armory may still be in reach
   const st = t.o && structOf(t.o);
   const isStruct = !!(st && STRUCTS[st.type]);
   const d = t.o && OBJECTS[t.o.type];
@@ -169,7 +170,14 @@ function drawWorkHint(ox, oy) {
   if (x < px0 + 9 && x + totalW > px0 - 9 && y < py0 + 5 && y + 10 > py0 - 14) {
     y = Math.round(hby - oy + 3);
   }
-  // key-cap: navy rim, icy face, top highlight; pressed = face drops a pixel, no highlight
+  drawKeyPrompt(x, y, verb, pressed);
+}
+
+// the key-cap + verb pair itself, shared by the work prompt and the rack's:
+// navy rim, icy face, top highlight; pressed = the face drops a pixel and
+// the verb goes gold
+function drawKeyPrompt(x, y, verb, pressed) {
+  const capW = 9;
   const cy = y + (pressed ? 1 : 0);
   ctx.fillStyle = '#0a0e23';
   ctx.fillRect(x, y, capW, 10);
@@ -180,7 +188,20 @@ function drawWorkHint(ox, oy) {
     ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 1, y + 8, capW - 2, 1); // bottom shade = depth
   }
   drawPixelText(ctx, 'E', x + 3, cy + 3, '#0a0e23');
-  drawPixelTextOutline(ctx, verb, x + capW + gapW, y + 3, pressed ? '#ffd95c' : '#f4f7ff', '#0f1632');
+  drawPixelTextOutline(ctx, verb, x + capW + 3, y + 3, pressed ? '#ffd95c' : '#f4f7ff', '#0f1632');
+}
+
+// The practice armory's prompt: PROXIMITY, not hover - standing beside the
+// rack is the whole gesture (rackNear, js/world.js), so the E ARM cap rises
+// over the rack itself the moment you are in reach, wherever the pointer is.
+// Pressing E opens the wheel, which hides every hint including this one.
+function drawRackHint(ox, oy) {
+  const rk = rackNear(player);
+  if (!rk) return;
+  const verb = 'ARM';
+  const totalW = 9 + 3 + pixelTextWidth(verb);
+  const hx = (rk.tx + 1) * TILE + (rk.dx || 0); // the pair's centre, nudged with the sprite
+  drawKeyPrompt(Math.round(hx - ox - totalW / 2), Math.round(rk.ty * TILE - oy - 24), verb, !!keys['e']);
 }
 
 // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour

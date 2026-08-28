@@ -42,6 +42,19 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Control' && !e.repeat) player.input.prone = true;
   if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
   if (e.key.toLowerCase() === 'f') player.input.eatFish = true;
+  // E at the practice rack: the press opens the armory wheel over it, the
+  // pointer picks, and RELEASING E takes - the right-click wheel's own
+  // hold-and-release grammar, moved onto the key. A real work target in reach
+  // keeps E's day job (the same rule that decides which prompt is showing),
+  // and ordinary work is suppressed while any wheel is up (sampleHumanInput).
+  if (e.key.toLowerCase() === 'e' && !e.repeat && !state.wheel && !state.mapOpen &&
+      !state.settingsOpen && !state.draft && !state.drag && !player.dead) {
+    const t = workTarget(player);
+    if (!t || !t.near) {
+      const rk = rackNear(player);
+      if (rk) { SFX.unlock(); state.wheel = { kind: 'rack', tx: rk.tx, ty: rk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
+    }
+  }
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and
   // ESC it neither stops the sim nor swallows anything but its own clicks.
   if (e.key.toLowerCase() === 'b') state.bagOpen = !state.bagOpen;
@@ -64,7 +77,15 @@ window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'n') { settings.muted = SFX.toggleMute(); saveSettings(); }
   if (e.key.toLowerCase() === 'p') state.paused = !state.paused;
 });
-window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+window.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
+  // letting go of E with the armory wheel up takes what the pointer is on
+  // (or cancels from the hub), exactly as releasing the right button does
+  if (e.key.toLowerCase() === 'e' && state.wheel && state.wheel.kind === 'rack') {
+    resolveWheel();
+    state.wheel = null;
+  }
+});
 // a key - or the middle button - held while the window loses focus never sends
 // its keyup/mouseup: alt-tabbing out would otherwise leave the scoreboard (or
 // a walk direction, or the flag preview) stuck on
@@ -75,6 +96,9 @@ window.addEventListener('blur', () => {
   state.flagAim = false;
   state.dragPend = null;
   if (state.drag) dragReturn();
+  // the E-held armory wheel is a held gesture too: its keyup is lost with the
+  // focus, so it closes (choosing nothing) instead of sticking open
+  if (state.wheel && state.wheel.kind === 'rack') state.wheel = null;
 });
 
 canvas.addEventListener('mousemove', (e) => {
@@ -109,7 +133,6 @@ canvas.addEventListener('mousedown', (e) => {
     if (Math.hypot(tx * TILE + 8 - player.x, ty * TILE + 8 - player.y) > 60) { SFX.deny(); return; }
     // ax/ay: the press point every later pointer move is measured against
     if (site) state.wheel = { kind: 'build', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
-    else if (o.type === 'rack') state.wheel = { kind: 'rack', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y }; // the practice armory: pick a tool off it
     else if (STRUCTS[o.type] && !o.building && o.team === player.team) state.wheel = { kind: 'manage', tx, ty, seg: -1, ax: mouse.x, ay: mouse.y };
     else if (STRUCTS[o.type]) SFX.deny(); // someone else's building
     return;
