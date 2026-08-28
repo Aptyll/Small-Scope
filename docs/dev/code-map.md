@@ -165,6 +165,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
 | the shield eating a shot, the rush's step/grab/slam | `abShieldBlocks` (read by the arrow loop, sim.js), `rushStep`/`rushEnd` (read by `updatePlayer`'s rush branch) | `class abilities` |
 | drawing it all: ground layer, air layer, the pose on the sprite, the states on a body | `drawAbilityGround`, `drawAbilityAir`, `abilityPose`, `drawAbilityOnPlayer` | `class abilities` › `drawing` (called from render.js and `drawPlayer`, draw-world.js) |
+| the eight 32×32 ability icons and their bake | `AB32`, `AB32_PAL`, `classAbIcon` | `class abilities` › `the strip icons` (drawn by `drawClassAbCell`/`tipClassAb`, ui.js) |
 
 ## js/ai.js
 
@@ -223,9 +224,9 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | carrying an item between the grid, the four weapon slots and a bit column | `state.drag`/`state.dragPend`, `DRAG_SLOP`, `hudPress`, `hudMove`, `hudRelease`, `dragTake`, `dragReturn`, `dragDrop`, `dragDropBag`, `dragDropBit`, `dragDropSlot`, `throwCell`, `drawDragGhost` | `UI` › `carrying an item on the cursor` (its three listeners: `input`, input.js) |
 | the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` |
 | what the pointer is on, said in words, bottom left | `tipAt`, `tipResolve`, `tipNow`, `tipLift`, `tipSize`, `drawTooltip`, `TIP_*` | `tooltips` (resolved once per frame in `render`, render.js; the feed steps up by `tipLift`, panels.js) |
-| the per-kind descriptions that panel is built from | `tipBase`, `tipTool`, `tipBit`, `tipStack`, `tipCell`, `tipGear`, `tipAbility`, `tipTech`, `AB_NAMES`/`AB_BLURB`, `TIP_PATH` | `tooltips` |
+| the per-kind descriptions that panel is built from | `tipBase`, `tipTool`, `tipBit`, `tipStack`, `tipCell`, `tipGear`, `tipAbility`, `tipClassAb`, `tipTech`, `AB_NAMES`/`AB_BLURB`, `TIP_PATH` | `tooltips` |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
-| the hud strip (bottom-centre): the one weapon well, the quiver/dodge rail, the xp bar | `AB_CELL`/`AB_RAIL`/`hudStripRect`/`toolCellRect`/`stripHit`/`drawToolCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
+| the hud strip (bottom-centre): five wells - the weapon centred, the four ability wells flanking - the quiver/dodge rail, the xp bar | `AB_CELL`/`AB_RAIL`/`hudStripRect`/`stripCellRect`/`toolCellRect`/`abCellRect`/`stripHit`/`drawToolCell`/`drawClassAbCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
 | the bit column hovering the weapon well raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
 | the plate a tier is stated on, wherever an item sits, and the shine on the top one | `tierPlate`, `tierShine`, `drawItemIcon` | `UI` › `hud strip` (the tiers themselves: `TOOL_TIERS`, tools.js) |
 

@@ -58,10 +58,10 @@ window.addEventListener('keydown', (e) => {
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and
   // ESC it neither stops the sim nor swallows anything but its own clicks.
   if (e.key.toLowerCase() === 'b') state.bagOpen = !state.bagOpen;
-  // 1-4 cast the class abilities, left to right like the strip will show
-  // them. Edge-triggered like the dodge; the sim consumes it (tryAbility,
-  // js/abilities.js). The bit column rises on HOVER over the weapon well now,
-  // so no key is held for it.
+  // 1-4 cast the class abilities, left to right exactly as the strip shows
+  // them (a click on the well sets the same field - hudPress, js/ui.js).
+  // Edge-triggered like the dodge; the sim consumes it (tryAbility,
+  // js/abilities.js). The bit column rises on HOVER over the weapon well.
   if (e.key >= '1' && e.key <= '4' && !e.repeat) { SFX.unlock(); player.input.ability = e.key.charCodeAt(0) - 49; }
   if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
   if (e.key.toLowerCase() === 'escape') {

@@ -307,8 +307,9 @@ short tooltip is a short panel.
 The builders, one per kind: `tipTool` (rate of fire, bit slots, max weight, then the loaded bits in
 **firing order** with `>` on the one up next), `tipBit` (damage, weight, speed, lifespan, flight —
 then only the flags that are *true*, because four rows of NO would drown the three that matter),
-`tipStack` (food, cards), `tipGear`, `tipAbility`, and `tipTech`, which strips the "what is loaded
-in it" half and adds the node's price and state instead.
+`tipStack` (food, cards), `tipGear`, `tipAbility` (the pack's skill row), `tipClassAb` (a strip
+ability well), and `tipTech`, which strips the "what is loaded in it" half and adds the node's
+price and state instead.
 
 ### The tech tree screen
 
@@ -332,22 +333,35 @@ and the tooltip, so the three can never point at different nodes.
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom, and it is the **weapon**: the one tool well
-centred on top (the class abilities will flank it, two a side — the strip's redesign is the next
-stage of the class pivot), a thin rail under it, then a gold xp bar along the bottom (lifetime
-gold, left-to-right, no
-level number — that lives on the overhead badge). The bar has a dark silhouette and a frost rim so
-it reads against the plate. The plate swallows clicks so nothing fires through it.
+`drawHudStrip` is one plate, flush to the bottom: **five 34px wells** — `[1][2][ WEAPON ][3][4]`,
+the class abilities flanking the one tool well two a side in key order (`stripCellRect`;
+`abCellRect(i)` skips the centre) — a thin rail under them, then a gold xp bar along the bottom
+(lifetime gold, left-to-right, no level number — that lives on the overhead badge). The bar has a
+dark silhouette and a frost rim so it reads against the plate. The plate swallows clicks so
+nothing fires through it.
 
 The tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
 tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
-highlight across the top tier's plate). The well wears the lit rim (it is always the live weapon);
-a tool that cannot answer the button goes red instead, which is the old dry-bow
+highlight across the top tier's plate); the 12px tool art is drawn doubled, so the centrepiece
+weapon reads at the ability icons' size. The well wears the lit rim (it is always the live
+weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
 tell. Along the top inner edge sits one **pip per bit cell** in that bit's own colour: filled is a
 bit, hollow is a free cell, the bright one is what the next press fires, and red is a bit this
 tool is not strong enough to throw. And the **cooldown wipe** covers the whole well for exactly
 `toolRof`, so the rate of fire is the shape of the wipe rather than a number.
+
+An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB[p.cls][i]`: its
+detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
+top-down cover is its cooldown, and the key digit sits in the corner (the keybind-indicator
+carve-out). On top of that it tells the ability's moments: the rim goes **white while the body
+performs the cast**, a **running** ability (the shield up, the fury out) pulses the rim in its own
+colour (`acol` in its table row) and drains a bar of it along the bottom edge — the wipe waits
+while that state runs, because the shield resets its cooldown on the drop and a wipe under a
+raised shield would be a lie (`activeF` in the table row is the readout) — and the well **pops
+white** the frame a cooldown comes home. A click on the well sets `input.ability` exactly as the
+key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — cooldown and
+cast numbers, the blurb, nothing the well itself already shows better).
 
 The rail carries the two numbers a firefight is read off and nothing else: shafts left in the
 quiver on the left with the arrow that spends them, dodge charges as pips on the right.
@@ -827,7 +841,7 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 - `kind` **arrow** — dead (off a plank), paused, map, and anywhere in the title/settings/wheel that isn't
   a widget; **hand** — over a live main-menu item (`menuHit()`, frozen planks stay an arrow), a death-overlay plank (`deadHit()`) or spectate arrow (`specHit()`), a settings widget (`settingsHit()`, shared with the click handler
   so hover and click can never disagree), a live wheel segment, or a control inside the backpack
-  widget (`gearHit()` / `bagHit()`), a weapon slot (`stripHit()`) or a cell of a raised bit column
+  widget (`gearHit()` / `bagHit()`), a weapon or ability well (`stripHit()`) or a cell of a raised bit column
   (`bitColHit()` — the gold strip of the bag stays an arrow, see [The HUD corners](#the-hud-corners)); **grab** — dragging a
   slider, **or carrying an item on the cursor** (`state.drag`, which outranks everything: the drag
   ghost *is* the cursor until it is put down); **hammer** — over a stump or finished structure

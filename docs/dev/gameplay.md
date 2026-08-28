@@ -474,8 +474,9 @@ quiver as shafts around the body, the same way `spillInventory` spills the bag.
 
 Five indicators carry it, and none of them is a word:
 
-- **The hud strip's rail** (`drawHudStrip`, bottom-centre). The four wells above it are the weapon
-  slots ([above](#tools-and-bits)); between them and the gold xp bar sits a thin rail carrying the
+- **The hud strip's rail** (`drawHudStrip`, bottom-centre). Above it sit the five wells — the one
+  weapon slot ([above](#tools-and-bits)) between the four class-ability wells
+  ([rendering.md](rendering.md#the-hud-strip)); between them and the gold xp bar sits a thin rail carrying the
   two numbers a firefight is actually read off — what is left in the quiver, with the arrow that
   spends it, on the left, and the dodge charges as pips on the right. Both used to live on the
   ability wells that moved into the backpack, and both are needed with the pack shut. A gained
@@ -972,7 +973,8 @@ chevron already answers that, on the piece it applies to, only when the answer i
 `gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
 can never disagree, and it is asked **before** `bagHit` everywhere because `bagHit` deliberately
 does not report the four gear cells. The click is swallowed **before** `clickAction` — the
-backpack widget, the weapon strip and a raised bit column are the left-clickable HUD in play.
+backpack widget, the hud strip (the weapon well, and an ability well casting on the press) and a
+raised bit column are the left-clickable HUD in play.
 Living in that widget is also what
 keeps the chevrons legible: see
 [the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold

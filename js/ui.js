@@ -1027,13 +1027,17 @@ function drawBag(now) {
 // shots wipes top-down over the whole well, so the tool's rate of fire is the
 // shape of the wipe rather than a number anywhere.
 //
-// The upgrade half of this strip - the four ability wells and the plus that
+// The upgrade half of this strip - the four skill wells and the plus that
 // spends a skill point on one - moved into the backpack, under the gear row
 // (bagAbRect / drawAbilityRow): both rows are "buy the next level of this",
 // one with gold and one with skill points, so they belong stacked in the same
 // grid rather than split across two corners of the screen.
-const AB_CELL = 20, AB_GAP = 3, AB_N = 4;
-const AB_W = AB_N * AB_CELL + (AB_N - 1) * AB_GAP; // 89: odd, so the centre is a real column
+//
+// The strip proper is FIVE wells: [1][2][ WEAPON ][3][4] - the class
+// abilities flank the one weapon well two a side, in key order left to
+// right, each wearing its 32px icon (classAbIcon, js/abilities.js).
+const AB_CELL = 34, AB_GAP = 3, AB_N = 4; // AB_CELL: a strip well; AB_N: abilities
+const AB_W = (AB_N + 1) * AB_CELL + AB_N * AB_GAP;
 const AB_PAD = 2, AB_UP = 8, AB_XP = 5;
 const AB_RAIL = 9; // the quiver + dodge rail between the wells and the bar
 const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_RAIL + AB_XP + AB_PAD;
@@ -1042,14 +1046,19 @@ const AB_COVER = 'rgba(8,12,30,0.82)';
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
-// the ONE weapon well, centred in the strip - the class abilities will flank
-// it, two a side (i is kept so the drag plumbing stays generic over slots)
-function toolCellRect(i) {
+// well j of the five, left to right
+function stripCellRect(j) {
   const R = hudStripRect();
-  return { x: R.x + ((AB_W - AB_CELL) >> 1) + i * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
+  return { x: R.x + j * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
 }
-// { kind:'slot', i } | { kind:'frame' } | null. Shared by the click handler,
-// the cursor and the strip's own hover so they cannot disagree.
+// the ONE weapon well, centred in the strip (i is kept so the drag plumbing
+// stays generic over slots)
+function toolCellRect(i) { return stripCellRect(2 + i); }
+// ability i's well: keys 1-2 left of the weapon, 3-4 right of it
+function abCellRect(i) { return stripCellRect(i < 2 ? i : i + 1); }
+// { kind:'slot', i } | { kind:'ab', i } | { kind:'frame' } | null. Shared by
+// the click handler, the cursor and the strip's own hover so they cannot
+// disagree.
 function stripHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
@@ -1058,6 +1067,10 @@ function stripHit(mx, my) {
   for (let i = 0; i < TOOL_SLOTS; i++) {
     const s = toolCellRect(i);
     if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'slot', i };
+  }
+  for (let i = 0; i < AB_N; i++) {
+    const s = abCellRect(i);
+    if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'ab', i };
   }
   return { kind: 'frame' };
 }
@@ -1157,7 +1170,8 @@ function hudPress(mx, my) {
   }
   const sh = stripHit(mx, my);
   if (sh) {
-    if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
+    if (sh.kind === 'ab') player.input.ability = sh.i; // click-to-cast: the well IS the key
+    else if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
     else if (sh.kind === 'slot') state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my, empty: true };
     return true;
   }
@@ -1468,7 +1482,13 @@ function drawToolCell(i, now, hov) {
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
   if (cell) {
     tierShine(r, y, cell.type, now);
-    drawItemIcon(cell.type, r, y + 1);
+    // the 12px tool art doubled: the weapon well is the strip's centrepiece
+    // and reads at the ability icons' size, not the bag's
+    const im = ITEMS[cell.type] && SPRITES[ITEMS[cell.type].icon];
+    if (im) {
+      ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + 1 + ((r.h - im.height * 2) >> 1),
+        im.width * 2, im.height * 2);
+    }
     // one pip per bit cell along the top inner edge, in each bit's own colour
     const bits = cell.bits, up = peekBit(cell);
     const T = TOOLS[toolIdOf(cell.type)];
@@ -1489,6 +1509,56 @@ function drawToolCell(i, now, hov) {
     }
   }
 }
+// An ability well says everything without a word: the 32px icon is the
+// ability, the top-down wipe is its cooldown (the same cover every other well
+// cools by, so one grammar reads everywhere), the rim goes white while the
+// body performs the cast, an ACTIVE ability (the shield up, the fury running)
+// pulses the rim in its own colour and drains a bar of it along the bottom
+// edge, and the well pops white the frame a cooldown comes home. The digit in
+// the corner is the key (the keybind-indicator carve-out).
+let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
+function drawClassAbCell(i, now, on) {
+  const p = player, ab = CLASS_AB[p.cls][i];
+  const r = abCellRect(i);
+  const cd = p.abCd[i];
+  if (abCdSeen[i] > 0 && cd <= 0) abReadyFlash[i] = now + 0.3;
+  abCdSeen[i] = cd;
+  const casting = p.castT > 0 && p.castAb === i;
+  const act = ab.activeF ? ab.activeF(p) : 0;
+  const rim = casting ? '#f4f7ff'
+    : act > 0 ? (Math.sin(now * 9) > 0 ? ab.acol : '#35426e')
+    : now < abReadyFlash[i] ? '#f4f7ff'
+    : on ? '#8fa0c8' : cd > 0 ? '#232c52' : '#35426e';
+  ctx.fillStyle = rim;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = BAG_WELL;
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  ctx.drawImage(classAbIcon(p.cls, i), r.x + 1, r.y + 1);
+  // a RUNNING ability owns its well: the drain bar is the readout and the
+  // wipe waits until the state ends (the shield resets its cooldown on the
+  // drop anyway, so a wipe under a raised shield would be a lie)
+  if (cd > 0 && act <= 0) {
+    const cov = Math.max(1, Math.round(cd / ab.cd * (r.h - 2)));
+    ctx.fillStyle = AB_COVER;
+    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, cov);
+    if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, r.y + cov, r.w - 2, 1); }
+  }
+  if (act > 0) {
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(r.x + 1, r.y + r.h - 4, r.w - 2, 3);
+    ctx.fillStyle = ab.acol;
+    ctx.fillRect(r.x + 2, r.y + r.h - 3, Math.max(1, Math.round(act * (r.w - 4))), 1);
+  }
+  if (casting) {
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#f4f7ff';
+    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    ctx.globalAlpha = 1;
+  }
+  const key = String(i + 1);
+  drawPixelTextOutline(ctx, key, r.x + r.w - 3 - pixelTextWidth(key), r.y + 3,
+    cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632');
+}
 function drawHudStrip(now) {
   const p = player;
   const R = hudStripRect();
@@ -1504,6 +1574,9 @@ function drawHudStrip(now) {
   ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
   for (let i = 0; i < TOOL_SLOTS; i++) {
     drawToolCell(i, now, hov && hov.kind === 'slot' && hov.i === i);
+  }
+  for (let i = 0; i < AB_N; i++) {
+    drawClassAbCell(i, now, hov && hov.kind === 'ab' && hov.i === i);
   }
   // The rail: the two numbers a firefight is actually read off, and nothing
   // else. Shafts left in the quiver on the left with the arrow that spends
@@ -1773,6 +1846,19 @@ function tipAbility(i) {
     : player.skill[i] >= AB_RANK_MAX ? 'MAXED OUT' : 'NO POINTS TO SPEND', TIP_DIM]);
   return d;
 }
+// a class ability well on the strip: the numbers behind the wipe the well
+// itself is showing
+function tipClassAb(i) {
+  const ab = CLASS_AB[player.cls][i];
+  const d = { title: ab.name, tcol: '#f4f7ff', kind: CLASSES[player.cls].name + ' ABILITY',
+    rows: [], notes: [], icon: classAbIcon(player.cls, i), plate: BAG_WELL, rim: '#35426e' };
+  d.rows.push(['COOLDOWN', tipSec(ab.cd), '#f4f7ff']);
+  d.rows.push(['CAST', tipSec(ab.cast), '#f4f7ff']);
+  if (player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
+  for (const s of ab.blurb.split('. ')) d.notes.push([s.replace(/\.$/, ''), TIP_DIM]);
+  d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
+  return d;
+}
 // A TECH NODE on the title screen's tree - the one tooltip that is not about
 // something you are holding, so it carries the node's state and price on top
 // of the same item description the HUD gives.
@@ -1830,11 +1916,12 @@ function tipAt(mx, my) {
     return d;
   }
   const sh = stripHit(mx, my);
+  if (sh && sh.kind === 'ab') return tipClassAb(sh.i);
   if (sh && sh.kind === 'slot') {
     const cell = player.tools[sh.i];
     if (cell) return tipCell(cell, null);
     return { title: 'EMPTY SLOT ' + (sh.i + 1), tcol: TIP_DIM, kind: 'WEAPON', rows: [], plate: BAG_WELL, rim: '#35426e',
-      notes: [['DRAG A TOOL HERE FROM THE PACK', TIP_DIM], ['PRESS ' + (sh.i + 1) + ' TO SELECT IT', TIP_DIM]] };
+      notes: [['DRAG A TOOL HERE FROM THE PACK', TIP_DIM]] };
   }
   const bh = bagHit(mx, my);
   if (!bh) return null;
@@ -1976,7 +2063,7 @@ function renderUI(now) {
     const a = Math.min(1, state.msgT * 2);
     ctx.globalAlpha = a;
     const w = pixelTextWidth(state.msg);
-    drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - 54, '#fff4d8', '#0f1632');
+    drawPixelTextOutline(ctx, state.msg, (VIEW_W - w) / 2, VIEW_H - AB_H - 14, '#fff4d8', '#0f1632');
     ctx.globalAlpha = 1;
   }
 
