@@ -66,7 +66,9 @@ The local player profile — display name, lifetime stats (`wins`, `gold`, `days
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
 eagle, gating the ride's first-flight countdown), the one-shot `practice` flag
 (`practiceOpen()`/`markPractice()`: has the PRACTICE TOOL plank's ice been broken — three
-knocks at the title, after which the plank stays a live menu item), the
+knocks at the title, after which the plank stays a live menu item), `bestLap`
+(`bestLap()`/`setBestLap()`: the ice parkour's all-time record, the one thing the practice
+arena writes — [world.md](world.md#the-practice-arena)), the
 [tech tree](gameplay.md#the-tech-tree)'s two id lists (`tech.seen` / `tech.done`) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that

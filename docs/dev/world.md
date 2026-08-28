@@ -185,7 +185,11 @@ beside `PK_*`), the far leg's checkpoint row keeps a lap honest (`PK_CP_X0`), an
 line records it and rolls straight into the next lap. Leaving the ice for `PK_OFF_T` seconds (or
 dying) abandons the run. The live clock rides over the runner's head (gold, icy blue once the
 checkpoint is armed) and BEST / LAST hang on a frost plate above the gate (`drawParkour`,
-js/draw-world.js) — the dummy meter's instrument language, same recorded carve-out. Everything
+js/draw-world.js) — the dummy meter's instrument language, same recorded carve-out. **BEST is
+the profile's all-time record**: seeded from `PROFILE.bestLap()` at gen, written back through
+`PROFILE.setBestLap()` on a record (stored at the plate's own 0.1 s precision; only a strictly
+lower time writes) — the one thing practice ever puts in the profile, while LAST stays
+session-only. Everything
 is coordinate tests against the carved ice — no objects, no triggers. The trickle that refills a
 match's shoal is **off entirely under `PRACTICE`** (js/wildlife.js), because the only ice in the
 world is the race line and a fish emerging into it would be absurd; `crackIce` still works on
@@ -214,7 +218,8 @@ Practice is not a match, and everything with stakes is guarded on `PRACTICE`: th
 the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
 forest), `die()` becomes `practiceRevive()` (full pool, spawn tile `PR_SPAWN`, a beat of
 grace), `checkLastStanding()` never fires, and the profile is never written — `gainGold` skips
-`PROFILE.addGold` and the pinned clock means `addDay` can never fire. The way out is the ESC
+`PROFILE.addGold` and the pinned clock means `addDay` can never fire — with one deliberate
+exception: a record parkour lap (`PROFILE.setBestLap`, above). The way out is the ESC
 slab's LEAVE PRACTICE plank ([settings](gameplay.md#settings)).
 
 The **dummy** is an `OBJECTS` entry (`solid`, any tool, verb HIT) with one solid tile and a

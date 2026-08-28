@@ -437,9 +437,11 @@ function drawParkour(ex, ey, now) {
   if (!parkour.best) return;
   const x0 = Math.round(PK_GATE.x - ex), y0 = Math.round(PK_GATE.y - ey);
   if (x0 < -40 || y0 < -30 || x0 > WV_W + 40 || y0 > WV_H + 30) return;
+  // BEST can arrive from the profile with no lap run yet this session, so an
+  // unrun LAST shows a dash rather than a meaningless 0.0
   const rows = [
     ['BEST', parkour.best.toFixed(1), '#ffd95c'],
-    ['LAST', parkour.last.toFixed(1), '#f4f7ff'],
+    ['LAST', parkour.last ? parkour.last.toFixed(1) : '-', '#f4f7ff'],
   ];
   const W = 46, H = 18;
   const x = x0 - (W >> 1), y = y0 - H;

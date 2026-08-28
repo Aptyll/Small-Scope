@@ -538,7 +538,9 @@ function landmarkAt(x, y) {
 // ?seed can never reshape it) and replaces genWorld outright: no landmarks,
 // no eagles, no other slots (js/boot.js), and the clock is pinned to early
 // morning forever (sim.js). One player, nothing at stake - die() revives on
-// the spot and the profile is never written (js/player.js).
+// the spot and the profile is never written (js/player.js), with ONE
+// exception: a record parkour lap goes through PROFILE.setBestLap, so the
+// gate plate's BEST stands across visits.
 //
 // Ground 3 is PACKED EARTH, the pad's floor: painted by paintGroundTile's
 // earth branch, coloured on both maps, walks exactly like snow
@@ -641,7 +643,10 @@ const PK_CP_X0 = 54;   // checkpoint: track ice on the same row, far (east) leg
 const PK_OFF_T = 2.5;  // s off the ice before a live run is abandoned
 const PK_GATE = { x: 9.5 * TILE, y: 27.5 * TILE }; // where the BEST/LAST plate hangs, clear above the north flag
 // one runner, one clock: the live lap (on/t/cp), the abandon timer, and the
-// session's last and best laps - practice writes nothing to the profile
+// last and best laps. `best` is the profile's all-time record - seeded from
+// PROFILE.bestLap() by genPracticeWorld and written back through
+// PROFILE.setBestLap() on a record, the one thing practice ever writes -
+// while `last` is this session's only
 const parkour = { on: false, t: 0, cp: false, wasLine: false, offT: 0, last: 0, best: 0 };
 
 function genPracticeWorld() {
@@ -705,6 +710,9 @@ function genPracticeWorld() {
   // the gate: a flag either side of the walk where it meets the line
   fell(9, 29); placeObj(9, 29, 'banner');
   fell(9, 32); placeObj(9, 32, 'banner');
+  // the record stands across visits: the gate plate opens showing the
+  // profile's best lap before this session has run one
+  parkour.best = PROFILE.bestLap();
 }
 
 // The grounds' clock, from updatePlay under PRACTICE only: the dummy mends
@@ -768,7 +776,7 @@ function updatePractice(dt) {
     if (onLine && !parkour.wasLine && parkour.cp) {
       parkour.last = parkour.t;
       const record = !parkour.best || parkour.t < parkour.best;
-      if (record) parkour.best = parkour.t;
+      if (record) { parkour.best = parkour.t; PROFILE.setBestLap(parkour.t); }
       burst(player.x, player.y - 10, '#ffd95c', 12, 60, 0.55, true);
       burst(player.x, player.y - 10, '#f4f7ff', 8, 45, 0.45, true);
       if (record) SFX.dawnChime(); else SFX.place();
