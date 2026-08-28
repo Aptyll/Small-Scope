@@ -6,7 +6,8 @@ anything that must stay stable per tile.
 
 ## The tile world
 
-- `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world. The forest border keeps its
+- `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world (under `PRACTICE` the const is
+  64 instead — see [the practice arena](#the-practice-arena)). The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
   (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is `RING_N`
@@ -154,60 +155,67 @@ returns the landmark a world position stands in; `updatePlay` feeds it `state.lo
 
 ## The practice arena
 
-The TRAINING GROUNDS behind the title's PRACTICE TOOL plank (three knocks break its ice —
+The TRAINING FIELD behind the title's PRACTICE TOOL plank (three knocks break its ice —
 [rendering.md](rendering.md#main-menu-title)): `?practice=1` boots `genPracticeWorld()` (the
 `practice arena` banner, js/world.js) **instead of** `genWorld()`, and js/boot.js skips
-landmarks, chests, wildlife spawns and the eagle drop entirely — the arena stocks itself. It is
-a hand-built campus, not a clearing: a **64×36-tile frame** (`PR_W`/`PR_H`, deliberately 16:9 —
-the view's own shape) carved out of solid forest, laid out like a real camp where every piece of
-dressing marks something. The packed-earth parade yard holds the two melee **dummies** square
-with a south gate (a banner pair over an earth stub — where you walked in), braziers at its four
-corners. East, a firing platform fronts two **fully fenced archery lanes** (statics at graded
-distances, then the pop-up lane), each entered through a **one-tile gate that is the firing
-slot** — the rail fences are ordinary solid tiles, so arrows die on them and a lane can only be
-shot down its own gate; a tree windbreak splits the lanes. North, the moving-target gallery hangs
-off the wall, entry flanked by banners, its end caps lit by braziers *outside* the lane. The
-pendulum swings on a fenced-backstop pad south-east. West is the camp's larder and works: the ice
-pond with `PR_FISH` fish (the shoal trickle caps there instead of `FISH_MAX`, js/wildlife.js), a
-berry hedge and the three rabbits on its north shore, the tool rack and two stumps at a work
-corner off the pond path, a woodlot grove (trees around a snag) north-west and a rock quarry
-south-west, plus two chests tucked in the treeline. The dressing is all inert `OBJECTS` entries
-like the den: rail **fences**, red **banners** (gate markers, never scattered), iron **braziers**
-(real `lights` entries — `rebuildLights` scans for the type, the first glowing object since the
-campfires went), and the two-tile weapon **racks** — `lead`/`variant` on the left tile, a solid
-silent follower right (variant 0 the bow rack on the platform, 1 the axes-and-picks rack at the
-work corner; `bakeRack` in js/draw-world.js). `PRACTICE` (js/core.js) pins `SEED` to
-`PRACTICE_SEED` *above* the `?seed` parse, so the campus is bit-identical on every visit and no
-seed can reshape it.
+landmarks, chests, wildlife spawns and the eagle drop entirely. **The practice world itself is
+small — `WORLD` is 64 under `PRACTICE`, against the match's 232** (the conditional above the
+`WORLD` const, js/core.js; everything downstream sizes itself off `WORLD`, so the match world is
+untouched). The **clock never runs**: js/boot.js pins `state.time` to early morning and sim.js
+never advances it under `PRACTICE` — crisp daylight forever, no dusk, no dawn refreeze, and
+nothing glows (`rebuildLights` currently finds no light-emitting object in any world).
 
-**Ground 3 is packed earth**, the grounds' floor, and exists only inside this arena
+The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
+**dummy** on a small packed-earth pad in the middle, the spawn just south of it, the two-tile
+bow **rack** beside the spawn (`lead` on the left tile, a solid silent follower right;
+`RACK_SPR`, baked per-pixel in js/draw-world.js so the strung staves get true curves), and the
+**targets standing in the open along the field's edges** near the trees — statics on posts of
+all three heights, pop-ups working the corners, two sliders patrolling the north edge. No
+fences, no wildlife, no chests, no pond, no harvest, and nothing spawns or restocks. `PRACTICE`
+(js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed` parse, so the field is
+bit-identical on every visit and no seed can reshape it.
+
+**The ice parkour** runs through the forest collar around the field: a narrow carved-ice loop
+(`PK_PATH`, the centreline in world tiles, carved 2–3 wide by `genPracticeWorld` — trees hug
+both sides, and ice being mechanically slippery is the whole game of it). A flag gate on the
+field's west side (two `banner` objects over a cleared walk) leads onto the track, where a
+**checkered start/finish line** is painted flat on the ice (`drawParkourLine`, render.js's flat
+pass). The lap: stepping onto the line-row ice starts the clock (`parkour`, the module state
+beside `PK_*`), the far leg's checkpoint row keeps a lap honest (`PK_CP_X0`), and recrossing the
+line records it and rolls straight into the next lap. Leaving the ice for `PK_OFF_T` seconds (or
+dying) abandons the run. The live clock rides over the runner's head (gold, icy blue once the
+checkpoint is armed) and BEST / LAST hang on a frost plate above the gate (`drawParkour`,
+js/draw-world.js) — the dummy meter's instrument language, same recorded carve-out. Everything
+is coordinate tests against the carved ice — no objects, no triggers. The trickle that refills a
+match's shoal is **off entirely under `PRACTICE`** (js/wildlife.js), because the only ice in the
+world is the race line and a fish emerging into it would be absurd; `crackIce` still works on
+the track (a hole in the racing line is the player's own doing, and re-entering rebuilds).
+
+**Ground 3 is packed earth**, the pad's floor, and exists only inside this arena
 (`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,
 straw, snow dust blown over every snowy edge), coloured on both maps, and walked exactly like
 snow — `updatePlayer`'s surface block only special-cases ice and holes, so no movement branch
 was needed — but it refuses prone (`tryProne` wants ground 0; there is no snow to dig into) and
-leaves no footprints. `fishWater` names ice and open water outright rather than "not snow" so a
-fish can never count the yard as swimmable.
+leaves no footprints.
 
 **The archery targets** (Link's-Crossbow-Training-style) are ENTITIES in `ptargets`, never tile
 objects — a slider crosses tiles every frame, and a raised face should not block a walker — so
 only arrows meet them: the PRACTICE branch of the arrow loop (js/sim.js) tests every live face
-disc (`ptFace`/`ptLive`/`PT_HIT_R`). Four habits share one record: `static` on posts of three
-heights (`PT_ALTS`), `pop` rising out of hatch boxes on offset clocks (`PT_POP`), `slide`
-patrolling rails between `x0..x1`, and `swing` hanging on a rope from a frame
-(`ptFace` is the one geometry the update, the arrow test and the draw all read). A hit is flat
-feedback — `hitPTarget` shatters the face into painted chips, straw and splinters, the post
-stands bare and splintered, and `PT_RESPAWN` seconds later a fresh face springs back with a
-wobble. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
-baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a
-grid.
+disc (`ptFace`/`ptLive`/`PT_HIT_R`). Three habits share one record: `static` on posts of three
+heights (`PT_ALTS`), `pop` rising out of hatch boxes on offset clocks (`PT_POP`), and `slide`
+patrolling rails between `x0..x1` (`ptFace` is the one geometry the update, the arrow test and
+the draw all read). A hit is flat feedback — `hitPTarget` shatters the face into painted chips,
+straw and splinters, the post stands bare and splintered, and `PT_RESPAWN` seconds later a
+fresh face springs back with a wobble. `drawPTarget` (js/draw-world.js) owns every pixel,
+`TARGET_SPR` is the 32×32 face — baked per-pixel (true circles, hash-dithered band edges,
+top-left light) rather than from a grid.
 
 Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local slot is
 the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
 forest), `die()` becomes `practiceRevive()` (full pool, spawn tile `PR_SPAWN`, a beat of
 grace), `checkLastStanding()` never fires, and the profile is never written — `gainGold` skips
-`PROFILE.addGold` (a free room with chests must not farm tech points) and the dawn skips
-`addDay`. The way out is the ESC slab's LEAVE PRACTICE plank
-([settings](gameplay.md#settings)).
+`PROFILE.addGold` and the pinned clock means `addDay` can never fire. The way out is the ESC
+slab's LEAVE PRACTICE plank ([settings](gameplay.md#settings)).
 
 The **dummy** is an `OBJECTS` entry (`solid`, any tool, verb HIT) with one solid tile and a
 26×42 sprite (`DUMMY_SPR`, baked in js/draw-world.js beside the chest). Every way of hurting it
@@ -216,14 +224,15 @@ tests the dummy across its base tile and the two above it, so torso and head sho
 the roll's tackle. It never breaks: the pool floors at zero, the overhead bar appears only
 while it is hurt, and `updatePractice` (called from `updatePlay` under `PRACTICE`) mends it
 back to `DUMMY_HP` after `DUMMY_RESET_T` seconds unhit, with a shimmer for the announcement.
-`updatePractice` is also the grounds' clock: it ticks every target's habit and respawn.
+`updatePractice` is also the grounds' clock: it ticks every target's habit and respawn, and
+times the parkour laps.
 
-Over a dummy's head hangs its **damage meter** — LAST HIT / DPS / TOTAL for the combo in
-progress, a recorded labelled-row carve-out from show-don't-label (CLAUDE.md). `hitDummy`
-keeps the ledger (`mLast`/`mTotal`/`mT0`/`mT1` on the object; a hit after the mend window
-starts it over), DPS is total over first-to-last hit floored at one second, and
-`drawDummyMeter` (js/draw-world.js) draws the plate — visible only while a combo is live,
-lingering `DUMMY_METER_LINGER` past the mend so the final read stands, then fading.
+Over the dummy's head hangs its **damage meter** — LAST HIT / DPS / TOTAL for the combo in
+progress, a recorded labelled-row carve-out from show-don't-label (CLAUDE.md, shared with the
+parkour's plate). `hitDummy` keeps the ledger (`mLast`/`mTotal`/`mT0`/`mT1` on the object; a
+hit after the mend window starts it over), DPS is total over first-to-last hit floored at one
+second, and `drawDummyMeter` (js/draw-world.js) draws the plate — visible only while a combo is
+live, lingering `DUMMY_METER_LINGER` past the mend so the final read stands, then fading.
 
 ## Determinism and noise
 

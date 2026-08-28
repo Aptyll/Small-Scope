@@ -96,6 +96,9 @@ function render() {
     }
   }
 
+  // the parkour's start/finish line, painted flat on the carved ice
+  if (PRACTICE) drawParkourLine(ox, oy);
+
   // footprints + slide trails
   for (const f of footprints) {
     if (f.k === 1) {
@@ -250,20 +253,15 @@ function render() {
       if (o.hp < o.maxHp) drawHealthBar(px + 8 + sh, dy - 6, o.hp, o.maxHp, 20);
       // the combo readout, above the bar's slot so neither ever covers the other
       drawDummyMeter(o, px + 8, dy - 10);
-    } else if (o.type === 'fence') {
-      drawFence(o, px + sh, py);
-    } else if (o.type === 'brazier') {
-      drawBrazier(o, px + sh, py, now, o.flash);
     } else if (o.type === 'banner') {
       drawBanner(o, px + sh, py, now);
     } else if (o.type === 'rack') {
       // two tiles per rack: the lead (left) tile draws the whole sprite
       // centred over the pair; the follower tile is solid and silent
       if (o.lead) {
-        const spr = o.variant ? RACK_TOOL_SPR : RACK_BOW_SPR;
         ctx.fillStyle = 'rgba(40,60,100,0.25)';
         ctx.fillRect(px + sh + 2, py + TILE - 2, TILE * 2 - 4, 2);
-        drawSpriteFlash(spr, px + sh + ((TILE * 2 - spr.width) >> 1), py + TILE - spr.height + 1, o.flash);
+        drawSpriteFlash(RACK_SPR, px + sh + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
       }
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
@@ -336,6 +334,9 @@ function render() {
   drawFlagAim(ox, oy);
   drawWorkHint(ox, oy);
   drawFishHint(ex, ey, now);
+  // the parkour's two readouts: the lap clock over the runner, BEST / LAST
+  // on the frost plate at the gate (drawParkour, js/draw-world.js)
+  if (PRACTICE) drawParkour(ex, ey, now);
 
   // construction AND card-crafting progress bars - same bar, same "over the
   // roof" placement for a big building; a craft in flight (a finished Keep,

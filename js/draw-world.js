@@ -307,33 +307,14 @@ const TARGET_SPR = (() => {
   return c;
 })();
 
-// the standing brazier's iron: bowl, rim, three legs, coal bed. The flame is
-// live (drawBrazier), and the light it throws is a `lights` entry
-// (rebuildLights scans for the object type, js/structures.js).
-const BRAZIER_SPR = bakeGrid([
-  '..oiIIIIIIio..',
-  '.oIhhccchhIo..',
-  '.oicccccccio..',
-  '..oiiiiiiio...',
-  '...oi..io.....',
-  '...oi..io.....',
-  '..oi....io....',
-  '.oi......io...',
-  '.o........o...',
-], { o: '#241a12', i: '#3c4250', I: '#5a637a', h: '#8b93a8', c: '#1c1208' }, 14);
-
-// The weapon racks, one per station and TWO TILES wide (the `rack` entry in
-// js/world.js carries the lead/follower pair). Baked per-pixel like the
-// target face rather than from a grid, because a strung bow stave wants a
-// true curve. Variant 0 is the BOW rack on the archery platform: an A-frame
-// of posts and rails with three strung longbows leaned against the top rail
-// and a hung quiver of fletched shafts. Variant 1 is the WORK rack by the
-// quarry path: the same frame racked with two axes and a pick, a coiled rope
-// on the end post. Snow rides the rail and the post caps of both.
-const RACK_W = 34, RACK_H = 28;
-function bakeRack(variant) {
+// The weapon rack, TWO TILES wide (the `rack` entry in js/world.js carries
+// the lead/follower pair). Baked per-pixel like the target face rather than
+// from a grid, because a strung bow stave wants a true curve: an A-frame of
+// posts and rails with three strung longbows leaned against the top rail and
+// a hung quiver of fletched shafts. Snow rides the rail and the post caps.
+const RACK_SPR = (() => {
   const c = document.createElement('canvas');
-  c.width = RACK_W; c.height = RACK_H;
+  c.width = 34; c.height = 28;
   const g = c.getContext('2d');
   const px = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
   const rect = (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x, y, w, h); };
@@ -347,70 +328,42 @@ function bakeRack(variant) {
     rect(x0, 25, 4, 1, wd);
     px(x0, 25, wl);
   }
-  // rails: the heavy top rail the gear leans on, a thin keeper rail below
+  // rails: the heavy top rail the bows lean on, a thin keeper rail below
   rect(0, 5, 34, 4, O);
   rect(1, 6, 32, 1, wl); rect(1, 7, 32, 1, wd);
   px(0, 6, wp); px(33, 6, wp);       // end-grain glints on the overhang
   rect(1, 18, 32, 3, O);
   rect(2, 19, 30, 1, wd);
-  if (variant === 0) {
-    // three strung longbows, tips hooked over the top rail. The stave bends
-    // left off the straight string, each with its own height and draw
-    const bows = [[9, 2, 3], [16, 4, 2], [23, 2, 3]]; // centre, top y, belly
-    for (const [cx2, ty0, bend] of bows) {
-      rect(cx2, ty0 + 1, 1, 23 - ty0 - 1, '#f0e6cc');            // the string
-      for (let y = ty0; y <= 23; y++) {                           // the stave
-        const u = (y - ty0) / (23 - ty0);
-        const b = Math.round(Math.sin(u * Math.PI) * bend);
-        px(cx2 - b, y, '#6b4a30');
-        px(cx2 - b - 1, y, '#c9a874');
-      }
-      rect(cx2 - bend - 1, 11, 2, 3, '#5c4226');                  // the grip wrap
+  // three strung longbows, tips hooked over the top rail. The stave bends
+  // left off the straight string, each with its own height and draw
+  const bows = [[9, 2, 3], [16, 4, 2], [23, 2, 3]]; // centre, top y, belly
+  for (const [cx2, ty0, bend] of bows) {
+    rect(cx2, ty0 + 1, 1, 23 - ty0 - 1, '#f0e6cc');            // the string
+    for (let y = ty0; y <= 23; y++) {                           // the stave
+      const u = (y - ty0) / (23 - ty0);
+      const b = Math.round(Math.sin(u * Math.PI) * bend);
+      px(cx2 - b, y, '#6b4a30');
+      px(cx2 - b - 1, y, '#c9a874');
     }
-    // the quiver, leaned inside the right post, shafts fletched red and straw
-    rect(25, 10, 4, 13, O);
-    rect(26, 11, 1, 11, '#93744a'); rect(27, 11, 1, 11, '#6e4f2f');
-    rect(26, 13, 2, 1, '#8b93a8');                                // iron band
-    rect(26, 20, 2, 1, '#8b93a8');
-    for (const [sx2, sy0, f] of [[26, 6, '#d0453a'], [28, 7, '#e0c890'], [27, 5, '#d0453a']]) {
-      rect(sx2, sy0 + 2, 1, 10 - sy0, wp);                        // shaft into the mouth
-      px(sx2, sy0, f); px(sx2, sy0 + 1, f);                       // the fletching
-    }
-  } else {
-    // two axes and a pick leaned into the rail, heads up in the clear above
-    // it so the iron reads against the snow, bright hafts down to the ground
-    for (const [hx, hy] of [[8, 2], [14, 3]]) {                   // the axes
-      rect(hx, hy + 2, 1, 21 - hy, '#c9a874'); rect(hx + 1, hy + 2, 1, 21 - hy, '#6b4a30');
-      rect(hx - 3, hy, 4, 5, O);                                  // the head, edge left
-      rect(hx - 2, hy + 1, 2, 3, '#8b93a8');
-      px(hx, hy + 1, '#3c4250'); px(hx, hy + 3, '#3c4250');       // the poll in shade
-      px(hx - 3, hy + 1, '#c6cddc'); px(hx - 3, hy + 2, '#c6cddc'); px(hx - 3, hy + 3, '#c6cddc');
-    }
-    rect(21, 4, 1, 19, '#c9a874'); rect(22, 4, 1, 19, '#6b4a30'); // the pick's haft
-    for (const [dx2, dy2] of [[-4, 3], [-3, 2], [-2, 1], [-1, 0], [0, 0], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3]]) {
-      px(21 + dx2, 1 + dy2, O);                                   // the curved head
-      px(21 + dx2, 2 + dy2, '#8b93a8');
-      px(21 + dx2, 3 + dy2, '#3c4250');
-    }
-    // a coiled rope hung on the right post
-    for (let a = 0; a < 16; a++) {
-      const th = a / 16 * Math.PI * 2;
-      px(Math.round(26.5 + Math.cos(th) * 2.4), Math.round(13.5 + Math.sin(th) * 3),
-         a % 3 ? '#93744a' : '#6e4f2f');
-    }
-    // a pair of split-log rounds by the right foot
-    rect(24, 21, 4, 4, O); rect(25, 22, 2, 2, wp); px(25, 22, '#c9a874');
-    rect(27, 20, 4, 4, O); rect(28, 21, 2, 2, wp); px(28, 21, '#c9a874');
+    rect(cx2 - bend - 1, 11, 2, 3, '#5c4226');                  // the grip wrap
+  }
+  // the quiver, leaned inside the right post, shafts fletched red and straw
+  rect(25, 10, 4, 13, O);
+  rect(26, 11, 1, 11, '#93744a'); rect(27, 11, 1, 11, '#6e4f2f');
+  rect(26, 13, 2, 1, '#8b93a8');                                // iron band
+  rect(26, 20, 2, 1, '#8b93a8');
+  for (const [sx2, sy0, f] of [[26, 6, '#d0453a'], [28, 7, '#e0c890'], [27, 5, '#d0453a']]) {
+    rect(sx2, sy0 + 2, 1, 10 - sy0, wp);                        // shaft into the mouth
+    px(sx2, sy0, f); px(sx2, sy0 + 1, f);                       // the fletching
   }
   // snow: a broken run along the top rail and caps on both posts
   for (let x = 0; x < 34; x++) {
-    if (hash2(x * 7 + variant * 3, 91) > 0.45) px(x, 4, '#f4f7ff');
-    if (hash2(x * 5 + variant * 3, 93) > 0.75) px(x, 5, '#c4d4ea');
+    if (hash2(x * 7, 91) > 0.45) px(x, 4, '#f4f7ff');
+    if (hash2(x * 5, 93) > 0.75) px(x, 5, '#c4d4ea');
   }
   for (const x0 of [1, 29]) { rect(x0, 1, 4, 1, '#f4f7ff'); px(x0 + 3, 2, '#c4d4ea'); }
   return c;
-}
-const RACK_BOW_SPR = bakeRack(0), RACK_TOOL_SPR = bakeRack(1);
+})();
 
 // The damage meter over a dummy's head: LAST HIT / DPS / TOTAL for the combo
 // in progress, on a small frost plate in the overhead frame's language. A
@@ -448,8 +401,63 @@ function drawDummyMeter(o, cxp, botY) {
   ctx.globalAlpha = 1;
 }
 
-// One practice target, whatever its habit: rails or hatch or frame first,
-// then the post, then the face (or the bare splintered post while broken).
+// ---- the ice parkour's pixels (practice arena only) -----------------------
+// the start/finish line: a checker band laid flat across the carved ice
+// under the gate, in the flat pass before anything that walks. Which tiles
+// are the line is the same coordinate test updatePractice times laps with
+// (PK_LINE_Y / PK_LINE_X1, the practice arena banner in js/world.js).
+function drawParkourLine(ox, oy) {
+  for (let tx = 0; tx <= PK_LINE_X1; tx++) {
+    if (ground[idx(tx, PK_LINE_Y)] !== 1) continue;
+    const px = tx * TILE - ox, py = PK_LINE_Y * TILE - oy;
+    if (px < -TILE || py < -TILE || px > WV_W || py > WV_H) continue;
+    for (let cx2 = 0; cx2 < TILE; cx2 += 3) {
+      for (let r = 0; r < 2; r++) {
+        ctx.fillStyle = ((cx2 / 3) + r) % 2 ? '#1c2130' : '#f4f7ff';
+        ctx.fillRect(px + cx2, py + 5 + r * 3, Math.min(3, TILE - cx2), 3);
+      }
+    }
+  }
+}
+
+// The parkour's two readouts. The live lap clock rides over the runner's
+// head while a run is on - the clock appearing at all is what says the line
+// worked. Once any lap exists, BEST / LAST hang on a frost plate over the
+// gate flags: the dummy meter's instrument language, and the same recorded
+// labelled-row carve-out from show-don't-label (CLAUDE.md) - a stopwatch's
+// whole job is comparing numbers.
+function drawParkour(ex, ey, now) {
+  if (parkour.on && !player.dead) {
+    // above the overhead name frame, not on it - the clock and the name are
+    // both centred on the player and would collide at the same row
+    const t = parkour.t.toFixed(1);
+    drawPixelTextOutline(ctx, t, Math.round(player.x - ex - pixelTextWidth(t) / 2),
+      Math.round(player.y - ey - 42), parkour.cp ? '#8fd8ff' : '#ffd95c');
+  }
+  if (!parkour.best) return;
+  const x0 = Math.round(PK_GATE.x - ex), y0 = Math.round(PK_GATE.y - ey);
+  if (x0 < -40 || y0 < -30 || x0 > WV_W + 40 || y0 > WV_H + 30) return;
+  const rows = [
+    ['BEST', parkour.best.toFixed(1), '#ffd95c'],
+    ['LAST', parkour.last.toFixed(1), '#f4f7ff'],
+  ];
+  const W = 46, H = 18;
+  const x = x0 - (W >> 1), y = y0 - H;
+  ctx.fillStyle = 'rgba(12,18,42,0.85)';
+  ctx.fillRect(x - 1, y - 1, W + 2, H + 2);
+  ctx.fillStyle = '#3a4470';
+  ctx.fillRect(x, y, W, 1); ctx.fillRect(x, y + H - 1, W, 1);
+  ctx.fillRect(x, y, 1, H); ctx.fillRect(x + W - 1, y, 1, H);
+  for (let i = 0; i < 2; i++) {
+    const ry = y + 3 + i * 7;
+    drawPixelTextShadow(ctx, rows[i][0], x + 3, ry, '#9fb6d8', 'rgba(8,12,28,0.9)');
+    const v = rows[i][1];
+    drawPixelTextShadow(ctx, v, x + W - 3 - pixelTextWidth(v), ry, rows[i][2], 'rgba(8,12,28,0.9)');
+  }
+}
+
+// One practice target, whatever its habit: rails or hatch first, then the
+// post, then the face (or the bare splintered post while broken).
 // ptFace() (js/world.js) is the same geometry the arrow test reads, so what
 // you see is exactly what a shot can hit.
 function drawPTarget(t, ex, ey, now) {
@@ -465,24 +473,6 @@ function drawPTarget(t, ex, ey, now) {
     ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 5, by - 3, 10, 4);
     ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 4, by - 2, 8, 2);
     ctx.fillStyle = '#3c4250'; ctx.fillRect(bx - 4, by + 1, 2, 2); ctx.fillRect(bx + 2, by + 1, 2, 2);
-  }
-  // the swing frame: two legs, a snow-capped crossbar, and the rope
-  if (t.kind === 'swing') {
-    const top = by - t.alt - t.len - 4;
-    ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(bx - 15, by + 1, 8, 2); ctx.fillRect(bx + 8, by + 1, 8, 2);
-    for (const lx of [bx - 12, bx + 11]) {
-      ctx.fillStyle = '#241a12'; ctx.fillRect(lx - 1, top, 4, by - top + 2);
-      ctx.fillStyle = '#5c4226'; ctx.fillRect(lx, top + 1, 2, by - top);
-      ctx.fillStyle = '#8a6142'; ctx.fillRect(lx, top + 1, 1, by - top);
-    }
-    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 14, top - 1, 29, 4);
-    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 13, top, 27, 2);
-    ctx.fillStyle = '#f4f7ff';
-    for (let x = -13; x < 14; x += 2) if (hash2(x + 40, t.px) > 0.4) ctx.fillRect(bx + x, top - 1, 1, 1);
-    const f = ptFace(t);
-    const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
-    ctx.strokeStyle = '#6e4f2f'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(bx + 0.5, top + 3); ctx.lineTo(fx + 0.5, fy - 12); ctx.stroke();
   }
   // the pop-up's hatch box, mouth toward the firing line
   if (t.kind === 'pop') {
@@ -519,66 +509,50 @@ function drawPTarget(t, ex, ey, now) {
   else ctx.drawImage(TARGET_SPR, fx - (w >> 1), fy - (h >> 1), w, h);
 }
 
-// a rail fence tile: one snow-capped post, with rails run out toward any
-// fence neighbour right or down (the left/up neighbour draws the run into
-// this tile, so every span is drawn exactly once)
-function drawFence(o, px, py) {
-  const cx2 = px + 8, base = py + 13;
-  const right = objAt(o.tx + 1, o.ty), down = objAt(o.tx, o.ty + 1);
-  if (right && right.type === 'fence') {
-    ctx.fillStyle = '#241a12'; ctx.fillRect(cx2, base - 9, 16, 3); ctx.fillRect(cx2, base - 4, 16, 3);
-    ctx.fillStyle = '#6b4a30'; ctx.fillRect(cx2, base - 8, 16, 1); ctx.fillRect(cx2, base - 3, 16, 1);
-    ctx.fillStyle = '#8a6142'; ctx.fillRect(cx2, base - 9, 16, 1); ctx.fillRect(cx2, base - 4, 16, 1);
-  }
-  if (down && down.type === 'fence') {
-    ctx.fillStyle = '#241a12'; ctx.fillRect(cx2 - 3, base, 2, 16); ctx.fillRect(cx2 + 2, base, 2, 16);
-    ctx.fillStyle = '#6b4a30'; ctx.fillRect(cx2 - 2, base, 1, 16); ctx.fillRect(cx2 + 3, base, 1, 16);
-  }
-  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(cx2 - 2, base + 1, 6, 2);
-  ctx.fillStyle = '#241a12'; ctx.fillRect(cx2 - 2, base - 12, 5, 14);
-  ctx.fillStyle = '#5c4226'; ctx.fillRect(cx2 - 1, base - 11, 3, 13);
-  ctx.fillStyle = '#8a6142'; ctx.fillRect(cx2 - 1, base - 11, 1, 13);
-  ctx.fillStyle = '#f4f7ff'; ctx.fillRect(cx2 - 2, base - 13, 5, 2);
-  ctx.fillStyle = '#c4d4ea'; ctx.fillRect(cx2 + 2, base - 12, 1, 1);
-}
-
-// a standing brazier: the baked iron, then the live fire - three flame
-// tongues wavering on the frame clock and the odd spark. Its throw of light
-// is a `lights` entry, so the night opens around it for free.
-function drawBrazier(o, px, py, now, flash) {
-  drawSpriteFlash(BRAZIER_SPR, px + 1, py + 4, flash);
-  const fx = px + 8, fy = py + 5;
-  for (let i = 0; i < 3; i++) {
-    const ph = now * (7 + i * 1.7) + i * 2.1 + o.tx;
-    const hgt = 3 + Math.round(Math.abs(Math.sin(ph)) * 3);
-    const sway = Math.round(Math.sin(ph * 0.8) * 1.5);
-    ctx.fillStyle = i === 0 ? '#ffd95c' : i === 1 ? '#ff9440' : '#e05548';
-    ctx.fillRect(fx - 2 + i * 2 + sway, fy - hgt, 2 - (i >> 1), hgt);
-  }
-  if (((now * 5 + o.tx) | 0) % 3 === 0) {
-    ctx.fillStyle = '#ffd95c';
-    ctx.fillRect(fx - 2 + (((now * 13) | 0) % 5), fy - 7 - (((now * 9) | 0) % 3), 1, 1);
-  }
-}
-
-// a banner: dark pole, gilt finial, and a red pennant rippling off it on the
-// frame clock - the grounds' section markers, in the target rings' own red
+// A flag: dark pole with a gilt finial, and a big red cloth streaming off it
+// on the frame clock - the parkour gate's marker, in the target rings' own
+// red. The cloth is a full rectangle (18 wide, 11 deep) with a swallowtail
+// cut at the fly end, waving column by column with folds shaded where the
+// wave crests, so it reads as heavy cloth rather than a pennant.
 function drawBanner(o, px, py, now) {
-  const bx = px + 5, top = py - 12;
-  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(bx - 1, py + 14, 5, 2);
-  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 1, top, 4, 28);
-  ctx.fillStyle = '#5c4226'; ctx.fillRect(bx, top + 1, 2, 26);
-  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx, top + 1, 1, 26);
-  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx, top - 2, 2, 2);
-  for (let i = 0; i < 11; i++) {
-    const wave = Math.round(Math.sin(now * 5 + i * 0.7 + o.ty) * (i / 10) * 2);
-    const hgt = Math.max(1, 9 - Math.round(i * 0.7));
-    const x = bx + 3 + i, y = top + 2 + wave + ((9 - hgt) >> 1);
-    ctx.fillStyle = '#241a12'; ctx.fillRect(x, y - 1, 1, hgt + 2);
-    ctx.fillStyle = i % 4 === 3 ? '#a83232' : '#c0392b'; ctx.fillRect(x, y, 1, hgt);
-    ctx.fillStyle = '#d0453a'; ctx.fillRect(x, y, 1, 1);
+  const bx = px + 4, top = py - 18;
+  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(bx - 1, py + 14, 6, 2);
+  // the pole, snow at its foot
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 1, top - 2, 4, 36);
+  ctx.fillStyle = '#5c4226'; ctx.fillRect(bx, top - 1, 2, 34);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx, top - 1, 1, 34);
+  ctx.fillStyle = '#f4f7ff'; ctx.fillRect(bx - 1, py + 12, 4, 2);
+  // the finial: a gilt ball on a collar
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 1, top - 5, 4, 3);
+  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx, top - 5, 2, 2);
+  ctx.fillStyle = '#fff3c4'; ctx.fillRect(bx, top - 5, 1, 1);
+  // the cloth, hung from the pole top, waving toward the fly
+  const W = 18, H = 11;
+  for (let i = 0; i < W; i++) {
+    const u = i / (W - 1);
+    const wave = Math.sin(now * 4.5 + i * 0.55 + o.ty) * u * 2.6;
+    const y0 = top + Math.round(wave);
+    // the swallowtail: the last few columns lose their middle rows
+    const notch = Math.max(0, i - (W - 5));
+    const gap = notch > 0 ? Math.min(H - 4, notch * 2) : 0;
+    const x = bx + 3 + i;
+    // fold shading rides the wave's slope: leaning columns catch the dark
+    const slope = Math.cos(now * 4.5 + i * 0.55 + o.ty) * u;
+    const cloth = slope < -0.35 ? '#a83232' : slope > 0.45 ? '#d0453a' : '#c0392b';
+    if (gap === 0) {
+      ctx.fillStyle = '#241a12'; ctx.fillRect(x, y0 - 1, 1, H + 2);
+      ctx.fillStyle = cloth; ctx.fillRect(x, y0, 1, H);
+      ctx.fillStyle = '#e05548'; ctx.fillRect(x, y0, 1, 1); // the lit top hem
+      if (i === 0 || i === 7) { ctx.fillStyle = '#8f2a24'; ctx.fillRect(x, y0 + 1, 1, H - 1); } // seam shadows
+    } else {
+      const arm = ((H - gap) >> 1) + 1;
+      ctx.fillStyle = '#241a12'; ctx.fillRect(x, y0 - 1, 1, arm + 1); ctx.fillRect(x, y0 + H - arm, 1, arm + 1);
+      ctx.fillStyle = cloth; ctx.fillRect(x, y0, 1, arm); ctx.fillRect(x, y0 + H - arm, 1, arm);
+      ctx.fillStyle = '#e05548'; ctx.fillRect(x, y0, 1, 1);
+    }
   }
-  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx + 2, top + 2, 1, 9); // the hoist stripe
+  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx + 2, top, 1, H); // the gilt hoist stripe
+  ctx.fillStyle = '#c89a3c'; ctx.fillRect(bx + 2, top + H - 2, 1, 2);
 }
 
 // Spent arrows in the snow, drawn flat under everything that walks: a stub of

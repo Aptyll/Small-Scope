@@ -5,7 +5,14 @@
 // Tuning for one feature lives with that feature; see docs/dev/architecture.md.
 // ------------------------------------------------------------ constants
 const TILE = 16;
-const WORLD = 232;                // tiles per side (~132-tile open interior, 2x the old 92's area; treeline depth unchanged)
+// ?practice=1 boots the training arena instead of a match (the full story on
+// the `Practice mode` comment below) - parsed HERE, above WORLD, because the
+// practice world is a small one: the training field plus a forest collar for
+// the ice parkour, against the match's 232. Everything downstream sizes
+// itself off WORLD (the ground arrays, the ground bake, both maps, the
+// camera clamps), so the match world is untouched.
+const PRACTICE = /[?&]practice=1/.test(location.search);
+const WORLD = PRACTICE ? 64 : 232; // tiles per side (match: ~132-tile open interior, 2x the old 92's area; treeline depth unchanged)
 let VIEW_W = 480, VIEW_H = 270; // internal resolution; fitCanvas() sizes it to the window
 let FULL_W = 480; // window width in game px BEFORE the 16:9 cap (bars canvas span)
 const DAY_LEN = 110, NIGHT_LEN = 55;
@@ -38,13 +45,14 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-// Practice mode: ?practice=1 boots the training arena (the `practice arena`
-// banner, js/world.js) instead of a match - no title menu, no eagles, no other
-// slots. It pins SEED to a constant BELOW ?seed on purpose, so the arena is
-// the same ground on every machine every time: a practice room the seed can
-// never reshuffle. Entered from the menu plank (menu.js beginPractice), left
-// from the ESC panel (leavePractice) - both are page reloads, like the reroll.
-const PRACTICE = /[?&]practice=1/.test(location.search);
+// Practice mode: ?practice=1 (the PRACTICE const above WORLD) boots the
+// training arena (the `practice arena` banner, js/world.js) instead of a
+// match - no title menu, no eagles, no other slots, and the clock pinned to
+// early morning (sim.js never advances state.time under PRACTICE). It pins
+// SEED to a constant BELOW ?seed on purpose, so the arena is the same ground
+// on every machine every time: a practice room the seed can never reshuffle.
+// Entered from the menu plank (menu.js beginPractice), left from the ESC
+// panel (leavePractice) - both are page reloads, like the reroll.
 const PRACTICE_SEED = 0x50524143; // 'PRAC'
 
 // one run seed drives every deterministic value: worldgen, per-tile hashes, fx.

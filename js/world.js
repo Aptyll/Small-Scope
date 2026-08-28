@@ -40,17 +40,12 @@ const OBJECTS = {
   // every bit and the roll's tackle all land through hitDummy (js/actions.js).
   dummy:    { solid: true,  tool: 'axe',  needs: null,   verb: 'HIT', lift: 28,
               mm: [216, 178, 122], map: [188, 148, 96] },
-  // The training grounds' dressing (practice arena only): all inert scenery
-  // like the den - no `tool`, so E never offers them - drawn in the y-sorted
-  // pass off their own baked sprites. The fence auto-connects to fence
-  // neighbours in its draw branch; the brazier is the game's first
-  // light-emitting object (rebuildLights scans for it, js/structures.js).
-  fence:    { solid: true,  mm: [150, 118, 84],  map: [140, 110, 76] },
-  brazier:  { solid: true,  mm: [214, 142, 66],  map: [178, 118, 58] },
+  // The training field's dressing (practice arena only): inert scenery like
+  // the den - no `tool`, so E never offers them - drawn in the y-sorted pass.
+  // The banner is the parkour gate's flag; the rack spans TWO tiles - the
+  // left one carries `lead` and draws the whole sprite, the right tile is a
+  // plain solid follower the draw pass skips.
   banner:   { solid: true,  mm: [214, 88, 76],   map: [186, 74, 62] },
-  // a rack spans TWO tiles: the left one carries `lead` (and `variant` - 0
-  // bows, 1 axes and picks) and draws the whole sprite; the right tile is a
-  // plain solid follower the draw pass skips
   rack:     { solid: true,  mm: [168, 132, 92],  map: [150, 116, 80] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
@@ -520,48 +515,50 @@ function landmarkAt(x, y) {
 }
 
 // ------------------------------------------------------------ practice arena
-// The TRAINING GROUNDS behind the PRACTICE TOOL plank: a hand-built campus,
-// not a wilderness clearing. A 64x36-tile frame (16:9, the view's own shape)
-// carved out of solid forest, laid out like a real camp - every piece of
-// dressing marks something. The packed-earth parade yard holds the two melee
-// dummies with braziers at its four corners; a south gate (banner pair over
-// an earth stub) is where you walked in. East, a firing platform fronts two
-// fully fenced archery lanes - statics, then pop-ups - each entered through a
-// one-tile gate that IS the firing slot, with the bow rack standing on the
-// platform and a banner at each lane mouth; a tree windbreak splits the
-// lanes. North, the moving-target gallery hangs off the wall, its entry
-// flanked by banners and its end caps lit by braziers OUTSIDE the lane. The
-// pendulum swings on a fenced-backstop pad south-east. West is the camp's
-// larder: the ice pond with its shoal, a berry hedge on the north shore with
-// the rabbits, and past it the work side - tool rack and stumps, the woodlot
-// grove north-west, the rock quarry south-west. Rail fences stop arrows like
-// any solid tile, so a lane can only be shot down its own gate.
+// The TRAINING FIELD behind the PRACTICE TOOL plank: one open snowfield, cut
+// to pure combat. The practice world itself is SMALL - WORLD is 64 under
+// PRACTICE (js/core.js) - so the forest is a collar, not a wilderness. In the
+// middle of the field: one dummy on a small packed-earth pad, spawn just
+// south of it, the bow rack beside the spawn. The archery targets stand in
+// the OPEN, spread along the field's edges near the trees - statics at three
+// heights, pop-ups, and two sliders on rails - nothing fenced, shoot them
+// from anywhere, roll straight past them. No wildlife, no chests, no pond,
+// no harvest: the world drops nothing and asks nothing.
+//
+// Around the field, through the forest collar, runs the ICE PARKOUR: a
+// narrow carved-ice loop (PK_PATH) entered through a flag gate on the west
+// side. Ice is mechanically slippery, so the track is the movement pillar as
+// a minigame: stepping onto the start line starts the lap clock, a
+// checkpoint on the far side keeps a lap honest, and recrossing the line
+// records it - the clock rides over the runner's head, and BEST / LAST hang
+// on a frost plate at the gate (the dummy meter's own language). Leaving the
+// ice for more than PK_OFF_T abandons the run.
 //
 // Boots only under PRACTICE (js/core.js pins the seed to PRACTICE_SEED, so
 // ?seed can never reshape it) and replaces genWorld outright: no landmarks,
-// no eagles, no other slots (js/boot.js). One player, nothing at stake -
-// die() revives on the spot and the profile is never written (js/player.js).
+// no eagles, no other slots (js/boot.js), and the clock is pinned to early
+// morning forever (sim.js). One player, nothing at stake - die() revives on
+// the spot and the profile is never written (js/player.js).
 //
-// Ground 3 is PACKED EARTH, the training grounds' floor: painted by
-// paintGroundTile's earth branch, coloured on both maps, walks exactly like
-// snow (updatePlayer's surface block only special-cases ice and holes) but
+// Ground 3 is PACKED EARTH, the pad's floor: painted by paintGroundTile's
+// earth branch, coloured on both maps, walks exactly like snow
+// (updatePlayer's surface block only special-cases ice and holes) but
 // refuses prone (tryProne wants ground 0 - there is no snow to dig into) and
 // leaves no footprints. It exists only inside this arena; genWorld never
 // writes it.
-const PR_W = 64, PR_H = 36;                      // the campus, in tiles: 16:9
+const PR_W = 40, PR_H = 23;                      // the open field, in tiles
 const PR_X0 = (WORLD - PR_W) >> 1, PR_Y0 = (WORLD - PR_H) >> 1;
-const PR_SPAWN = { tx: PR_X0 + 30, ty: PR_Y0 + 22 }; // south yard, facing the dummies
+const PR_SPAWN = { tx: PR_X0 + 20, ty: PR_Y0 + 15 }; // just south of the pad, facing the dummy
 const DUMMY_HP = 60;
 const DUMMY_WORK_DMG = 10;   // what one E swing chips off it (the eagle's own number)
 const DUMMY_RESET_T = 2.5;   // s unhit before a dummy mends itself back to full
-// the damage meter over a dummy's head (drawDummyMeter, js/draw-world.js):
+// the damage meter over the dummy's head (drawDummyMeter, js/draw-world.js):
 // LAST HIT / DPS / TOTAL for the combo in progress - the string of hits since
 // the dummy last went quiet (hitDummy starts the ledger over, js/actions.js).
 // It hangs on this long after the mend so the final numbers can be read,
 // then fades. DPS is total over first-to-last hit, floored at one second, so
 // a single hit reads as itself instead of infinity.
 const DUMMY_METER_LINGER = 2.5;
-const PR_FISH = 6;           // the pond's shoal, and the ceiling the trickle refills to
 const practiceDummies = [];  // every dummy standing, for updatePractice's mend clock
 
 // ---- the archery targets -------------------------------------------------
@@ -573,15 +570,13 @@ const practiceDummies = [];  // every dummy standing, for updatePractice's mend 
 // SHATTERS the face off its post (hitPTarget below - flat feedback, no
 // score) and PT_RESPAWN seconds later a fresh one springs back with a
 // wobble. drawPTarget (js/draw-world.js) owns every pixel: the face sprite,
-// the three post heights, the pop-up hatch, the slide rails and the swing
-// frame.
-//   kind  'static' | 'pop' | 'slide' | 'swing'
+// the three post heights, the pop-up hatch and the slide rails.
+//   kind  'static' | 'pop' | 'slide'
 //   x, y  the base point on the ground (post foot / hatch / track position)
 //   alt   px from the base to the face's centre - the "height" arrows aim at
 //   up    0..1, how far a pop-up has risen (static kinds sit at 1)
-//   t     the behaviour clock; phase offsets stop the pop lane syncing
+//   t     the behaviour clock; phase offsets stop the pop-ups syncing
 //   x0/x1/spd/dir   a slider's track and speed
-//   px/len/amp/om   a swinger's pivot x, rope length, swing arc and rate
 //   broken          >0: seconds until the face respawns (post stands bare)
 //   wob             respawn wobble timer, a scale bounce in the draw
 const PT_HIT_R = 11;         // px around the face centre an arrow scores on
@@ -595,10 +590,8 @@ function addPTarget(kind, tx, ty, opts) {
     kind, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 3,
     alt: PT_ALTS[0], up: 1, t: 0,
     x0: 0, x1: 0, spd: 0, dir: 1,
-    px: 0, len: 22, amp: 0.85, om: 1.6,
     broken: 0, wob: 0,
   }, opts || {});
-  if (kind === 'swing') t.px = t.x;
   ptargets.push(t);
   return t;
 }
@@ -606,12 +599,6 @@ function addPTarget(kind, tx, ty, opts) {
 // where a face's centre is right now, in world px - the one geometry the
 // update, the arrow test and the draw all share, so they can never disagree
 function ptFace(t) {
-  if (t.kind === 'swing') {
-    // the face hangs on a rope from a pivot (alt + len) above the base:
-    // straight down it sits at alt, and the swing carries it up either side
-    const th = Math.sin(t.t * t.om) * t.amp;
-    return { x: t.px + Math.sin(th) * t.len, y: t.y - (t.alt + t.len) + Math.cos(th) * t.len };
-  }
   // a pop-up's face flips up out of its hatch: the centre rides the rise,
   // bottom edge pinned at the hatch mouth (exactly how drawPTarget anchors it)
   if (t.kind === 'pop') return { x: t.x, y: t.y - 4 - 16 * t.up };
@@ -633,9 +620,33 @@ function hitPTarget(t, hx, hy) {
   if (nearPlayer(f.x, f.y)) { SFX.hit(); SFX.break_(); }
 }
 
+// ---- the ice parkour -----------------------------------------------------
+// PK_PATH is the loop's centreline in world tiles (the practice WORLD is a
+// fixed 64, so these are absolute), carved 2-3 tiles wide through the forest
+// collar by genPracticeWorld - trees hug both sides, and ice being
+// mechanically slippery IS the whole game of it. The lap: step onto the
+// start-line ice under the west flag gate (the clock starts), round the far
+// checkpoint, recross the line (the clock records). Both line and checkpoint
+// are plain coordinate tests against the carved ice, not objects.
+const PK_PATH = [
+  [7, 31], [7, 24], [5, 18], [8, 13],                       // west leg, up
+  [14, 9], [22, 12], [30, 8], [38, 12], [46, 9], [53, 13],  // the top slalom
+  [57, 18], [55, 25], [58, 31], [55, 38], [57, 45],         // east leg, down
+  [52, 50], [44, 54], [36, 50], [28, 54], [20, 50],         // the bottom slalom
+  [13, 53], [8, 48], [6, 41], [7, 35], [7, 31],             // and home
+];
+const PK_LINE_Y = 31;  // start/finish: the track ice on this row...
+const PK_LINE_X1 = 9;  // ...at tx <= this (the west gate)
+const PK_CP_X0 = 54;   // checkpoint: track ice on the same row, far (east) leg
+const PK_OFF_T = 2.5;  // s off the ice before a live run is abandoned
+const PK_GATE = { x: 9.5 * TILE, y: 27.5 * TILE }; // where the BEST/LAST plate hangs, clear above the north flag
+// one runner, one clock: the live lap (on/t/cp), the abandon timer, and the
+// session's last and best laps - practice writes nothing to the profile
+const parkour = { on: false, t: 0, cp: false, wasLine: false, offT: 0, last: 0, best: 0 };
+
 function genPracticeWorld() {
   const ax = PR_X0, ay = PR_Y0;
-  // solid forest everywhere, then the campus carved out of it - the rim
+  // solid forest everywhere, then the field carved out of it - the rim
   // tiles keep a scatter of trees so the treeline reads ragged, not stamped
   for (let ty = 0; ty < WORLD; ty++) {
     for (let tx = 0; tx < WORLD; tx++) {
@@ -647,121 +658,59 @@ function genPracticeWorld() {
       placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
-  // ---- the floors: packed earth where the grounds are worked -------------
-  const earth = (x0, y0, x1, y1) => {
-    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
-      if (!objects[idx(ax + tx, ay + ty)]) ground[idx(ax + tx, ay + ty)] = 3;
-    }
-  };
-  earth(22, 13, 39, 24);        // the parade yard
-  earth(30, 25, 31, 27);        // the south gate: the road you walked in on
-  earth(31, 6, 32, 12);         // gallery approach, yard -> the north wall
-  earth(14, 3, 49, 5);          // the moving-target gallery floor
-  earth(16, 18, 21, 19);        // west path, yard -> pond shore
-  earth(40, 11, 42, 23);        // the firing platform fronting both lanes
-  earth(43, 12, 43, 12);        // lane A's gate tile
-  earth(43, 22, 43, 22);        // lane B's gate tile
-  earth(44, 11, 61, 13);        // lane A: the static range
-  earth(44, 21, 61, 23);        // lane B: the pop-up range
-  earth(40, 24, 41, 27);        // pendulum approach, platform -> the pad...
-  earth(42, 27, 43, 28);        // ...turning east
-  earth(44, 27, 50, 31);        // the pendulum pad, south-east
-  // the yard's corners knocked off so the plaza reads worn, not stamped
-  for (const [cx2, cy2] of [[22, 13], [39, 13], [22, 24], [39, 24]]) {
-    if (hash2(cx2 * 7, cy2 * 5) > 0.5) ground[idx(ax + cx2, ay + cy2)] = 0;
+  // ---- the pad: packed earth under the dummy, corners rounded off --------
+  for (let ty = ay + 10; ty <= ay + 14; ty++) for (let tx = ax + 17; tx <= ax + 23; tx++) {
+    if (!objects[idx(tx, ty)]) ground[idx(tx, ty)] = 3;
   }
-  // ---- the pond, west: the camp's larder ---------------------------------
-  const pcx = ax + 9, pcy = ay + 21;
-  for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
-    if ((dx * dx) / 33 + (dy * dy) / 15 > 1) continue;
-    if (!objects[idx(pcx + dx, pcy + dy)]) ground[idx(pcx + dx, pcy + dy)] = 1;
+  for (const [cx2, cy2] of [[17, 10], [23, 10], [17, 14], [23, 14]]) {
+    ground[idx(ax + cx2, ay + cy2)] = 0;
   }
-  // ---- fences: solid rails, so a lane can only be shot down its gate -----
-  const fenceRow = (x0, x1, y) => { for (let tx = x0; tx <= x1; tx++) if (!objects[idx(ax + tx, ay + y)]) placeObj(ax + tx, ay + y, 'fence'); };
-  const fenceCol = (x, y0, y1) => { for (let ty = y0; ty <= y1; ty++) if (!objects[idx(ax + x, ay + ty)]) placeObj(ax + x, ay + ty, 'fence'); };
-  // lane A, closed on all four sides but its one-tile gate at (43,12)
-  fenceRow(43, 61, 10); fenceRow(43, 61, 14); fenceCol(62, 10, 14);
-  fenceCol(43, 11, 11); fenceCol(43, 13, 13);
-  // lane B, the same box with its gate at (43,22)
-  fenceRow(43, 61, 20); fenceRow(43, 61, 24); fenceCol(62, 20, 24);
-  fenceCol(43, 21, 21); fenceCol(43, 23, 23);
-  fenceRow(14, 49, 2);                                              // gallery, north backstop
-  fenceRow(14, 30, 6); fenceRow(33, 49, 6);                         // ...south rail, entry gap
-  fenceCol(13, 2, 6); fenceCol(50, 2, 6);                           // ...end caps
-  fenceRow(44, 51, 32); fenceCol(51, 28, 31);                       // pendulum backstop, south + east
-  // ---- the dressing: everything marks something --------------------------
+  // ---- the dummy on its pad, the rack by the spawn -----------------------
   const put = (tx, ty, type, extra) => { if (!objects[idx(ax + tx, ay + ty)]) return placeObj(ax + tx, ay + ty, type, extra); return null; };
-  // braziers: the yard's four corners, the gallery's end caps (outside the
-  // lane), and the firing platform - lit stations, dark wilds
-  for (const [tx, ty] of [[22, 13], [39, 13], [22, 24], [39, 24], [12, 4], [51, 4], [40, 13], [40, 21]]) put(tx, ty, 'brazier');
-  // banners: gate markers - the south gate pair, the gallery entry pair, one
-  // at each lane mouth, one at the pendulum pad's turn-in
-  for (const [tx, ty] of [[29, 25], [32, 25], [30, 7], [33, 7], [42, 10], [42, 24], [43, 29]]) put(tx, ty, 'banner');
-  // the racks, two tiles each: bows on the firing platform, axes and picks
-  // at the work corner off the pond path
-  const rack2 = (tx, ty, variant) => { put(tx, ty, 'rack', { lead: true, variant }); put(tx + 1, ty, 'rack', { variant }); };
-  rack2(40, 16, 0);
-  rack2(17, 22, 1);
-  // ---- the melee yard: the dummy pair, square with the south gate --------
-  for (const [tx, ty] of [[26, 17], [35, 17]]) {
-    const d = put(tx, ty, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
-      mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
-    if (d) practiceDummies.push(d);
+  const d = put(20, 12, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
+    mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
+  if (d) practiceDummies.push(d);
+  put(14, 14, 'rack', { lead: true }); put(15, 14, 'rack', {});
+  // ---- the targets: in the open, spread along the treeline ---------------
+  // two sliders patrol the north edge, statics of all three heights hold
+  // the middles, pop-ups work the corners - shoot any of them from anywhere
+  addPTarget('slide', ax + 3, ay + 2, { alt: PT_ALTS[0], x0: (ax + 3) * TILE, x1: (ax + 13) * TILE, spd: 26 });
+  addPTarget('slide', ax + 26, ay + 2, { alt: PT_ALTS[2], x0: (ax + 26) * TILE, x1: (ax + 36) * TILE, spd: 44 });
+  addPTarget('static', ax + 19, ay + 2, { alt: PT_ALTS[1] });
+  addPTarget('static', ax + 2, ay + 13, { alt: PT_ALTS[0] });
+  addPTarget('static', ax + 37, ay + 9, { alt: PT_ALTS[2] });
+  addPTarget('pop', ax + 2, ay + 7, { alt: PT_ALTS[0], up: 0, t: 0.0 });
+  addPTarget('pop', ax + 37, ay + 16, { alt: PT_ALTS[0], up: 0, t: 1.1 });
+  addPTarget('pop', ax + 14, ay + 20, { alt: PT_ALTS[1], up: 0, t: 2.2 });
+  addPTarget('pop', ax + 25, ay + 20, { alt: PT_ALTS[0], up: 0, t: 3.3 });
+  // ---- the ice parkour: the gate walk, the carved loop, the flags --------
+  // the walk out of the field is cleared snow (the approach should not
+  // slide); the loop is carved AFTER it so their overlap ends up ice, which
+  // is what puts the start line - the loop ice at PK_LINE_Y - under the gate
+  const fell = (tx, ty) => { objects[idx(tx, ty)] = null; };
+  for (let ty = 30; ty <= 31; ty++) for (let tx = 8; tx <= 12; tx++) { fell(tx, ty); ground[idx(tx, ty)] = 0; }
+  for (let s = 0; s < PK_PATH.length - 1; s++) {
+    const [x0, y0] = PK_PATH[s], [x1, y1] = PK_PATH[s + 1];
+    const steps = Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 3;
+    for (let i = 0; i <= steps; i++) {
+      const fx = x0 + (x1 - x0) * i / steps, fy = y0 + (y1 - y0) * i / steps;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const tx = Math.round(fx) + dx, ty = Math.round(fy) + dy;
+        if (!inWorld(tx, ty) || Math.hypot(tx - fx, ty - fy) > 1.15) continue;
+        fell(tx, ty);
+        ground[idx(tx, ty)] = 1;
+      }
+    }
   }
-  // ---- the targets -------------------------------------------------------
-  // lane A: statics at graded distances, each a head taller than the last
-  addPTarget('static', ax + 49, ay + 12, { alt: PT_ALTS[0] });
-  addPTarget('static', ax + 54, ay + 12, { alt: PT_ALTS[1] });
-  addPTarget('static', ax + 59, ay + 12, { alt: PT_ALTS[2] });
-  // lane B: pop-ups out of hatches, phases spread so the lane never syncs
-  addPTarget('pop', ax + 47, ay + 22, { alt: PT_ALTS[0], up: 0, t: 0.0 });
-  addPTarget('pop', ax + 51, ay + 22, { alt: PT_ALTS[0], up: 0, t: 1.1 });
-  addPTarget('pop', ax + 55, ay + 22, { alt: PT_ALTS[1], up: 0, t: 2.2 });
-  addPTarget('pop', ax + 59, ay + 22, { alt: PT_ALTS[0], up: 0, t: 3.3 });
-  // the gallery: a slow low slider west, a fast tall one east
-  addPTarget('slide', ax + 17, ay + 4, { alt: PT_ALTS[0], x0: (ax + 17) * TILE, x1: (ax + 30) * TILE, spd: 26 });
-  addPTarget('slide', ax + 33, ay + 4, { alt: PT_ALTS[2], x0: (ax + 33) * TILE, x1: (ax + 46) * TILE, spd: 44 });
-  // the pendulum, swinging from its frame on the pad
-  addPTarget('swing', ax + 47, ay + 29, { alt: PT_ALTS[2], len: 20, amp: 0.85, om: 1.7 });
-  // ---- the windbreak: a tree line splitting the two archery lanes --------
-  for (const [tx, ty] of [[46, 16], [49, 18], [52, 16], [55, 18], [58, 16]]) {
-    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
-  }
-  // ---- the woodlot grove, north-west, ringing its snag ------------------
-  for (const [tx, ty] of [[6, 5], [8, 4], [11, 5], [13, 6], [6, 8], [9, 9], [12, 8], [8, 11]]) {
-    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
-  }
-  put(10, 6, 'deadTree', { hp: 3, variant: 0 });
-  // ---- the quarry, south-west --------------------------------------------
-  for (const [tx, ty] of [[6, 29], [8, 31], [10, 29], [7, 33], [9, 27]]) {
-    put(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
-  }
-  // ---- the pond shore: berry hedge north, framing rocks, the work corner -
-  for (const [tx, ty] of [[12, 14], [14, 15], [16, 16]]) put(tx, ty, 'bush', { berries: 2, regrow: 0 });
-  put(4, 16, 'rock', { hp: 5, variant: 0 });
-  put(14, 25, 'rock', { hp: 5, variant: 1 });
-  put(16, 24, 'stump'); put(19, 24, 'stump');
-  // loose singles so the open snow reads wild, not unfinished
-  for (const [tx, ty] of [[18, 9], [25, 30], [36, 29], [57, 5], [60, 8]]) {
-    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
-  }
-  put(24, 10, 'rock', { hp: 5, variant: 0 });
-  put(34, 31, 'rock', { hp: 5, variant: 1 });
-  put(2, 2, 'chest', { hp: 1 });
-  put(61, 33, 'chest', { hp: 1 });
-  // the warren: rabbits browse the hedge and the west meadow
-  for (const [tx, ty] of [[13, 13], [18, 22], [10, 27]]) {
-    animals.push(makeAnimal('rabbit', (ax + tx + 0.5) * TILE, (ay + ty + 0.5) * TILE));
-  }
-  for (let i = 0; i < PR_FISH; i++) {
-    addFish((pcx + rand(-2, 2) + 0.5) * TILE, (pcy + rand(-1, 1) + 0.5) * TILE);
-  }
+  // the gate: a flag either side of the walk where it meets the line
+  fell(9, 29); placeObj(9, 29, 'banner');
+  fell(9, 32); placeObj(9, 32, 'banner');
 }
 
-// The grounds' clock, from updatePlay under PRACTICE only: the dummies mend
-// between combos, broken targets spring back, pop-ups run their cycle and
-// sliders patrol their rails. The shimmer, the wobble and the bar refilling
-// are the whole announcement - no words.
+// The grounds' clock, from updatePlay under PRACTICE only: the dummy mends
+// between combos, broken targets spring back, pop-ups run their cycle,
+// sliders patrol their rails, and the parkour lap is timed. The shimmer, the
+// wobble and the bar refilling are the whole announcement - no words.
 function updatePractice(dt) {
   for (const o of practiceDummies) {
     o.hitT += dt;
@@ -800,8 +749,35 @@ function updatePractice(dt) {
       if (t.x > t.x1) { t.x = t.x1; t.dir = -1; }
       if (t.x < t.x0) { t.x = t.x0; t.dir = 1; }
     }
-    // a swinger's position is pure ptFace(t.t) - nothing to integrate
   }
+  // ---- the parkour clock -------------------------------------------------
+  // plain coordinate tests against the carved ice: stepping onto the line
+  // starts a lap, the far checkpoint keeps it honest, recrossing the line
+  // records it and rolls straight into the next - continuous laps. Leaving
+  // the ice for PK_OFF_T (or dying) abandons the run without a time.
+  const ptx = Math.floor(player.x / TILE), pty = Math.floor(player.y / TILE);
+  const onIce = inWorld(ptx, pty) && ground[idx(ptx, pty)] === 1;
+  const onLine = onIce && pty === PK_LINE_Y && ptx <= PK_LINE_X1;
+  if (player.dead) {
+    parkour.on = false;
+  } else if (!parkour.on) {
+    if (onLine && !parkour.wasLine) { parkour.on = true; parkour.t = 0; parkour.cp = false; parkour.offT = 0; }
+  } else {
+    parkour.t += dt;
+    if (onIce && pty === PK_LINE_Y && ptx >= PK_CP_X0) parkour.cp = true;
+    if (onLine && !parkour.wasLine && parkour.cp) {
+      parkour.last = parkour.t;
+      const record = !parkour.best || parkour.t < parkour.best;
+      if (record) parkour.best = parkour.t;
+      burst(player.x, player.y - 10, '#ffd95c', 12, 60, 0.55, true);
+      burst(player.x, player.y - 10, '#f4f7ff', 8, 45, 0.45, true);
+      if (record) SFX.dawnChime(); else SFX.place();
+      parkour.t = 0; parkour.cp = false;
+    }
+    if (!onIce) { parkour.offT += dt; if (parkour.offT > PK_OFF_T) parkour.on = false; }
+    else parkour.offT = 0;
+  }
+  parkour.wasLine = onLine;
 }
 
 // slow top-up, never while someone is standing in the site: clearing a

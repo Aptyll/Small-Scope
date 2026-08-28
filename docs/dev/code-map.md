@@ -73,8 +73,9 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt` | `world` (the two `*_ORDER` tables: `stump structures`, structures.js) |
 | treasure chests: where they take their trees, and what one pays | `placeChests`, `CHEST_COUNT`/`CHEST_SPACING`/`CHEST_GOLD_*`/`CHEST_ODDS` | `world` (opening: `hitObject`'s chest branch, actions.js; sprite: `CHEST_SPR`, draw-world.js) |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
-| the practice arena: its gen, its dummies' numbers, the grounds' clock | `PRACTICE` (core.js), `genPracticeWorld`, `PR_W`/`PR_H`/`PR_SPAWN`/`PR_FISH`, `DUMMY_HP`/`DUMMY_WORK_DMG`/`DUMMY_RESET_T`, `practiceDummies`, `updatePractice` | `practice arena` (the hits: `hitDummy`, actions.js; sprite: `DUMMY_SPR`, draw-world.js) |
-| the archery targets: the four habits, the shared face geometry, a hit and its respawn | `ptargets`, `addPTarget`, `ptFace`, `ptLive`, `hitPTarget`, `PT_HIT_R`/`PT_RESPAWN`/`PT_POP`/`PT_ALTS` | `practice arena` (the arrow test: the PRACTICE branch, `update`, sim.js; pixels: `drawPTarget`, draw-world.js) |
+| the practice arena: its gen, the dummy's numbers, the grounds' clock | `PRACTICE` (core.js, above `WORLD` — practice worlds are 64 tiles), `genPracticeWorld`, `PR_W`/`PR_H`/`PR_SPAWN`, `DUMMY_HP`/`DUMMY_WORK_DMG`/`DUMMY_RESET_T`, `practiceDummies`, `updatePractice` | `practice arena` (the hits: `hitDummy`, actions.js; sprite: `DUMMY_SPR`, draw-world.js) |
+| the archery targets: the three habits, the shared face geometry, a hit and its respawn | `ptargets`, `addPTarget`, `ptFace`, `ptLive`, `hitPTarget`, `PT_HIT_R`/`PT_RESPAWN`/`PT_POP`/`PT_ALTS` | `practice arena` (the arrow test: the PRACTICE branch, `update`, sim.js; pixels: `drawPTarget`, draw-world.js) |
+| the ice parkour: the loop's centreline, the carve, the lap clock's state and rules | `PK_PATH`, `PK_LINE_Y`/`PK_LINE_X1`/`PK_CP_X0`/`PK_OFF_T`/`PK_GATE`, `parkour`, the parkour block of `updatePractice` | `practice arena` (pixels: `drawParkourLine`/`drawParkour`, draw-world.js) |
 
 ## js/nav.js
 
@@ -174,7 +175,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | ground painting and runtime repaints | `paintGroundTile`, `renderGround`, `repaintGround`, `hash2`, `vnoise` | `ground prerender` |
 | the treasure chest's and the practice dummy's baked sprites | `CHEST_SPR`, `DUMMY_SPR` | `entity draw` (its head; drawn in the y-sorted pass, render.js) |
 | the dummy's LAST HIT / DPS / TOTAL plate | `drawDummyMeter` (its linger: `DUMMY_METER_LINGER`, world.js) | `entity draw` |
-| the training grounds' pixels: the 32x32 target face, a target in any habit, the fence/brazier/banner draws and the two-tile weapon racks | `TARGET_SPR`, `drawPTarget`, `drawFence`, `drawBrazier`, `drawBanner`, `BRAZIER_SPR`, `bakeRack`, `RACK_BOW_SPR`, `RACK_TOOL_SPR` | `entity draw` (the records they draw: `practice arena`, world.js) |
+| the training field's pixels: the 32x32 target face, a target in any habit, the big gate flag, the two-tile bow rack, the parkour's line and readouts | `TARGET_SPR`, `drawPTarget`, `drawBanner`, `RACK_SPR`, `drawParkourLine`, `drawParkour` | `entity draw` (the records they draw: `practice arena`, world.js) |
 | the packed-earth floor's painting | `paintGroundTile` (the `gv === 3` branch) | `ground prerender` |
 | spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
 | drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |

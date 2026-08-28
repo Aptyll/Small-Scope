@@ -227,16 +227,11 @@ function removeStruct(o) {
 }
 
 function rebuildLights() {
-  // the single rebuild point for anything glowing. The training grounds'
-  // braziers (practice arena, js/world.js) are the first light-emitting
-  // object since the campfires went - a match world scans and finds none.
+  // the single rebuild point for anything glowing. Nothing emits light since
+  // the practice braziers went (and the campfires before them): every world
+  // currently rebuilds to an empty list, and this is where the next glowing
+  // object registers itself.
   lights.length = 0;
-  for (let i = 0; i < objects.length; i++) {
-    const o = objects[i];
-    if (o && o.type === 'brazier') {
-      lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 6, r: 52, warm: 44 });
-    }
-  }
 }
 
 // ------------------------------------------------------------ the building sim

@@ -256,14 +256,14 @@ function updateFish(dt) {
   }
   // the trickle that keeps the shoal alive: one fish at a time, twice as fast
   // once the water is fished down past FISH_MIN, nothing at all at the cap.
-  // The practice pond is a puddle next to a match's lakes, so its ceiling and
-  // floor are its own (PR_FISH, the `practice arena` banner in js/world.js) -
-  // thirty fish in it would be a bucket, not a shoal.
-  const fmax = PRACTICE ? PR_FISH : FISH_MAX, fmin = PRACTICE ? 3 : FISH_MIN;
+  // The practice arena has NO fishable water - its only ice is the parkour
+  // track, and a fish emerging into a race line would be absurd - so under
+  // PRACTICE the trickle is off entirely.
+  if (PRACTICE) return;
   state.fishT -= dt;
   if (state.fishT <= 0) {
-    state.fishT = fish.length < fmin ? FISH_SPAWN_FAST : FISH_SPAWN_T;
-    if (fish.length < fmax) spawnEmerger();
+    state.fishT = fish.length < FISH_MIN ? FISH_SPAWN_FAST : FISH_SPAWN_T;
+    if (fish.length < FISH_MAX) spawnEmerger();
   }
 }
 

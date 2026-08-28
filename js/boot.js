@@ -828,9 +828,10 @@ SFX.setMuted(settings.muted);
 // this as pending and the first click or keypress starts it (see js/audio.js).
 SFX.music.play('intro', { in: 1.5 });
 if (PRACTICE) {
-  // the training arena (the `practice arena` banner, js/world.js): a fixed
-  // room instead of a match world - it stocks its own wildlife and shoal, and
-  // there are no landmarks, caches beyond its own two, or eagles to place
+  // the training field (the `practice arena` banner, js/world.js): a fixed
+  // room instead of a match world - one dummy, open targets, the ice parkour,
+  // and nothing that spawns or restocks: no landmarks, chests, wildlife or
+  // eagles at all
   genPracticeWorld();
 } else {
   genWorld();
@@ -865,6 +866,9 @@ if (PRACTICE) {
   player.spawn = { tx: PR_SPAWN.tx, ty: PR_SPAWN.ty };
   player.x = (PR_SPAWN.tx + 0.5) * TILE;
   player.y = (PR_SPAWN.ty + 0.5) * TILE;
+  // early morning, forever: sim.js never advances state.time under PRACTICE,
+  // so this is the arena's one fixed hour - crisp daylight, shadowless dawn
+  state.time = 0;
   state.mode = 'play';
   camX = Math.max(0, Math.min(WORLD * TILE - WV_W, player.x - WV_W / 2));
   camY = Math.max(0, Math.min(WORLD * TILE - WV_H, player.y - WV_H / 2));
@@ -886,11 +890,11 @@ window.DBG = {
   fish, iceCracks, holes, crackIce, addFish, spawnEmerger, netAt, buildSiteAt,
   // named places: the live registry, the table behind it, and what is where
   landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
-  // the practice arena: whether this boot is one, the dummies' live records,
-  // the spawn tile, the shared hit paths, the archery targets and the ESC
-  // slab's exit plank
+  // the practice arena: whether this boot is one, the dummy's live record,
+  // the spawn tile, the shared hit paths, the archery targets, the parkour
+  // clock and the ESC slab's exit plank
   PRACTICE, practiceDummies, PR_SPAWN, hitDummy, leavePlankRect,
-  ptargets, ptFace, ptLive, hitPTarget,
+  ptargets, ptFace, ptLive, hitPTarget, parkour,
   // drop a slot (default the local one) on a tile - how to stage a landmark
   warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
   settings, perf, treeRare, cursorInfo,

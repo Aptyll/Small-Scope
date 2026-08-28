@@ -38,8 +38,11 @@ function update(dt) {
   SFX.setAmbience(!state.paused && (state.mode !== 'dead' || state.over === 'respawning'),
     state.darkness > 0.55);
 
-  // time (the clock starts with the eagle - the match is live while you ride)
-  if (state.mode === 'play' || state.mode === 'drop') {
+  // time (the clock starts with the eagle - the match is live while you ride).
+  // The practice arena has no clock at all: state.time stays pinned at the
+  // boot's early morning, so it is always crisp daylight, no dusk, no dawn
+  // refreeze - a training room, not a day
+  if ((state.mode === 'play' || state.mode === 'drop') && !PRACTICE) {
     state.time += dt;
     state.elapsed += dt;
     if (state.time >= CYCLE) {
