@@ -243,6 +243,7 @@ function tackleObject(o, dmg, p) {
   o.shake = 0.26;
   const c = structCenter(o);
   burst(c.x, c.y - 6, '#eef4fb', 8, 45, 0.5, true);
+  if (o.type === 'dummy') { hitDummy(o, dmg, c.x, c.y - 8); return; } // the dummy takes the shoulder for real
   if (!STRUCTS[o.type] || ownsStruct(o, p)) return;
   o.hp -= dmg;
   addDmgFloater(c.x, c.y - 12, dmg);
@@ -515,6 +516,8 @@ function hitObject(o, p) {
     if (!e || e.state !== 'down' || p.team === o.team) { if (near) SFX.deny(); return; }
     hurtEagle(e, EAGLE_WORK_DMG, p, ox, oy); // the puff lands on the struck tile
     if (near) SFX.chop();
+  } else if (o.type === 'dummy') {
+    hitDummy(o, DUMMY_WORK_DMG, ox, oy - 10);
   } else if (o.type === 'bush') {
     if (o.berries > 0) {
       o.berries = 0;
@@ -546,6 +549,21 @@ function hitObject(o, p) {
     // reached from swingHit only for a building on ANOTHER team
     hurtStruct(o, STRUCT_HIT_DMG, p);
   }
+}
+
+// Every way of hurting the practice dummy lands here - the E swing, every
+// bit an arrow pipeline shot can be (js/sim.js), and the roll's tackle - so
+// the numbers read the same whatever is thrown at it. The dummy never
+// breaks: the pool floors at zero and updatePractice (js/world.js) mends it
+// after DUMMY_RESET_T of quiet, which is what makes it a combo readout.
+function hitDummy(o, dmg, hx, hy) {
+  o.hp = Math.max(0, o.hp - dmg);
+  o.hitT = 0;
+  o.flash = 0.1;
+  o.shake = 0.24;
+  addDmgFloater(hx, hy - 6, dmg);
+  burst(hx, hy - 4, '#e0c890', 5, 40, 0.4, true); // straw off the sack
+  if (nearPlayer(hx, hy)) SFX.hit();
 }
 
 // One blow against a building on another team. Both things that can land one

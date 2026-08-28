@@ -47,8 +47,9 @@ function update(dt) {
       state.day++;
       // the profile's days played: each dawn the player is still in the match
       // counts the day it opens (day 1 counted itself at takeoff), so quitting
-      // to the lobby mid-match still keeps the days begun
-      if (!player.eliminated) PROFILE.addDay();
+      // to the lobby mid-match still keeps the days begun. Practice is not a
+      // match: its dawns count nothing, like the rest of its stats.
+      if (!player.eliminated && !PRACTICE) PROFILE.addDay();
       SFX.dawnChime();
       showMsg('DAY ' + state.day, 3);
       // carved ice holes freeze back over during the night; cracks heal too.
@@ -235,6 +236,22 @@ function updatePlay(dt) {
         }
       }
     }
+    if (!dead && PRACTICE) {
+      // the practice dummy: nearly three tiles tall on one solid tile, so a
+      // shot through the torso or head tiles (one and two above the base)
+      // lands too - tested before tile solidity, which would eat the base hit
+      const atx = Math.floor(a.x / TILE), aty = Math.floor(a.y / TILE);
+      let dm = null;
+      for (let dd = 0; dd <= 2 && !dm; dd++) {
+        const o = objAt(atx, aty + dd);
+        if (o && o.type === 'dummy') dm = o;
+      }
+      if (dm) {
+        hitDummy(dm, a.dmg, a.x, a.y);
+        if (a.ambush) ambushFx(a.x, a.y);
+        dead = true;
+      }
+    }
     // a bit whose `solid` is false passes through the world - that is the
     // whole of "never hits ground", and the only reason a wisp can circle you
     // through a treeline
@@ -298,6 +315,7 @@ function updatePlay(dt) {
   for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
   updateFish(dt);
   updateLandmarks(dt); // named sites restock their inhabitants
+  if (PRACTICE) updatePractice(dt); // the dummy mends itself between combos
 
   // the named place the local player is standing in drives the arrival toast
   if (player.dead || inAir(player)) state.loc = null;

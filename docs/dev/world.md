@@ -152,11 +152,41 @@ returns the landmark a world position stands in; `updatePlay` feeds it `state.lo
 `DBG` exposes `landmarks`, `LANDMARKS`, `landmarkAt`, `stockLandmarks`, `flushBirds` and
 `warp(tx, ty, p?)` — warping a slot onto a site is how to stage one.
 
+## The practice arena
+
+The training room behind the title's PRACTICE TOOL plank (three knocks break its ice —
+[rendering.md](rendering.md#main-menu-title)): `?practice=1` boots `genPracticeWorld()` (the
+`practice arena` banner, js/world.js) **instead of** `genWorld()`, and js/boot.js skips
+landmarks, chests, wildlife spawns and the eagle drop entirely — the arena stocks itself. The
+room is a **48×27-tile clearing** (`PR_W`/`PR_H`, deliberately 16:9 — the view's own shape)
+carved out of a world that is otherwise solid forest, holding one of everything worth
+practising on: the **dummy**, an ice pond with `PR_FISH` fish (the shoal trickle caps there
+instead of `FISH_MAX`, js/wildlife.js), trees, a snag, rocks, bushes, three rabbits, two stumps
+and two chests. `PRACTICE` (js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed`
+parse, so the arena is bit-identical on every visit and no seed can reshape it.
+
+Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local slot is
+the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
+forest), `die()` becomes `practiceRevive()` (full pool, spawn tile `PR_SPAWN`, a beat of
+grace), `checkLastStanding()` never fires, and the profile is never written — `gainGold` skips
+`PROFILE.addGold` (a free room with chests must not farm tech points) and the dawn skips
+`addDay`. The way out is the ESC slab's LEAVE PRACTICE plank
+([settings](gameplay.md#settings)).
+
+The **dummy** is an `OBJECTS` entry (`solid`, any tool, verb HIT) with one solid tile and a
+26×42 sprite (`DUMMY_SPR`, baked in js/draw-world.js beside the chest). Every way of hurting it
+lands in `hitDummy` (js/actions.js): the E swing (`DUMMY_WORK_DMG`), every bit — the arrow loop
+tests the dummy across its base tile and the two above it, so torso and head shots land — and
+the roll's tackle. It never breaks: the pool floors at zero, the overhead bar appears only
+while it is hurt, and `updatePractice` (called from `updatePlay` under `PRACTICE`) mends it
+back to `DUMMY_HP` after `DUMMY_RESET_T` seconds unhit, with a shimmer for the announcement.
+
 ## Determinism and noise
 
 Every run picks a fresh `SEED` at boot from `Date.now() ^ Math.random()`, and **everything random
 derives from it** — there is no other entropy source. `?seed=N` in the URL overrides it, which is
-how you replay or diff a specific world. `drawTags()` prints `SEED_TXT` as a line of the **info
+how you replay or diff a specific world (and `?practice=1` overrides *that*: the
+[practice arena](#the-practice-arena) pins `SEED` to `PRACTICE_SEED`). `drawTags()` prints `SEED_TXT` as a line of the **info
 stack** on the left edge at the top quarter of the view (drawn after the map, settings, and death
 overlays), so a screenshot carries the world it came from while `settings.info` is on — the INFO
 DISPLAY row in the ESC menu or **F3**, default **off**, so flip it on before comparison captures;

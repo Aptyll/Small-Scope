@@ -236,6 +236,14 @@ function render() {
       drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
     } else if (o.type === 'chest') {
       drawSpriteFlash(CHEST_SPR, px + sh, py + TILE - CHEST_SPR.height, o.flash);
+    } else if (o.type === 'dummy') {
+      // the practice target: skids on its tile, everything else drawn up off
+      // it like a tree. The readout bar only appears once it is hurt, and
+      // updatePractice mending it is what takes the bar away again.
+      const dx = px + sh + ((TILE - DUMMY_SPR.width) >> 1);
+      const dy = py + TILE - DUMMY_SPR.height;
+      drawSpriteFlash(DUMMY_SPR, dx, dy, o.flash);
+      if (o.hp < o.maxHp) drawHealthBar(px + 8 + sh, dy - 6, o.hp, o.maxHp, 20);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {

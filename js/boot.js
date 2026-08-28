@@ -827,12 +827,19 @@ SFX.setMuted(settings.muted);
 // the title track. Browsers refuse audio before a gesture, so SFX.music holds
 // this as pending and the first click or keypress starts it (see js/audio.js).
 SFX.music.play('intro', { in: 1.5 });
-genWorld();
-placeLandmarks();  // worldgen's last pass, before the ground is baked
-placeChests();     // ...then the caches take their trees (objects only, no ground)
-spawnAnimals();
-spawnFish();
-stockLandmarks();  // wolves and birds go in once the world is standing
+if (PRACTICE) {
+  // the training arena (the `practice arena` banner, js/world.js): a fixed
+  // room instead of a match world - it stocks its own wildlife and shoal, and
+  // there are no landmarks, caches beyond its own two, or eagles to place
+  genPracticeWorld();
+} else {
+  genWorld();
+  placeLandmarks();  // worldgen's last pass, before the ground is baked
+  placeChests();     // ...then the caches take their trees (objects only, no ground)
+  spawnAnimals();
+  spawnFish();
+  stockLandmarks();  // wolves and birds go in once the world is standing
+}
 initPlayers();
 renderGround();
 buildMapPanel();
@@ -843,6 +850,27 @@ buildPatchPanel();
 rebuildLights();
 camX = player.x - WV_W / 2;
 camY = player.y - WV_H / 2;
+// practice boots straight onto the snow: no title, no eagle. The other nine
+// slots empty out (control 'none' - `active` is derived from it) and stand
+// parked in the corner forest, far outside the arena, so their ghost
+// silhouettes never wander into a capture; the local slot takes the arena's
+// spawn tile and the HUD slides in the way a landing's does.
+if (PRACTICE) {
+  for (const p of players) {
+    if (p === player) continue;
+    p.control = 'none';
+    p.spawn = { tx: 4, ty: 4 };
+    p.x = (4.5) * TILE; p.y = (4.5) * TILE;
+  }
+  player.spawn = { tx: PR_SPAWN.tx, ty: PR_SPAWN.ty };
+  player.x = (PR_SPAWN.tx + 0.5) * TILE;
+  player.y = (PR_SPAWN.ty + 0.5) * TILE;
+  state.mode = 'play';
+  camX = Math.max(0, Math.min(WORLD * TILE - WV_W, player.x - WV_W / 2));
+  camY = Math.max(0, Math.min(WORLD * TILE - WV_H, player.y - WV_H / 2));
+  state.introFrom = { x: camX, y: camY };
+  state.intro = HUD_IN_T; state.introLen = HUD_IN_T;
+}
 // landing from a reroll: the whiteout the die left behind clears to the new world
 try {
   if (sessionStorage.getItem('softfall.reroll')) {
@@ -858,6 +886,9 @@ window.DBG = {
   fish, iceCracks, holes, crackIce, addFish, spawnEmerger, netAt, buildSiteAt,
   // named places: the live registry, the table behind it, and what is where
   landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
+  // the practice arena: whether this boot is one, the dummies' live records,
+  // the spawn tile, the shared hit path and the ESC slab's exit plank
+  PRACTICE, practiceDummies, PR_SPAWN, hitDummy, leavePlankRect,
   // drop a slot (default the local one) on a tile - how to stage a landmark
   warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
   settings, perf, treeRare, cursorInfo,

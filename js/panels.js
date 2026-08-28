@@ -520,12 +520,22 @@ function applySliderDrag() {
 // the speaker beside the MASTER track: 9x9, the same plate the toggle rows use
 function muteBtnRect() { return { x: SET_MUTE_X, y: ROW_SOUND - 1, w: 9, h: 9 }; }
 
+// Practice only: the way back out of the training arena - a frost plank
+// hanging under the settings slab (the ESC panel is the room's one menu).
+// Clicking it is leavePractice() (js/menu.js): the reroll's whiteout onto a
+// bare URL, so leaving lands on a fresh title world.
+function leavePlankRect() { return { x: Math.round((VIEW_W - 132) / 2), y: SET_Y + SET_H + 8, w: 132, h: 20 }; }
+
 // which settings widget is under the pointer (null for none); shared by the
 // click handler and the cursor so the hand cursor can never disagree with a click
 function settingsHit() {
   const mx = mouse.x, my = mouse.y;
   const b = muteBtnRect();
   if (mx >= b.x - 2 && mx < b.x + b.w + 2 && my >= b.y - 2 && my < b.y + b.h + 2) return 'mute';
+  if (PRACTICE && state.settingsOpen) {
+    const l = leavePlankRect();
+    if (mx >= l.x - 2 && mx < l.x + l.w + 2 && my >= l.y - 3 && my < l.y + l.h + 3) return 'leave';
+  }
   if (mx < SL_X - 4 || mx > SL_X + SL_W + 6) return null;
   // 14px pitch, so the bands must not overlap or a click lands on two rows
   const inRow = (y) => my >= y - 3 && my <= y + 10;
@@ -544,6 +554,7 @@ function settingsMouseDown() {
   const hit = settingsHit();
   if (!hit) return;
   if (hit === 'vol' || hit === 'music' || hit === 'sfx' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
+  if (hit === 'leave') { leavePractice(); return; }
   if (hit === 'mute') settings.muted = SFX.toggleMute();
   else if (hit === 'shake') settings.shake = !settings.shake;
   else if (hit === 'info') settings.info = !settings.info;
@@ -615,6 +626,10 @@ function renderSettings(now, opts) {
   drawToggleRow(ROW_SHAKE, settings.shake);
   drawToggleRow(ROW_INFO, settings.info);
   drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
+  // the arena's one exit, on the same frost plank the title menu is made of
+  // (drawMenuButton, js/menu.js). Practice never opens this panel from the
+  // title, so it only ever appears on the in-match ESC slab.
+  if (PRACTICE && !slide) drawMenuButton(leavePlankRect(), 'LEAVE PRACTICE', hit === 'leave' ? 1 : 0, now, false, false);
   if (slide) ctx.restore();
 }
 

@@ -19,6 +19,11 @@ eagle dives into the treeline and becomes its team's **objective**. **Last team 
 The world is 232 tiles of 16 px — a 3712×3712 px snowfield with a forest border and an open
 interior threaded by frozen lakes and rivers. See [world.md](world.md#the-tile-world).
 
+Outside the match sits one room: the **practice tool** — a fixed, seedless training arena with a
+mending target dummy and one of everything worth practising on, found by breaking the ice off its
+menu plank. Nothing in it counts and nothing in it is at stake.
+See [the practice arena](world.md#the-practice-arena).
+
 ## The pillars
 
 **Your weapon is something you build.** Keys 1-4 are four slots, each holding a **tool** — a body

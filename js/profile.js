@@ -39,6 +39,7 @@
       name: '',        // '' until the first-launch prompt is answered
       named: false,    // has that prompt been answered at all (SKIP counts)
       dropped: false,  // has this profile ever jumped off the eagle - gates the first-flight countdown
+      practice: false, // has the PRACTICE TOOL plank been knocked open (3 knocks; stays open)
       // wins = matches the local slot was standing for at the win
       // (endMatch('won')); days = days begun (takeoff + each dawn still in).
       // A save written as games/bestDay is a different pair and is not copied.
@@ -118,6 +119,7 @@
         if (typeof s.name === 'string') profile.name = s.name;
         profile.named = !!s.named;
         profile.dropped = !!s.dropped;
+        profile.practice = !!s.practice;
         if (s.stats && typeof s.stats === 'object') {
           // only the live keys. games/bestDay from PATCH 1.82 are not wins/days
           // (matches started vs matches won; highest day vs days begun), so an
@@ -185,6 +187,13 @@
     // runs the PREPARE TO DROP countdown and jumps itself (js/boot.js)
     hasDropped() { return !!profile.dropped; },
     markDropped() { if (!profile.dropped) { profile.dropped = true; saveNow(); } },
+
+    // ---- the practice tool --------------------------------------------------
+    // whether the PRACTICE TOOL plank's ice has been broken (three knocks at
+    // the title menu, js/menu.js). Once open it never refreezes for this
+    // profile - the plank is a live menu item from then on.
+    practiceOpen() { return !!profile.practice; },
+    markPractice() { if (!profile.practice) { profile.practice = true; saveNow(); } },
 
     // ---- settings ---------------------------------------------------------
     // The live stored object, or null if this profile has never saved any.

@@ -38,9 +38,19 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+// Practice mode: ?practice=1 boots the training arena (the `practice arena`
+// banner, js/world.js) instead of a match - no title menu, no eagles, no other
+// slots. It pins SEED to a constant BELOW ?seed on purpose, so the arena is
+// the same ground on every machine every time: a practice room the seed can
+// never reshuffle. Entered from the menu plank (menu.js beginPractice), left
+// from the ESC panel (leavePractice) - both are page reloads, like the reroll.
+const PRACTICE = /[?&]practice=1/.test(location.search);
+const PRACTICE_SEED = 0x50524143; // 'PRAC'
+
 // one run seed drives every deterministic value: worldgen, per-tile hashes, fx.
 // ?seed=N in the URL replays a world exactly.
 const SEED = (function () {
+  if (PRACTICE) return PRACTICE_SEED;
   const q = /[?&]seed=([0-9]+)/.exec(location.search);
   if (q) return (parseInt(q[1], 10) >>> 0) || 1;
   return ((Date.now() ^ Math.floor(Math.random() * 0xFFFFFFFF)) >>> 0) || 1;
@@ -104,8 +114,10 @@ const state = {
     nameBuf: '', nameFirst: false, nameShake: 0, nameHover: [0, 0],
     moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
     // frozen planks: refusal shudder timer, which plank was struck (menu index),
-    // per-knock crack seed, the struck point (plank-local) and the ice chips it sprays (screen-space)
-    iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [],
+    // per-knock crack seed, the struck point (plank-local) and the ice chips it sprays (screen-space).
+    // iceMarks: the PRACTICE TOOL plank's standing cracks - one per knock, and
+    // the third knock breaks the sheet for good (menu.js iceRefuse)
+    iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [], iceMarks: [],
     // champion select: which screen the menu shows, its cross-fade, the
     // highlighted champion, per-card hover eases, swap pop, lock-in hold
     // screen: 'menu' | 'select' | 'gear' | 'tech'. select and gear cross-fade

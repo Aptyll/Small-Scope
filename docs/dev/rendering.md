@@ -864,15 +864,21 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `state.menu`:
 
 - **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / TECH TREE / SETTINGS —
-  `menuFrozen(i)` is true for MULTIPLAYER and PRACTICE TOOL: both drawn sealed under an ice
-  glaze by `drawMenuButton(..., frozen)`, never selectable or activatable until they exist;
-  arrow keys skip the whole iced block and the hand cursor ignores them. Each frozen plank's
+  `menuFrozen(i)` is true for MULTIPLAYER always, and for PRACTICE TOOL until the profile has
+  broken it open: frozen planks are drawn sealed under an ice glaze by
+  `drawMenuButton(..., frozen)`, never selectable or activatable;
+  arrow keys skip the iced planks and the hand cursor ignores them. Each frozen plank's
   `menu.hover` slot tracks the pointer instead of the selection and drives a cold shimmer —
   pale rim, a sheen sweeping the glaze, frost breath — and clicking one calls `iceRefuse(i)`:
   that plank rattles for `menu.iceT` (`menu.iceI` names which), hairline cracks flash from the
   struck point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it
-  refreezes, and `menu.shards` ice chips spray and fall, to `SFX.iceKnock`. SINGLEPLAYER leads
-  the column as the one live way in; the sealed pair sits as a quiet coming-soon block;
+  refreezes, and `menu.shards` ice chips spray and fall, to `SFX.iceKnock`. **PRACTICE TOOL's
+  ice is breakable**: each knock there also leaves its crack web standing (`menu.iceMarks`,
+  drawn every frame by the same `cracksAt` helper), and the third calls `breakPracticeIce` —
+  the whole glaze sprays off, `PROFILE.markPractice()` keeps the break, and from then on the
+  plank is a live item whose activation is `beginPractice()` (the reroll's whiteout onto
+  `?practice=1`, the [practice arena](world.md#the-practice-arena)). SINGLEPLAYER leads
+  the column as the first live way in; MULTIPLAYER sits as a quiet coming-soon block;
   [TECH TREE](#the-tech-tree-screen) and SETTINGS are the two live utilities at the foot) plus
   the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
   `MENU_PITCH` apart from `MENU_Y0`. **`menu.hover` has one cell per rect** — items *plus* the
@@ -914,7 +920,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   (no dim, no minimap preview, translated by `slide`) — its widgets only take input once
   `menuPanelReady()`, so a click can never land on a half-slid row, and clicking outside the
   slab closes it. The help panel (`helpPanelCv`, controls + the rules of the frostlands) still
-  bakes, but PRACTICE TOOL is frozen so the title no longer opens it; PATCH
+  bakes, but nothing on the title opens it any more (PRACTICE TOOL now boots the arena); PATCH
   NOTES is `patchPanelCv`, opened by clicking the `PATCH_TXT` tag bottom-right (`patchTagRect` /
   `overPatchTag`; the tag turns gold with an underline on hover): the frame is baked once, the
   entries (newest first, word-wrapped) into `patchNotesCv` as tall as they need, and render blits

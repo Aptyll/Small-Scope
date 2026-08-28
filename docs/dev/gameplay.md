@@ -1367,6 +1367,12 @@ the CONTROLS divider without `SET_H` growing: 218 is already close to the 240-ro
 `y-3 .. y+10` to match that pitch — 14 px each, touching but never overlapping, so one click can
 never land on two rows.
 
+**In [practice](world.md#the-practice-arena) the slab grows one hanger.** A LEAVE PRACTICE frost
+plank (`leavePlankRect`, drawn by the title's own `drawMenuButton`) hangs under the panel — the
+ESC slab is the arena's only menu, so its exit lives there. `settingsHit()` answers `'leave'`
+for it (PRACTICE only) and the click is `leavePractice()` (js/menu.js): the reroll's whiteout
+onto a bare URL, landing on a fresh title world.
+
 **Mute is not a row.** It is a 9×9 speaker plate (`muteBtnRect`, `drawMuteBtn`) hard against the
 left end of the MASTER track: a cone with two waves coming off it, the waves swapped for a red ×
 when it is off. `settingsHit()` tests it *before* the track's x-gate, since it sits left of

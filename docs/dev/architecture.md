@@ -23,7 +23,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
 | [js/player.js](../../js/player.js) | ~760 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
-| [js/world.js](../../js/world.js) | ~470 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, and the landmarks with their own `lmRng` stream |
+| [js/world.js](../../js/world.js) | ~590 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, the landmarks with their own `lmRng` stream, and the practice arena |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |
@@ -64,7 +64,9 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 The local player profile — display name, lifetime stats (`wins`, `gold`, `days`), the
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
-eagle, gating the ride's first-flight countdown), the
+eagle, gating the ride's first-flight countdown), the one-shot `practice` flag
+(`practiceOpen()`/`markPractice()`: has the PRACTICE TOOL plank's ice been broken — three
+knocks at the title, after which the plank stays a live menu item), the
 [tech tree](gameplay.md#the-tech-tree)'s two id lists (`tech.seen` / `tech.done`) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that

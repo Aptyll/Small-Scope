@@ -35,6 +35,11 @@ const OBJECTS = {
   chest:    { solid: true,  tool: 'axe',  needs: null,   verb: 'OPEN', lift: 12,
               mm: [242, 204, 100], map: [206, 160, 70] },
   den:      { solid: true,  mm: [92, 86, 100],   map: [86, 80, 92] },
+  // the practice arena's target (the `practice arena` banner below): any tool
+  // hits it, it never falls, and it mends itself between combos. E swings,
+  // every bit and the roll's tackle all land through hitDummy (js/actions.js).
+  dummy:    { solid: true,  tool: 'axe',  needs: null,   verb: 'HIT', lift: 28,
+              mm: [216, 178, 122], map: [188, 148, 96] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
   // solid to walkers and a work target for RIVAL E swings only - workTarget
@@ -500,6 +505,95 @@ function landmarkAt(x, y) {
   const tx = x / TILE - 0.5, ty = y / TILE - 0.5;
   for (const L of landmarks) if (Math.hypot(tx - L.tx, ty - L.ty) <= L.r) return L;
   return null;
+}
+
+// ------------------------------------------------------------ practice arena
+// The training room behind the PRACTICE TOOL plank: a 48x27-tile clearing (a
+// 16:9 frame, the view's own shape) carved out of a world that is otherwise
+// solid forest, with one of everything worth practising on - the dummy, an
+// ice pond with fish, trees, a snag, rocks, bushes, two stumps to build on
+// and two chests. Boots only under PRACTICE (js/core.js pins the seed to
+// PRACTICE_SEED, so ?seed can never reshape it) and replaces genWorld
+// outright: no landmarks, no eagles, no other slots (js/boot.js). One player,
+// nothing at stake - die() revives on the spot and the profile's lifetime
+// gold is never paid (both guarded in js/player.js).
+const PR_W = 48, PR_H = 27;                      // the clearing, in tiles: 16:9
+const PR_X0 = (WORLD - PR_W) >> 1, PR_Y0 = (WORLD - PR_H) >> 1;
+const PR_SPAWN = { tx: PR_X0 + 22, ty: PR_Y0 + 13 }; // where the player stands, facing the dummy
+const DUMMY_HP = 60;
+const DUMMY_WORK_DMG = 10;   // what one E swing chips off it (the eagle's own number)
+const DUMMY_RESET_T = 2.5;   // s unhit before the dummy mends itself back to full
+const PR_FISH = 6;           // the pond's shoal, and the ceiling the trickle refills to
+const practiceDummies = [];  // every dummy standing, for updatePractice's mend clock
+
+function genPracticeWorld() {
+  // solid forest everywhere, then the clearing carved out of it - the rim
+  // tiles keep a scatter of trees so the treeline reads ragged, not stamped
+  for (let ty = 0; ty < WORLD; ty++) {
+    for (let tx = 0; tx < WORLD; tx++) {
+      const inX = tx >= PR_X0 && tx < PR_X0 + PR_W, inY = ty >= PR_Y0 && ty < PR_Y0 + PR_H;
+      if (inX && inY) {
+        const rim = tx === PR_X0 || tx === PR_X0 + PR_W - 1 || ty === PR_Y0 || ty === PR_Y0 + PR_H - 1;
+        if (!rim || hash2(tx * 3 + 7, ty * 5 + 1) > 0.4) continue;
+      }
+      placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+    }
+  }
+  // the ice pond, west: an ellipse two tiles clear of the wall - big enough
+  // to slide across, crack open and fish through
+  const pcx = PR_X0 + 9, pcy = PR_Y0 + 13;
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
+    if ((dx * dx) / 36 + (dy * dy) / 14 > 1) continue;
+    const tx = pcx + dx, ty = pcy + dy;
+    if (!objects[idx(tx, ty)]) ground[idx(tx, ty)] = 1;
+  }
+  // the dummy, standing right of centre with clear ground on every side
+  const d = placeObj(PR_X0 + 31, PR_Y0 + 13, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99 });
+  practiceDummies.push(d);
+  // one of everything the E key works: a stand of pines and a snag to chop...
+  for (const [tx, ty] of [[PR_X0 + 39, PR_Y0 + 5], [PR_X0 + 41, PR_Y0 + 7], [PR_X0 + 38, PR_Y0 + 8],
+                          [PR_X0 + 43, PR_Y0 + 4], [PR_X0 + 36, PR_Y0 + 4]]) {
+    placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+  }
+  placeObj(PR_X0 + 41, PR_Y0 + 10, 'deadTree', { hp: 3, variant: 0 });
+  // ...rocks to mine...
+  for (const [tx, ty] of [[PR_X0 + 37, PR_Y0 + 21], [PR_X0 + 39, PR_Y0 + 22], [PR_X0 + 41, PR_Y0 + 20],
+                          [PR_X0 + 38, PR_Y0 + 24], [PR_X0 + 42, PR_Y0 + 23]]) {
+    placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
+  }
+  // ...berries, and two stumps standing ready to build on
+  for (const [tx, ty] of [[PR_X0 + 18, PR_Y0 + 4], [PR_X0 + 22, PR_Y0 + 3], [PR_X0 + 26, PR_Y0 + 5]]) {
+    placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
+  }
+  placeObj(PR_X0 + 8, PR_Y0 + 22, 'stump');
+  placeObj(PR_X0 + 11, PR_Y0 + 23, 'stump');
+  // two chests against the treeline, top-tier loot inside as anywhere
+  placeObj(PR_X0 + 2, PR_Y0 + 2, 'chest', { hp: 1 });
+  placeObj(PR_X0 + 45, PR_Y0 + 14, 'chest', { hp: 1 });
+  // moving targets, and a shoal under the pond
+  for (const [tx, ty] of [[PR_X0 + 20, PR_Y0 + 8], [PR_X0 + 30, PR_Y0 + 20], [PR_X0 + 25, PR_Y0 + 17]]) {
+    animals.push(makeAnimal('rabbit', (tx + 0.5) * TILE, (ty + 0.5) * TILE));
+  }
+  for (let i = 0; i < PR_FISH; i++) {
+    addFish((pcx + rand(-2, 2) + 0.5) * TILE, (pcy + rand(-1, 1) + 0.5) * TILE);
+  }
+}
+
+// the dummies' mend clock, from updatePlay under PRACTICE only: a stretch of
+// quiet and the sack stitches itself back to full - the shimmer and the bar
+// refilling are the whole announcement, no words
+function updatePractice(dt) {
+  for (const o of practiceDummies) {
+    o.hitT += dt;
+    if (o.hp < o.maxHp && o.hitT > DUMMY_RESET_T) {
+      o.hp = o.maxHp;
+      o.flash = 0.18;
+      const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+      burst(ox, oy - 14, '#f4f7ff', 8, 40, 0.5, true);
+      burst(ox, oy - 14, '#e0c890', 5, 35, 0.45, true);
+      if (nearPlayer(ox, oy)) SFX.place();
+    }
+  }
 }
 
 // slow top-up, never while someone is standing in the site: clearing a

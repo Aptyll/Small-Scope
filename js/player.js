@@ -92,7 +92,9 @@ function levelMaxHp(p) { return kitOf(p).maxHp + LVL_HP * (p.level - 1); }
 function gainGold(p, n) {
   p.inv.gold += n;
   p.xp += n;
-  if (p === player) PROFILE.addGold(n); // lifetime total, coalesced - see profile.js
+  // lifetime total, coalesced - see profile.js. Practice gold is play money:
+  // a free room with chests in it must never farm the tech tree's points.
+  if (p === player && !PRACTICE) PROFILE.addGold(n);
   while (p.level < LEVEL_MAX && p.xp >= LEVEL_XP[p.level]) levelUp(p);
 }
 // Gold is never a physical drop: every source pays the earner on the spot
@@ -628,6 +630,9 @@ const RESPAWN_TIME = 8; // flat, gold-free - "the respawn from a keep is timer-o
 // respawn-pending local death gets the lighter 'respawning' overlay instead
 // (see endMatch/DEAD_ITEMS/renderDead).
 function die(p, src, cause) {
+  // practice: nothing is at stake and nobody is ever out - a death is undone
+  // on the spot, back at the spawn tile with the build and the bag untouched
+  if (PRACTICE && p === player) { practiceRevive(p); return; }
   p.dead = true;
   p.charging = false;
   p.chargeT = 0;
@@ -757,10 +762,29 @@ function rivalTeamsInMatch(p) {
 // together - a Keep still standing, or a teammate mid-respawn-timer, keeps
 // a team in it - so this is the last TEAM standing, not the last player.
 function checkLastStanding() {
+  // practice has no rivals and no ending - an empty roster must not read as a win
+  if (PRACTICE) return;
   // state.eagleCine: the driven-off ceremony is playing - the screens wait
   // for it (eagleFleeResolve re-runs this once the camera has had its moment)
   if (state.over || state.eagleCine || player.eliminated || rivalTeamsInMatch(player) > 0) return;
   endMatch('won');
+}
+
+// the practice room's answer to a fall: full pool, spawn tile, a beat of
+// grace - the fall through the ice or the tackle still HAPPENED (the damage
+// numbers taught what they taught), it just costs nothing that lasts
+function practiceRevive(p) {
+  p.hp = p.maxHp;
+  p.vx = p.vy = 0;
+  p.dodgeT = 0; p.stunT = 0; p.stunMax = 0;
+  p.fallT = 0; p.sliding = false;
+  p.prone = false; p.hide = 0; p.riseT = 0;
+  p.charging = false; p.chargeT = 0; p.fireArmed = false;
+  const s = p.spawn || { tx: WORLD >> 1, ty: WORLD >> 1 };
+  p.x = (s.tx + 0.5) * TILE; p.y = (s.ty + 0.5) * TILE;
+  p.invuln = 2;
+  burst(p.x, p.y - 4, '#f4f7ff', 14, 60, 0.5, true);
+  SFX.place();
 }
 
 // Both end screens print the same object, so there is one of these rather

@@ -150,6 +150,75 @@ const CHEST_SPR = (() => {
   });
   return c;
 })();
+// The practice dummy (the `practice arena` banner, js/world.js), baked here
+// for the same reason the chest is. A big target you read across the arena:
+// a burlap sack head with stitched eyes under a snow cap, arms lashed to a
+// crossbar with rope, a sack torso wearing a painted red ring, straw leaking
+// out of the cinch, and a post into crossed skids in the drift. 26x42 - a
+// head taller than a player, drawn up off its one solid tile like a tree.
+const DUMMY_SPR = (() => {
+  const pal = {
+    o: '#1c1208',                                        // outline
+    w: '#5c4226', W: '#8a6142', v: '#b98a58',            // post + crossbar wood
+    b: '#a8875a', B: '#c9a874', d: '#7a5f3d', D: '#5e4930', // burlap, lit to shaded
+    r: '#5c4526', R: '#93744a',                          // rope windings
+    t: '#a83232', T: '#d05548',                          // the painted ring
+    s: '#f4f7ff', S: '#c4d4ea',                          // snow cap and drift
+    y: '#e0c890', Y: '#f2e0a8',                          // straw
+    x: '#4a3826',                                        // stitching
+  };
+  const rows = [
+    '..........oooooo..........',
+    '.........osssssso.........',
+    '........obsssssSbdo.......',
+    '.......oBBbbbbbbbddo......',
+    '.......oBbbbbbbbbddo......',
+    '.......oBbbxbbxbbddo......',
+    '.......oBbbbxxbbbddo......',
+    '.......odbbbbbbbbdDo......',
+    '........odbbbbbbdDo.......',
+    '..........orrrro..........',
+    '.osWWWWWWWrrrrrrWWWWWWWso.',
+    '.ovWWWWWWWrbbbbrWWWWWWWvo.',
+    '.owwWWWWWWrbbbbrWWWWWWwwo.',
+    '..oowwwwwWrbbbbrWwwwwwoo..',
+    '.....oBBbbbbbbbbbbddo.....',
+    '....oBBbbbbbbbbbbbbddo....',
+    '....oBbbbbbbbbbbbbbddo....',
+    '....oRrrRrrRrrRrrRrro.....',
+    '....oBbbbbbttttbbbbddo....',
+    '....oBbbbttbbbbttbbddo....',
+    '....oBbbttbbbbbbttbddo....',
+    '....oBbbtbbbTTbbbtbddo....',
+    '....oBbbtbbTTTTbbtbddo....',
+    '....oBbbtbbbTTbbbtbddo....',
+    '....oBbbttbbbbbbttbddo....',
+    '....oBbbbttbbbbttbbddo....',
+    '....oBbbbbbttttbbbbddo....',
+    '....oRrrRrrRrrRrrRrro.....',
+    '....oBbbbxbbbbbbxbbddo....',
+    '.....odbbbbbbbbbbdDo......',
+    '......yodbbbbbbdoy........',
+    '.......Yorrrrrroy.........',
+    '..........oWwwwo..........',
+    '..........oWwwwo..........',
+    '..........oWwwwo..........',
+    '..........oWwvwo..........',
+    '..........oWwwwo..........',
+    '..........oWwwwo..........',
+    '........ooWWwwWWoo........',
+    '......oWWwwwwwwwwWWo......',
+    '....osWWwwwwwwwwwwWWso....',
+    '...ssSsssssssssssssSss....',
+  ];
+  const c = document.createElement('canvas');
+  c.width = 26; c.height = rows.length;
+  const g = c.getContext('2d');
+  rows.forEach((r, y) => {
+    for (let x = 0; x < 26; x++) if (pal[r[x]]) { g.fillStyle = pal[r[x]]; g.fillRect(x, y, 1, 1); }
+  });
+  return c;
+})();
 // Spent arrows in the snow, drawn flat under everything that walks: a stub of
 // shaft on the bearing it came in on (the head is buried, so it starts at the
 // entry point and runs backwards), fletching in the shooter's team colour, a

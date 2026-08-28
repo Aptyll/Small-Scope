@@ -11,20 +11,22 @@ const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD sl
 const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
 const PANEL_SLIDE_T = 0.32;
 const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'TECH TREE', 'SETTINGS'];
-// sealed under ice until they exist: inert to hover, keys and clicks. 1 and 2
-// are MULTIPLAYER and PRACTICE TOOL - SINGLEPLAYER leads, the sealed pair sits
-// as a quiet coming-soon block, and TECH TREE / SETTINGS are the two live
-// utilities at the foot.
-function menuFrozen(i) { return i === 1 || i === 2; }
+// sealed under ice until they exist: inert to hover, keys and clicks.
+// MULTIPLAYER (1) is solid ice - a coming-soon plank. PRACTICE TOOL (2) is
+// sealed the same way but its ice is BREAKABLE: three knocks shatter the
+// sheet (iceRefuse below), the profile remembers, and from then on the plank
+// is a live item that boots the training arena (beginPractice).
+function menuFrozen(i) { return i === 1 || (i === 2 && !PROFILE.practiceOpen()); }
 const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // First plank, in the 270-tall authored frame; the seed row follows the last
 // plank. The pitch tightened by 2 and the column started 4 higher when the
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.86'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.87'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.87', 'KNOCK ON THE PRACTICE TOOL PLANK THREE TIMES AND ITS ICE BREAKS FOR GOOD - BEHIND IT IS A TRAINING ARENA THAT IS THE SAME EVERY VISIT, WITH A BIG STRAW DUMMY THAT COUNTS YOUR HITS AND MENDS ITSELF, ICE, FISH, TREES AND CHESTS, AND NOTHING AT STAKE.'],
   ['1.86', 'HOVER ANYTHING AND THE BOTTOM LEFT SAYS WHAT IT IS AND WHAT ITS NUMBERS ARE, AND A TECH TREE ON THE MAIN MENU REMEMBERS WHAT YOU HAVE RESEARCHED AND DECIDES WHAT THE WORLD IS ALLOWED TO DROP.'],
   ['1.85', 'WEAPONS ARE BUILT NOW - KEYS 1-4 HOLD TOOLS, TOOLS HOLD BITS THAT SAY WHAT THEY FIRE, AND ROCKS, TREES AND CHESTS ARE WHERE BOTH ARE FOUND.'],
   ['1.84', 'A LOSS PLAYS ITS OWN SONG NOW - SLEEPY GAME SAVE, NOT THE VICTORY TRACK.'],
@@ -185,16 +187,79 @@ function iceRefuse(i) {
       c: ['#e8f4ff', '#a8c8e8', '#f4f7ff'][i % 3],
     });
   }
+  // the practice plank's ice takes damage instead of healing: every knock
+  // leaves its crack web standing (iceMarks, drawn by drawMenuButton), and
+  // the third breaks the sheet open for good
+  if (i === 2) {
+    m.iceMarks.push({ x: m.iceX, y: m.iceY, seed: m.iceSeed });
+    if (m.iceMarks.length >= 3) { breakPracticeIce(i); return; }
+  }
   SFX.iceKnock();
+}
+
+// the third knock: the whole sheet lets go. The glaze bursts off the plank in
+// one spray, the profile keeps the break, and the plank is live from here on -
+// menuFrozen() reads PROFILE.practiceOpen(), so nothing else needs telling.
+function breakPracticeIce(i) {
+  const m = state.menu;
+  const { rects } = menuLayout();
+  const r = rects[i];
+  PROFILE.markPractice();
+  m.iceT = 0; m.iceI = -1;
+  m.iceMarks.length = 0;
+  for (let k = 0; k < 34; k++) { // the whole glaze coming away, not one chip
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 3.4;
+    const sp = 40 + Math.random() * 110;
+    m.shards.push({
+      x: r.x + 4 + Math.random() * (r.w - 8), y: r.y + 2 + Math.random() * (r.h - 4),
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30,
+      life: 0.5 + Math.random() * 0.6, w: Math.random() < 0.4 ? 2 : 1,
+      c: ['#e8f4ff', '#a8c8e8', '#f4f7ff', '#ffffff'][k % 4],
+    });
+  }
+  m.sel = i; // the freed plank takes the selection: the eye is already on it
+  SFX.break_();
+  SFX.unlock();
 }
 
 function menuActivate(i) {
   if (menuFrozen(i)) return; // solid ice - iceRefuse() is the only answer
   SFX.unlock();
   if (i === 0) beginSelect();
+  else if (i === 2) beginPractice();
   else if (i === 3) beginTech();
   else if (i === 4) openMenuPanel('settings');
   else if (i === MENU_ITEMS.length) rerollWorld();
+}
+
+// Into the training arena: the same whiteout-and-reload the die uses, onto
+// ?practice=1 - PRACTICE (js/core.js) pins the seed and js/boot.js boots the
+// arena straight into play. leavePractice is the way back (the ESC panel's
+// plank, js/panels.js): the same fade onto a bare URL, so leaving practice
+// lands on a fresh title world exactly like a reroll does.
+function beginPractice() {
+  if (state.fade) return;
+  SFX.dodge();
+  SFX.music.stop(0.45);
+  state.fade = {
+    a: 0, to: 1, spd: 1 / 0.55, color: '#f4f7ff',
+    then: () => {
+      try { sessionStorage.setItem('softfall.reroll', '1'); } catch (e) { }
+      location.href = location.pathname + '?practice=1';
+    },
+  };
+}
+function leavePractice() {
+  if (state.fade) return;
+  SFX.pickup();
+  SFX.music.stop(0.45);
+  state.fade = {
+    a: 0, to: 1, spd: 1 / 0.55, color: '#f4f7ff',
+    then: () => {
+      try { sessionStorage.setItem('softfall.reroll', '1'); } catch (e) { }
+      location.href = location.pathname;
+    },
+  };
 }
 
 function openMenuPanel(kind) {
@@ -483,25 +548,30 @@ function drawMenuButton(r, label, hv, now, pressed, frozen) {
       }
       ctx.globalAlpha = a0;
     }
-    if (m.iceT > 0 && m.iceI === r.i) {
-      // dark fissures with the odd white glint, so they read against the pale glaze
-      ctx.globalAlpha = a0 * Math.min(1, m.iceT / 0.45);
+    // one knock's crack web: dark fissures with the odd white glint, so they
+    // read against the pale glaze. Shared by the refusal flash and the
+    // practice plank's STANDING marks - each knock there leaves its web in
+    // m.iceMarks until the third breaks the sheet (iceRefuse).
+    const cracksAt = (px0, py0, seed, alpha) => {
+      ctx.globalAlpha = alpha;
       for (let c = 0; c < 5; c++) {
-        let px = m.iceX, py = m.iceY;
-        let ang = (c / 5) * Math.PI * 2 + hash2(c * 7 + m.iceSeed, m.iceSeed) * 1.3;
+        let px = px0, py = py0;
+        let ang = (c / 5) * Math.PI * 2 + hash2(c * 7 + seed, seed) * 1.3;
         for (let s = 0; s < 12; s++) {
-          ang += (hash2(c * 11 + s, m.iceSeed * 5 + 1) - 0.5) * 0.9;
+          ang += (hash2(c * 11 + s, seed * 5 + 1) - 0.5) * 0.9;
           px += Math.cos(ang) * 1.5; py += Math.sin(ang) * 1.5;
           if (px < 2 || px >= w - 2 || py < 1 || py >= h - 1) break;
-          ctx.fillStyle = hash2(c * 3 + s * 7, m.iceSeed) > 0.85 ? '#ffffff' : s % 2 ? '#1a2040' : '#0a0e23';
+          ctx.fillStyle = hash2(c * 3 + s * 7, seed) > 0.85 ? '#ffffff' : s % 2 ? '#1a2040' : '#0a0e23';
           ctx.fillRect(x + Math.round(px), y + Math.round(py), 1, 1);
         }
       }
       // the impact point itself: a bright chip out of the glaze
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(x + Math.round(m.iceX), y + Math.round(m.iceY), 1, 1);
+      ctx.fillRect(x + Math.round(px0), y + Math.round(py0), 1, 1);
       ctx.globalAlpha = a0;
-    }
+    };
+    if (r.i === 2) for (const mk of m.iceMarks) cracksAt(mk.x, mk.y, mk.seed, a0 * 0.85);
+    if (m.iceT > 0 && m.iceI === r.i) cracksAt(m.iceX, m.iceY, m.iceSeed, a0 * Math.min(1, m.iceT / 0.45));
   }
 }
 
