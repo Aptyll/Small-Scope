@@ -23,7 +23,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
 | [js/player.js](../../js/player.js) | ~760 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
-| [js/world.js](../../js/world.js) | ~590 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, the landmarks with their own `lmRng` stream, and the practice arena |
+| [js/world.js](../../js/world.js) | ~730 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, the landmarks with their own `lmRng` stream, and the practice training grounds |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |

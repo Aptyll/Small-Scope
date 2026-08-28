@@ -887,8 +887,10 @@ window.DBG = {
   // named places: the live registry, the table behind it, and what is where
   landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
   // the practice arena: whether this boot is one, the dummies' live records,
-  // the spawn tile, the shared hit path and the ESC slab's exit plank
+  // the spawn tile, the shared hit paths, the archery targets and the ESC
+  // slab's exit plank
   PRACTICE, practiceDummies, PR_SPAWN, hitDummy, leavePlankRect,
+  ptargets, ptFace, ptLive, hitPTarget,
   // drop a slot (default the local one) on a tile - how to stage a landmark
   warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
   settings, perf, treeRare, cursorInfo,

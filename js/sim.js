@@ -251,6 +251,18 @@ function updatePlay(dt) {
         if (a.ambush) ambushFx(a.x, a.y);
         dead = true;
       }
+      // ...and the archery targets: the shot meets the FACE, wherever its
+      // habit has carried it - ptFace is the same geometry the draw uses
+      if (!dead) for (const t of ptargets) {
+        if (!ptLive(t)) continue;
+        const f = ptFace(t);
+        if (Math.hypot(f.x - a.x, f.y - a.y) < PT_HIT_R) {
+          hitPTarget(t, a.x, a.y);
+          if (a.ambush) ambushFx(a.x, a.y);
+          dead = true;
+          break;
+        }
+      }
     }
     // a bit whose `solid` is false passes through the world - that is the
     // whole of "never hits ground", and the only reason a wisp can circle you

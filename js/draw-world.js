@@ -78,6 +78,44 @@ function paintGroundTile(g, tx, ty) {
         if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] === 0) g.fillRect(px, py + TILE - 1, TILE, 1);
         if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] === 0) g.fillRect(px, py, 1, TILE);
         if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] === 0) g.fillRect(px + TILE - 1, py, 1, TILE);
+      } else if (gv === 3) {
+        // packed earth: the training grounds' worked floor (practice arena
+        // only - genWorld never writes a 3). Trampled mud-and-gravel with
+        // ruts, stones and straw dropped off the targets, and a dusting of
+        // snow creeping in from every snowy neighbour so the yard reads as
+        // swept out of the drifts rather than pasted onto them.
+        quad(g, '#85765a', '#7d6f55');
+        // boot-churned ruts: short dark dashes with a low-sun highlight
+        const rn = 2 + ((h * 7) | 0) % 3;
+        for (let i = 0; i < rn; i++) {
+          const rx = px + ((h * (41 + i * 59)) | 0) % 12 + 1, ry = py + ((h * (67 + i * 37)) | 0) % 12 + 2;
+          g.fillStyle = '#655741'; g.fillRect(rx, ry, 3 + ((h * (i + 3) * 17) | 0) % 3, 1);
+          g.fillStyle = '#948468'; g.fillRect(rx, ry + 1, 2, 1);
+        }
+        // gravel: a stone with its own shadow
+        if (h > 0.55 && h < 0.62) {
+          const sx2 = px + ((h * 730) | 0) % 12 + 2, sy2 = py + ((h * 910) | 0) % 12 + 2;
+          g.fillStyle = '#a5977a'; g.fillRect(sx2, sy2, 2, 1);
+          g.fillStyle = '#5e4f36'; g.fillRect(sx2, sy2 + 1, 2, 1);
+        }
+        // straw dropped off the butts and dummies
+        if (h > 0.86 && h < 0.9) {
+          g.fillStyle = '#c9b078';
+          g.fillRect(px + ((h * 530) | 0) % 13 + 1, py + ((h * 350) | 0) % 13 + 1, 2, 1);
+        }
+        // snow dust blown in over every edge that borders snow
+        g.fillStyle = '#dfe6f0';
+        const dust = (x0, y0, sx, sy) => {
+          for (let i = 0; i < TILE; i += 2) {
+            if (hash2(tx * 29 + x0 + sx * i, ty * 41 + y0 + sy * i) > 0.45) {
+              g.fillRect(px + x0 + sx * i, py + y0 + sy * i, sx ? 2 : 1, sy ? 2 : 1);
+            }
+          }
+        };
+        if (!inWorld(tx, ty - 1) || ground[idx(tx, ty - 1)] === 0) dust(0, 0, 1, 0);
+        if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] === 0) dust(0, TILE - 1, 1, 0);
+        if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] === 0) dust(0, 0, 0, 1);
+        if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] === 0) dust(TILE - 1, 0, 0, 1);
       } else {
         quad(g, '#ebf2fa', '#e7eff8');
         // dither speckles
@@ -219,6 +257,243 @@ const DUMMY_SPR = (() => {
   });
   return c;
 })();
+// ---- the training grounds' pixels (practice arena only) -------------------
+// The 32x32 archery target face. Baked per-pixel rather than from a grid:
+// concentric rings want true circles, and the hand-made feel comes back in
+// through hash dithering on every band edge, a top-left light direction on
+// every band, straw ticks around the batt, four iron pins and a dusting of
+// snow on the wooden rim. Same bake-beside-the-draw rule as the chest.
+const TARGET_SPR = (() => {
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 32;
+  const g = c.getContext('2d');
+  const put = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
+  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
+    const dx = x - 15.5, dy = y - 15.5;
+    let d = Math.hypot(dx, dy);
+    d += (hash2(x * 7 + 3, y * 11 + 5) - 0.5) * 0.9; // hand-jitter every band edge
+    if (d > 15.4) continue;
+    const lit = (-dx * 0.55 - dy * 0.83) > 0.5;      // light from the upper left
+    const h = hash2(x * 13 + 1, y * 17 + 9);
+    if (d > 14.6) { put(x, y, '#241a12'); continue; }                 // outline
+    if (d > 13.1) {                                                    // wooden frame ring
+      put(x, y, lit ? (h > 0.75 ? '#a3794f' : '#8a6142') : (h > 0.8 ? '#5c4226' : '#4a3421'));
+      continue;
+    }
+    if (d > 12.5) { put(x, y, '#3a2c1c'); continue; }                  // the batt's shadow ring
+    if (d > 9.4) {                                                     // outer straw ring
+      const a = Math.atan2(dy, dx);
+      const tick = hash2(((a * 9) | 0) * 5 + 2, 7) > 0.6 && h > 0.45;  // radial straw grain
+      put(x, y, tick ? '#c9b078' : lit ? '#ece0c2' : '#d9c9a8');
+      continue;
+    }
+    if (d > 6.2) { put(x, y, lit ? '#d0453a' : '#a83232'); continue; } // red ring
+    if (d > 3.2) { put(x, y, lit ? '#f0e6cc' : '#ddd0b0'); continue; } // inner cream
+    put(x, y, d > 1.4 ? (lit ? '#d0453a' : '#b03428') : '#e05548');    // the bullseye
+  }
+  // four iron pins holding the batt to its frame
+  for (const [px2, py2] of [[15, 1], [15, 29], [1, 15], [29, 15]]) {
+    g.fillStyle = '#241a12'; g.fillRect(px2, py2, 2, 2);
+    g.fillStyle = '#8b93a8'; g.fillRect(px2, py2, 1, 1);
+  }
+  // snow settled along the top of the rim
+  for (let x = 8; x < 24; x++) {
+    if (hash2(x * 3 + 1, 51) > 0.35) {
+      const y = 1 + Math.round(Math.abs(x - 15.5) * Math.abs(x - 15.5) / 60);
+      g.fillStyle = '#f4f7ff'; g.fillRect(x, y, 1, 1);
+      if (hash2(x * 5, 53) > 0.6) { g.fillStyle = '#c4d4ea'; g.fillRect(x, y + 1, 1, 1); }
+    }
+  }
+  return c;
+})();
+
+// the standing brazier's iron: bowl, rim, three legs, coal bed. The flame is
+// live (drawBrazier), and the light it throws is a `lights` entry
+// (rebuildLights scans for the object type, js/structures.js).
+const BRAZIER_SPR = bakeGrid([
+  '..oiIIIIIIio..',
+  '.oIhhccchhIo..',
+  '.oicccccccio..',
+  '..oiiiiiiio...',
+  '...oi..io.....',
+  '...oi..io.....',
+  '..oi....io....',
+  '.oi......io...',
+  '.o........o...',
+], { o: '#241a12', i: '#3c4250', I: '#5a637a', h: '#8b93a8', c: '#1c1208' }, 14);
+
+// the weapon rack: a rail two practice bows stand leaned against, strings
+// out, with a quiver of shafts hung on the end post
+const RACK_SPR = bakeGrid([
+  '.oo.............oo',
+  '.wooooooooooooooW.',
+  '.wWWWWWWWWWWWWWWw.',
+  '.w..mM...mM..ss.w.',
+  '.w.mM.s.mM.s.sS.w.',
+  '.wmM..smM..s.qq.w.',
+  '.wmM..smM..s.qQ.w.',
+  '.wmM..smM..s.qQ.w.',
+  '.wmM..smM..s.qQ.w.',
+  '.w.mM.s.mM.s.qq.w.',
+  '.w..mM...mM..oo.w.',
+  '.w..............w.',
+  'owo............owo',
+], { o: '#241a12', w: '#5c4226', W: '#8a6142',
+     m: '#6b4a30', M: '#a3794f', s: '#e8dcb4', S: '#8b93a8', q: '#6e4f2f', Q: '#93744a' }, 18);
+
+// the canvas tent by the spawn: ridge pole, lit and shaded slopes, a dark
+// mouth, guy ropes out to their stakes and snow along the ridge
+const TENT_SPR = bakeGrid([
+  '..............ss..............',
+  '...........sssoosss...........',
+  '.........ssoLLLLDDoss.........',
+  '........soLLLLLLDDDDos........',
+  '.......oLLLLLLLLDDDDDDo.......',
+  '......oLLLLLLLLLLDDDDDDo......',
+  '.....oLLLLLLooooDDDDDDDDo.....',
+  '....oLLLLLLommmoDDDDDDDDDo....',
+  '...oLLLLLLommmmmoDDDDDDDDDo...',
+  '..oLLLLLLommmmmmmoDDDDDDDDDo..',
+  '.roLLLLLLommmmmmmoDDDDDDDDor..',
+  'r.oooooooooooooooooooooooo..r.',
+  'r...........................r',
+  'x...........................x',
+], { o: '#241a12', L: '#dcd6c6', D: '#b0aa9a', m: '#1c1208',
+     s: '#f4f7ff', r: '#93744a', x: '#5c4226' }, 30);
+
+// One practice target, whatever its habit: rails or hatch or frame first,
+// then the post, then the face (or the bare splintered post while broken).
+// ptFace() (js/world.js) is the same geometry the arrow test reads, so what
+// you see is exactly what a shot can hit.
+function drawPTarget(t, ex, ey, now) {
+  const bx = Math.round(t.x - ex), by = Math.round(t.y - ey);
+  // the slider's rails, laid along its whole track
+  if (t.kind === 'slide') {
+    const rx0 = Math.round(t.x0 - ex) - 6, rx1 = Math.round(t.x1 - ex) + 6;
+    ctx.fillStyle = '#241a12'; ctx.fillRect(rx0, by - 1, rx1 - rx0, 1); ctx.fillRect(rx0, by + 2, rx1 - rx0, 1);
+    ctx.fillStyle = '#5c4226'; ctx.fillRect(rx0, by, rx1 - rx0, 1);
+    ctx.fillStyle = '#8a6142';
+    for (let x = rx0; x < rx1; x += 8) ctx.fillRect(x, by - 2, 2, 5); // sleepers
+    // the trolley the post rides on
+    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 5, by - 3, 10, 4);
+    ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 4, by - 2, 8, 2);
+    ctx.fillStyle = '#3c4250'; ctx.fillRect(bx - 4, by + 1, 2, 2); ctx.fillRect(bx + 2, by + 1, 2, 2);
+  }
+  // the swing frame: two legs, a snow-capped crossbar, and the rope
+  if (t.kind === 'swing') {
+    const top = by - t.alt - t.len - 4;
+    ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(bx - 15, by + 1, 8, 2); ctx.fillRect(bx + 8, by + 1, 8, 2);
+    for (const lx of [bx - 12, bx + 11]) {
+      ctx.fillStyle = '#241a12'; ctx.fillRect(lx - 1, top, 4, by - top + 2);
+      ctx.fillStyle = '#5c4226'; ctx.fillRect(lx, top + 1, 2, by - top);
+      ctx.fillStyle = '#8a6142'; ctx.fillRect(lx, top + 1, 1, by - top);
+    }
+    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 14, top - 1, 29, 4);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 13, top, 27, 2);
+    ctx.fillStyle = '#f4f7ff';
+    for (let x = -13; x < 14; x += 2) if (hash2(x + 40, t.px) > 0.4) ctx.fillRect(bx + x, top - 1, 1, 1);
+    const f = ptFace(t);
+    const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
+    ctx.strokeStyle = '#6e4f2f'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx + 0.5, top + 3); ctx.lineTo(fx + 0.5, fy - 12); ctx.stroke();
+  }
+  // the pop-up's hatch box, mouth toward the firing line
+  if (t.kind === 'pop') {
+    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 8, by - 5, 16, 7);
+    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 7, by - 4, 14, 5);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 7, by - 4, 14, 1);
+    ctx.fillStyle = '#1c1208'; ctx.fillRect(bx - 6, by - 3, 12, 2); // the slot it rises from
+    ctx.fillStyle = '#f4f7ff';
+    for (let x = -7; x < 7; x += 2) if (hash2(x + 20, t.y) > 0.55) ctx.fillRect(bx + x, by - 5, 1, 1);
+  }
+  // the post (statics and sliders; a pop-up's face rides its own slide)
+  if (t.kind === 'static' || t.kind === 'slide') {
+    ctx.fillStyle = 'rgba(40,60,100,0.28)'; ctx.fillRect(bx - 4, by + 1, 9, 2);
+    const ph = t.alt - 6; // the face covers the top of it
+    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 2, by - ph, 5, ph + 1);
+    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 1, by - ph + 1, 3, ph);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 1, by - ph + 1, 1, ph);
+    if (t.broken > 0) { // the bare post, splintered where the face was shot off
+      ctx.fillStyle = '#a3794f';
+      ctx.fillRect(bx - 2, by - ph - 2, 1, 2); ctx.fillRect(bx + 1, by - ph - 3, 1, 3); ctx.fillRect(bx, by - ph - 1, 1, 1);
+    }
+  }
+  if (t.broken > 0) return;
+  // the face itself, off the shared geometry - squashed while a pop-up is
+  // mid-rise (it flips up out of the hatch), bounced just after a respawn
+  const f = ptFace(t);
+  const rise = t.kind === 'pop' ? Math.max(0, Math.min(1, t.up)) : 1;
+  if (rise <= 0.02) return;
+  const wobS = t.wob > 0 ? 1 + Math.sin(t.wob * 22) * 0.14 * (t.wob / 0.45) : 1;
+  const w = Math.round(TARGET_SPR.width * wobS);
+  const h = Math.max(1, Math.round(TARGET_SPR.height * rise * wobS));
+  const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
+  if (t.kind === 'pop') ctx.drawImage(TARGET_SPR, fx - (w >> 1), Math.round(t.y - ey) - 4 - h, w, h);
+  else ctx.drawImage(TARGET_SPR, fx - (w >> 1), fy - (h >> 1), w, h);
+}
+
+// a rail fence tile: one snow-capped post, with rails run out toward any
+// fence neighbour right or down (the left/up neighbour draws the run into
+// this tile, so every span is drawn exactly once)
+function drawFence(o, px, py) {
+  const cx2 = px + 8, base = py + 13;
+  const right = objAt(o.tx + 1, o.ty), down = objAt(o.tx, o.ty + 1);
+  if (right && right.type === 'fence') {
+    ctx.fillStyle = '#241a12'; ctx.fillRect(cx2, base - 9, 16, 3); ctx.fillRect(cx2, base - 4, 16, 3);
+    ctx.fillStyle = '#6b4a30'; ctx.fillRect(cx2, base - 8, 16, 1); ctx.fillRect(cx2, base - 3, 16, 1);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(cx2, base - 9, 16, 1); ctx.fillRect(cx2, base - 4, 16, 1);
+  }
+  if (down && down.type === 'fence') {
+    ctx.fillStyle = '#241a12'; ctx.fillRect(cx2 - 3, base, 2, 16); ctx.fillRect(cx2 + 2, base, 2, 16);
+    ctx.fillStyle = '#6b4a30'; ctx.fillRect(cx2 - 2, base, 1, 16); ctx.fillRect(cx2 + 3, base, 1, 16);
+  }
+  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(cx2 - 2, base + 1, 6, 2);
+  ctx.fillStyle = '#241a12'; ctx.fillRect(cx2 - 2, base - 12, 5, 14);
+  ctx.fillStyle = '#5c4226'; ctx.fillRect(cx2 - 1, base - 11, 3, 13);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(cx2 - 1, base - 11, 1, 13);
+  ctx.fillStyle = '#f4f7ff'; ctx.fillRect(cx2 - 2, base - 13, 5, 2);
+  ctx.fillStyle = '#c4d4ea'; ctx.fillRect(cx2 + 2, base - 12, 1, 1);
+}
+
+// a standing brazier: the baked iron, then the live fire - three flame
+// tongues wavering on the frame clock and the odd spark. Its throw of light
+// is a `lights` entry, so the night opens around it for free.
+function drawBrazier(o, px, py, now, flash) {
+  drawSpriteFlash(BRAZIER_SPR, px + 1, py + 4, flash);
+  const fx = px + 8, fy = py + 5;
+  for (let i = 0; i < 3; i++) {
+    const ph = now * (7 + i * 1.7) + i * 2.1 + o.tx;
+    const hgt = 3 + Math.round(Math.abs(Math.sin(ph)) * 3);
+    const sway = Math.round(Math.sin(ph * 0.8) * 1.5);
+    ctx.fillStyle = i === 0 ? '#ffd95c' : i === 1 ? '#ff9440' : '#e05548';
+    ctx.fillRect(fx - 2 + i * 2 + sway, fy - hgt, 2 - (i >> 1), hgt);
+  }
+  if (((now * 5 + o.tx) | 0) % 3 === 0) {
+    ctx.fillStyle = '#ffd95c';
+    ctx.fillRect(fx - 2 + (((now * 13) | 0) % 5), fy - 7 - (((now * 9) | 0) % 3), 1, 1);
+  }
+}
+
+// a banner: dark pole, gilt finial, and a red pennant rippling off it on the
+// frame clock - the grounds' section markers, in the target rings' own red
+function drawBanner(o, px, py, now) {
+  const bx = px + 5, top = py - 12;
+  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(bx - 1, py + 14, 5, 2);
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 1, top, 4, 28);
+  ctx.fillStyle = '#5c4226'; ctx.fillRect(bx, top + 1, 2, 26);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx, top + 1, 1, 26);
+  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx, top - 2, 2, 2);
+  for (let i = 0; i < 11; i++) {
+    const wave = Math.round(Math.sin(now * 5 + i * 0.7 + o.ty) * (i / 10) * 2);
+    const hgt = Math.max(1, 9 - Math.round(i * 0.7));
+    const x = bx + 3 + i, y = top + 2 + wave + ((9 - hgt) >> 1);
+    ctx.fillStyle = '#241a12'; ctx.fillRect(x, y - 1, 1, hgt + 2);
+    ctx.fillStyle = i % 4 === 3 ? '#a83232' : '#c0392b'; ctx.fillRect(x, y, 1, hgt);
+    ctx.fillStyle = '#d0453a'; ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.fillStyle = '#ffd95c'; ctx.fillRect(bx + 2, top + 2, 1, 9); // the hoist stripe
+}
+
 // Spent arrows in the snow, drawn flat under everything that walks: a stub of
 // shaft on the bearing it came in on (the head is buried, so it starts at the
 // entry point and runs backwards), fletching in the shooter's team colour, a

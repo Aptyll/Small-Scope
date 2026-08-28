@@ -210,6 +210,9 @@ function render() {
   }
   for (const a of animals) draws.push({ y: a.y + 4, a });
   for (const b of robots) draws.push({ y: b.y + 4, r: b });
+  // the training grounds' archery targets: entities, never tile objects (a
+  // slider crosses tiles every frame), sorted by their base like everything
+  if (PRACTICE) for (const t of ptargets) draws.push({ y: t.y + 1, pt: t });
   // your side's worker flags, half a pixel behind their own tile so a flag
   // planted on a tree is never swallowed by that tree's canopy
   for (const q of players) {
@@ -223,6 +226,7 @@ function render() {
     if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
     if (d.r) { drawRobot(d.r, ex, ey); continue; }
     if (d.f) { drawFlag(d.f, ex, ey, now); continue; }
+    if (d.pt) { drawPTarget(d.pt, ex, ey, now); continue; }
     const o = d.o;
     const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
     const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
@@ -244,6 +248,16 @@ function render() {
       const dy = py + TILE - DUMMY_SPR.height;
       drawSpriteFlash(DUMMY_SPR, dx, dy, o.flash);
       if (o.hp < o.maxHp) drawHealthBar(px + 8 + sh, dy - 6, o.hp, o.maxHp, 20);
+    } else if (o.type === 'fence') {
+      drawFence(o, px + sh, py);
+    } else if (o.type === 'brazier') {
+      drawBrazier(o, px + sh, py, now, o.flash);
+    } else if (o.type === 'banner') {
+      drawBanner(o, px + sh, py, now);
+    } else if (o.type === 'rack') {
+      drawSpriteFlash(RACK_SPR, px + sh + ((TILE - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
+    } else if (o.type === 'tent') {
+      drawSpriteFlash(TENT_SPR, px + sh + ((TILE - TENT_SPR.width) >> 1), py + TILE - TENT_SPR.height + 2, o.flash);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {

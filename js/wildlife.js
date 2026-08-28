@@ -119,7 +119,11 @@ function addFish(x, y, a, born) {
 
 function fishWater(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  return inWorld(tx, ty) && ground[idx(tx, ty)] !== 0;
+  // ice or open water only - named outright rather than "not snow", because
+  // the practice arena's packed earth (ground 3) is land a fish must not
+  // count as swimmable
+  const g = inWorld(tx, ty) ? ground[idx(tx, ty)] : 0;
+  return g === 1 || g === 2;
 }
 // the whole body fits in water with margin px to spare on every side, so a
 // fish never reads as poking into the snow

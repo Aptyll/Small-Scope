@@ -154,16 +154,43 @@ returns the landmark a world position stands in; `updatePlay` feeds it `state.lo
 
 ## The practice arena
 
-The training room behind the title's PRACTICE TOOL plank (three knocks break its ice —
+The TRAINING GROUNDS behind the title's PRACTICE TOOL plank (three knocks break its ice —
 [rendering.md](rendering.md#main-menu-title)): `?practice=1` boots `genPracticeWorld()` (the
 `practice arena` banner, js/world.js) **instead of** `genWorld()`, and js/boot.js skips
-landmarks, chests, wildlife spawns and the eagle drop entirely — the arena stocks itself. The
-room is a **48×27-tile clearing** (`PR_W`/`PR_H`, deliberately 16:9 — the view's own shape)
-carved out of a world that is otherwise solid forest, holding one of everything worth
-practising on: the **dummy**, an ice pond with `PR_FISH` fish (the shoal trickle caps there
-instead of `FISH_MAX`, js/wildlife.js), trees, a snag, rocks, bushes, three rabbits, two stumps
-and two chests. `PRACTICE` (js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed`
-parse, so the arena is bit-identical on every visit and no seed can reshape it.
+landmarks, chests, wildlife spawns and the eagle drop entirely — the arena stocks itself. It is
+a hand-built campus, not a clearing: a **64×36-tile frame** (`PR_W`/`PR_H`, deliberately 16:9 —
+the view's own shape) carved out of solid forest, laid out as a packed-earth central yard with
+the two melee **dummies**, a fenced archery range of two lanes east (static targets at graded
+distances, then a pop-up lane), a moving-target gallery along the north wall, a pendulum frame
+south-east, the ice pond west with `PR_FISH` fish (the shoal trickle caps there instead of
+`FISH_MAX`, js/wildlife.js), a harvest corner (trees, a snag, rocks, bushes), two stumps, two
+chests, three rabbits — and the dressing that makes it read as built: rail **fences**, red
+**banners**, iron **braziers** (real `lights` entries — `rebuildLights` scans for the type, the
+first glowing object since the campfires went), a weapon **rack** pair and a **tent** by the
+spawn, all inert `OBJECTS` entries like the den. `PRACTICE` (js/core.js) pins `SEED` to
+`PRACTICE_SEED` *above* the `?seed` parse, so the campus is bit-identical on every visit and no
+seed can reshape it.
+
+**Ground 3 is packed earth**, the grounds' floor, and exists only inside this arena
+(`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,
+straw, snow dust blown over every snowy edge), coloured on both maps, and walked exactly like
+snow — `updatePlayer`'s surface block only special-cases ice and holes, so no movement branch
+was needed — but it refuses prone (`tryProne` wants ground 0; there is no snow to dig into) and
+leaves no footprints. `fishWater` names ice and open water outright rather than "not snow" so a
+fish can never count the yard as swimmable.
+
+**The archery targets** (Link's-Crossbow-Training-style) are ENTITIES in `ptargets`, never tile
+objects — a slider crosses tiles every frame, and a raised face should not block a walker — so
+only arrows meet them: the PRACTICE branch of the arrow loop (js/sim.js) tests every live face
+disc (`ptFace`/`ptLive`/`PT_HIT_R`). Four habits share one record: `static` on posts of three
+heights (`PT_ALTS`), `pop` rising out of hatch boxes on offset clocks (`PT_POP`), `slide`
+patrolling rails between `x0..x1`, and `swing` hanging on a rope from a frame
+(`ptFace` is the one geometry the update, the arrow test and the draw all read). A hit is flat
+feedback — `hitPTarget` shatters the face into painted chips, straw and splinters, the post
+stands bare and splintered, and `PT_RESPAWN` seconds later a fresh face springs back with a
+wobble. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
+baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a
+grid.
 
 Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local slot is
 the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
@@ -180,6 +207,7 @@ tests the dummy across its base tile and the two above it, so torso and head sho
 the roll's tackle. It never breaks: the pool floors at zero, the overhead bar appears only
 while it is hurt, and `updatePractice` (called from `updatePlay` under `PRACTICE`) mends it
 back to `DUMMY_HP` after `DUMMY_RESET_T` seconds unhit, with a shimmer for the announcement.
+`updatePractice` is also the grounds' clock: it ticks every target's habit and respawn.
 
 ## Determinism and noise
 

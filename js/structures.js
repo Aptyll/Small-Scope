@@ -227,9 +227,16 @@ function removeStruct(o) {
 }
 
 function rebuildLights() {
-  // nothing currently emits light (campfires/torches went with the old hotbar);
-  // kept as the single rebuild point for any future glowing object type
+  // the single rebuild point for anything glowing. The training grounds'
+  // braziers (practice arena, js/world.js) are the first light-emitting
+  // object since the campfires went - a match world scans and finds none.
   lights.length = 0;
+  for (let i = 0; i < objects.length; i++) {
+    const o = objects[i];
+    if (o && o.type === 'brazier') {
+      lights.push({ x: o.tx * TILE + 8, y: o.ty * TILE + 6, r: 52, warm: 44 });
+    }
+  }
 }
 
 // ------------------------------------------------------------ the building sim

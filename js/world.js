@@ -40,6 +40,16 @@ const OBJECTS = {
   // every bit and the roll's tackle all land through hitDummy (js/actions.js).
   dummy:    { solid: true,  tool: 'axe',  needs: null,   verb: 'HIT', lift: 28,
               mm: [216, 178, 122], map: [188, 148, 96] },
+  // The training grounds' dressing (practice arena only): all inert scenery
+  // like the den - no `tool`, so E never offers them - drawn in the y-sorted
+  // pass off their own baked sprites. The fence auto-connects to fence
+  // neighbours in its draw branch; the brazier is the game's first
+  // light-emitting object (rebuildLights scans for it, js/structures.js).
+  fence:    { solid: true,  mm: [150, 118, 84],  map: [140, 110, 76] },
+  brazier:  { solid: true,  mm: [214, 142, 66],  map: [178, 118, 58] },
+  banner:   { solid: true,  mm: [214, 88, 76],   map: [186, 74, 62] },
+  rack:     { solid: true,  mm: [168, 132, 92],  map: [150, 116, 80] },
+  tent:     { solid: true,  mm: [200, 196, 186], map: [176, 168, 150] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
   // solid to walkers and a work target for RIVAL E swings only - workTarget
@@ -508,80 +518,202 @@ function landmarkAt(x, y) {
 }
 
 // ------------------------------------------------------------ practice arena
-// The training room behind the PRACTICE TOOL plank: a 48x27-tile clearing (a
-// 16:9 frame, the view's own shape) carved out of a world that is otherwise
-// solid forest, with one of everything worth practising on - the dummy, an
-// ice pond with fish, trees, a snag, rocks, bushes, two stumps to build on
-// and two chests. Boots only under PRACTICE (js/core.js pins the seed to
-// PRACTICE_SEED, so ?seed can never reshape it) and replaces genWorld
-// outright: no landmarks, no eagles, no other slots (js/boot.js). One player,
-// nothing at stake - die() revives on the spot and the profile's lifetime
-// gold is never paid (both guarded in js/player.js).
-const PR_W = 48, PR_H = 27;                      // the clearing, in tiles: 16:9
+// The TRAINING GROUNDS behind the PRACTICE TOOL plank: a hand-built campus,
+// not a wilderness clearing. A 64x36-tile frame (16:9, the view's own shape)
+// carved out of solid forest holds a packed-earth central yard with the two
+// melee dummies, a fenced archery range of two lanes east (static targets at
+// graded distances, then a pop-up lane), a moving-target gallery along the
+// north wall, a pendulum frame south-east, the ice pond kept west, a harvest
+// corner (trees, a snag, rocks, bushes), stumps to build on, two chests, and
+// the dressing that makes it read as BUILT: rail fences, red banners, iron
+// braziers (live lights), a weapon rack and a tent by the spawn.
+//
+// Boots only under PRACTICE (js/core.js pins the seed to PRACTICE_SEED, so
+// ?seed can never reshape it) and replaces genWorld outright: no landmarks,
+// no eagles, no other slots (js/boot.js). One player, nothing at stake -
+// die() revives on the spot and the profile is never written (js/player.js).
+//
+// Ground 3 is PACKED EARTH, the training grounds' floor: painted by
+// paintGroundTile's earth branch, coloured on both maps, walks exactly like
+// snow (updatePlayer's surface block only special-cases ice and holes) but
+// refuses prone (tryProne wants ground 0 - there is no snow to dig into) and
+// leaves no footprints. It exists only inside this arena; genWorld never
+// writes it.
+const PR_W = 64, PR_H = 36;                      // the campus, in tiles: 16:9
 const PR_X0 = (WORLD - PR_W) >> 1, PR_Y0 = (WORLD - PR_H) >> 1;
-const PR_SPAWN = { tx: PR_X0 + 22, ty: PR_Y0 + 13 }; // where the player stands, facing the dummy
+const PR_SPAWN = { tx: PR_X0 + 30, ty: PR_Y0 + 22 }; // south yard, facing the dummies
 const DUMMY_HP = 60;
 const DUMMY_WORK_DMG = 10;   // what one E swing chips off it (the eagle's own number)
-const DUMMY_RESET_T = 2.5;   // s unhit before the dummy mends itself back to full
+const DUMMY_RESET_T = 2.5;   // s unhit before a dummy mends itself back to full
 const PR_FISH = 6;           // the pond's shoal, and the ceiling the trickle refills to
 const practiceDummies = [];  // every dummy standing, for updatePractice's mend clock
 
+// ---- the archery targets -------------------------------------------------
+// Link's-Crossbow-Training-style red ring targets, at different heights and
+// with different habits. They are ENTITIES in `ptargets`, not tile objects -
+// a slider crosses tiles every frame and nothing about a raised face should
+// block a walker - so only arrows meet them: the PRACTICE branch of the
+// arrow loop (js/sim.js) tests every live face against PT_HIT_R. A hit
+// SHATTERS the face off its post (hitPTarget below - flat feedback, no
+// score) and PT_RESPAWN seconds later a fresh one springs back with a
+// wobble. drawPTarget (js/draw-world.js) owns every pixel: the face sprite,
+// the three post heights, the pop-up hatch, the slide rails and the swing
+// frame.
+//   kind  'static' | 'pop' | 'slide' | 'swing'
+//   x, y  the base point on the ground (post foot / hatch / track position)
+//   alt   px from the base to the face's centre - the "height" arrows aim at
+//   up    0..1, how far a pop-up has risen (static kinds sit at 1)
+//   t     the behaviour clock; phase offsets stop the pop lane syncing
+//   x0/x1/spd/dir   a slider's track and speed
+//   px/len/amp/om   a swinger's pivot x, rope length, swing arc and rate
+//   broken          >0: seconds until the face respawns (post stands bare)
+//   wob             respawn wobble timer, a scale bounce in the draw
+const PT_HIT_R = 11;         // px around the face centre an arrow scores on
+const PT_RESPAWN = 2.6;      // s a broken face stays gone
+const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the pop cycle
+const PT_ALTS = [18, 24, 30]; // the three post heights: stake, post, mast
+const ptargets = [];
+
+function addPTarget(kind, tx, ty, opts) {
+  const t = Object.assign({
+    kind, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 3,
+    alt: PT_ALTS[0], up: 1, t: 0,
+    x0: 0, x1: 0, spd: 0, dir: 1,
+    px: 0, len: 22, amp: 0.85, om: 1.6,
+    broken: 0, wob: 0,
+  }, opts || {});
+  if (kind === 'swing') t.px = t.x;
+  ptargets.push(t);
+  return t;
+}
+
+// where a face's centre is right now, in world px - the one geometry the
+// update, the arrow test and the draw all share, so they can never disagree
+function ptFace(t) {
+  if (t.kind === 'swing') {
+    // the face hangs on a rope from a pivot (alt + len) above the base:
+    // straight down it sits at alt, and the swing carries it up either side
+    const th = Math.sin(t.t * t.om) * t.amp;
+    return { x: t.px + Math.sin(th) * t.len, y: t.y - (t.alt + t.len) + Math.cos(th) * t.len };
+  }
+  // a pop-up's face flips up out of its hatch: the centre rides the rise,
+  // bottom edge pinned at the hatch mouth (exactly how drawPTarget anchors it)
+  if (t.kind === 'pop') return { x: t.x, y: t.y - 4 - 16 * t.up };
+  return { x: t.x, y: t.y - t.alt };
+}
+// can an arrow score on it this frame
+function ptLive(t) { return t.broken <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
+
+// one arrow into the face: the whole flat-feedback payoff - the face bursts
+// into painted chips, straw and splinters, and the post stands bare until
+// the respawn springs a new one on
+function hitPTarget(t, hx, hy) {
+  t.broken = PT_RESPAWN;
+  t.wob = 0;
+  const f = ptFace(t);
+  burst(f.x, f.y, '#d0453a', 10, 60, 0.5, true);   // painted chips
+  burst(f.x, f.y, '#efe6d0', 8, 55, 0.5, true);    // straw backing
+  burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);   // splinters
+  if (nearPlayer(f.x, f.y)) { SFX.hit(); SFX.break_(); }
+}
+
 function genPracticeWorld() {
-  // solid forest everywhere, then the clearing carved out of it - the rim
+  const ax = PR_X0, ay = PR_Y0;
+  // solid forest everywhere, then the campus carved out of it - the rim
   // tiles keep a scatter of trees so the treeline reads ragged, not stamped
   for (let ty = 0; ty < WORLD; ty++) {
     for (let tx = 0; tx < WORLD; tx++) {
-      const inX = tx >= PR_X0 && tx < PR_X0 + PR_W, inY = ty >= PR_Y0 && ty < PR_Y0 + PR_H;
+      const inX = tx >= ax && tx < ax + PR_W, inY = ty >= ay && ty < ay + PR_H;
       if (inX && inY) {
-        const rim = tx === PR_X0 || tx === PR_X0 + PR_W - 1 || ty === PR_Y0 || ty === PR_Y0 + PR_H - 1;
+        const rim = tx === ax || tx === ax + PR_W - 1 || ty === ay || ty === ay + PR_H - 1;
         if (!rim || hash2(tx * 3 + 7, ty * 5 + 1) > 0.4) continue;
       }
       placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
-  // the ice pond, west: an ellipse two tiles clear of the wall - big enough
-  // to slide across, crack open and fish through
-  const pcx = PR_X0 + 9, pcy = PR_Y0 + 13;
+  // ---- the floors: packed earth where the grounds are worked -------------
+  const earth = (x0, y0, x1, y1) => {
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+      if (!objects[idx(ax + tx, ay + ty)]) ground[idx(ax + tx, ay + ty)] = 3;
+    }
+  };
+  earth(22, 13, 39, 24);        // the central yard
+  earth(16, 18, 21, 19);        // west path, yard -> pond shore
+  earth(40, 17, 41, 19);        // east path, yard -> the range
+  earth(42, 11, 61, 13);        // lane A: the static range
+  earth(42, 21, 61, 23);        // lane B: the pop-up range
+  earth(14, 3, 49, 5);          // the moving-target gallery, north wall
+  earth(30, 6, 33, 12);         // gallery entry, down into the yard's reach
+  earth(44, 27, 51, 31);        // the pendulum pad, south-east
+  // the yard's corners knocked off so the plaza reads worn, not stamped
+  for (const [cx2, cy2] of [[22, 13], [39, 13], [22, 24], [39, 24]]) {
+    if (hash2(cx2 * 7, cy2 * 5) > 0.5) ground[idx(ax + cx2, ay + cy2)] = 0;
+  }
+  // ---- the pond, west (kept from the old room) ---------------------------
+  const pcx = ax + 9, pcy = ay + 21;
   for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
-    if ((dx * dx) / 36 + (dy * dy) / 14 > 1) continue;
-    const tx = pcx + dx, ty = pcy + dy;
-    if (!objects[idx(tx, ty)]) ground[idx(tx, ty)] = 1;
+    if ((dx * dx) / 33 + (dy * dy) / 15 > 1) continue;
+    if (!objects[idx(pcx + dx, pcy + dy)]) ground[idx(pcx + dx, pcy + dy)] = 1;
   }
-  // the dummy, standing right of centre with clear ground on every side
-  const d = placeObj(PR_X0 + 31, PR_Y0 + 13, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99 });
-  practiceDummies.push(d);
-  // one of everything the E key works: a stand of pines and a snag to chop...
-  for (const [tx, ty] of [[PR_X0 + 39, PR_Y0 + 5], [PR_X0 + 41, PR_Y0 + 7], [PR_X0 + 38, PR_Y0 + 8],
-                          [PR_X0 + 43, PR_Y0 + 4], [PR_X0 + 36, PR_Y0 + 4]]) {
-    placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+  // ---- fences: the rails that make it read as built ----------------------
+  const fenceRow = (x0, x1, y) => { for (let tx = x0; tx <= x1; tx++) if (!objects[idx(ax + tx, ay + y)]) placeObj(ax + tx, ay + y, 'fence'); };
+  const fenceCol = (x, y0, y1) => { for (let ty = y0; ty <= y1; ty++) if (!objects[idx(ax + x, ay + ty)]) placeObj(ax + x, ay + ty, 'fence'); };
+  fenceRow(42, 61, 10); fenceRow(42, 61, 14); fenceCol(62, 10, 14); // lane A
+  fenceRow(42, 61, 20); fenceRow(42, 61, 24); fenceCol(62, 20, 24); // lane B
+  fenceRow(14, 49, 2);                                              // gallery, north rail
+  fenceRow(14, 29, 6); fenceRow(34, 49, 6);                         // ...south rail, entry gap
+  fenceCol(13, 2, 6); fenceCol(50, 2, 6);                           // ...end caps
+  // ---- the dressing ------------------------------------------------------
+  const put = (tx, ty, type, extra) => { if (!objects[idx(ax + tx, ay + ty)]) return placeObj(ax + tx, ay + ty, type, extra); return null; };
+  for (const [tx, ty] of [[22, 13], [39, 13], [22, 24], [39, 24], [14, 4], [49, 4]]) put(tx, ty, 'brazier');
+  for (const [tx, ty] of [[21, 17], [40, 16], [42, 9], [42, 19], [33, 7], [44, 26]]) put(tx, ty, 'banner');
+  put(33, 26, 'rack'); put(35, 26, 'rack');
+  put(26, 27, 'tent');
+  // ---- the melee yard: two dummies, mid-plaza ----------------------------
+  for (const [tx, ty] of [[27, 17], [34, 20]]) {
+    const d = put(tx, ty, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99 });
+    if (d) practiceDummies.push(d);
   }
-  placeObj(PR_X0 + 41, PR_Y0 + 10, 'deadTree', { hp: 3, variant: 0 });
-  // ...rocks to mine...
-  for (const [tx, ty] of [[PR_X0 + 37, PR_Y0 + 21], [PR_X0 + 39, PR_Y0 + 22], [PR_X0 + 41, PR_Y0 + 20],
-                          [PR_X0 + 38, PR_Y0 + 24], [PR_X0 + 42, PR_Y0 + 23]]) {
-    placeObj(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
+  // ---- the targets -------------------------------------------------------
+  // lane A: statics at graded distances, each a head taller than the last
+  addPTarget('static', ax + 49, ay + 12, { alt: PT_ALTS[0] });
+  addPTarget('static', ax + 54, ay + 12, { alt: PT_ALTS[1] });
+  addPTarget('static', ax + 59, ay + 12, { alt: PT_ALTS[2] });
+  // lane B: pop-ups out of hatches, phases spread so the lane never syncs
+  addPTarget('pop', ax + 47, ay + 22, { alt: PT_ALTS[0], up: 0, t: 0.0 });
+  addPTarget('pop', ax + 51, ay + 22, { alt: PT_ALTS[0], up: 0, t: 1.1 });
+  addPTarget('pop', ax + 55, ay + 22, { alt: PT_ALTS[1], up: 0, t: 2.2 });
+  addPTarget('pop', ax + 59, ay + 22, { alt: PT_ALTS[0], up: 0, t: 3.3 });
+  // the gallery: a slow low slider west, a fast tall one east
+  addPTarget('slide', ax + 17, ay + 4, { alt: PT_ALTS[0], x0: (ax + 17) * TILE, x1: (ax + 30) * TILE, spd: 26 });
+  addPTarget('slide', ax + 33, ay + 4, { alt: PT_ALTS[2], x0: (ax + 33) * TILE, x1: (ax + 46) * TILE, spd: 44 });
+  // the pendulum, swinging from its frame on the pad
+  addPTarget('swing', ax + 47, ay + 29, { alt: PT_ALTS[2], len: 20, amp: 0.85, om: 1.7 });
+  // ---- the harvest corner and the rest of the old room -------------------
+  for (const [tx, ty] of [[6, 8], [8, 10], [11, 7], [13, 10], [7, 12], [10, 13]]) {
+    put(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(ax + tx, ay + ty) });
   }
-  // ...berries, and two stumps standing ready to build on
-  for (const [tx, ty] of [[PR_X0 + 18, PR_Y0 + 4], [PR_X0 + 22, PR_Y0 + 3], [PR_X0 + 26, PR_Y0 + 5]]) {
-    placeObj(tx, ty, 'bush', { berries: 2, regrow: 0 });
+  put(13, 8, 'deadTree', { hp: 3, variant: 0 });
+  for (const [tx, ty] of [[6, 29], [8, 31], [11, 30], [7, 33], [10, 33]]) {
+    put(tx, ty, 'rock', { hp: 5, variant: randi(0, 1) });
   }
-  placeObj(PR_X0 + 8, PR_Y0 + 22, 'stump');
-  placeObj(PR_X0 + 11, PR_Y0 + 23, 'stump');
-  // two chests against the treeline, top-tier loot inside as anywhere
-  placeObj(PR_X0 + 2, PR_Y0 + 2, 'chest', { hp: 1 });
-  placeObj(PR_X0 + 45, PR_Y0 + 14, 'chest', { hp: 1 });
-  // moving targets, and a shoal under the pond
-  for (const [tx, ty] of [[PR_X0 + 20, PR_Y0 + 8], [PR_X0 + 30, PR_Y0 + 20], [PR_X0 + 25, PR_Y0 + 17]]) {
-    animals.push(makeAnimal('rabbit', (tx + 0.5) * TILE, (ty + 0.5) * TILE));
+  for (const [tx, ty] of [[16, 12], [19, 13], [17, 15]]) put(tx, ty, 'bush', { berries: 2, regrow: 0 });
+  put(18, 26, 'stump'); put(20, 27, 'stump');
+  put(2, 2, 'chest', { hp: 1 });
+  put(61, 33, 'chest', { hp: 1 });
+  // moving targets of the furred kind, and the shoal under the pond
+  for (const [tx, ty] of [[17, 8], [26, 31], [45, 17]]) {
+    animals.push(makeAnimal('rabbit', (ax + tx + 0.5) * TILE, (ay + ty + 0.5) * TILE));
   }
   for (let i = 0; i < PR_FISH; i++) {
     addFish((pcx + rand(-2, 2) + 0.5) * TILE, (pcy + rand(-1, 1) + 0.5) * TILE);
   }
 }
 
-// the dummies' mend clock, from updatePlay under PRACTICE only: a stretch of
-// quiet and the sack stitches itself back to full - the shimmer and the bar
-// refilling are the whole announcement, no words
+// The grounds' clock, from updatePlay under PRACTICE only: the dummies mend
+// between combos, broken targets spring back, pop-ups run their cycle and
+// sliders patrol their rails. The shimmer, the wobble and the bar refilling
+// are the whole announcement - no words.
 function updatePractice(dt) {
   for (const o of practiceDummies) {
     o.hitT += dt;
@@ -593,6 +725,34 @@ function updatePractice(dt) {
       burst(ox, oy - 14, '#e0c890', 5, 35, 0.45, true);
       if (nearPlayer(ox, oy)) SFX.place();
     }
+  }
+  for (const t of ptargets) {
+    t.t += dt;
+    if (t.wob > 0) t.wob = Math.max(0, t.wob - dt);
+    if (t.broken > 0) {
+      t.broken -= dt;
+      if (t.broken <= 0) { // a fresh face springs onto the bare post
+        t.broken = 0;
+        t.wob = 0.45;
+        const f = ptFace(t);
+        burst(f.x, f.y, '#f4f7ff', 6, 35, 0.4, true);
+        if (nearPlayer(f.x, f.y)) SFX.place();
+      }
+    }
+    if (t.kind === 'pop') {
+      // the cycle: hidden - rise - hold - sink, on the target's own clock
+      const C = PT_POP, total = C.hide + C.rise + C.hold + C.sink;
+      const u = t.t % total;
+      if (u < C.hide) t.up = 0;
+      else if (u < C.hide + C.rise) t.up = (u - C.hide) / C.rise;
+      else if (u < C.hide + C.rise + C.hold) t.up = 1;
+      else t.up = 1 - (u - C.hide - C.rise - C.hold) / C.sink;
+    } else if (t.kind === 'slide') {
+      t.x += t.spd * t.dir * dt;
+      if (t.x > t.x1) { t.x = t.x1; t.dir = -1; }
+      if (t.x < t.x0) { t.x = t.x0; t.dir = 1; }
+    }
+    // a swinger's position is pure ptFace(t.t) - nothing to integrate
   }
 }
 
