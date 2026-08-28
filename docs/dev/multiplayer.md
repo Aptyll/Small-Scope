@@ -53,6 +53,8 @@ prone         edge-triggered (Ctrl): TOGGLES the burrow, never a held level -
               holding a modifier while tapping W is Ctrl+W, which closes the tab
 eatBerry      edge-triggered (Q)
 eatFish       edge-triggered (F)
+ability       edge-triggered (keys 1-4): cast that class ability, -1 = none
+              (tryAbility, js/abilities.js - see Classes below)
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id}
               or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
               or {kind:'skill', i} - a hud-ability rank: same, free (a skill point)
@@ -70,40 +72,45 @@ bots and future network peers can't use it.
 `workTarget(p)` reads `p.input.aimX/aimY`, not the mouse, which is why the cursor's lock ring and a
 bot's chop resolve through exactly the same function.
 
-## Champions
+## Classes
 
-Every slot also carries a champion (`p.champ`, an index into `CHAMPS` in the `players` banner).
-A champion is a look plus a kit — the handful of numbers the sim reads through `kitOf(p)`
-instead of the bare constants. **`kitOf(p)` returns the *effective* kit**: the champion's numbers
+Every slot also carries a class (`p.cls`, an index into `CLASSES` in the `players` banner).
+A class is a look, a kit, and **four active abilities on keys 1-4** (`CLASS_AB`,
+[js/abilities.js](../../js/abilities.js) — see [Class abilities](gameplay.md#class-abilities-keys-1-4)).
+The kit is the handful of numbers the sim reads through `kitOf(p)`
+instead of the bare constants. **`kitOf(p)` returns the *effective* kit**: the class's numbers
 with the slot's [gear](gameplay.md#gear) folded in by `refreshKit(p)` (cached on `p.kit`, rebuilt
-on champion or gear change — never per frame). The champion fields: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
+on class or gear change — never per frame). The kit fields: `iceMax` (× `ICE_MAX`), `iceSteer`, `slideMin`, `fatigue`
 (snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
 `nock` (the baseline every rate of fire is scaled against — a tool's own `rof` is multiplied by
-`nock / BOW_NOCK`, so a champion's hands still set the rhythm; see
+`nock / BOW_NOCK`, so a class's hands still set the rhythm; see
 [the quiver](gameplay.md#the-quiver)),
 `dmgBase`/`dmgPow` (what the *player* adds to the bit's own damage), `spdDmg` (extra damage scaled
 by the shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
 `updatePlayer`'s movement block, `emitBit`, `tryDodge`, the AI's draw timing, the cursor,
-aim line and draw meter. `setChamp(p, c)` swaps one in (full heal — it's a pre-match choice);
+aim line and draw meter. `setClass(p, c)` swaps one in (full heal — it's a pre-match choice);
 `p.maxHp` is always `levelMaxHp(p)` = kit hp + the level growth below.
 
-| # | Name | Look | Kit | Flies in with |
+| # | Name | Fantasy | Kit | Flies in with |
 | --- | --- | --- | --- | --- |
-| 0 | **WREN**, the Ranger | the original pom-hat sprite | the original numbers, unchanged | a SHORTBOW loaded ARROW + BARBED SHOT |
-| 1 | **SKADI**, the Skater | hood, goggles, trailing scarf, skate blades (`SPRITES.champ[1]`) | ice cap ×1.35, sharper carves, slide engages at 60 and fatigues half as fast, draw 0.6 s at 85 % speed, +3 damage and up to +7 for speed on top of the bit, dash 245, 85 hp | a SLING loaded ARROW + SPEEDUP |
+| 0 | **HUNTER** — bow, traps, distance control | keep the gap and own the ground between | the ranged numbers: quick nock (0.4 s), full draw power, 92 hp | a SHORTBOW loaded ARROW + BARBED SHOT |
+| 1 | **WARRIOR** — close pressure, blocking, momentum | get to arm's length and stay there | 120 hp, faster on ice (×1.15), +5 speed damage, dash 230, softer bow numbers | a SLING loaded ARROW + HEFT |
 
-The **weapon is part of the champion**: `CHAMP_LOADOUT` (js/tools.js) pairs each one with a tool
-and its bits, and `setChamp` / `Player.reset` hand it over — so the two champions do not shoot the
+The **weapon is part of the class**: `CLASS_LOADOUT` (js/tools.js) pairs each one with a tool
+and its bits, and `setClass` / `Player.reset` hand it over — so the two classes do not shoot the
 same thing, every AI slot arrives armed, and a respawn is re-armed after
 [death spills the build](gameplay.md#death-is-final). See
-[Tools and bits](gameplay.md#tools-and-bits).
+[Tools and bits](gameplay.md#tools-and-bits). The four ABILITIES beside the weapon — what each
+one does, its cooldown, cast, and the states it leaves on a body — are
+[Class abilities](gameplay.md#class-abilities-keys-1-4) in gameplay.md.
 
-The local slot picks on the champion select screen (see
-[Main menu](rendering.md#main-menu-title)); AI slots hash theirs — champion **and** all four gear
+The local slot picks on the class select screen (see
+[Main menu](rendering.md#main-menu-title)); AI slots hash theirs — class **and** all four gear
 variants — from the seed in `initPlayers()` so a replayed world fields the same roster in the
-same loadouts. Sprites live in `SPRITES.champ[c][team]` — same
+same loadouts. Sprites live in `SPRITES.champ[c][team]` (the sprite key keeps its legacy name;
+js/sprites.js is never rewritten) — same
 16×16 body plan and frame set as the player, so `drawPlayer`/`drawGhost` just swap the set via
-`champSet(p)`; `SPRITES.playerTeam` is champion 0.
+`classSet(p)`; `SPRITES.playerTeam` is class 0.
 
 ## Hero levels
 
@@ -114,7 +121,7 @@ payout every source uses — and robot deposits both route through it) — it pa
 220 — the gap grows by 5 each level, ~220 gold to cap). Spending gold and dying never touch
 `xp`; level and xp are set in the constructor, not `reset()`, so they would survive a `reset`.
 
-Growth is flat and identical for both champions: each level past 1 adds `LVL_HP` (6) to
+Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (6) to
 `maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
 (`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
 damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
@@ -304,7 +311,10 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    The toggle goes through `inp.prone`, exactly the flag Ctrl sets.
 3. **fight** — a rival within `AI_SIGHT` (150 px, now filtered through `seenAt()` so a buried one
    is simply not there): circle at ~70 px, draw and loose near full, dodge when hurt. Only shoots
-   when `aiLineClear()` says the flight path is open. **Already prone, it holds perfectly still
+   when `aiLineClear()` says the flight path is open. **Class abilities are spent here, off
+   cooldown at the foe** — one per decision tick, through the same edge field a human's key
+   sets (`inp.ability`), each gated by the range it is good at (a warrior rushes the mid-gap,
+   stomps at arm's length; a hunter volleys and nets what it can see). **Already prone, it holds perfectly still
    and shoots from where it lies** — which earns it the ambush multiplier off the same
    `ambushReady()` check a human gets, since `concealOf` discounts a moving mound and
    `ambushReady` refuses a moving shot outright.

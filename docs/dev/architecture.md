@@ -21,7 +21,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
 | [js/core.js](../../js/core.js) | ~250 | shared scope, no `window.*` export | the base layer: the numbers with no one owner (grid, view, day cycle, `YIELD`), the seeded rng, `state`/`settings`, the fx/economy helpers |
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
-| [js/player.js](../../js/player.js) | ~760 | shared scope, no `window.*` export | the `Player` class and slots, champions/kits/gear/cards, the entity arrays, damage & death |
+| [js/player.js](../../js/player.js) | ~880 | shared scope, no `window.*` export | the `Player` class and slots, classes/kits/gear/cards, the entity arrays, damage & death |
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
 | [js/world.js](../../js/world.js) | ~730 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, the landmarks with their own `lmRng` stream, and the practice training grounds |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
@@ -30,13 +30,14 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/robots.js](../../js/robots.js) | ~520 | shared scope, no `window.*` export | the worker bots a bay rolls out, and the one flag per player whose tile is their standing order |
 | [js/actions.js](../../js/actions.js) | ~600 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone, the quiver |
 | [js/tools.js](../../js/tools.js) | ~760 | shared scope, no `window.*` export | the weapon: the `TOOLS` and `BITS` tables, what a press fires, how each bit flies, the loot rolls, the tech tree, and the icons for both |
-| [js/ai.js](../../js/ai.js) | ~350 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
+| [js/abilities.js](../../js/abilities.js) | ~640 | shared scope, no `window.*` export | the class abilities on keys 1-4: the `CLASS_AB` table, casting, the trap/net/falcon/volley/shield/rush/crater/juggernaut sim, and their draw passes |
+| [js/ai.js](../../js/ai.js) | ~380 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
 | [js/draw-world.js](../../js/draw-world.js) | ~1160 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, the flag and landmark glyphs, lighting/weather/vignettes |
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
 | [js/ui.js](../../js/ui.js) | ~1950 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, backpack + gear + ability widget, the weapon strip and bit column, the drag, card draft, the hover tooltip |
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
-| [js/menu.js](../../js/menu.js) | ~1450 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, champion select, the gear screen, the tech tree screen, `PATCH_TXT` |
+| [js/menu.js](../../js/menu.js) | ~1450 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, class select, the gear screen, the tech tree screen, `PATCH_TXT` |
 | [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |
 | [js/boot.js](../../js/boot.js) | ~490 | `DBG` + shared scope | the last file to load: the eagle drop, the boot order, `window.DBG`, the rAF loop |
 
@@ -116,7 +117,7 @@ the site-by-site list is in [rendering.md](rendering.md#text-over-the-world).
 ### sprites.js
 
 Literal ASCII grids paired with palette objects, baked to offscreen canvases by `bake()` at load.
-Team colours, champions and building tiers are all palette swaps of shared grids, which is why a
+Team colours, classes and building tiers are all palette swaps of shared grids, which is why a
 pose edit propagates further than it looks. **The file has a UTF-8 BOM and seven rows repairing a
 mangled byte** (one of the seven is currently a no-op) — re-saving it in another encoding corrupts
 the grids silently. All of it, including which sprites share which grid: [sprites.md](sprites.md).

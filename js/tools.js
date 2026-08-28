@@ -1,9 +1,10 @@
 'use strict';
-// The weapon: a TOOL on one of the four slots, loaded with BITS that say what
+// The weapon: a TOOL on the ONE weapon slot, loaded with BITS that say what
 // it fires. A tool is a body - how often it can shoot, how many bits it holds,
 // and how heavy a bit it can throw; a bit is a shot, or a modifier that
 // rewrites every shot on the tool it sits in. Both are carried items, both
 // scatter out of the world, and a tool keeps its bits wherever it goes.
+// Keys 1-4 are the class abilities now (js/abilities.js), not slot picks.
 // ------------------------------------------------------------ tools & bits
 // Ordering: this file needs ITEMS (js/player.js) and RES_COLORS
 // (js/structures.js) at LOAD time - it registers one ITEMS entry per tool and
@@ -123,8 +124,7 @@ const TOOLS = {
   hornbow:  { name: 'HORN BOW',    tier: 1, rof: 34, cap: 4, tensile: 5, art: 'bow' },
   longbow:  { name: 'LONGBOW',     tier: 2, rof: 28, cap: 5, tensile: 9, art: 'recurve' },
 };
-const TOOL_SLOTS = 4;        // the 1-4 keys, and therefore the hud strip's cells
-const TOOL_HOLD_T = 0.25;    // s (15 frames at 60) a slot key is held before its bit column rises
+const TOOL_SLOTS = 1;        // ONE weapon slot: the class weapon, centre of the strip
 const TOOL_ROF_STEP = 1 / 60; // a tool's `rof` is counted in game steps of this length
 
 // ---- items: one bag entry per kind ---------------------------------------
@@ -214,20 +214,29 @@ function toolReady(p) {
   const cell = heldTool(p);
   return !!cell && peekBit(cell) >= 0;
 }
-// A tap on 1-4. Selecting drops any draw in progress, because the shot you
-// were winding up belonged to the other tool.
-function selectTool(p, i) {
-  if (i < 0 || i >= TOOL_SLOTS || i === p.toolSel) return;
-  p.toolSel = i;
-  if (p.charging) { p.charging = false; p.chargeT = 0; }
-  p.fireArmed = false;
-  if (p === player) SFX.pickup();
-}
-// Which slot's bit column is up: the selected slot, once its key has been held
-// past TOOL_HOLD_T, and only when there is a tool there to open. Derived, not
-// stored - so it can never disagree with the key that is actually down.
+// Whether the weapon's bit column is up: HOVER over the weapon well raises
+// it, and it stays up while the pointer is on the risen column itself (or
+// while a bit is being carried anywhere - the column is where a bit goes).
+// Derived every read, never stored, so it can never disagree with where the
+// pointer actually is; `bitColHover` only remembers that it was open, which
+// is what lets the pointer climb the column without it snapping shut.
+let bitColHover = false;
 function bitEditSlot() {
-  return player && player.toolHoldT >= TOOL_HOLD_T && player.tools[player.toolSel] ? player.toolSel : -1;
+  if (!player || state.mode !== 'play' || player.dead) { bitColHover = false; return -1; }
+  const cell = player.tools[0];
+  if (!cell) { bitColHover = false; return -1; }
+  if (state.drag && bitIdOf(state.drag.cell.type)) return 0;
+  if (!mouse.inside) { bitColHover = false; return -1; }
+  const r = toolCellRect(0);
+  let over = mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 &&
+    mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3;
+  if (!over && bitColHover) {
+    const top = bitColRect(0, cell.bits.length - 1);
+    over = mouse.x >= top.x - 8 && mouse.x < top.x + top.w + 8 &&
+      mouse.y >= top.y - 6 && mouse.y < r.y + r.h;
+  }
+  bitColHover = over;
+  return over ? 0 : -1;
 }
 
 // ---- equipping -----------------------------------------------------------
@@ -529,18 +538,18 @@ function dropLoot(x, y, tier, chance) {
 }
 
 // ---- starting loadouts ---------------------------------------------------
-// Every slot flies in with a tool on key 1 and its champion's own bits in it,
-// which is what makes the loadout screen a choice rather than a preview: the
-// two champions do not shoot the same thing. Called from initPlayers() and
-// again whenever the local slot changes champion at the select screen.
-const CHAMP_LOADOUT = [
-  { tool: 'shortbow', bits: ['arrow', 'barb'] },   // WREN: the plain shaft, and a heavier one
-  { tool: 'sling',    bits: ['arrow', 'speedup'] }, // SKADI: fast and light, and faster still
+// Every slot flies in with its class's tool in the one weapon slot, its
+// class's own bits in it, which is what makes the pick a choice rather than
+// a preview: the two classes do not shoot the same thing. Called from
+// initPlayers() and again whenever the local slot changes class at select.
+const CLASS_LOADOUT = [
+  { tool: 'shortbow', bits: ['arrow', 'barb'] }, // HUNTER: the plain shaft, and a heavier one
+  { tool: 'sling',    bits: ['arrow', 'heft'] }, // WARRIOR: close-in, and hitting like a fist
 ];
 function giveLoadout(p) {
   p.tools = new Array(TOOL_SLOTS).fill(null);
   p.toolSel = 0;
-  const L = CHAMP_LOADOUT[p.champ] || CHAMP_LOADOUT[0];
+  const L = CLASS_LOADOUT[p.cls] || CLASS_LOADOUT[0];
   const cell = makeTool(L.tool);
   for (let i = 0; i < L.bits.length && i < cell.bits.length; i++) cell.bits[i] = L.bits[i];
   p.tools[0] = cell;

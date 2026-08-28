@@ -1,8 +1,8 @@
 'use strict';
 // Every combatant in the match: the numbers a slot is made of, the Player
-// class and its slots, champions and kits, gear, cards, the input struct,
-// contested orders, the entity arrays - and the damage & death lifecycle
-// those slots live and die by.
+// class and its slots, the two playable classes and their kits, gear, cards,
+// the input struct, contested orders, the entity arrays - and the damage &
+// death lifecycle those slots live and die by.
 // ------------------------------------------------------------ players
 // Every slot in the match is a Player. They all carry identical state and are
 // all driven from the same `input` struct, so a feature written for "the
@@ -49,43 +49,43 @@ const DODGE_SPEED = 215;  // roll velocity -> ~60px travelled
 const DODGE_CHARGES = 2;
 const DODGE_CD = 3.5;     // seconds to refill one charge
 
-// The two bow numbers a champion kit is expressed against - CHAMPS below
+// The two bow numbers a class kit is expressed against - CLASSES below
 // reads both at load time, which is why they sit here and the rest of the
 // bow (the quiver, the shafts, the trail) is in js/actions.js.
 const BOW_CHARGE = 0.9;   // seconds to a full draw
 const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
-// ---- champions ----------------------------------------------------------
-// Every slot plays one of these. A champion is a look (SPRITES.champ[c]) plus
-// a kit: the handful of numbers updatePlayer / emitBit / tryDodge read
-// through kitOf(p) instead of the bare constants. Champion 0 is the original
-// kit unchanged; the skater trades draw power for ice speed and shoots
-// harder the faster she is moving. Picked on the select screen (local) or
+// ---- classes ------------------------------------------------------------
+// Every slot plays one of these. A class is a look (SPRITES.champ[c] - the
+// sprite key keeps its legacy name; js/sprites.js is never rewritten) plus a
+// kit - the numbers updatePlayer / emitBit / tryDodge read through kitOf(p)
+// instead of the bare constants - plus its four ACTIVE ABILITIES on keys 1-4
+// (CLASS_AB, js/abilities.js). Picked on the class select screen (local) or
 // hashed from the seed (AI slots) in initPlayers().
-const CHAMPS = [
+const CLASSES = [
   {
-    name: 'WREN', role: 'THE RANGER',
-    blurb: ['STEADY DRAW, HARD HITS. THE ALL-ROUNDER.', 'AXE AND PICK COME OUT ON THEIR OWN.', 'ROLLS CHAIN INTO SPEED ON THE RIVERS.'],
-    stats: { ice: 2, draw: 3, power: 4, tough: 3 },
-    kit: { iceMax: 1, iceSteer: 2.6, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.55,
-      bowCharge: BOW_CHARGE, nock: BOW_NOCK, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 100 },
+    name: 'HUNTER', role: 'BOW, TRAPS, DISTANCE',
+    blurb: ['THE BOW IS THE ARGUMENT: KEEP THE GAP.', 'TRAPS, NETS AND A FALCON CONTROL THE GROUND.', 'CALL A VOLLEY ON ANYONE WHO STANDS STILL.'],
+    stats: { ice: 3, draw: 4, power: 4, tough: 2 },
+    kit: { iceMax: 1, iceSteer: 2.8, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.55,
+      bowCharge: BOW_CHARGE, nock: 0.4, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 92 },
   },
   {
-    name: 'SKADI', role: 'THE SKATER',
-    blurb: ['BLADES ON THE ICE: FASTER CAP, SHARPER CARVES.', 'QUICK DRAW THAT BARELY SLOWS HER DOWN.', 'ARROWS HIT HARDER THE FASTER SHE FLIES.'],
-    stats: { ice: 5, draw: 5, power: 2, tough: 2 },
-    kit: { iceMax: 1.35, iceSteer: 3.8, slideMin: 60, fatigue: 0.5, chargeMul: 0.85,
-      bowCharge: 0.6, nock: 0.3, dmgBase: 3, dmgPow: 6, spdDmg: 7, dodgeSpeed: 245, maxHp: 85 },
+    name: 'WARRIOR', role: 'PRESSURE, BLOCKING, MOMENTUM',
+    blurb: ['THE FIGHT IS AT ARM\'S LENGTH: GET THERE.', 'THE SHIELD EATS ARROWS; THE RUSH CARRIES BODIES.', 'SPEED IS DAMAGE - NOTHING STOPS A JUGGERNAUT.'],
+    stats: { ice: 4, draw: 2, power: 3, tough: 5 },
+    kit: { iceMax: 1.15, iceSteer: 3.2, slideMin: 70, fatigue: 0.7, chargeMul: 0.7,
+      bowCharge: 0.75, nock: 0.5, dmgBase: 3, dmgPow: 6, spdDmg: 5, dodgeSpeed: 230, maxHp: 120 },
   },
 ];
-// the kit every sim site reads: the champion's numbers with the slot's gear
-// folded in. refreshKit() rebuilds the cache whenever champion or gear
+// the kit every sim site reads: the class's numbers with the slot's gear
+// folded in. refreshKit() rebuilds the cache whenever class or gear
 // changes; kitOf() itself is called many times a frame and must stay a read.
-function kitOf(p) { return p.kit || CHAMPS[p.champ].kit; }
-// swap a slot's champion: kit hp applies on the spot (full heal, it's a
-// pre-match choice), and the new champion brings its own tool and bits - the
+function kitOf(p) { return p.kit || CLASSES[p.cls].kit; }
+// swap a slot's class: kit hp applies on the spot (full heal, it's a
+// pre-match choice), and the new class brings its own tool and bits - the
 // loadout is part of who you picked, not a thing carried across (js/tools.js)
-function setChamp(p, c) { p.champ = c; refreshKit(p); p.hp = p.maxHp; giveLoadout(p); }
+function setClass(p, c) { p.cls = c; refreshKit(p); p.hp = p.maxHp; giveLoadout(p); }
 // kit hp plus the flat per-level growth
 function levelMaxHp(p) { return kitOf(p).maxHp + LVL_HP * (p.level - 1); }
 // the one way gold enters a wallet: pays the purse and the same amount of XP
@@ -117,7 +117,7 @@ function levelUp(p) {
   if (!inAir(p)) floaters.push({ x: p.x, y: p.y - 22, txt: 'LEVEL ' + p.level, color: '#f2cc6a', t: 0, vx: 0, scale: 2, rise: 20 });
   if (p === player) SFX.levelUp();
 }
-function champSet(p) { return SPRITES.champ[p.champ][p.team]; }
+function classSet(p) { return SPRITES.champ[p.cls][p.team]; }
 // Five slots share each team colour, so text that names one player (the
 // scoreboard, the event log) also needs a per-slot shade of that team's
 // palette - the team colour stays the background, this is the ink.
@@ -220,7 +220,7 @@ function bagTake(p, type, n) {
 
 // ---- gear ----------------------------------------------------------------
 // Four pieces - helmet, chest, legs, boots - each picked from three variants
-// at champ select (that free pick is level 1) and bought to level GEAR_LV_MAX
+// at class select (that free pick is level 1) and bought to level GEAR_LV_MAX
 // in-match, from anywhere, per piece. A variant's mod() writes its bonus into
 // the effective kit at the piece's level, so the whole system is one table
 // plus refreshKit(); the sim never reads gear directly. Levels reset with the
@@ -317,10 +317,10 @@ function pick3Distinct(rarity) {
   return pool.slice(0, Math.min(3, pool.length));
 }
 
-// rebuild p.kit from champion + gear. The gear-free defaults added here are
-// the fields no champion kit carries; a variant's mod() edits them in place.
+// rebuild p.kit from class + gear. The gear-free defaults added here are
+// the fields no class kit carries; a variant's mod() edits them in place.
 function refreshKit(p) {
-  const k = Object.assign({}, CHAMPS[p.champ].kit, {
+  const k = Object.assign({}, CLASSES[p.cls].kit, {
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
     harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
     ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
@@ -374,8 +374,7 @@ function makeInput() {
                          // level - holding a modifier while tapping W closes the
                          // browser tab, and preventDefault cannot stop it
     eatBerry: false, eatFish: false, // edge-triggered
-    toolPick: -1,        // edge-triggered: select this weapon slot (keys 1-4)
-    toolHold: false,     // that slot's key is still down - past TOOL_HOLD_T it raises the bit column
+    ability: -1,         // edge-triggered: cast the class ability on this key (1-4), js/abilities.js
     cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
   };
 }
@@ -392,7 +391,7 @@ class Player {
     this.inv = { gold: 0 };             // the wallet is currency only - carried goods are in the bag
     this.bagCap = BAG_CAP;              // slots; one starting backpack
     this.bag = new Array(this.bagCap).fill(null); // each cell null or { type, n }
-    this.champ = 0;                     // CHAMPS index; the select screen sets the local one
+    this.cls = 0;                       // CLASSES index; the select screen sets the local one
     this.gear = [0, 0, 0, 0];           // chosen GEAR variant per slot (helmet/chest/legs/boots)
     this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
     this.skill = [0, 0, 0, 0];          // ranks on the four hud abilities, 0..AB_RANK_MAX
@@ -410,7 +409,7 @@ class Player {
     this.respawnT = 0;                  // seconds left on an active respawn countdown
     this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
     this.kills = 0;                     // rivals downed; scoreboard only, survives death
-    refreshKit(this);                   // builds this.kit and this.maxHp from champ + gear + skill
+    refreshKit(this);                   // builds this.kit and this.maxHp from class + gear + skill
     this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
     this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
     this.dropU = 1;                     // route fraction at which an AI slot jumps
@@ -452,14 +451,27 @@ class Player {
     this.crawlT = 0; this.puffT = 0; this.hideFlash = 0;
     this.swingT = 0; this.swingCd = 0; this.swingDir = 0; this.swingHitDone = false;
     this.swing = SWING_BOW;                        // held SWING_TOOLS index (bow at rest)
-    // The four weapon slots (keys 1-4) and which one the button fires. A slot
-    // holds a tool CELL - the same object a bag cell is, bits and all - so
-    // moving one between the bag and a slot is a reference move and a tool
-    // never loses what is loaded into it. Regranted here rather than kept,
-    // because death spills the build where you fell (spillInventory) and the
-    // Keep hands your champion's own loadout back. js/tools.js owns all of it.
+    // the class abilities (keys 1-4, js/abilities.js): per-key cooldowns, the
+    // cast in progress, and every timed state one can leave on a body -
+    // rooted by a trap, slowed under a net or a crater, revealed by the
+    // falcon, shielded, mid-rush, or five seconds of juggernaut
+    this.abCd = [0, 0, 0, 0];
+    this.castAb = -1; this.castT = 0;
+    this.rootT = 0;                                // snare trap: pinned where you stand
+    this.slowT = 0; this.slowMul = 1;              // net / crater drag on every speed cap
+    this.netT = 0;                                 // the drape the slow is read off
+    this.markT = 0;                                // falcon sweep: revealed to everything
+    this.shieldT = 0; this.shieldA = 0;            // the tower shield, and where it faces
+    this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = -1;
+    this.jugT = 0; this.jugHit = []; this.jugFxT = 0;
+    this.hopT = 0;                                 // the net shot's recoil hop, on the body
+    // The one weapon slot the button fires. It holds a tool CELL - the same
+    // object a bag cell is, bits and all - so moving one between the bag and
+    // the slot is a reference move and a tool never loses what is loaded
+    // into it. Regranted here rather than kept, because death spills the
+    // build where you fell (spillInventory) and the Keep hands your class's
+    // own loadout back. js/tools.js owns all of it.
     giveLoadout(this);
-    this.toolHoldT = 0;                            // s the selected slot's key has been held (the bit column rises at TOOL_HOLD_T)
     this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
     this.hurtT = 0; this.invuln = first ? 0 : 3;
     this.kbx = 0; this.kby = 0;
@@ -478,11 +490,11 @@ let inv = null;      // === player.inv, the counters the HUD draws
 function initPlayers() {
   players.length = 0;
   for (let i = 0; i < MAX_PLAYER_SLOTS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
-  // AI slots draw their champion AND their four gear variants from the seed,
+  // AI slots draw their class AND their four gear variants from the seed,
   // so a replayed world fields the same roster in the same loadouts
   for (const p of players) if (p.control === 'ai') {
     for (let i = 0; i < GEAR_SLOTS.length; i++) p.gear[i] = Math.floor(hash2(p.id * 29 + i * 13 + 5, 191) * 3) % 3;
-    setChamp(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1); // refreshes the kit too
+    setClass(p, hash2(p.id * 17 + 3, 77) < 0.5 ? 0 : 1); // refreshes the kit too
   }
   player = players[0];
   inv = player.inv;
@@ -506,6 +518,9 @@ function concealOf(p) { return p.hide > 0 ? p.hide * (p.moving ? PRONE_MOVE : 1)
 // brain) resolves through this one function so they cannot disagree about who
 // is hidden.
 function seenAt(p, range) {
+  // the falcon's mark is the ONE legal bypass: a swept rival is simply seen,
+  // whatever they are lying under, until the mark runs out (js/abilities.js)
+  if (p.markT > 0) return range;
   const c = concealOf(p);
   const r = range * kitOf(p).stealth * (1 - PRONE_CUT * c);
   return c > 0 ? Math.max(r, Math.min(range, PRONE_SNIFF)) : r;
@@ -567,7 +582,9 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
   p.hp -= dmg;
   p.hurtT = 0.25;
   p.invuln = 0.7;
-  p.kbx = dx * 110; p.kby = dy * 110;
+  // a juggernaut takes the damage and none of the shove (js/abilities.js)
+  if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
+  else { p.kbx = dx * 110; p.kby = dy * 110; }
   risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
   if (p === player) state.shake = Math.max(state.shake, crit ? 6 : 3);
   addDmgFloater(p.x, p.y - 18, dmg, p === player, crit);
@@ -603,9 +620,9 @@ function spillInventory(p, killer) {
     const base = Math.floor(n / parts), rem = n % parts;
     for (let i = 0; i < parts; i++) spawnDrop(p.x, p.y - 4, k, base + (i < rem ? 1 : 0));
   }
-  // the bag, and then the four weapon slots: a build goes down with the body
-  // and lies where it fell, loaded, for whoever walks over it. reset() hands
-  // the slot its champion's starting loadout back, so a respawn is armed but
+  // the bag, and then the weapon slot: a build goes down with the body and
+  // lies where it fell, loaded, for whoever walks over it. reset() hands
+  // the slot its class's starting loadout back, so a respawn is armed but
   // not the same player it was.
   for (let i = 0; i < p.bag.length; i++) {
     const s = p.bag[i];
@@ -644,6 +661,10 @@ function die(p, src, cause) {
   p.prone = false; p.hide = 0; p.riseT = 0;
   p.fallT = 0;
   p.swingT = p.swingCd = 0;
+  // whatever ability the body was mid-way through dies with it
+  p.castT = 0; p.castAb = -1;
+  p.shieldT = 0; p.rushT = 0; p.rushVictim = -1;
+  p.jugT = 0; p.rootT = 0; p.slowT = 0; p.netT = 0; p.markT = 0; p.hopT = 0;
   burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about
@@ -788,7 +809,7 @@ function practiceRevive(p) {
 }
 
 // Both end screens print the same object, so there is one of these rather
-// than one per ending: the four tally numbers, the champion it was played in,
+// than one per ending: the four tally numbers, the class it was played in,
 // the kit it finished in, and the two facts only one of the screens uses
 // (mates for the win's headline, place/by for the loss's).
 function endSnapshot() {
@@ -798,7 +819,7 @@ function endSnapshot() {
   const left = players.filter((q) => q !== player && q.active && !q.eliminated).length;
   return {
     gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
-    team: player.team, champ: player.champ,
+    team: player.team, cls: player.cls,
     gear: player.gear.slice(), gearLv: player.gearLv.slice(),
     // a teammate still standing means the TEAM won, and the headline says so
     mates: players.filter((q) => q !== player && q.active && !q.dead && q.team === player.team).length,

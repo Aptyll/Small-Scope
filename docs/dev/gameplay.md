@@ -9,15 +9,15 @@ Everything below describes **a player**, not *the* player: each mechanic runs pe
 model, the input struct, teams, bots and how two players' orders are resolved.
 
 > Several numbers below (ice cap, steer, slide threshold and fatigue, draw time and speed, arrow
-> damage, dash speed, max hp) are **per champion** — the constants are champion 0's values and
-> the sim reads them through `kitOf(p)`. See [Champions](multiplayer.md#champions).
+> damage, dash speed, max hp) are **per class** — the constants are baselines the kits are
+> written against and the sim reads them through `kitOf(p)`. See [Classes](multiplayer.md#classes).
 
 ## Momentum movement (players only)
 
 A player moves on a real velocity (`p.vx/vy`): `p.input.mx/my` accelerates, and the surface
 underfoot sets friction and speed caps. All the tuning constants live in the `players` banner of
 [js/player.js](../../js/player.js) (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`, above
-`CHAMPS`, whose kits are written against them) and the per-surface rates inline in
+`CLASSES`, whose kits are written against them) and the per-surface rates inline in
 `updatePlayer()`'s movement block, which every slot runs. **Momentum is deliberately players-only**
 — animals, robots, and knockback still use the old direct-move idiom.
 
@@ -132,10 +132,12 @@ banner. It loads after `actions.js` because a shot it fires is the arrow pipelin
 top-level code registers one `ITEMS` row per kind — which is what makes the bag, the drop pickup,
 the death spill and the refusal flash work on tools and bits with no storage code of their own.
 
-**Keys 1-4 are four weapon slots** (`p.tools`, `TOOL_SLOTS`), and the left button fires whichever
-one is selected (`p.toolSel`). A slot holds a **tool**; a tool holds **bits**; the bits are what
-actually fly. Both are found in the world, never bought, and both are carried items you can drag
-around — so the weapon is a thing a player assembles rather than a thing they are issued.
+**There is ONE weapon slot** (`p.tools`, `TOOL_SLOTS` = 1 — the array and the drag plumbing stay
+generic over it), and the left button fires it. Keys 1-4 belong to the
+[class abilities](#class-abilities-keys-1-4) now. The slot holds a **tool**; a tool holds
+**bits**; the bits are what actually fly. Both are found in the world, never bought, and both are
+carried items you can drag around — so the weapon is a thing a player assembles rather than a
+thing they are issued.
 
 ### A tool
 
@@ -187,7 +189,7 @@ HEFT and LONGSHOT are the six that exist.
    `risePlayer` (the shot is what breaks cover).
 
 `emitBit` is where the player is folded back in: the bit's own damage leads, and the draw
-(`pwScale`), the champion kit's `dmgBase`/`dmgPow`, SKADI's speed bonus, the hero level and then
+(`pwScale`), the class kit's `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`), the hero level and then
 the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
 about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
 `stick`, `burn`, `lit` and `col` alongside the old fields.
@@ -217,16 +219,18 @@ shaft. A burning shot trails fire instead of team colour and bursts embers where
 
 ### The bit column
 
-Holding a slot's own key past `TOOL_HOLD_T` (0.25 s, 15 frames at 60) raises that tool's bit cells
-out of it — `bitEditSlot()` is derived from `p.toolHoldT`, never stored, so it cannot disagree
-with the key that is actually down. Cell 0 is at the **bottom**, nearest the tool, because that is
+**Hovering the weapon well raises its bit cells out of it** — `bitEditSlot()` (js/tools.js) is
+derived from the pointer every read, never stored: open over the well, kept open while the
+pointer is on the risen column itself, and forced open while a **bit is being carried** anywhere
+(the column is where a bit goes, so picking one up presents the destination). Cell 0 is at the
+**bottom**, nearest the tool, because that is
 what fires first; a gold caret on the left edge marks what the next press will fire and climbs as
 the tool cycles. While the column is up the backpack is open too (`bagOpenNow`), because
-customising a tool means dragging bits between the two. It is a hold, not a mode.
+customising a tool means dragging bits between the two. It is a hover, not a mode.
 
-The drag is one mechanism shared by the grid, the four slots and the column
+The drag is one mechanism shared by the grid, the weapon slot and the column
 ([UI banner](../../js/ui.js), `state.drag`): a press **arms** a pick-up and only travel past
-`DRAG_SLOP` promotes it, so a tap on a berry still eats it and a tap on a slot still selects it
+`DRAG_SLOP` promotes it, so a tap on a berry still eats it
 while a drag off either one picks it up. A release over any well that will take it puts it there;
 over the rest of the HUD it goes home; **over the world it is thrown**, which is the only way to
 get rid of a tool — and it goes with its bits.
@@ -271,14 +275,58 @@ bot cannot read a boomerang or an orbit and leaves those for someone who can.
 
 ### Starting loadouts
 
-`CHAMP_LOADOUT` gives each champion a tool and its bits, and `giveLoadout(p)` is called from
-`Player.reset()` and from `setChamp()` — so the weapon is part of picking a champion, every AI
-slot gets its own, and a respawn is re-armed. WREN flies in with a SHORTBOW loaded ARROW +
-BARBED SHOT; SKADI with a SLING loaded ARROW + SPEEDUP. Death **spills the equipped tools** with
+`CLASS_LOADOUT` gives each class a tool and its bits, and `giveLoadout(p)` is called from
+`Player.reset()` and from `setClass()` — so the weapon is part of picking a class, every AI
+slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
+BARBED SHOT; the WARRIOR with a SLING loaded ARROW + HEFT. Death **spills the equipped tool** with
 the bag (`spillInventory`), so a build lies where its owner fell and the Keep hands back the
 starting one — you come back armed, but not as the player you were. The gear screen draws the pair
 above the armour cards (`drawArmsStrip`, js/menu.js): the tool's well, its bit cells in firing
 order, the tool's tensile as pips, and one caption naming them.
+
+## Class abilities (keys 1-4)
+
+Everything in this section lives in **[js/abilities.js](../../js/abilities.js)**, under the
+`class abilities` banner. Keys 1-4 cast the four actives of the slot's
+[class](multiplayer.md#classes) — `CLASS_AB[p.cls]`, one row per key, where **what an ability IS
+lives in its table entry** (`cd`, `cast`, `use(p)`), never in an `if` elsewhere. The press goes
+through `input.ability` (edge-triggered, like the dodge) into `tryAbility(p, i)`, so a bot casts
+through exactly the key a human presses; `updateAbilities(p, dt)` runs the cooldowns, lands the
+cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)` (called from
+`updatePlay`) steps what they leave in the world.
+
+**A cast is a performance**: `p.castT` runs the ability's `cast` seconds, the body visibly does
+it (`abilityPose` shifts/tilts the sprite — a kneel to set a trap, a hop into the stomp, the
+recoil hop off the net shot), movement halves, and the effect fires at the aim held at the END
+of the cast. Casting breaks prone cover like a shot, is refused mid-roll / mid-stun / in a hole,
+and a stun knocks a cast (and the shield, and a rush) out of the hands. Everything an ability
+does to a body is **drawn on that body for both sides** (`drawAbilityOnPlayer`) — readability
+first: a trap is plainly visible to both teams, a mark hangs gold chevrons over the head, a
+netted player wears the net.
+
+HUNTER — bow, traps, distance control:
+
+| key | name | cd | what it does |
+| --- | --- | --- | --- |
+| 1 | **SNARE TRAP** | 10 s | sets an iron jaw at the aim (≤ `TRAP_RANGE`, tile-snapped, visible to everyone). Arms in 1 s — the jaws visibly spread — then the first rival on it takes 8 and is **rooted** (`p.rootT`, 1.2 s: no walk, no roll, no slide; tools still work). `TRAP_MAX` 2 per owner, a third springs the oldest |
+| 2 | **NET SHOT** | 11 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
+| 3 | **FALCON SWEEP** | 18 s | the bird flies the aim line (`falcons`, 340 px): every rival under it is **marked** (`p.markT`, 4 s) — `seenAt()` returns full range for a marked body (its one legal bypass) and both maps keep showing them |
+| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then 14 damage in `VOLLEY_R`, and `VOLLEY_SHAFTS` plain shafts stick for **anyone** — the ammo pillar holds even for a called strike |
+
+WARRIOR — close pressure, blocking, momentum:
+
+| key | name | cd | what it does |
+| --- | --- | --- | --- |
+| 1 | **SHIELD WALL** | 9 s | raises a tower shield toward the aim for up to 2.2 s (the key again lowers it early; the cooldown starts when it comes DOWN). Any shot flying into the front arc dies on it (`abShieldBlocks`, checked in the arrow loop before the body); walking drops to 40 % and the bow is out of hand |
+| 2 | **BULL RUSH** | 12 s | charges the aim line at 300 px/s for 0.42 s (its own movement branch in `updatePlayer`, no i-frames): the **first rival hit is carried** on the shoulder and **slammed** at the end — 10 damage + 0.6 s stun, ×1.6 driven into a wall (`rushStep`/`rushEnd`) |
+| 3 | **AVALANCHE STOMP** | 14 s | a leap-stomp at the feet: 12 damage + radial knockback + a beat of stun in `STOMP_R`, and the **crater** (`craters`) is deep snow that slows rivals crossing it for 4 s |
+| 4 | **JUGGERNAUT** | 20 s | 5 s: immune to stun (`stunUnit` head) and knockback (`damagePlayer`), speed ramps +50 % over the duration, and body contact at speed bowls rivals over — damage scales with the speed carried in, once per rival per activation (`p.jugHit`) |
+
+The movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
+crater drag, juggernaut ramps — applied to the walk cap **and** the ice cap in `updatePlayer`.
+All damage passes its `src`, so an ability kill credits like an arrow. Bots spend abilities in
+`updateAI`'s fight rung, off cooldown at ranges each is good at. The strip's ability wells (icons,
+cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.md).
 
 ## The tech tree
 
@@ -551,7 +599,7 @@ takes everything inside `ROLL_HIT_R` (7px) of the roller's own radius and splits
   nor is a **fish net**, which is not solid, so a roll crosses one without a contact at all.
 
 **Everything scales with the speed the roll is actually carrying** — `rollPow` runs from the
-champion's own `kit.dodgeSpeed` up to `ROLL_FAST` (340 px/s), which is why a dash launched out of
+class's own `kit.dodgeSpeed` up to `ROLL_FAST` (340 px/s), which is why a dash launched out of
 an ice slide deals `ROLL_DMG`'s top end (16 and a 1.1s stun) against 5 and 0.5s off a standing
 start. That is the whole reason to chain a dash out of momentum instead of from rest.
 
@@ -632,10 +680,10 @@ that made it — and it is the counterplay: a line like that leads straight to t
 
 `ambushReady(p)` is `prone && hide >= 1 && !moving`: **full** cover, and dead still while it goes.
 `fireTool` reads it before anything else can break the cover, multiplies the whole damage roll
-(champion + power + speed + level) by `kit.ambushMul` (starts at `AMBUSH_MUL` 2.5, grown by ambush
+(class + power + speed + level) by `kit.ambushMul` (starts at `AMBUSH_MUL` 2.5, grown by ambush
 ranks), tags the arrow `ambush: true`, and calls
 `risePlayer` after the loose — one ambush per burrow, then you are a player lying in the open with
-a bow that still has to be renocked. A WREN's full draw goes 12 → 30. Bow-fishing is the exception
+a bow that still has to be renocked. A HUNTER's full draw goes 12 → 30. Bow-fishing is the exception
 that proves the rule: it never leaves the bow, so it costs no arrow and breaks no cover.
 
 Wherever the tagged arrow lands — player, worker bot or animal — `ambushFx()` puts a gold flare
@@ -882,7 +930,7 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
 (4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
 (every boot builds fresh `Player`s). The human picks variants on the **gear page** — a full
-screen after champion select showing all 12 variants at once as cards (League runes-style; see
+screen after class select showing all 12 variants at once as cards (League runes-style; see
 [Main menu](rendering.md#main-menu-title)); `pickGear()` writes straight to `player.gear`. AI
 slots hash all four variants from the seed in `initPlayers()`. **Every variant has its own
 12×12 icon** (`SPRITES.gearIcons[slot][variant][material]`), so a pick is a distinct picture,
@@ -891,11 +939,11 @@ not a label.
 **Worn gear shows on the sprite**: each piece at level 2+ lays a 1 px band of its material across
 the shared 16×16 body plan — hat, coat, hips, one mark per foot (`GEAR_MARKS`/`drawGearMarks`,
 called from `drawPlayer` under the held tool; skipped while rolling, in a hole, or in title). The
-free level-1 pick draws nothing, so the baseline look stays the champion's; a fed player reads
+free level-1 pick draws nothing, so the baseline look stays the class's; a fed player reads
 iron → steel → gold at a glance, the same materials the HUD plates wear.
 
 **Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
-`refreshKit(p)` copies the champion kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
+`refreshKit(p)` copies the class kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
 `nightHeal`, `walkMul`, `harvest`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
 returns that cache, so every existing kit read site (movement, `emitBit`, dodge timing, the AI,
 the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
@@ -1279,7 +1327,7 @@ killer whose own bag is full simply leaves them lying; this is also, for free, h
 roguelike card drops on death** (see [Roguelike cards](#roguelike-cards)) — a picked card is
 already baked into the kit, not an item, so only what's still sitting unopened in the bag spills.
 **And the four weapon slots empty with it**, each tool going down *loaded*: a build lies where its
-owner fell, for whoever walks over it, and `reset()` hands the dead slot its champion's starting
+owner fell, for whoever walks over it, and `reset()` hands the dead slot its class's starting
 loadout back — so a respawn is armed but is not the player it was. (An item riding the cursor
 mid-drag goes back in the bag first, so it spills with the rest instead of vanishing with the hand
 holding it.) All three loops are generic per type, so a future resource spills without touching
@@ -1306,7 +1354,7 @@ A `'respawning'` LOBBY still leaves directly, and `'respawning'` needs no state 
 that: once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same
 one-line way `'KEEP PLAYING'` already does, lands the local slot near its Keep, and replays the HUD
 slide-in a fresh eagle landing gets. A win *or* an elimination also freezes what its screen will
-print (`endSnapshot()` on `state.end`: gold, kills, level, clock, team, champion, the kit, and the
+print (`endSnapshot()` on `state.end`: gold, kills, level, clock, team, class, the kit, and the
 placing and killer only the loss prints) because the match keeps running underneath and a total
 that climbs behind a tally which already counted it reads as a bug — and because a loss's summary
 is opened off a plank minutes later, by which time none of those numbers are still true. Spectating

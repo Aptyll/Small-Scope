@@ -11,8 +11,8 @@ nine other people are on it.
 ## A match
 
 Ten slots in `players` — **slot 0 is you, the rest are AI** — across **two teams of five, RED vs
-BLUE** (slots alternate). Everyone picks one of **two champions** (WREN the Ranger, SKADI the
-Skater) and is **dropped in by their team's armoured eagle** — the two birds fly the one line in
+BLUE** (slots alternate). Everyone picks one of **two classes** (the ranged HUNTER, the melee
+WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the one line in
 opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of its line each
 eagle dives into the treeline and becomes its team's **objective**. **Last team standing wins.**
 
@@ -26,14 +26,20 @@ nothing in it is at stake. See [the practice arena](world.md#the-practice-arena)
 
 ## The pillars
 
-**Your weapon is something you build.** Keys 1-4 are four slots, each holding a **tool** — a body
+**Your weapon is something you build.** One weapon slot holds a **tool** — a body
 with a rate of fire, a number of bit cells and a weight it is strong enough to throw. What comes
 out of it is the **bits** loaded into it, fired in order and then round again: a plain arrow, a
 log that arcs down and flattens whoever it lands on, a wisp that circles you lighting the dark,
 or a modifier that rewrites every shot on that tool at once. Neither is bought. Both are found —
 in broken rocks, in felled trees, and at the top tier in the treeline's chests — so the weapon you
-finish a match with is one the map handed you a piece at a time. Hold a slot's key and its bit
+finish a match with is one the map handed you a piece at a time. Hover the weapon well and its bit
 column rises out of it to be rebuilt mid-fight. [Tools and bits](gameplay.md#tools-and-bits).
+
+**Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's traps, net,
+falcon and volley; the WARRIOR's shield, rush, stomp and juggernaut — each with a cooldown, a
+cast the body visibly performs, and effects drawn plainly for both sides: the game is readable
+first, sneaky second. [Class abilities](gameplay.md#class-abilities-keys-1-4),
+[Classes](multiplayer.md#classes).
 
 **The arsenal itself grows across matches.** A **tech tree** on the main menu spends lifetime gold
 on permanently unlocking tools and bits, and what is unlocked is what the world is allowed to drop

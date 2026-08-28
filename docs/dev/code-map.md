@@ -1,6 +1,6 @@
 # Where things live in the game code
 
-The game code is ~13400 lines of flat top-level code across twenty files sharing one global
+The game code is ~14000 lines of flat top-level code across twenty-one files sharing one global
 scope ([architecture.md](architecture.md) has the file table and the load order), organized
 inside each file only by banner comments of the form `// ------ name`. **Keep every banner
 honest** — one that has drifted from what sits under it is worse than no banner, because it sends
@@ -44,7 +44,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| slots, teams, champions + kits, hero levels, the input struct, contested orders | `Player`, `CHAMPS`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
+| slots, teams, classes + kits, hero levels, the input struct, contested orders | `Player`, `CLASSES`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
 | the one on-the-spot gold payout every source uses (gold is never a drop) | `awardGold` | `players` (beside `gainGold`) |
 | the numbers a slot is made of: the slot count and teams, walk/roll/slide speeds, hero levels, and the two bow baselines a kit is written against | `MAX_PLAYER_SLOTS`, `TEAM_COUNT`, `PVP`, `PLAYER_SPEED`/`PLAYER_R`, `ICE_MAX`/`SLIDE_MIN`/`SLIDE_EXIT`/`TRAIL_MIN`/`SNOW_TRAIL_*`, `LEVEL_*`/`LVL_*`, `DODGE_*`, `BOW_CHARGE`/`BOW_NOCK` | `players` (above `CHAMPS`, which reads four of them at load time) |
 | the entity arrays and the local aliases | `animals`…`landmarks`, `players`, `player`, `inv` | `players` (the banner's tail) |
@@ -140,7 +140,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| what every weapon and every shot IS: the two tables the whole system is driven from | `TOOLS`, `BITS`, `TOOL_TIERS`, `TOOL_SLOTS`, `TOOL_HOLD_T` | `tools & bits` (its head) |
+| what every weapon and every shot IS: the two tables the whole system is driven from | `TOOLS`, `BITS`, `TOOL_TIERS`, `TOOL_SLOTS` (1 - the one weapon slot) | `tools & bits` (its head) |
 | the tier a find wears, and where that colour is read back | `TOOL_TIERS`, `itemTier`, `TIER_SHINE` (`tierPlate`/`tierShine`, which paint it: `UI`, ui.js) |`tools & bits` |
 | the bag rows that make tools and bits carryable at all | the `ITEMS` / `RES_COLORS` loops at the foot of the file | `tools & bits` › `icons` |
 | a tool instance and the things that read one | `makeTool`, `heldTool`, `bitsIn`, `bitFires`, `toolMods`, `nextBit`, `peekBit`, `toolRof`, `toolReady` | `tools & bits` › `a tool instance` |
@@ -149,10 +149,22 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
 | where tools and bits come from, and how often | `dropLoot`, `LOOT_POOL`, `rebuildLootPool`, `ROCK_DROP`, `TREE_DROP`, `CHEST_TOOL`, `LOOT_TOOL` | `tools & bits` › `loot` (its callers: `hitObject`, actions.js) |
 | the tech tree: the graph, what a node costs, what is open, and the one writer | `TECH`, `TECH_BY_ID`, `TECH_COST`, `TECH_GOLD_PER_PT`, `techTier`, `techCost`, `techDone`, `techOpen`, `techPoints`, `techResearch`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.tech`, profile.js; the page: `main menu`, menu.js) |
-| what each champion flies in with | `CHAMP_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (drawn by `drawArmsStrip`: `main menu`, menu.js) |
+| what each class flies in with | `CLASS_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (drawn by `drawArmsStrip`: `main menu`, menu.js) |
 | a bot putting its loot to work, having no column and no pointer | `botFitLoadout` | `tools & bits` › `a bot fitting what it has found` (called from `updateAI`: `ai`, ai.js) |
 | the icons for both, and the one bake helper they share | `TOOL_ART`, `TOOL_ART_PAL`, `BIT_ART`, `BIT_PAL`, `bakeGrid` | `tools & bits` › `icons` |
-| which slot's column is up right now | `bitEditSlot`, `selectTool` | `tools & bits` › `equipping` (its geometry: `bitColRect`, ui.js) |
+| whether the hover-raised bit column is up right now | `bitEditSlot` | `tools & bits` › `equipping` (its geometry: `bitColRect`, ui.js) |
+
+## js/abilities.js
+
+| Looking for | Start at | Banner |
+| --- | --- | --- |
+| the two kits' four actives each: name, cooldown, cast, and the whole effect | `CLASS_AB` (each row's `use(p)`) | `class abilities` |
+| tuning for every ability (trap arm/root, net slow, mark time, volley ring, shield arc, rush slam, crater, juggernaut) | `TRAP_*`, `NET_*`, `FALCON_*`/`MARK_T`, `VOLLEY_*`, `SHIELD_*`, `RUSH_*`, `STOMP_*`/`CRATER_*`, `JUG_*` | `class abilities` (its head) |
+| a keypress becoming a cast, and the per-slot tick that lands it | `tryAbility`, `updateAbilities` | `class abilities` › `casting` |
+| every movement cap an ability may touch, folded once | `abilityMoveMul` | `class abilities` › `casting` (read by `updatePlayer`, sim.js) |
+| what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
+| the shield eating a shot, the rush's step/grab/slam | `abShieldBlocks` (read by the arrow loop, sim.js), `rushStep`/`rushEnd` (read by `updatePlayer`'s rush branch) | `class abilities` |
+| drawing it all: ground layer, air layer, the pose on the sprite, the states on a body | `drawAbilityGround`, `drawAbilityAir`, `abilityPose`, `drawAbilityOnPlayer` | `class abilities` › `drawing` (called from render.js and `drawPlayer`, draw-world.js) |
 
 ## js/ai.js
 
@@ -213,8 +225,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what the pointer is on, said in words, bottom left | `tipAt`, `tipResolve`, `tipNow`, `tipLift`, `tipSize`, `drawTooltip`, `TIP_*` | `tooltips` (resolved once per frame in `render`, render.js; the feed steps up by `tipLift`, panels.js) |
 | the per-kind descriptions that panel is built from | `tipBase`, `tipTool`, `tipBit`, `tipStack`, `tipCell`, `tipGear`, `tipAbility`, `tipTech`, `AB_NAMES`/`AB_BLURB`, `TIP_PATH` | `tooltips` |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
-| the hud strip (bottom-centre): the four weapon slots, the quiver/dodge rail, the xp bar | `AB_CELL`/`AB_RAIL`/`hudStripRect`/`toolCellRect`/`stripHit`/`drawToolCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
-| the bit column a held slot key raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
+| the hud strip (bottom-centre): the one weapon well, the quiver/dodge rail, the xp bar | `AB_CELL`/`AB_RAIL`/`hudStripRect`/`toolCellRect`/`stripHit`/`drawToolCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
+| the bit column hovering the weapon well raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
 | the plate a tier is stated on, wherever an item sits, and the shine on the top one | `tierPlate`, `tierShine`, `drawItemIcon` | `UI` › `hud strip` (the tiers themselves: `TOOL_TIERS`, tools.js) |
 
 ## js/panels.js
@@ -233,10 +245,10 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| the title screen: buttons, die, panels, champion select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
+| the title screen: buttons, die, panels, class select, play intro | `menuLayout`, `drawMenuButton`, `drawPillar`, `rerollWorld`, `renderSelect`, `lockIn`, `beginIntro`, `renderTitle` | `main menu` |
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
-| picking variants pre-match: the full-page picker, and the weapon the champion flies in with above it | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard`, `drawArmsStrip` | `main menu` › `the gear screen` (the loadout itself: `CHAMP_LOADOUT`, tools.js) |
+| picking variants pre-match: the full-page picker, and the weapon the class flies in with above it | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard`, `drawArmsStrip` | `main menu` › `the gear screen` (the loadout itself: `CLASS_LOADOUT`, tools.js) |
 | the tech tree page: its 7x3 grid, the edges, a node's three states, and the one spend | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techBuy`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
 
 ## js/screens.js

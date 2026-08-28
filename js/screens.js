@@ -888,7 +888,7 @@ function renderVictory(now) {
     const bob = Math.round(Math.sin(now * 2.2) * 1.5);
     const bx = L.cx - 40, by = L.champY + lift + bob;
     ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.champ][ws.team].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
+    ctx.drawImage(SPRITES.champ[ws.cls][ws.team].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
     drawGearMarks(ws, bx, by, 5);
     ctx.globalAlpha = 1;
     // the crown, dropped onto the head
@@ -1097,7 +1097,7 @@ function renderDefeat(now) {
     // the kit is read on this screen.
     const bx = L.cx - 40, by = L.champY - 8 - settle;
     ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.champ][ws.team].prone.right[0], bx, by, 80, 80);
+    ctx.drawImage(SPRITES.champ[ws.cls][ws.team].prone.right[0], bx, by, 80, 80);
     ctx.globalAlpha = 1;
     // ...and the snow in FRONT of it, over the body's last few rows: the
     // drift has already started taking it back

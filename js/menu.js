@@ -23,9 +23,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.94'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.95'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.95', 'CHAMPIONS ARE CLASSES NOW - HUNTER AND WARRIOR - AND KEYS 1-4 CAST FOUR REAL ABILITIES EACH: TRAPS, NETS, A FALCON AND A VOLLEY AGAINST A SHIELD, A RUSH, A STOMP AND A JUGGERNAUT - WHILE THE WEAPON LIVES IN ONE CENTRE SLOT AND ITS BIT COLUMN RISES ON HOVER.'],
   ['1.94', 'THE ARMORY RACK STANDS SQUARE BELOW THE DUMMY NOW, AND IT WORKS ON E - AN E PROMPT RISES WHEN YOU WALK UP, HOLDING E OPENS THE WEAPON WHEEL, AND LETTING GO TAKES THE ONE YOU ARE POINTING AT.'],
   ['1.93', 'THE PRACTICE RACK IS AN ARMORY NOW - RIGHT-CLICK IT TO OPEN A WHEEL OF EVERY WEAPON IN THE GAME AND TAKE ONE STRAIGHT INTO YOUR SELECTED SLOT, ARROW SEATED AND READY TO FIRE.'],
   ['1.92', 'YOUR BEST PARKOUR LAP IS SAVED NOW - THE PLATE AT THE GATE REMEMBERS YOUR RECORD ACROSS VISITS, AND ONLY A FASTER LAP EVER REPLACES IT.'],
@@ -426,7 +427,7 @@ function updateTitle(dt) {
   m.techT = Math.max(0, Math.min(1, m.techT + (m.screen === 'tech' ? 1 : -1) * dt / 0.35));
   m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
   const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
-  for (let i = 0; i < CHAMPS.length; i++) {
+  for (let i = 0; i < CLASSES.length; i++) {
     const target = (m.csel === i || sh === i) ? 1 : 0;
     m.chover[i] += (target - m.chover[i]) * Math.min(1, dt * 14);
   }
@@ -875,14 +876,14 @@ function drawPatchBar(ox, oy) {
 // PLAY goes here first (menu.screen = 'select'): champion cards on the left,
 // the chosen one big in the middle with name, role, blurb and stat pips, and
 // a LOCK IN plank. Up/Down browse, Enter/Space lock, Esc returns to the menu;
-// the mouse does the same through selectHit(). Lock-in stamps player.champ
+// the mouse does the same through selectHit(). Lock-in stamps player.cls
 // and hands off to beginDrop() (the eagle ride; see the eagle drop banner).
 const SEL_CARD_W = 78, SEL_CARD_H = 28;
 
 function selectLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  const cards = CHAMPS.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
+  const cards = CLASSES.map((_, i) => ({ x: Math.max(8, cx - 206), y: toy + 66 + i * 34, w: SEL_CARD_W, h: SEL_CARD_H }));
   const lock = { x: cx - 56, y: toy + 228, w: 112, h: 20 };
   // the current loadout, shown as its four variant icons under the stat pips;
   // the strip is a button into the gear screen
@@ -918,7 +919,7 @@ function gearLayout() {
 // one place the tool and its bits are spelled out, since a menu is where a
 // name is learned and the HUD is where the colour is then recognised.
 function drawArmsStrip(cx, y, champ, now) {
-  const L = CHAMP_LOADOUT[champ] || CHAMP_LOADOUT[0];
+  const L = CLASS_LOADOUT[champ] || CLASS_LOADOUT[0];
   const T = TOOLS[L.tool];
   const cells = 1 + T.cap;
   const cw = 20, gap = 3;
@@ -971,7 +972,7 @@ function leaveGear() {
   state.menu.screen = 'select';
   SFX.pickup();
 }
-// pre-match variant pick for the local slot, full heal like setChamp since
+// pre-match variant pick for the local slot, full heal like setClass since
 // nothing has been risked yet
 function pickGear(i, v) {
   if (player.gear[i] === v) return;
@@ -1002,8 +1003,8 @@ function gearClick() {
   pickGear(h.row, h.v);
 }
 
-// what the pointer is over: card index, CHAMPS.length for LOCK IN,
-// CHAMPS.length + 1 for the loadout strip, -1 for nothing
+// what the pointer is over: card index, CLASSES.length for LOCK IN,
+// CLASSES.length + 1 for the loadout strip, -1 for nothing
 function selectHit() {
   const { cards, lock, loadout } = selectLayout();
   for (let i = 0; i < cards.length; i++) {
@@ -1027,9 +1028,9 @@ function leaveSelect() {
   SFX.pickup();
   SFX.music.play('intro');
 }
-function selectChamp(i) {
+function selectClass(i) {
   const m = state.menu;
-  const n = ((i % CHAMPS.length) + CHAMPS.length) % CHAMPS.length;
+  const n = ((i % CLASSES.length) + CLASSES.length) % CLASSES.length;
   if (n === m.csel) return;
   m.csel = n;
   m.cswapT = 0;
@@ -1039,7 +1040,7 @@ function lockIn() {
   const m = state.menu;
   if (m.lockT > 0) return;
   m.lockT = 0.12;
-  setChamp(player, m.csel);
+  setClass(player, m.csel);
   SFX.place();
 }
 
@@ -1047,8 +1048,8 @@ function selectKey(k) {
   const m = state.menu;
   if (m.lockT > 0) return;
   if (k === 'escape' || k === 'backspace') leaveSelect();
-  else if (k === 'arrowup' || k === 'w') selectChamp(m.csel - 1);
-  else if (k === 'arrowdown' || k === 's') selectChamp(m.csel + 1);
+  else if (k === 'arrowup' || k === 'w') selectClass(m.csel - 1);
+  else if (k === 'arrowdown' || k === 's') selectClass(m.csel + 1);
   else if (k === 'enter' || k === ' ') { m.pressT = 0.12; beginGear(); } // champion locked: on to the gear page
 }
 
@@ -1057,12 +1058,12 @@ function selectClick() {
   if (m.lockT > 0 || m.screenT < 1 || m.gearT > 0) return;
   const h = selectHit();
   if (h < 0) return;
-  if (h >= CHAMPS.length) { m.pressT = 0.12; beginGear(); } // LOCK IN or the loadout strip
-  else { selectChamp(h); if (h === m.csel) m.csel = h; }
+  if (h >= CLASSES.length) { m.pressT = 0.12; beginGear(); } // LOCK IN or the loadout strip
+  else { selectClass(h); if (h === m.csel) m.csel = h; }
 }
 
 // a champion card: small plank with the portrait sprite and name; hot = gold
-function drawChampCard(r, ci, hv, now, chosen) {
+function drawClassCard(r, ci, hv, now, chosen) {
   const lift = Math.round(hv * 2);
   const x = r.x, y = r.y - lift, w = r.w, h = r.h;
   ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(x + 2, r.y + 2, w, h);
@@ -1080,8 +1081,8 @@ function drawChampCard(r, ci, hv, now, chosen) {
   ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 4, y + 5, 20, 19);
   ctx.fillStyle = chosen ? '#2a3a6e' : '#1c2750'; ctx.fillRect(x + 5, y + 6, 18, 17);
   ctx.drawImage(SPRITES.champ[ci][0].down[0], x + 6, y + 6);
-  drawPixelTextShadow(ctx, CHAMPS[ci].name, x + 28, y + 8, chosen ? '#ffd95c' : '#cfe0ff', '#0a0e23');
-  drawPixelTextShadow(ctx, CHAMPS[ci].role, x + 28, y + 16, chosen ? '#9fb6d8' : '#5a6690', '#0a0e23');
+  drawPixelTextShadow(ctx, CLASSES[ci].name, x + 28, y + 8, chosen ? '#ffd95c' : '#cfe0ff', '#0a0e23');
+  drawPixelTextShadow(ctx, CLASSES[ci].role, x + 28, y + 16, chosen ? '#9fb6d8' : '#5a6690', '#0a0e23');
 }
 
 function drawStatPips(x, y, label, n, col) {
@@ -1096,12 +1097,12 @@ function drawStatPips(x, y, label, n, col) {
 function renderSelect(now, a) {
   const m = state.menu;
   const { toy, cx, cards, lock, loadout } = selectLayout();
-  const c = CHAMPS[m.csel];
+  const c = CLASSES[m.csel];
   const slideIn = 1 - a;
 
   // header
   ctx.globalAlpha = a;
-  const t0 = 'CHOOSE YOUR CHAMPION';
+  const t0 = 'CHOOSE YOUR CLASS';
   drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 30 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
   drawGoldRule(cx, toy + 45 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
 
@@ -1110,7 +1111,7 @@ function renderSelect(now, a) {
     const r = cards[i];
     const rr = { x: r.x - Math.round(slideIn * 80), y: r.y, w: r.w, h: r.h };
     ctx.globalAlpha = a;
-    drawChampCard(rr, i, m.chover[i], now, m.csel === i);
+    drawClassCard(rr, i, m.chover[i], now, m.csel === i);
   }
   ctx.globalAlpha = a;
 
@@ -1146,7 +1147,7 @@ function renderSelect(now, a) {
   // pips end. It is a button - clicking it (or LOCK IN) opens the gear page.
   const hover = m.screenT >= 1 && !m.gearT ? selectHit() : -1;
   const lox = loadout.x + Math.round(slideIn * 80);
-  const lolift = hover === CHAMPS.length + 1 ? 1 : 0;
+  const lolift = hover === CLASSES.length + 1 ? 1 : 0;
   for (let i = 0; i < GEAR_SLOTS.length; i++) {
     const x = lox + i * 17, y = loadout.y - lolift;
     ctx.fillStyle = lolift ? '#8fa0c8' : '#35426e';
@@ -1157,7 +1158,7 @@ function renderSelect(now, a) {
   }
 
   // lock in
-  const over = hover === CHAMPS.length;
+  const over = hover === CLASSES.length;
   const pressed = m.pressT > 0 || m.lockT > 0;
   drawMenuButton({ x: lock.x, y: lock.y + Math.round(slideIn * 20), w: lock.w, h: lock.h }, 'LOCK IN', over ? 1 : 0.7, now, pressed);
   const t3 = 'ENTER LOCK IN - ESC BACK';

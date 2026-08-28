@@ -58,11 +58,11 @@ window.addEventListener('keydown', (e) => {
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and
   // ESC it neither stops the sim nor swallows anything but its own clicks.
   if (e.key.toLowerCase() === 'b') state.bagOpen = !state.bagOpen;
-  // 1-4 select a weapon slot, left to right like the hud strip. Holding one
-  // past TOOL_HOLD_T raises that tool's bit column - the held level is read in
-  // sampleHumanInput, so the repeat this handler gets is harmless. Gear is
-  // bought from the backpack now, not from a number key.
-  if (e.key >= '1' && e.key <= '4' && !e.repeat) player.input.toolPick = e.key.charCodeAt(0) - 49;
+  // 1-4 cast the class abilities, left to right like the strip will show
+  // them. Edge-triggered like the dodge; the sim consumes it (tryAbility,
+  // js/abilities.js). The bit column rises on HOVER over the weapon well now,
+  // so no key is held for it.
+  if (e.key >= '1' && e.key <= '4' && !e.repeat) { SFX.unlock(); player.input.ability = e.key.charCodeAt(0) - 49; }
   if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
   if (e.key.toLowerCase() === 'escape') {
     // a carried item goes back first, then the flag aim: both are gestures
@@ -259,7 +259,7 @@ function sampleHumanInput(p) {
     inp.slide = !!keys['shift'];
     inp.fire = inp.work = false;
     inp.eatBerry = inp.eatFish = false;
-    inp.toolPick = -1; inp.toolHold = false;
+    inp.ability = -1;
     inp.cmd = null;
     if (p.charging) { p.charging = false; p.chargeT = 0; }
     p.firePrev = false;
@@ -272,7 +272,7 @@ function sampleHumanInput(p) {
     inp.mx = inp.my = 0;
     inp.fire = inp.work = inp.slide = false;
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
-    inp.toolPick = -1; inp.toolHold = false;
+    inp.ability = -1;
     inp.cmd = null;
     if (p.charging) { p.charging = false; p.chargeT = 0; }
     p.firePrev = false;
@@ -284,10 +284,6 @@ function sampleHumanInput(p) {
   inp.mx = mx; inp.my = my;
   inp.slide = !!keys['shift'];
   inp.work = !!keys['e'] && !state.wheel;
-  // the selected slot's own key, still down: past TOOL_HOLD_T that raises its
-  // bit column. It is a held LEVEL rather than an edge because the column is
-  // up exactly as long as the finger is - see bitEditSlot (js/tools.js).
-  inp.toolHold = !state.wheel && !!keys[String(p.toolSel + 1)];
-  if (state.wheel) { inp.fire = false; inp.dodge = false; } // the wheel swallows the shot
+  if (state.wheel) { inp.fire = false; inp.dodge = false; inp.ability = -1; } // the wheel swallows the shot
 }
 

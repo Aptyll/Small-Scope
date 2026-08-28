@@ -125,7 +125,8 @@ function fishInRange(f, p) {
 // E: swing the right tool at the cursor's tile. Held E repeats every swing
 // cooldown; the bow comes back on its own once the cooldown runs out.
 function tryWork(p) {
-  if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0 || p.stunT > 0) return;
+  if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0 || p.stunT > 0 ||
+    p.castT > 0 || p.rushT > 0 || p.shieldT > 0) return; // both hands are on the ability
   if (p.prone) { risePlayer(p); return; } // no swinging an axe on your belly: E stands you up
   const t = workTarget(p);
   if (!t || !t.near) return;
@@ -146,7 +147,8 @@ function tryWork(p) {
 // dodge roll: dash with i-frames in the held movement direction (8-way),
 // falling back to the facing direction when no key is down
 function tryDodge(p) {
-  if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead || p.stunT > 0) return;
+  if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead || p.stunT > 0 ||
+    p.rootT > 0 || p.rushT > 0) return; // a trap pins the roll too, and a charge is already a dash
   risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
   let dx = p.input.mx, dy = p.input.my;
   if (!dx && !dy) {
@@ -203,6 +205,8 @@ function rollDmg(p, sp) { return Math.max(1, Math.round(rollLerp(ROLL_DMG, rollP
 // surface spends it the way it spends any other momentum.
 function stunUnit(e, t) {
   if (t <= 0) return;
+  // a juggernaut cannot be stunned - that is most of what the ability IS
+  if (e instanceof Player && e.jugT > 0) return;
   const cur = e.stunT || 0;
   e.stunT = Math.max(cur, t);
   e.stunMax = cur > 0 ? Math.max(e.stunMax || 0, e.stunT) : e.stunT;
@@ -212,6 +216,9 @@ function stunUnit(e, t) {
     e.fireArmed = false;
     e.swingT = 0; e.swingHitDone = true;           // the swing in flight never lands
     e.sliding = false;
+    e.castT = 0; e.castAb = -1;                    // the cast is knocked out of the hands
+    if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
+    if (e.rushT > 0) { e.rushT = 0; e.rushVictim = -1; }
   }
   burst(e.x, e.y - 9, '#ffe9a8', 4, 26, 0.4, true);
 }

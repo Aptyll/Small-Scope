@@ -457,7 +457,7 @@ function renderMinimap(now) {
   // the cover would make the whole thing pointless. Your own side never does.
   for (const p of players) {
     if (p === vp || !p.active || p.dead || inAir(p)) continue;
-    if (p.team !== vp.team && concealOf(p) >= PRONE_MAP) continue;
+    if (p.team !== vp.team && p.markT <= 0 && concealOf(p) >= PRONE_MAP) continue; // a falcon-marked rival stays on it
     const dx = (p.x / TILE - ptx) * s, dy = (p.y / TILE - pty) * s;
     if (Math.hypot(dx, dy) > MM_R - 1) continue;
     ctx.fillStyle = '#0f1632';
@@ -1042,10 +1042,11 @@ const AB_COVER = 'rgba(8,12,30,0.82)';
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
-// weapon slot i's well
+// the ONE weapon well, centred in the strip - the class abilities will flank
+// it, two a side (i is kept so the drag plumbing stays generic over slots)
 function toolCellRect(i) {
   const R = hudStripRect();
-  return { x: R.x + i * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
+  return { x: R.x + ((AB_W - AB_CELL) >> 1) + i * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
 }
 // { kind:'slot', i } | { kind:'frame' } | null. Shared by the click handler,
 // the cursor and the strip's own hover so they cannot disagree.
@@ -1054,7 +1055,7 @@ function stripHit(mx, my) {
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
   const R = hudStripRect();
   if (mx < R.x - 3 || mx >= R.x + R.w + 3 || my < R.y || my >= R.y + R.h) return null;
-  for (let i = 0; i < AB_N; i++) {
+  for (let i = 0; i < TOOL_SLOTS; i++) {
     const s = toolCellRect(i);
     if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'slot', i };
   }
@@ -1062,14 +1063,16 @@ function stripHit(mx, my) {
 }
 
 // ---- the bit column ------------------------------------------------------
-// Hold a slot's own key and the tool's bit cells rise out of it, bottom to
+// Hover the weapon well and the tool's bit cells rise out of it, bottom to
 // top: cell 0 sits nearest the tool because that is the one that fires first,
 // and the list is walked upward and then wraps, which is what the gold caret
 // climbing its left edge is showing. While it is up the backpack is open too
 // (bagOpenNow), so a bit is dragged straight between the two.
 //
-// The column is a hold, not a mode: it is on screen exactly as long as the key
-// is down. Nothing about it is a menu you can get stuck in.
+// The column is a hover, not a mode: it is on screen exactly as long as the
+// pointer is on the well or the column itself (or a bit is being carried -
+// see bitEditSlot, js/tools.js). Nothing about it is a menu you can get
+// stuck in.
 const BITC_CELL = 18, BITC_GAP = 2, BITC_LIFT = 6; // lift: clear of the tool well's rim
 // cell i of the column over slot s, i = 0 at the bottom
 function bitColRect(s, i) {
@@ -1197,7 +1200,8 @@ function hudRelease(mx, my) {
   state.dragPend = null;
   if (!q) return false;
   if (q.src.k === 'bag') bagClick({ kind: 'cell', i: q.src.i });
-  else if (q.src.k === 'slot') selectTool(player, q.src.i);
+  // a tap on the one weapon well selects nothing any more - there is only
+  // the one - so an unmoved press there simply ends
   return true;
 }
 // o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
@@ -1484,8 +1488,6 @@ function drawToolCell(i, now, hov) {
       }
     }
   }
-  drawPixelTextOutline(ctx, String(i + 1), r.x + r.w - 6, y + r.h - 8,
-    sel ? '#f4f7ff' : '#5f6f96', '#0f1632');
 }
 function drawHudStrip(now) {
   const p = player;
@@ -1500,7 +1502,7 @@ function drawHudStrip(now) {
   ctx.fillRect(R.x - 2, R.y + R.h - 1, R.w + 4, 1);
   ctx.fillRect(R.x - 3, R.y + 1, 1, R.h - 2);
   ctx.fillRect(R.x + R.w + 2, R.y + 1, 1, R.h - 2);
-  for (let i = 0; i < AB_N; i++) {
+  for (let i = 0; i < TOOL_SLOTS; i++) {
     drawToolCell(i, now, hov && hov.kind === 'slot' && hov.i === i);
   }
   // The rail: the two numbers a firefight is actually read off, and nothing

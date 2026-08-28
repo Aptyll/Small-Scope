@@ -356,7 +356,7 @@ function renderWorldMap(now) {
   // the other slots, inked in their team colour
   for (const p of players) {
     if (p === player || !p.active || p.dead || inAir(p)) continue;
-    if (p.team !== player.team && concealOf(p) >= PRONE_MAP) continue; // buried: off the map, same as the minimap
+    if (p.team !== player.team && p.markT <= 0 && concealOf(p) >= PRONE_MAP) continue; // buried: off the map, same as the minimap - unless falcon-marked
     const ox2 = MAP_X + Math.round((p.x / TILE) * MAP_S);
     const oy2 = MAP_Y + Math.round((p.y / TILE) * MAP_S);
     ctx.fillStyle = '#241a10';

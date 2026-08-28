@@ -190,6 +190,7 @@ function updatePlay(dt) {
     updatePlayer(p, dt);
   }
   resolveContests(); // this step's work swings, build orders and fish claims
+  updateAbilityWorld(dt); // traps, craters, falcons, nets and called volleys
   if (state.drop) updateDrop(dt);
 
   // Shots in flight. Everything a tool fires rides this one array, whatever
@@ -283,6 +284,15 @@ function updatePlay(dt) {
         if ((a.team === t.team && !a.ff) || t.id === a.owner ||
             !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
         if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
+          // a raised tower shield eats any shot flying into its front arc -
+          // bolts included - before the body behind it is ever asked
+          if (abShieldBlocks(t, nx, ny)) {
+            burst(a.x, a.y, '#c8d2e4', 6, 45, 0.35, true);
+            burst(a.x, a.y, '#f4f7ff', 3, 30, 0.3, true);
+            if (nearPlayer(a.x, a.y)) SFX.hit();
+            dead = true;
+            break;
+          }
           damagePlayer(t, a.dmg, nx, ny, players[a.owner], null, a.ambush);
           burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
           if (a.burn) burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
@@ -441,6 +451,7 @@ function updatePlayer(p, dt) {
 
   if (p.dead) { // out of the match: nothing it wants gets through
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.ability = -1;
     inp.cmd = null;
     return;
   }
@@ -454,6 +465,7 @@ function updatePlayer(p, dt) {
     p.stunT = Math.max(0, p.stunT - dt);
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
     inp.work = inp.fire = inp.slide = false;
+    inp.ability = -1;
     inp.cmd = null;
     inp.mx = inp.my = 0;
   }
@@ -463,7 +475,12 @@ function updatePlayer(p, dt) {
   if (inp.prone) { inp.prone = false; tryProne(p); }
   if (inp.eatBerry) { inp.eatBerry = false; eatBerry(p); }
   if (inp.eatFish) { inp.eatFish = false; eatFish(p); }
+  if (inp.ability >= 0) { const i = inp.ability; inp.ability = -1; tryAbility(p, i); }
   if (inp.cmd) { const c = inp.cmd; inp.cmd = null; runCmd(p, c); }
+
+  // the class abilities' own clock: cooldowns, the cast landing, and every
+  // timed state one leaves on this body (js/abilities.js)
+  updateAbilities(p, dt);
 
   // input
   let mx = inp.mx, my = inp.my;
@@ -544,15 +561,26 @@ function updatePlayer(p, dt) {
       burst(p.x, p.y + 5, '#dfe8f4', 2, 22, 0.3, true);
     }
     if (p.dodgeT <= 0) { p.rollHit.length = 0; burst(p.x, p.y + 4, '#cfd8e8', 4, 30, 0.3, true); }
+  } else if (p.rushT > 0) {
+    // BULL RUSH: the charge owns the velocity the way a roll does - straight
+    // down its line, walls and the first body met resolved by rushStep
+    p.rushT -= dt;
+    p.vx = p.rushNX * RUSH_SPD;
+    p.vy = p.rushNY * RUSH_SPD;
+    const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
+    rushStep(p, mv, dt);
   } else {
     const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
+    // every cap an ability may drag on (root, net, crater, cast, shield) or
+    // ramp up (juggernaut), folded once - js/abilities.js
+    const abMul = abilityMoveMul(p);
     // a belly crawl is a flat crawl on any surface - no ice cap, no draw
     // penalty, nothing to stack. Getting back up costs a moment of it too.
-    const walkMax = p.prone ? PRONE_SPEED
+    const walkMax = (p.prone ? PRONE_SPEED
       : p.riseT > 0 ? PLAYER_SPEED * kit.walkMul * 0.45
-        : PLAYER_SPEED * kit.walkMul * chargeMul; // STRIDER lengthens the stride
+        : PLAYER_SPEED * kit.walkMul * chargeMul) * abMul; // STRIDER lengthens the stride
 
-    if (p.prone || (!onIce && !p.sliding && sp <= walkMax + 6)) {
+    if (p.prone || p.rootT > 0 || (!onIce && !p.sliding && sp <= walkMax + 6)) {
       // plain snow walking: near-instant vector approach, tuned so it feels
       // exactly like the old fixed-speed movement (settles in ~3 frames)
       const f = 1 - Math.exp(-25 * dt);
@@ -570,7 +598,7 @@ function updatePlayer(p, dt) {
         steer = 1.7; target = 0;
         decay = onIce ? 0.15 : Math.min(2.6, 0.35 + 0.45 * p.slideT);
       } else if (onIce) {
-        const cap = ICE_MAX * kit.iceMax * chargeMul;
+        const cap = ICE_MAX * kit.iceMax * chargeMul * abMul;
         if (len > 0) { steer = kit.iceSteer; target = cap; decay = sp < cap ? 1.1 : 0.35; }
         else { steer = 0; target = 0; decay = 0.18; } // idle glide
       } else {
@@ -612,6 +640,8 @@ function updatePlayer(p, dt) {
       p.vx = p.vy = 0;
       p.sliding = false;
       p.slideT = 0;
+      if (p.rushT > 0) { p.rushT = 0; p.rushVictim = -1; } // the charge ends in the water
+      p.castT = 0; p.castAb = -1; p.shieldT = 0;           // and so does whatever was being cast
       p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water
       if (p.charging) { p.charging = false; p.chargeT = 0; }
       p.fireArmed = false;
@@ -760,14 +790,6 @@ function updatePlayer(p, dt) {
   if (p.swingT <= 0 && p.swingCd <= 0) p.swing = SWING_BOW;
   if (inp.work) tryWork(p);
 
-  // The four weapon slots: a tap of 1-4 selects, and keeping that key down
-  // past TOOL_HOLD_T raises the slot's bit column (bitEditSlot, js/tools.js -
-  // the local slot's editor, drawn by the UI). The timer lives on the player
-  // and runs off the input struct like everything else, so nothing about it
-  // reads `keys` directly.
-  if (inp.toolPick >= 0) { selectTool(p, inp.toolPick); inp.toolPick = -1; }
-  p.toolHoldT = inp.toolHold ? p.toolHoldT + dt : 0;
-
   // the quiver: the renock cooldown counts down, and a short quiver fletches
   // one arrow back at a time. Both run for every slot, dead or alive is
   // already filtered above, so a bot recovers on exactly the human's clock.
@@ -796,7 +818,8 @@ function updatePlayer(p, dt) {
     if (!armed && p.dryT <= 0) dryFire(p);
   }
   if (!inp.fire) p.fireArmed = false;
-  if (p.fireArmed && !p.charging && p.nockT <= 0 && armed && p.fallT <= 0 && p.swingT <= 0) {
+  if (p.fireArmed && !p.charging && p.nockT <= 0 && armed && p.fallT <= 0 && p.swingT <= 0 &&
+    p.castT <= 0 && p.shieldT <= 0 && p.rushT <= 0) { // a body mid-ability has no hand free for the draw
     p.charging = true;
     p.chargeT = 0;
     if (nearPlayer(p.x, p.y)) SFX.bowDraw();

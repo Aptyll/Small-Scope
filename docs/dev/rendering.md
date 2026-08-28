@@ -273,7 +273,7 @@ pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush o
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
-| bottom centre | the four weapon slots over a quiver/dodge rail and the xp bar, flush to the bottom; a held slot key raises that tool's bit column out of it | `drawHudStrip`, `drawBitColumn` |
+| bottom centre | the one weapon well (centred) over a quiver/dodge rail and the xp bar, flush to the bottom; hovering the well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
 | bottom right | the backpack **and** both upgrade rows: one frame — the gear row, the ability row and the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
 
 ### The hover tooltip
@@ -313,7 +313,7 @@ in it" half and adds the node's price and state instead.
 ### The tech tree screen
 
 `m.screen = 'tech'`, entered from the main menu's TECH TREE plank and eased in on its own `techT`
-(the chrome ducks under it the way it does under champion select). The `TECH` table already
+(the chrome ducks under it the way it does under class select). The `TECH` table already
 carries the only edge in the graph, and it lays out as seven lineages of at most three, so the
 page is a **7×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
 from a node to the one it opens.
@@ -332,16 +332,18 @@ and the tooltip, so the three can never point at different nodes.
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom, and it is the **weapon**: four tool wells on
-top, a thin rail under them, then a gold xp bar along the bottom (lifetime gold, left-to-right, no
+`drawHudStrip` is one plate, flush to the bottom, and it is the **weapon**: the one tool well
+centred on top (the class abilities will flank it, two a side — the strip's redesign is the next
+stage of the class pivot), a thin rail under it, then a gold xp bar along the bottom (lifetime
+gold, left-to-right, no
 level number — that lives on the overhead badge). The bar has a dark silhouette and a frost rim so
 it reads against the plate. The plate swallows clicks so nothing fires through it.
 
-A tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
+The tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
 tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
-highlight across the top tier's plate). The **selected** slot is the one with the lit rim, lifted
-a pixel; a selected tool that cannot answer the button goes red instead, which is the old dry-bow
+highlight across the top tier's plate). The well wears the lit rim (it is always the live weapon);
+a tool that cannot answer the button goes red instead, which is the old dry-bow
 tell. Along the top inner edge sits one **pip per bit cell** in that bit's own colour: filled is a
 bit, hollow is a free cell, the bright one is what the next press fires, and red is a bit this
 tool is not strong enough to throw. And the **cooldown wipe** covers the whole well for exactly
@@ -357,7 +359,8 @@ two corners. See the ability row below.
 
 ### The bit column
 
-Holding a weapon slot's own key past `TOOL_HOLD_T` raises that tool's bit cells out of it, bottom
+Hovering the weapon well raises its tool's bit cells out of it (`bitEditSlot`, js/tools.js — it
+also stays up while the pointer is on the risen column, or while a bit is being carried), bottom
 to top, joined to the well by a 1 px spine so the stack reads as coming *out* of the slot rather
 than floating over it. Cell 0 is at the bottom because it fires first; a gold caret on the left
 edge marks what the next press fires and climbs as the tool cycles. A cell carries the bit's
@@ -942,22 +945,22 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   (an outside click does nothing) and its second plank reads SKIP — the default name — where an
   edit reads CANCEL.
   Any open panel ducks the logo to zero alpha.
-- **Champion select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
-  over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CHAMPS` entry on
-  the left (`drawChampCard`: portrait well + name + role), the highlighted one drawn 6× in the
+- **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): cross-fades
+  over the menu (`menu.screenT`, the menu chrome ducks to zero). Cards for every `CLASSES` entry on
+  the left (`drawClassCard`: portrait well + name + role), the highlighted one drawn 6× in the
   middle over a plinth with name, role, blurb lines and four stat-pip rows, and a LOCK IN plank.
   `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; Up/Down or
   card clicks move `menu.csel` (`menu.cswapT` pops the big sprite, which walks in place), and the
   **loadout strip** (the four picked variant icons under the stat pips) is a button. Enter/Space,
-  LOCK IN or the strip call `beginGear()` — champion locked, on to the **gear page**;
+  LOCK IN or the strip call `beginGear()` — class locked, on to the **gear page**;
   Esc/Backspace go back to the menu.
 - **Gear page** (`menu.screen = 'gear'`, cross-faded from select on `menu.gearT`): the full-page
   loadout picker — all 12 variants at once as four rows of three cards (`gearLayout()`/
   `gearScreenHit()`/`drawGearCard`), each card its variant's own icon + name + blurb, the picked
   one gold-trimmed, the keyboard focus (`menu.grow`, W/S rows, A/D or Left/Right picks) wearing
-  pulsing corner ticks. Clicks pick via `pickGear()`; Enter or the **FLY** plank (the champion
-  sprite waits beside it) calls `lockIn()` — `setChamp`, `menu.lockT`, then `beginDrop()` (the
-  eagle ride, below); Esc returns to the champion screen. See [gameplay.md](gameplay.md#gear).
+  pulsing corner ticks. Clicks pick via `pickGear()`; Enter or the **FLY** plank (the class
+  sprite waits beside it) calls `lockIn()` — `setClass`, `menu.lockT`, then `beginDrop()` (the
+  eagle ride, below); Esc returns to the class screen. See [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
   is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over

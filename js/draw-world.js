@@ -1096,7 +1096,7 @@ const FRAME_DX = 3;
 function drawPlayer(p, ex, ey, now) {
   const local = p === player;
   const lying = p.prone;
-  const set = lying ? champSet(p).prone[p.dir] : champSet(p)[p.dir];
+  const set = lying ? classSet(p).prone[p.dir] : classSet(p)[p.dir];
   let frame = 0;
   if (lying) frame = p.moving ? 1 + (Math.floor(p.crawlT) % 2) : 0;
   else if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
@@ -1137,7 +1137,7 @@ function drawPlayer(p, ex, ey, now) {
       p.dodgeVY < 0 ? -1 : 1;
     const vd = Math.hypot(p.dodgeVX, p.dodgeVY) || 1;
     const nx = p.dodgeVX / vd, ny = p.dodgeVY / vd;
-    const rollSpr = champSet(p)[p.dir][0];
+    const rollSpr = classSet(p)[p.dir][0];
     const spin = (a, gx, gy) => {
       ctx.save();
       ctx.translate(Math.round(px + 8 + gx), Math.round(py + 8 + gy));
@@ -1149,19 +1149,37 @@ function drawPlayer(p, ex, ey, now) {
     ctx.globalAlpha = 0.28; spin(sgn * (prog - 0.07) * Math.PI * 2, -nx * 6, -ny * 6);
     ctx.globalAlpha = 1; spin(sgn * prog * Math.PI * 2, 0, 0);
   } else {
+    // a cast, the net shot's recoil hop or the rush lean is performed BY the
+    // body: the pose shifts / tilts the sprite itself (abilityPose,
+    // js/abilities.js), so an ability visibly happens to the model
+    const pose = state.mode !== 'title' ? abilityPose(p) : null;
+    const ax = px + (pose ? pose.dx : 0), ay = py + (pose ? pose.dy : 0);
     // held tool: behind the body when facing away, in the hand otherwise. A
     // lying player shows one only while the bow is actually drawn - a carried
-    // axe bobbing over a body on its belly reads as a floating axe.
-    const held = state.mode !== 'title' && (!lying || p.charging);
+    // axe bobbing over a body on its belly reads as a floating axe. A body
+    // mid-cast (or holding the shield, or charging) has no hand free for it.
+    const held = state.mode !== 'title' && (!lying || p.charging) &&
+      p.castT <= 0 && p.shieldT <= 0 && p.rushT <= 0;
     const toolBehind = held && p.dir === 'up' && !p.charging && p.swingT <= 0;
     if (toolBehind) drawHeldTool(p, px, py);
     if (p.invuln > 0 && state.mode !== 'title' && ((now * 12) | 0) % 2 === 0) ctx.globalAlpha = 0.45;
-    drawSpriteFlash(spr, px, py, p.hurtT > 0.12 ? 1 : 0);
+    if (pose && pose.rot) {
+      ctx.save();
+      ctx.translate(ax + 8, ay + 8);
+      ctx.rotate(pose.rot);
+      drawSpriteFlash(spr, -8, -8, p.hurtT > 0.12 ? 1 : 0);
+      ctx.restore();
+    } else {
+      drawSpriteFlash(spr, ax, ay, p.hurtT > 0.12 ? 1 : 0);
+    }
     // gear marks sit at fixed points on the standing body plan, so the prone
     // poses skip them rather than stripe a shoulder across someone's hip
-    if (state.mode !== 'title' && !lying) drawGearMarks(p, px, py);
+    if (state.mode !== 'title' && !lying && !(pose && pose.rot)) drawGearMarks(p, ax, ay);
     ctx.globalAlpha = 1;
     if (held && !toolBehind) drawHeldTool(p, px, py);
+    // what an ability left ON this body - shield, net, jaws, fury, mark -
+    // drawn over the sprite for every side alike (js/abilities.js)
+    if (state.mode !== 'title') drawAbilityOnPlayer(p, ax, ay, now);
     // and the snow goes on last, over body and bow alike
     if (lying && p.hide > 0) {
       drawSnowCover(p, spr, px, py, local ? 0.66 : p.team === player.team ? 0.85 : 1);
@@ -1406,7 +1424,7 @@ function drawBuryRing(p, cxp, cyp) {
 // an unfilled slot: a flat team-tinted silhouette standing at its camp, so
 // the world shows who is missing rather than pretending the slot isn't there
 function drawGhost(p, ex, ey) {
-  const spr = champSet(p)[p.dir][0];
+  const spr = classSet(p)[p.dir][0];
   const px = Math.round(p.x - 8 - ex), py = Math.round(p.y - 12 - ey);
   sctx.clearRect(0, 0, 32, 32);
   sctx.globalCompositeOperation = 'source-over';

@@ -607,7 +607,7 @@ function drawDropAir(ex, ey, now) {
     const sw = Math.round(3 + 5 * q);
     ctx.fillStyle = 'rgba(40,60,100,' + (0.12 + 0.28 * q).toFixed(2) + ')';
     ctx.fillRect(px - sw, py - 1, sw * 2, 2);
-    const ps = champSet(p).down[1 + (Math.floor(p.dropT * 10) % 2)];
+    const ps = classSet(p).down[1 + (Math.floor(p.dropT * 10) % 2)];
     const dw = Math.round(16 * sc);
     ctx.drawImage(ps, Math.round(px - dw / 2), Math.round(py - alt - 12 * sc), dw, dw);
   }
@@ -647,7 +647,7 @@ function drawEagle(e, ex, ey, now) {
       const dx = st[0] * S, dy = st[1] * S;
       const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + bob + Math.round(dx * hs + dy * hc);
       const rs = 16 * RIDER_SCALE;
-      ctx.drawImage(champSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
+      ctx.drawImage(classSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
     }
     // where a jump right now would land: a pulsing ring under the bird -
     // only while the jump window is open, or it promises a jump the lock refuses
@@ -925,10 +925,16 @@ window.DBG = {
   // firing pipeline and the loot roll - so a driver can stage a build without
   // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells
   // the pointer tests against, and `bagAbRect` is the ability row that moved
-  // into the pack. bitEditSlot is which column is up (-1 = none).
-  TOOL_TIERS, TOOL_SLOTS, TOOL_HOLD_T, makeTool, toolType, bitType, toolMods,
-  toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CHAMP_LOADOUT,
+  // into the pack. bitEditSlot is whether the hover-raised column is up (-1 = down).
+  TOOL_TIERS, TOOL_SLOTS, makeTool, toolType, bitType, toolMods,
+  toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
   toolCellRect, bitColRect, bitColHit, bagAbRect, bitEditSlot, tierPlate,
+  // the class abilities: the table, a keypress by hand, and the entity lists
+  // an ability leaves in the world - so a driver can stage a trap or a mark
+  // without walking a bot into one
+  CLASS_AB, abTraps: traps, abCraters: craters, abFalcons: falcons, abNets: nets, abVolleys: volleys,
+  tryAbility: (i, p) => tryAbility(p || player, i),
+  setAbilityCd: (i, t, p) => { (p || player).abCd[i] = t; },
   // the tech tree: the graph, the sums behind it, and the page's own geometry.
   // `research` is the one writer (it rebuilds the loot pool itself), and
   // `wipeTech` puts a profile back to a fresh install without clearing the name.
@@ -941,7 +947,6 @@ window.DBG = {
   tipAt: (x, y) => tipAt(x == null ? mouse.x : x, y == null ? mouse.y : y),
   tipLift,
   fireTool: (p) => fireTool(p || player),
-  selectTool: (i, p) => selectTool(p || player, i),
   get tools() { return player.tools; },
   // stage a loaded tool straight onto a slot: DBG.equip(0, 'longbow', ['arrow','flame'])
   equip: (slot, id, bits, p) => {
@@ -1043,7 +1048,7 @@ window.DBG = {
   setSwing: (i, p) => { (p || player).swing = i; },
   getSwing: (p) => (p || player).swing,
   cam: () => ({ x: camX, y: camY }),
-  startGame, beginIntro, beginSelect, lockIn, setChamp, CHAMPS, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
+  startGame, beginIntro, beginSelect, lockIn, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
   // the ESC panel: what the pointer is over, the speaker's plate, and every
   // row anchor - so a driver can click a dial without guessing at the pitch
   settingsHit, muteBtnRect,

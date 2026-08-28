@@ -31,8 +31,8 @@ Read the relevant one **before** working in that area — they carry the detail 
 | what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
-| movement, tools and bits, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
-| player slots, champions and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
+| movement, tools and bits, the class abilities, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 | the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
@@ -42,7 +42,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** — twenty files, `core.js` through
+**flat top-level classic scripts sharing one global scope** — twenty-one files, `core.js` through
 `boot.js` (the tag `pre-split` keeps the one-file history).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
@@ -64,7 +64,7 @@ them; `core.js` keeps only the numbers with no one owner. A const is invisible t
 before its own, so anything read at *load time* must be declared no later:
 [architecture](docs/dev/architecture.md#the-game-files-corejs--bootjs).
 
-The game code is organized only by `// ------ name` banners inside its twenty files.
+The game code is organized only by `// ------ name` banners inside its twenty-one files.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind.
 

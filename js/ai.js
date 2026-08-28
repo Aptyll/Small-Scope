@@ -164,6 +164,21 @@ function updateAI(p, dt) {
       ai.tgt = null;
       return;
     }
+    // the class abilities, spent off cooldown at the foe - through the same
+    // edge key a human presses, so a bot can never cast what a hand couldn't
+    if (p.castT <= 0 && p.rushT <= 0 && p.shieldT <= 0 && inp.ability < 0) {
+      if (p.cls === 0) { // hunter: pin, tangle, reveal, rain
+        if (p.abCd[3] <= 0 && d < 150 && clear) inp.ability = 3;      // volley on their feet
+        else if (p.abCd[1] <= 0 && d < 110 && clear) inp.ability = 1; // net the gap
+        else if (p.abCd[0] <= 0 && d < 90) inp.ability = 0;           // trap the ground between
+        else if (p.abCd[2] <= 0) inp.ability = 2;                     // falcon down the line
+      } else { // warrior: get there, and be unstoppable arriving
+        if (p.abCd[3] <= 0 && d < 110) inp.ability = 3;               // juggernaut into the fight
+        else if (p.abCd[1] <= 0 && d > 36 && d < 120 && clear) inp.ability = 1; // rush the line
+        else if (p.abCd[2] <= 0 && d < 42) inp.ability = 2;           // stomp at arm's length
+        else if (p.abCd[0] <= 0 && d < 150 && p.hp < p.maxHp * 0.75) inp.ability = 0; // shield the arrows
+      }
+    }
     const side = p.id % 2 ? 1 : -1;
     const a = Math.atan2(foe.y - p.y, foe.x - p.x);
     const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
