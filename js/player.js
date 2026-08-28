@@ -317,15 +317,21 @@ function pick3Distinct(rarity) {
   return pool.slice(0, Math.min(3, pool.length));
 }
 
-// rebuild p.kit from class + gear. The gear-free defaults added here are
-// the fields no class kit carries; a variant's mod() edits them in place.
-function refreshKit(p) {
-  const k = Object.assign({}, CLASSES[p.cls].kit, {
+// the class kit plus the gear-free defaults - the fields no class kit
+// carries; a variant's mod() edits them in place. Shared by refreshKit and
+// the gear pop-up's preview ledger (gearPreviewKit, js/menu.js), so the
+// numbers that page shows can never drift from the ones the sim reads.
+function baseKit(cls) {
+  return Object.assign({}, CLASSES[cls].kit, {
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
     harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
     ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
     killHeal: 0,
   });
+}
+// rebuild p.kit from class + gear + skills + cards
+function refreshKit(p) {
+  const k = baseKit(p.cls);
   for (let i = 0; i < GEAR.length; i++) GEAR[i][p.gear[i]].mod(k, p.gearLv[i]);
   for (let i = 0; i < AB_SKILL.length; i++) AB_SKILL[i].mod(k, p.skill[i]);
   for (const c of p.cards) CARDS[c.rarity][c.id].mod(k);

@@ -82,7 +82,7 @@ team, a plank that lifts on hover — not "CLICK OR ARROWS TO SWAP", not "PLAYER
 control must read as what it does by its shape and its hover state alone, and if you catch
 yourself writing a hint sentence, build the affordance instead. Text is for names, numbers,
 headlines (a death, a landmark) and five deliberate carve-outs: **keybind indicators** (`'ESC
-BACK'`, a "1" in a slot's corner), the **settings and PLAYER panels**' labelled rows, the
+BACK'`, a "1" in a slot's corner), the **settings, PLAYER and gear pop-up panels**' labelled rows, the
 **practice instruments** (the dummy meter's LAST HIT / DPS / TOTAL and the parkour's lap clock
 and BEST / LAST plate — a training instrument's whole job is comparing numbers), **first-run
 onboarding** (the two `showMsg` teaching lines), and the **hover tooltip** (bottom-left,

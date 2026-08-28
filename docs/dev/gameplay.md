@@ -280,9 +280,9 @@ bot cannot read a boomerang or an orbit and leaves those for someone who can.
 slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
 BARBED SHOT; the WARRIOR with a SLING loaded ARROW + HEFT. Death **spills the equipped tool** with
 the bag (`spillInventory`), so a build lies where its owner fell and the Keep hands back the
-starting one — you come back armed, but not as the player you were. The gear pop-up draws the pair
-above the armour cards (`drawArmsStrip`, js/menu.js): the tool's well, its bit cells in firing
-order, the tool's tensile as pips, and one caption naming them.
+starting one — you come back armed, but not as the player you were. The gear pop-up's preview
+shows the weapon at the body's side (`drawGearPreview`, js/menu.js) — the other half of what a
+class flies out with.
 
 ## Class abilities (keys 1-4)
 
@@ -931,12 +931,13 @@ variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 The variant pick is free and is **level 1**; in-match gold buys each piece to level `GEAR_LV_MAX`
 (4) for `GEAR_COSTS` 10/20/35 — the second gold sink beside building. Levels reset with the match
 (every boot builds fresh `Player`s). The human picks variants in the **gear pop-up** — opened
-from class select's collapsed gear widget, all 12 variants at once as cards over the still-lit
-select screen (League runes-style; see
+from class select's collapsed gear widget, all 12 variants at once as 32×32 icon wells beside a
+live preview and a real-number stat ledger with hover deltas (League runes-style; see
 [Main menu](rendering.md#main-menu-title)); `pickGear()` writes straight to `player.gear`. AI
 slots hash all four variants from the seed in `initPlayers()`. **Every variant has its own
-12×12 icon** (`SPRITES.gearIcons[slot][variant][material]`), so a pick is a distinct picture,
-not a label.
+icons**: the 12×12 material-swapped `SPRITES.gearIcons[slot][variant][material]` the HUD and
+the select screen's plaque wear, and the detailed 32×32 `GEAR32` set the pop-up's wells wear —
+a pick is a distinct picture, not a label.
 
 **Worn gear shows on the sprite**: each piece at level 2+ lays a 1 px band of its material across
 the shared 16×16 body plan — hat, coat, hips, one mark per foot (`GEAR_MARKS`/`drawGearMarks`,
@@ -995,8 +996,7 @@ kill-credit line the same way `eatBerry` applies its heal.
 **The draft**: clicking an unopened card's bag cell (`bagClick`, instead of the eat branch berry/fish
 take) calls `openDraft(rarity)`, which sets `state.draft = { rarity, options }` — three distinct
 entries drawn at random from `CARDS[rarity]` (`pick3Distinct`). `renderDraft`/`draftLayout`/
-`draftHit` draw and hit-test three cards centred on screen, in the same idiom the pre-match
-[gear pop-up](rendering.md#main-menu-title) draws its variant cards, but as an in-match overlay like
+`draftHit` draw and hit-test three cards centred on screen, but as an in-match overlay like
 the bag or the map — **it does not pause the sim**, same as every other HUD overlay here, so a
 draft is read at real risk, not in a safe pause. `draftClick()` (the mousedown handler routes to it
 first, ahead of the wheel/settings/map/bag, whenever `state.draft` is set) either applies the

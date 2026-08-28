@@ -67,8 +67,9 @@ through the same code because the icon is centred on its own half-width. The **g
 twelve 12×12 grids, **one per variant** (`gearLongsight` … `gearGhoststep`), each baked once per
 **material** — `GEAR_MAT_PALS`, leather → iron → steel → gold, plus the shared accent chars `w`
 (ice-white) and `r` (hearth-red) — into `SPRITES.gearIcons[slot][variant][material]`: the glyph
-says which piece, the material says its level. Drawn by the HUD's gear plates, class select's
-collapsed gear widget and the gear pop-up's cards (see [gameplay.md](gameplay.md#gear)). `itemBag` is
+says which piece, the material says its level. Drawn by the HUD's gear plates and class select's
+collapsed gear widget; the gear pop-up's wells wear the detailed 32×32 `GEAR32` set instead
+(js/menu.js — see [gameplay.md](gameplay.md#gear)). `itemBag` is
 12×12 for the same reason — it sits in the same 18 px HUD well — but shares `ITPAL` with the
 8×8 item icons rather than taking a material palette: it is one object, not four levels of one.
 The five **roguelike card** icons take the gear icons' trick the other way round: one shared 8×8
@@ -100,7 +101,10 @@ paint their char grids onto their own canvases and assign into `SPRITES`, which 
 is a plain object. The reason is the paragraph below: `js/sprites.js` is byte-fragile, so the
 fewer sessions that rewrite it, the better. Tool art goes further and follows the gear icons'
 trick — one 12×12 silhouette per family, baked once per **tier** through `TOOL_ART_PAL`, so shape
-says which weapon and palette says how good it is.
+says which weapon and palette says how good it is. The two detailed 32×32 icon sets do the same:
+the ability icons (`AB32`/`AB32_PAL`, js/abilities.js) and the gear-variant icons (`GEAR32`,
+js/menu.js) bake lazily beside their drawers, and `GEAR32` deliberately shares `AB32_PAL` so
+every big icon in the game speaks one palette.
 
 `js/sprites.js` has a UTF-8 BOM and **seven** rows that repair a mangled byte via
 `'...'.replace('о', 'g')` — in `stump`, `imp1` (×2), `wall` (×2, one of them a `/g` replace),

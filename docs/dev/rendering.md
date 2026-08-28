@@ -975,13 +975,24 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   gear widget** (the four picked variant icons); clicking it opens the gear pop-up. No
   instructional text anywhere on the screen.
 - **Gear pop-up** (`menu.screen = 'gear'`, easing over the still-lit select screen on
-  `menu.gearT`): a dim, then a floating panel — the ARMS strip (the class's tool and loaded
-  bits in their HUD wells), then all 12 variants as four rows of three cards (`gearLayout()`/
-  `gearScreenHit()`/`drawGearCard`), each card its variant's own icon + name + blurb, the picked
-  one gold-trimmed, the keyboard focus (`menu.grow`, W/S rows, A/D or Left/Right picks) wearing
-  pulsing corner ticks. Clicks pick via `pickGear()`; ESC, Enter, the **X** in the corner, or a
-  click anywhere off the panel close it back to select (`leaveGear`) — lock-in stays on the
-  select screen behind it. See [gameplay.md](gameplay.md#gear).
+  `menu.gearT`): a dim, then a floating panel in two columns (`gearLayout()`/`gearScreenHit()`).
+  LEFT is the **live preview** (`drawGearPreview`): the chosen class walking in place at 4×
+  wearing its four leather bands (every pre-match pick is the free level 1) with the class
+  weapon at hand, and under it the **stat ledger** — one labelled row per number gear can touch
+  (`GEAR_STATS`), real values computed by `gearPreviewKit` through the same `baseKit`
+  (js/player.js) the sim's `refreshKit` uses, so the page can never lie. RIGHT is all 12
+  variants as **32px icon wells** (`drawGearWell`, icons `GEAR32`/`gearIcon32` baked on the
+  ability icons' palette), four rows of three: the picked one gold-rimmed, the keyboard focus
+  (`menu.grow`, W/S rows, A/D or Left/Right picks) breathing corner ticks, and the hovered
+  variant's name printed once under the grid. **Hovering an unpicked well writes its deltas
+  into the ledger** — the current number steps aside dim and the would-be number takes the
+  edge in green (better) or red (worse), covering the whole swap (what the old pick gave up
+  too). **Picking plays on the preview body** (`pickGear` → `menu.gearFxT`/`gearFxSlot`): a
+  white flash through the scratch canvas, gold sparks, the changed piece's band lit. ESC,
+  Enter, the **X** in the corner, or a click anywhere off the panel close it back to select
+  (`leaveGear`) — lock-in stays on the select screen behind it. The ledger's labelled rows are
+  the PLAYER-panel text carve-out: comparing numbers is this panel's whole job. See
+  [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
 - **Menu exit**: `state.intro` counting down from `INTRO_T` (1.6 s) with `state.introLen = INTRO_T`
   is what dissolves the menu — `renderTitle` keeps drawing while it runs: the tint dissolves over

@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 1.97'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 1.98'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['1.98', 'THE GEAR POP-UP IS A REAL FITTING ROOM NOW - TWELVE DETAILED GEAR ICONS AROUND A LIVE PREVIEW OF YOUR CLASS IN ITS GEAR, EVERY STAT AS A REAL NUMBER, HOVERING A PIECE SHOWS EXACTLY WHAT CHANGES IN GREEN OR RED, AND EQUIPPING FLASHES IT ONTO THE BODY.'],
   ['1.97', 'CLASS SELECT IS ONE SCREEN UNDER ITS OWN AURORA NIGHT - BOTH CLASSES STAND FACING EACH OTHER WITH WEAPON AND ABILITY ICONS, LOCK IN FLIES STRAIGHT TO THE EAGLE, AND GEAR IS A SMALL WIDGET THAT OPENS INTO A POP-UP.'],
   ['1.96', 'THE STRIP SHOWS YOUR WHOLE KIT NOW - FOUR DETAILED ABILITY ICONS FLANK THE WEAPON WITH COOLDOWN WIPES, CAST AND ACTIVE TELLS AND THEIR KEYS IN THE CORNER, AND A CLICK ON A WELL CASTS IT LIKE THE KEY DOES.'],
   ['1.95', 'CHAMPIONS ARE CLASSES NOW - HUNTER AND WARRIOR - AND KEYS 1-4 CAST FOUR REAL ABILITIES EACH: TRAPS, NETS, A FALCON AND A VOLLEY AGAINST A SHIELD, A RUSH, A STOMP AND A JUGGERNAUT - WHILE THE WEAPON LIVES IN ONE CENTRE SLOT AND ITS BIT COLUMN RISES ON HOVER.'],
@@ -438,6 +439,8 @@ function updateTitle(dt) {
     m.lockT -= dt;
     if (m.lockT <= 0) { m.lockT = 0; beginDrop(); }
   }
+  if (m.gearFxT > 0) m.gearFxT = Math.max(0, m.gearFxT - dt); // the equip flash on the preview
+
   if (m.panel) {
     if (m.closing) {
       m.panelT -= dt / PANEL_SLIDE_T;
@@ -977,61 +980,516 @@ function drawSelectBackdrop(now, a) {
 
 // ---- the gear pop-up (League runes-style) --------------------------------
 // Opened from the select screen's collapsed gear widget (beginGear). The
-// select screen stays lit underneath; the pop-up dims it and floats a panel:
-// the ARMS strip (the tool this class flies in with and the bits loaded in
-// it, in exactly the wells they wear in the HUD), then all 12 variants as
-// cards - four rows, one per piece, three options each - so the choice is a
-// read, not a cycle. Clicking a card picks it (writes straight to
-// player.gear); ESC, the X, or a click outside the panel closes it. Lock-in
-// stays on the select screen behind it.
+// select screen stays lit underneath; the pop-up dims it and floats a panel
+// in two columns. LEFT: the live preview - the chosen class walking in
+// place in its four leather pieces with the class weapon at hand, and under
+// it the STAT LEDGER: every number the kit flies out with, real values from
+// the same code the sim reads (gearPreviewKit / baseKit, js/player.js).
+// RIGHT: all 12 variants as 32px icon wells, four rows of three, one row per
+// piece - the picked one gold-rimmed, the hovered one lifting and writing
+// its stat deltas into the ledger in green/better or red/worse. Clicking a
+// well picks it (pickGear writes straight to player.gear) and the equip
+// plays ON the preview body - a white flash, sparks, the piece's band lit.
+// ESC, Enter, the X, or a click outside the panel closes it; lock-in stays
+// on the select screen behind it. The ledger's labelled rows are the
+// PLAYER-panel text carve-out: comparing numbers is this panel's whole job.
+const GEARP_W = 38, GEARP_G = 4; // a variant well, and the grid gap
 function gearLayout() {
-  const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  const w = 132, h = 30, gapx = 6, gapy = 3;
-  const pw = 3 * w + 2 * gapx + 16;
-  const ph = 48 + 4 * (h + gapy) - gapy + 8;
+  const ledW = 118;
+  const gridW = 3 * GEARP_W + 2 * GEARP_G;
+  const pw = 8 + ledW + 10 + gridW + 8;
+  const ph = 212;
   const px = cx - (pw >> 1), py = Math.round((VIEW_H - ph) / 2);
-  const x0 = px + 8;
-  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({ x: x0 + v * (w + gapx), y: py + 48 + i * (h + gapy), w, h })));
-  return { toy, cx, panel: { x: px, y: py, w: pw, h: ph }, rows,
-    xr: { x: px + pw - 15, y: py + 5, w: 10, h: 10 }, arms: { x: cx, y: py + 18 } };
-}
-// The class's starting weapon, laid out flat: the tool's well, then its bit
-// cells left to right in firing order - the bit column of the HUD, tipped on
-// its side because there is no key to hold here. One caption names them, the
-// one place the tool and its bits are spelled out, since a menu is where a
-// name is learned and the HUD is where the colour is then recognised.
-function drawArmsStrip(cx, y, champ, now) {
-  const L = CLASS_LOADOUT[champ] || CLASS_LOADOUT[0];
-  const T = TOOLS[L.tool];
-  const cells = 1 + T.cap;
-  const cw = 20, gap = 3;
-  const x0 = cx - Math.round((cells * cw + (cells - 1) * gap) / 2);
-  const names = [T.name].concat(L.bits.map((b) => BITS[b].name)).join(' - ');
-  drawPixelTextShadow(ctx, names, Math.round(cx - pixelTextWidth(names) / 2), y - 10, '#9fb6d8', '#0a0e23');
-  for (let i = 0; i < cells; i++) {
-    const type = i === 0 ? toolType(L.tool) : (L.bits[i - 1] ? bitType(L.bits[i - 1]) : null);
-    const r = { x: x0 + i * (cw + gap), y, w: cw, h: cw };
-    const tp = type ? tierPlate(type, i === 0) : { plate: '#171f45', rim: '#2c3560' };
-    ctx.fillStyle = 'rgba(4,6,18,0.55)';
-    ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
-    ctx.fillStyle = tp.rim;
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    ctx.fillStyle = tp.plate;
-    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
-    if (!type) continue;
-    tierShine(r, r.y, type, now);
-    const im = SPRITES[ITEMS[type].icon];
-    ctx.drawImage(im, r.x + ((r.w - im.width) >> 1), r.y + ((r.h - im.height) >> 1));
-  }
-  // and the tool's own ceiling, under the strip: one pip per unit of weight
-  // it can throw, the same pips the bit column counts a bit's weight in
-  for (let k = 0; k < T.tensile && k < 12; k++) {
-    ctx.fillStyle = TOOL_TIERS[T.tier].ink;
-    ctx.fillRect(x0 + 2 + k * 3, y + cw + 2, 2, 2);
-  }
+  const gx = px + 8 + ledW + 10;
+  const rows = GEAR.map((slot, i) => slot.map((_, v) => ({
+    x: gx + v * (GEARP_W + GEARP_G), y: py + 18 + i * (GEARP_W + GEARP_G), w: GEARP_W, h: GEARP_W,
+  })));
+  return { cx, panel: { x: px, y: py, w: pw, h: ph }, rows,
+    prev: { x: px + 8, y: py + 8, w: ledW, h: 78 },   // the preview well
+    led: { x: px + 8, y: py + 92, w: ledW },           // the ledger below it
+    name: { x: gx + (gridW >> 1), y: py + 188 },       // the hovered variant's name
+    xr: { x: px + pw - 14, y: py + 4, w: 10, h: 10 } };
 }
 
+// The kit these picks would fly out with: the class base plus each variant
+// at the free level 1 - no skills, no cards - exactly what refreshKit hands
+// the sim at lock-in.
+function gearPreviewKit(gear) {
+  const k = baseKit(state.menu.csel);
+  for (let i = 0; i < GEAR.length; i++) GEAR[i][gear[i]].mod(k, 1);
+  return k;
+}
+// The ledger: one row per number gear can touch. `dir` says which way is
+// better (+1 higher, -1 lower), which is what colours a hovered delta.
+const GS_INT = (v) => String(Math.round(v));
+const GS_SEC = (v) => (Math.round(v * 100) / 100).toFixed(2) + 'S';
+const GS_PCT = (v) => Math.round(v * 100) + '%';
+const GS_NUM = (v) => String(Math.round(v * 10) / 10);
+const GS_ADD = (v) => '+' + Math.round(v);
+const GEAR_STATS = [
+  ['HEALTH', (k) => k.maxHp, GS_INT, 1],
+  ['DAMAGE', (k) => k.dmgBase, GS_INT, 1],
+  ['DRAW', (k) => k.bowCharge, GS_SEC, -1],
+  ['RENOCK', (k) => k.nock, GS_SEC, -1],
+  ['ARMOR', (k) => k.dr, GS_INT, 1],
+  ['WALK', (k) => k.walkMul, GS_PCT, 1],
+  ['ICE SPEED', (k) => k.iceMax, GS_PCT, 1],
+  ['ICE GRIP', (k) => k.iceSteer, GS_NUM, 1],
+  ['FATIGUE', (k) => k.fatigue, GS_PCT, -1],
+  ['DODGE', (k) => k.dodgeCd, GS_SEC, -1],
+  ['HUNTS', (k) => k.huntMul, GS_PCT, 1],
+  ['FELLS', (k) => k.harvest, GS_ADD, 1],
+  ['FOOD', (k) => k.foodMul, GS_PCT, 1],
+  ['SEEN AT', (k) => k.stealth, GS_PCT, -1],
+];
+
+// The twelve variant icons: detailed 32x32 char grids on the ability icons'
+// palette (AB32_PAL, js/abilities.js - one style across every big icon),
+// baked lazily beside the code that draws them (sprites.md). GEAR32[slot][v]
+// in GEAR's own order; the 12px material-swapped SPRITES.gearIcons stay the
+// HUD's and the plaque's.
+const GEAR32 = [
+  [ // helmets
+    [ // LONGSIGHT: the leather hood with a long visor, a gold lens over one eye
+      '................................',
+      '................................',
+      '................................',
+      '............oooooooo............',
+      '..........oowwwwwwwwoo..........',
+      '.........owwwwwwwwwwwwo.........',
+      '........owwwwwwwwwwwwwwo........',
+      '........owwhhwwwwwwhhwwo........',
+      '.......owwwwwwwwwwwwwwwwo.......',
+      '.......owwwwwwwwwwwwwwwwo.......',
+      '.......owwwwwwwwwwwwwwwwo.......',
+      '.......ouwwwwwwwwwwwwwwuo.......',
+      '.....oooooooooooooooooooooo.....',
+      '....ouuuuuuuuuuuuuuuuuuuuuuo....',
+      '.....okkkkkkkkkkkGGGGGGGkko.....',
+      '.....okkkWWkkkkkkGWggggGkko.....',
+      '.....okkkkkkkkkkkGgggggGkko.....',
+      '.....ooooooooooooGGGGGGGooo.....',
+      '.......ouuo..........ouuo.......',
+      '.......ouo............ouo.......',
+      '........ou............uo........',
+      '.........ouddddddddduo..........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // QUICKDRAW: the steel sallet, wing fins swept off both sides
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.............oooooo.............',
+      '...........oossssssoo...........',
+      '..........ossCCCCCCsso..........',
+      '.........osssCCCCCCssso.........',
+      '...oWWo..osssssssssssso..oWWo...',
+      '..oWWWo..osssssssssssso..oWWWo..',
+      '.oWWCWWoossssssssssssssooWWCWWo.',
+      '.oWCCCWoosskkkkkkkkkkssooWCCCWo.',
+      '..oWWWo.osskkkkkkkkkksso.oWWWo..',
+      '...oWo..osssssssssssssso..oWo...',
+      '........osssssssssssssso........',
+      '........ossssoooooosssso........',
+      '.........oooo......oooo.........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // HUNTSMAN: the fur hood under two small antlers
+      '................................',
+      '................................',
+      '......ot....ot....to....to......',
+      '.......ot..to......ot..to.......',
+      '........ottto......ottto........',
+      '.........oto........oto.........',
+      '.........odo........odo.........',
+      '.........odo........odo.........',
+      '..........oooooooooooo..........',
+      '.........ohhhhhhhhhhhho.........',
+      '........ohHhhHhhhHhhHhho........',
+      '........ohhHhhhHhhhhHhho........',
+      '.......ohhhhhhhhhhhhhhhho.......',
+      '.......ohHhhhHhhhHhhhHhho.......',
+      '.......ohhokkkkkkkkkkohho.......',
+      '.......ohhokkWkkkkWkkohho.......',
+      '.......ohhokkkkkkkkkkohho.......',
+      '........ohhokkkkkkkkohho........',
+      '........ohhhhhhhhhhhhhho........',
+      '.........ohHohHohHohHo..........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+  [ // chests
+    [ // BULWARK: the broad breastplate, gold boss, riveted belt
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '....oooooo............oooooo....',
+      '...osssssso..........osssssso...',
+      '...ossssssoooooooooooosssssso...',
+      '....osssssssssssssssssssssso....',
+      '....oksssssssssCCsssssssssko....',
+      '....ossssssssssCCsssssssssso....',
+      '.....osssssssssCCssssssssso.....',
+      '.....osssssssssCCssssssssso.....',
+      '.....ossssssssoooosssssssso.....',
+      '.....osssssssogggGossssssso.....',
+      '.....osssssssogWgGossssssso.....',
+      '.....osssssssoggGGossssssso.....',
+      '.....ossssssssoooosssssssso.....',
+      '......osssssssssssssssssso......',
+      '.......okssssssssssssssko.......',
+      '.......ossssssssssssssssso......',
+      '........oDDDDDDDDDDDDDDo........',
+      '........oDDDDDDggDDDDDDo........',
+      '.........osssssssssssso.........',
+      '..........oooooooooooo..........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // IRONHIDE: the scale coat, row on row of plates
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '......oooooooooooooooooooo......',
+      '.....owwoooooookkkkoooooowwo....',
+      '......oCCsCCsCCsCCsCCsCCso......',
+      '......oSSsSSsSSsSSsSSsSSso......',
+      '......osCCsCCsCCsCCsCCsCCo......',
+      '......osSSsSSsSSsSSsSSsSSo......',
+      '......oCCsCCsCCsCCsCCsCCso......',
+      '......oSSsSSsSSsSSsSSsSSso......',
+      '......osCCsCCsCCsCCsCCsCCo......',
+      '......osSSsSSsSSsSSsSSsSSo......',
+      '......oCCsCCsCCsCCsCCsCCso......',
+      '......oSSsSSsSSsSSsSSsSSso......',
+      '......osCCsCCsCCsCCsCCsCCo......',
+      '......osSSsSSsSSsSSsSSsSSo......',
+      '......oCCsCCsCCsCCsCCsCCso......',
+      '......oSSsSSsSSsSSsSSsSSso......',
+      '......oooooooooooooooooooo......',
+      '.......oSoSoSoSoSoSoSoSo........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // HEARTHWEAVE: the quilted tunic, an ember heart at the chest
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.......oooooooooooooooooo.......',
+      '.......owwwwwwokkowwwwwwo.......',
+      '.......ouwwwuwwwuwwwuwwwo.......',
+      '.......owuwwwuwwwuwwwuwwo.......',
+      '.......owwuwwwuwwwuwwwuwo.......',
+      '.......owwwuwwwuwwwuwwwuo.......',
+      '.......ouwwwurrwurrwuwwwo.......',
+      '.......owuwwrprrrrprwuwwo.......',
+      '.......owwuwrrggggrrwwuwo.......',
+      '.......owwwurrggggrrwwwuo.......',
+      '.......ouwwwurrggrrwuwwwo.......',
+      '.......owuwwwurrrrwwwuwwo.......',
+      '.......owwuwwwurrwuwwwuwo.......',
+      '.......owwwuwwwuwwwuwwwuo.......',
+      '.......ouwwwuwwwuwwwuwwwo.......',
+      '.......owuwwwuwwwuwwwuwwo.......',
+      '.......oooooooooooooooooo.......',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+  [ // legs
+    [ // STRIDER: the long pants, wings flaring off both knees
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.........oooooooooooooo.........',
+      '........oDDDDDDDDDDDDDDo........',
+      '........oDDggDDDDDDggDDo........',
+      '........owwwwwwuuwwwwwwo........',
+      '........owwwwwo..owwwwwo........',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........ouwwwo....owwwuo........',
+      '...oWWo.owwwwo....owwwwo.oWWo...',
+      '..oWWCWoogwwwo....owwwgooWCWWo..',
+      '...oWWo.owwwwo....owwwwo.oWWo...',
+      '....oWo.owwwwo....owwwwo.oWo....',
+      '........ouwwwo....owwwuo........',
+      '........ouwwwo....owwwuo........',
+      '........ouwwwo....owwwuo........',
+      '........ouwwwo....owwwuo........',
+      '........ouuuuo....ouuuuo........',
+      '........oooooo....oooooo........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // SLIDEWORN: the worn pants, knees polished smooth, slide streaks
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.........oooooooooooooo.........',
+      '........ouuuuuuuuuuuuuuo........',
+      '........owwwwwwuuwwwwwwo........',
+      '........owwwwwo..owwwwwo........',
+      '........owwdwo....owdwwo........',
+      '........owwwwo....owwwwo........',
+      '........odwwwo....owwwdo........',
+      '........owwwwo....owwwwo........',
+      '........oCCCCo....oCCCCo........',
+      '..bb....oCCCCo....oCCCCo........',
+      '.bb.....oCWCCo....oCCWCo....bb..',
+      '..bb....oCCCCo....oCCCCo..bb....',
+      '........osCCso....osCCso........',
+      '........owwwwo....owwwwo........',
+      '...bb...odwwwo....owwwdo...bb...',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........ouuuuo....ouuuuo........',
+      '........oooooo....oooooo........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // PACKMULE: the sturdy pants, a strapped pouch on each thigh
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.........oooooooooooooo.........',
+      '........oDDDDDDDDDDDDDDo........',
+      '........owwwwwwuuwwwwwwo........',
+      '........owwwwwo..owwwwwo........',
+      '...oooooowwwwo....owwwwooooo....',
+      '...ouuuoowwwwo....owwwwoouuuo...',
+      '...ouguoowwwwo....owwwwoouguo...',
+      '...ohhhoowwwwo....owwwwoohhho...',
+      '...ohhhoowwwwo....owwwwoohhho...',
+      '...ohhhoowwwwo....owwwwoohhho...',
+      '...ouuuoowwwwo....owwwwoouuuo...',
+      '....ooo.owwwwo....owwwwo.ooo....',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........owwwwo....owwwwo........',
+      '........ouwwwo....owwwuo........',
+      '........ouuuuo....ouuuuo........',
+      '........oooooo....oooooo........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+  [ // boots
+    [ // SKATES: the winter boot up on its bright blade
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '..........oooooooo..............',
+      '.........oWWWWWWWWo.............',
+      '.........obbWWWWbbo.............',
+      '.........oooooooooo.............',
+      '..........owwwwwwuo.............',
+      '..........owwgwwwuo.............',
+      '..........owwwwwwuo.............',
+      '..........owwwwwwuo.............',
+      '..........owwwwwwuo.............',
+      '..........owwwwwwuoo............',
+      '..........owwwwwwwuooo..........',
+      '..........owwwwwwwwwuooo........',
+      '..........owwwwwwwwwwwuo........',
+      '.........oDDDDDDDDDDDDDDDo......',
+      '.........ooooooooooooooooo......',
+      '...........oo....oo....oo.......',
+      '.........oCCCCCCCCCCCCCCCCo.....',
+      '..........oooooooooooooooo......',
+      '......b........b.......b........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // DANCER: the pair up on pointe, ribbons crossed up the shin
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.......ot...to....ot...to.......',
+      '........ottto......ottto........',
+      '.......oHHHHo.....oHHHHo........',
+      '.......otHHto.....otHHto........',
+      '.......oHHHHo.....oHHHHo........',
+      '..b....otHHto.....otHHto....b...',
+      '.b.....oHHHHo.....oHHHHo.....b..',
+      '.......oHHHHo.....oHHHHo........',
+      '.......oHHHo......oHHHo.........',
+      '.......oHHHo......oHHHo.........',
+      '........oHHo......oHHo..........',
+      '........oddo......oddo..........',
+      '.........oo........oo...........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // GHOSTSTEP: the pale boot, its heel drifting off as wisps
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '..........oooooooo..............',
+      '.........obbbbbbbbo.............',
+      '.........obBBbbBbo..............',
+      '.........oBbbbbbBo..............',
+      '.........oB.bb.bBo..............',
+      '..B......oBbbbbbBo..............',
+      '.....B...oBbbbbbBo..............',
+      '..b......oBbbbbbBo..............',
+      '.........oBbbbbbBoo.............',
+      '....B....oBbbbbbbbBooo..........',
+      '..b......oBbbbbbbbbbBoo.........',
+      '.........oBbbbbbbbbbbbBo........',
+      '........obbbbbbbbbbbbbbbo.......',
+      '........ooooooooooooooooo.......',
+      '......b....b.....b......b.......',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+];
+const gear32Cache = new Map();
+// the baked 32x32 icon for gear slot i, variant v
+function gearIcon32(i, v) {
+  const key = i + ':' + v;
+  let cv = gear32Cache.get(key);
+  if (!cv) {
+    cv = document.createElement('canvas');
+    cv.width = cv.height = 32;
+    const g = cv.getContext('2d');
+    const rows = GEAR32[i][v];
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r];
+      for (let c = 0; c < row.length; c++) {
+        const col = AB32_PAL[row[c]];
+        if (!col) continue;
+        g.fillStyle = col;
+        g.fillRect(c, r, 1, 1);
+      }
+    }
+    gear32Cache.set(key, cv);
+  }
+  return cv;
+}
 // what the pointer is over on the gear pop-up: {row, v}, 'x', 'panel' (the
 // slab itself - inert, swallows the press), or null (outside: a click closes)
 function gearScreenHit() {
@@ -1058,12 +1516,15 @@ function leaveGear() {
   SFX.pickup();
 }
 // pre-match variant pick for the local slot, full heal like setClass since
-// nothing has been risked yet
+// nothing has been risked yet. The pick plays on the preview body: gearFxT
+// runs the white flash and the sparkles, gearFxSlot lights the piece's band.
 function pickGear(i, v) {
   if (player.gear[i] === v) return;
   player.gear[i] = v;
   refreshKit(player);
   player.hp = player.maxHp;
+  state.menu.gearFxT = 0.45;
+  state.menu.gearFxSlot = i;
   SFX.pickup();
 }
 
@@ -1240,29 +1701,20 @@ function renderSelect(now, a) {
   ctx.globalAlpha = 1;
 }
 
-// a gear card: icon + name + blurb; the picked one is gold-trimmed, the
-// keyboard-focused row's pick wears pulsing corner ticks
-function drawGearCard(r, slot, v, hot, picked, focused, now) {
-  const lift = hot ? 2 : 0;
+// a variant well: the 32px icon on a dark plate. The picked one wears the
+// gold rim; the hovered one lifts; the keyboard focus (the focused row's
+// pick) breathes four corner ticks.
+function drawGearWell(r, slot, v, hot, picked, focused, now) {
+  const lift = hot && !picked ? 1 : 0;
   const x = r.x, y = r.y - lift, w = r.w, h = r.h;
   ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(x + 2, r.y + 2, w, h);
-  ctx.fillStyle = '#0a0e23'; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = picked ? '#1f2b5c' : '#141c3c'; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-  ctx.fillStyle = picked ? '#5a7fb8' : '#35426e';
-  ctx.fillRect(x + 2, y + 1, w - 4, 1); ctx.fillRect(x + 1, y + 2, 1, h - 4);
-  ctx.fillStyle = '#080c1c';
-  ctx.fillRect(x + 2, y + h - 2, w - 4, 1); ctx.fillRect(x + w - 2, y + 2, 1, h - 4);
-  if (picked) {
-    ctx.fillStyle = '#c89a3c';
-    ctx.fillRect(x + 3, y + 2, w - 6, 1); ctx.fillRect(x + 3, y + h - 3, w - 6, 1);
-  }
-  // icon well, the variant's own glyph (leather: everyone leaves at level 1)
-  ctx.fillStyle = '#0a0e23'; ctx.fillRect(x + 4, y + 9, 16, 16);
-  ctx.fillStyle = picked ? '#2a3a6e' : '#1c2750'; ctx.fillRect(x + 5, y + 10, 14, 14);
-  ctx.drawImage(SPRITES.gearIcons[slot][v][0], x + 6, y + 11);
-  const g = GEAR[slot][v];
-  drawPixelTextShadow(ctx, g.name, x + 24, y + 8, picked ? '#ffd95c' : hot ? '#f4f7ff' : '#cfe0ff', '#0a0e23');
-  drawPixelTextShadow(ctx, g.blurb, x + 24, y + 19, picked || hot ? '#9fb6d8' : '#5a6690', '#0a0e23');
+  ctx.fillStyle = picked ? '#c89a3c' : hot ? '#8fa0c8' : '#2c3560';
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = picked ? '#1a2142' : '#0f1632';
+  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
+  ctx.globalAlpha *= picked || hot ? 1 : 0.75;
+  ctx.drawImage(gearIcon32(slot, v), x + 3, y + 3);
+  ctx.globalAlpha /= picked || hot ? 1 : 0.75;
   if (focused) { // keyboard cursor: four corner ticks, breathing
     ctx.globalAlpha *= 0.7 + 0.3 * Math.sin(now * 6);
     ctx.fillStyle = '#f4f7ff';
@@ -1274,11 +1726,59 @@ function drawGearCard(r, slot, v, hot, picked, focused, now) {
   }
 }
 
+// The preview body: the chosen class walking in place, its four leather
+// bands worn (every pre-match pick is the free level 1), the class weapon at
+// hand - and the equip playing ON it: gearFxT runs a white flash through the
+// scratch canvas, gold sparks off the body, and the changed piece's band lit.
+function drawGearPreview(r, now) {
+  const m = state.menu;
+  ctx.fillStyle = '#0a0e23';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = '#232c52';
+  ctx.fillRect(r.x, r.y, r.w, 1); ctx.fillRect(r.x, r.y + r.h - 1, r.w, 1);
+  ctx.fillRect(r.x, r.y, 1, r.h); ctx.fillRect(r.x + r.w - 1, r.y, 1, r.h);
+  const sx = r.x + 12, sy = r.y + 7, s = 4; // the 16x16 body at 4x
+  ctx.fillStyle = 'rgba(4,6,18,0.6)';
+  ctx.beginPath(); ctx.ellipse(sx + 32, r.y + r.h - 6, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const spr = SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 3) % 2)];
+  ctx.drawImage(spr, sx, sy, 64, 64);
+  for (let i = 0; i < GEAR_MARKS.length; i++) { // the leather the picks ride
+    const mk = GEAR_MARKS[i];
+    const lit = m.gearFxT > 0 && m.gearFxSlot === i;
+    ctx.fillStyle = lit ? '#f4f7ff' : GEAR_MATS[0];
+    ctx.fillRect(sx + mk.x * s, sy + mk.y * s, mk.w * s, s);
+    if (mk.x2 !== undefined) ctx.fillRect(sx + mk.x2 * s, sy + mk.y * s, mk.w * s, s);
+  }
+  if (m.gearFxT > 0) { // the equip: the body flashes white and throws sparks
+    const f = m.gearFxT / 0.45;
+    sctx.clearRect(0, 0, 64, 64);
+    sctx.globalCompositeOperation = 'source-over';
+    sctx.drawImage(spr, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = 'rgba(255,255,255,0.85)';
+    sctx.fillRect(0, 0, 64, 64);
+    ctx.globalAlpha *= f;
+    ctx.drawImage(scratch, 0, 0, 16, 16, sx, sy, 64, 64);
+    ctx.globalAlpha /= f;
+    ctx.fillStyle = '#f2cc6a';
+    for (let k = 0; k < 8; k++) {
+      const an = hash2(k, 77) * Math.PI * 2;
+      const d = 20 + (1 - f) * 22;
+      ctx.fillRect(sx + 32 + Math.round(Math.cos(an) * d), sy + 32 + Math.round(Math.sin(an) * d * 0.8), 2, 2);
+    }
+  }
+  // the class weapon rides along - the other half of what you fly out with
+  const L = CLASS_LOADOUT[m.csel] || CLASS_LOADOUT[0];
+  const im = SPRITES[ITEMS[toolType(L.tool)].icon];
+  ctx.drawImage(im, r.x + r.w - 31, r.y + r.h - 33 + Math.round(Math.sin(now * 2.2) * 1.5), 24, 24);
+}
+
 // the pop-up itself: a dim over the still-lit select screen, then the panel
-// slab rising a few px as it eases in - arms strip, twelve cards, the X
+// slab rising a few px as it eases in - the preview and its ledger on the
+// left, the twelve wells on the right, the X in the corner
 function renderGear(now, a) {
   const m = state.menu;
-  const { cx, panel, rows, xr, arms } = gearLayout();
+  const { panel, rows, xr, prev, led, name } = gearLayout();
   ctx.fillStyle = 'rgba(4,6,18,' + (0.62 * a).toFixed(3) + ')';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   const rise = Math.round((1 - a) * 12);
@@ -1292,19 +1792,57 @@ function renderGear(now, a) {
   ctx.fillRect(panel.x + 2, py + 1, panel.w - 4, 1); ctx.fillRect(panel.x + 1, py + 2, 1, panel.h - 4);
   ctx.fillStyle = '#080c1c';
   ctx.fillRect(panel.x + 2, py + panel.h - 2, panel.w - 4, 1); ctx.fillRect(panel.x + panel.w - 2, py + 2, 1, panel.h - 4);
-  // what this class is armed with, above the pieces it is being armoured in
-  drawArmsStrip(cx, arms.y + rise, m.csel, now);
-  ctx.globalAlpha = a;
   const gh = m.gearT >= 1 && mouse.inside ? gearScreenHit() : null;
+  drawGearPreview({ x: prev.x, y: prev.y + rise, w: prev.w, h: prev.h }, now);
+  // the ledger: the numbers as picked now - and, under a hovered variant,
+  // what they would BECOME, green where that is better and red where worse
+  const cur = gearPreviewKit(player.gear);
+  let hovKit = null;
+  if (gh && gh !== 'x' && gh !== 'panel' && gh.v !== player.gear[gh.row]) {
+    const picks = player.gear.slice();
+    picks[gh.row] = gh.v;
+    hovKit = gearPreviewKit(picks);
+  }
+  for (let i = 0; i < GEAR_STATS.length; i++) {
+    const [label, get, fmt, dir] = GEAR_STATS[i];
+    const y = led.y + rise + i * 8;
+    const ov = get(cur), nv = hovKit ? get(hovKit) : ov;
+    const changed = hovKit && Math.abs(nv - ov) > 1e-9;
+    drawPixelTextShadow(ctx, label, led.x, y, changed ? '#f4f7ff' : '#7a8bb8', '#0a0e23');
+    const vTxt = fmt(ov);
+    if (changed) {
+      // the current number steps aside dim; the would-be number takes the
+      // right edge in its verdict colour
+      const col = (nv - ov) * dir > 0 ? '#8fe08a' : '#e0637a';
+      const nTxt = fmt(nv);
+      const nw = pixelTextWidth(nTxt);
+      drawPixelTextShadow(ctx, nTxt, led.x + led.w - nw, y, col, '#0a0e23');
+      const ow = pixelTextWidth(vTxt);
+      drawPixelTextShadow(ctx, vTxt, led.x + led.w - nw - 8 - ow, y, '#5a6690', '#0a0e23');
+      ctx.fillStyle = col;
+      ctx.fillRect(led.x + led.w - nw - 6, y + 2, 1, 1);
+      ctx.fillRect(led.x + led.w - nw - 5, y + 3, 1, 1);
+      ctx.fillRect(led.x + led.w - nw - 6, y + 4, 1, 1);
+    } else {
+      drawPixelTextShadow(ctx, vTxt, led.x + led.w - pixelTextWidth(vTxt), y, '#f4f7ff', '#0a0e23');
+    }
+  }
+  ctx.globalAlpha = a;
   for (let i = 0; i < rows.length; i++) {
     for (let v = 0; v < rows[i].length; v++) {
       const r = rows[i][v];
-      drawGearCard({ x: r.x, y: r.y + rise, w: r.w, h: r.h }, i, v,
+      drawGearWell({ x: r.x, y: r.y + rise, w: r.w, h: r.h }, i, v,
         gh && gh.row === i && gh.v === v,
         player.gear[i] === v, m.grow === i && player.gear[i] === v, now);
       ctx.globalAlpha = a;
     }
   }
+  // the hovered (else the picked, on the focused row) variant's name - the
+  // one word the icons earn
+  const nm = gh && gh !== 'x' && gh !== 'panel' ? GEAR[gh.row][gh.v].name
+    : GEAR[m.grow][player.gear[m.grow]].name;
+  drawPixelTextShadow(ctx, nm, name.x - Math.round(pixelTextWidth(nm) / 2), name.y + rise,
+    gh && gh !== 'x' && gh !== 'panel' && gh.v !== player.gear[gh.row] ? '#f4f7ff' : '#ffd95c', '#0a0e23');
   // the X: the one way out that is drawn (ESC and a click outside also close)
   const hot = gh === 'x';
   ctx.fillStyle = hot ? '#8fa0c8' : '#35426e';

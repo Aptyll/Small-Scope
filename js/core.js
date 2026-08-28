@@ -126,13 +126,14 @@ const state = {
     // iceMarks: the PRACTICE TOOL plank's standing cracks - one per knock, and
     // the third knock breaks the sheet for good (menu.js iceRefuse)
     iceT: 0, iceI: -1, iceSeed: 0, iceX: 0, iceY: 0, shards: [], iceMarks: [],
-    // champion select: which screen the menu shows, its cross-fade, the
-    // highlighted champion, per-card hover eases, swap pop, lock-in hold
-    // screen: 'menu' | 'select' | 'gear' | 'tech'. select and gear cross-fade
-    // into each other inside screenT; the tech tree is a surface of its own on
-    // techT, with tsel the keyboard cursor into its flat node list.
+    // class select: which screen the menu shows, its cross-fade, the chosen
+    // class, per-figure hover eases, swap pop, lock-in hold.
+    // screen: 'menu' | 'select' | 'gear' | 'tech'. 'gear' is the pop-up over
+    // the still-lit select screen (gearT its ease, grow the keyboard row,
+    // gearFxT/gearFxSlot the equip flash); the tech tree is a surface of its
+    // own on techT, with tsel the keyboard cursor into its flat node list.
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
-    gearT: 0, grow: 0, techT: 0, tsel: 0 },
+    gearT: 0, grow: 0, gearFxT: 0, gearFxSlot: 0, techT: 0, tsel: 0 },
   intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from

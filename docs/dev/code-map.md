@@ -49,7 +49,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the numbers a slot is made of: the slot count and teams, walk/roll/slide speeds, hero levels, and the two bow baselines a kit is written against | `MAX_PLAYER_SLOTS`, `TEAM_COUNT`, `PVP`, `PLAYER_SPEED`/`PLAYER_R`, `ICE_MAX`/`SLIDE_MIN`/`SLIDE_EXIT`/`TRAIL_MIN`/`SNOW_TRAIL_*`, `LEVEL_*`/`LVL_*`, `DODGE_*`, `BOW_CHARGE`/`BOW_NOCK` | `players` (above `CHAMPS`, which reads four of them at load time) |
 | the entity arrays and the local aliases | `animals`…`landmarks`, `players`, `player`, `inv` | `players` (the banner's tail) |
 | the item table and the backpack model: count, room, add, take, and putting an instanced cell (a loaded tool) in whole | `ITEMS`, `BAG_CAP`, `bagCount`, `bagUsed`, `bagRoom`, `bagAdd`, `bagTake`, `bagPut` | `players` › `inventory` (the tool and bit rows register themselves from tools.js) |
-| the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
+| the gear table, the effective kit, buying a piece level | `GEAR`, `GEAR_SLOTS`, `GEAR_COSTS`, `baseKit`, `refreshKit`, `gearCost`, `buyGear` | `players` › `gear` |
 | ability ranks and skill points | `AB_RANK_MAX`, `AB_SKILL`, `abCanBuy`, `buySkill` | `players` › `gear` |
 | roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` |
 | how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` |
@@ -149,7 +149,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
 | where tools and bits come from, and how often | `dropLoot`, `LOOT_POOL`, `rebuildLootPool`, `ROCK_DROP`, `TREE_DROP`, `CHEST_TOOL`, `LOOT_TOOL` | `tools & bits` › `loot` (its callers: `hitObject`, actions.js) |
 | the tech tree: the graph, what a node costs, what is open, and the one writer | `TECH`, `TECH_BY_ID`, `TECH_COST`, `TECH_GOLD_PER_PT`, `techTier`, `techCost`, `techDone`, `techOpen`, `techPoints`, `techResearch`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.tech`, profile.js; the page: `main menu`, menu.js) |
-| what each class flies in with | `CLASS_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (drawn by `drawArmsStrip`: `main menu`, menu.js) |
+| what each class flies in with | `CLASS_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (the weapon rides the gear pop-up's preview: `drawGearPreview`, menu.js) |
 | a bot putting its loot to work, having no column and no pointer | `botFitLoadout` | `tools & bits` › `a bot fitting what it has found` (called from `updateAI`: `ai`, ai.js) |
 | the icons for both, and the one bake helper they share | `TOOL_ART`, `TOOL_ART_PAL`, `BIT_ART`, `BIT_PAL`, `bakeGrid` | `tools & bits` › `icons` |
 | whether the hover-raised bit column is up right now | `bitEditSlot` | `tools & bits` › `equipping` (its geometry: `bitColRect`, ui.js) |
@@ -250,7 +250,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | class select: the painted night, the two figures, lock-in straight to the eagle | `selectLayout`, `selectHit`, `drawSelectBackdrop`, `drawSelectFigure`, `renderSelect`, `selectClass`, `lockIn` | `main menu` › `class select` |
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
-| picking variants pre-match: the pop-up over class select, and the weapon the class flies in with above its cards | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearCard`, `drawArmsStrip`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the loadout itself: `CLASS_LOADOUT`, tools.js) |
+| picking variants pre-match: the pop-up over class select - live preview, stat ledger with hover deltas, twelve 32×32 icon wells, the equip flash | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearWell`, `drawGearPreview`, `gearPreviewKit`, `GEAR_STATS`, `GEAR32`/`gearIcon32`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the numbers' base: `baseKit`, player.js) |
 | the tech tree page: its 7x3 grid, the edges, a node's three states, and the one spend | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techBuy`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
 
 ## js/screens.js
