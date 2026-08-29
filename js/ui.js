@@ -2041,8 +2041,8 @@ function tipClassAb(i, cls) {
   return d;
 }
 // A TECH NODE on the title screen's tree - the one tooltip that is not about
-// something you are holding, so it carries the node's state and price on top
-// of the same item description the HUD gives.
+// something you are holding, so it describes the KIND itself and ends on the
+// one thing the page knows about you: whether you have ever held one.
 function tipTech(id) {
   const cell = toolIdOf(id) ? makeTool(toolIdOf(id)) : null;
   const d = cell ? tipTool(cell) : tipBit(bitIdOf(id), null);
@@ -2053,18 +2053,6 @@ function tipTech(id) {
   if (cell) {
     d.rows.length = 3;
     d.rows[1] = ['BIT SLOTS', String(TOOLS[toolIdOf(id)].cap), '#f4f7ff'];
-  }
-  const done = techDone(id), open = techOpen(id);
-  const cost = techCost(id);
-  d.rows.push(['RESEARCH', done ? 'DONE' : cost + ' PTS',
-    done ? '#8fe08a' : techPoints() >= cost ? '#f2cc6a' : '#e0637a']);
-  if (done) d.notes.push(['UNLOCKED - THE WORLD CAN DROP IT', '#8fe08a']);
-  else if (open) d.notes.push([techPoints() >= cost ? 'CLICK TO RESEARCH IT'
-    : 'NOT ENOUGH RESEARCH YET', techPoints() >= cost ? '#f2cc6a' : '#e0637a']);
-  else {
-    const req = TECH_BY_ID[id].req;
-    const rn = toolIdOf(req) ? TOOLS[toolIdOf(req)].name : BITS[bitIdOf(req)].name;
-    d.notes.push(['LOCKED - RESEARCH ' + rn + ' FIRST', '#e0637a']);
   }
   d.notes.push([PROFILE.techSeen(id) ? 'YOU HAVE HELD ONE OF THESE'
     : 'NEVER HELD ONE', PROFILE.techSeen(id) ? '#8fd8ff' : TIP_DIM]);

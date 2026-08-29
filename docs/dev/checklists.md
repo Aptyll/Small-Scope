@@ -41,11 +41,10 @@ declare victory. The three affordances:
   once will never show it again. `DBG.PROFILE` is the store and `DBG.openNamePanel(first)` opens
   the panel either way (`true` = the SKIP variant). See
   [architecture.md](architecture.md#profilejs).
-- **The [tech tree](gameplay.md#the-tech-tree) needs staging too**, because it decides what the
-  world may drop and a played-in profile has already opened half of it. `DBG.wipeTech()` puts it
-  back to a fresh install without losing the name, `PROFILE.addGold(n)` buys research points
-  (`DBG.techPoints()`), and `DBG.research(id)` unlocks a node the way a click does — it rebuilds
-  `LOOT_POOL` itself, so read that back rather than the profile to prove an unlock landed.
+- **The [tech tree](gameplay.md#the-tech-tree) needs no staging** — every kind is unlocked for
+  every profile, so `DBG.LOOT_POOL` is the same on a fresh install as on a played-in one, and
+  reading it back is how you prove what a match may drop. `DBG.wipeTech()` still forgets which
+  kinds this profile has *held*, which is all the page's blue pips are.
 - **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
@@ -157,12 +156,12 @@ that carries a **damage type** sets `m.type` (see `DMG_TYPES`, js/actions.js) an
 it to `hurtUnit` with no per-kind code; add its numbers to `tipBit`'s modifier branch, which reads
 them back out of `toolMods` rather than restating them.
 
-**It also needs a `TECH` node**, or it is unreachable: the loot pool is built from what the
-profile has *researched*, so a kind with no node is never rolled and never appears in any match.
-Give it a `req` naming the node beneath it (null only on the free tier-0 row), and keep each
-lineage to a root plus at most two children — the tech screen's 7×3 grid derives its rows from
-`TECH` and a fourth column would draw off the page. The screen, the tooltip and the loot pool all
-follow from that one row.
+**It also needs a `TECH` node**, or the tech screen never shows it — the loot pool rolls it either
+way, since the pool is every kind at or under a tier, but a kind missing from the page is a kind
+nobody can read the numbers of. Give it a `req` naming the node beneath it (null only on the
+tier-0 row), and keep each lineage to a root plus at most two children — the tech screen's 7×3 grid
+derives its rows from `TECH` and a fourth column would draw off the page. The screen and its
+tooltip both follow from that one row.
 
 A brand-new `path` is the only thing that is not table-driven: it needs a
 branch in `steerBit`, and a body of its own in the shots pass (`drawTumbler`/`drawMote`,

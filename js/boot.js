@@ -937,14 +937,12 @@ window.DBG = {
   CLASS_AB, abTraps: traps, abCraters: craters, abFalcons: falcons, abNets: nets, abVolleys: volleys,
   tryAbility: (i, p) => tryAbility(p || player, i),
   setAbilityCd: (i, t, p) => { (p || player).abCd[i] = t; },
-  // the tech tree: the graph, the sums behind it, and the page's own geometry.
-  // `research` is the one writer (it rebuilds the loot pool itself), and
-  // `wipeTech` puts a profile back to a fresh install without clearing the name.
-  TECH, TECH_ROWS, TECH_COST, TECH_GOLD_PER_PT, techCost, techOpen, techPoints,
-  techNodeRect, techHit, rebuildLootPool, LOOT_POOL,
-  techDone: (id) => techDone(id),
-  research: (id) => techResearch(id),
-  wipeTech: () => { PROFILE.clearTech(); rebuildLootPool(); },
+  // the arsenal tree: the graph, the page's own geometry, and the pool a
+  // match drops from - which is the whole arsenal, the same for every profile.
+  // `wipeTech` forgets what this profile has HELD (the blue pips), which is
+  // all a profile still remembers about the tree.
+  TECH, TECH_ROWS, techNodeRect, techHit, rebuildLootPool, LOOT_POOL,
+  wipeTech: () => PROFILE.clearTech(),
   // what the pointer is on, as the panel would describe it (null = nothing)
   tipAt: (x, y) => tipAt(x == null ? mouse.x : x, y == null ? mouse.y : y),
   tipLift,

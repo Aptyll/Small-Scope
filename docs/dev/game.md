@@ -41,11 +41,11 @@ cast the body visibly performs, and effects drawn plainly for both sides: the ga
 first, sneaky second. [Class abilities](gameplay.md#class-abilities-keys-1-4),
 [Classes](multiplayer.md#classes).
 
-**The arsenal itself grows across matches.** A **tech tree** on the main menu spends lifetime gold
-on permanently unlocking tools and bits, and what is unlocked is what the world is allowed to drop
-— so the snowfield of your fiftieth match is stocked with things your first one had never heard
-of. It is the only thing that survives a match, and the only thing a match reads back out of the
-profile. [The tech tree](gameplay.md#the-tech-tree).
+**The whole arsenal is on the table from the first match.** A **tech tree** on the main menu lays
+every tool and bit out in its lineages, and all of it is unlocked: what your fiftieth match may
+drop is exactly what your first one may drop, so a new player and a veteran play the same game and
+a find is a find because of what it *is*, never because of what you have ground out.
+[The tech tree](gameplay.md#the-tech-tree).
 
 **Arrows are finite whatever is firing them.** Every projectile bit spends one from the same small
 quiver, and the plain shafts stick in the snow where they land for **anyone** to pick up — so a
@@ -113,9 +113,9 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.
-- **Not an account.** The player profile is a display name, a few lifetime numbers and the tech
-  tree, in the browser, and it is skippable. No passwords, no sign-in, nothing to log into. The
-  **one** thing in it a match reads is which nodes are researched, which is what the world may drop
-  — everything else about a match is decided inside that match. See
+- **Not an account.** The player profile is a display name, a few lifetime numbers and a record of
+  which kinds you have held, in the browser, and it is skippable. No passwords, no sign-in, nothing
+  to log into. A match reads **nothing** back out of it — everything about a match is decided
+  inside that match, and the arsenal is unlocked for everybody alike. See
   [architecture.md](architecture.md#profilejs). If a server ever holds it, it holds the same
   object.

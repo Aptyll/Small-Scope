@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.07'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.08'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.08', 'THE WHOLE ARSENAL IS UNLOCKED FROM YOUR FIRST MATCH NOW - EVERY TOOL AND EVERY BIT CAN DROP FOR ANYBODY, SO A BRAND-NEW PLAYER AND A VETERAN FIND EXACTLY THE SAME THINGS IN THE ROCKS, THE TREES AND THE CHESTS, AND THE TECH TREE IS THE PICTURE OF THAT ARSENAL RATHER THAN A THING TO GRIND.'],
   ['2.07', 'EVERY LIVING THING PLAYS BY ONE RULEBOOK NOW - RABBITS, DEER, BIRDS, WOLVES AND BOT BAY WORKERS TAKE THE SAME DAMAGE AND THE SAME SNARES, NETS, SLOWS, MARKS AND STUNS FROM EVERY ABILITY AND EVERY SHOT A PLAYER WOULD - AND FIRE IS A REAL DAMAGE TYPE, SO FLAME, PYRE AND CINDER BURST SET WHATEVER THEY HIT ALIGHT AND IT BURNS.'],
   ['2.06', 'THE WEATHER HAS WEIGHT NOW - CLOUD SHADOWS ROLL OVER THE SNOW DARK ENOUGH TO SEE THE SUN COME BACK OUT BEHIND THEM, AND THE WIND CROSSES THE FOREST AS REAL GUSTS: WANDERING BODIES OF MOVING AIR THAT THROW ONE STAND OF PINES FULLY OVER WHILE THE NEXT ONE STANDS STILL, INSTEAD OF ONE STRIPED WAVE MARCHING THROUGH EVERYTHING AT ONCE.'],
   ['2.05', 'THE PINES STAND FULL SIZE AGAIN - THE TALL SNOWY TREE IS BACK TO ITS OLD HEIGHT AND SPREAD, STILL RUSTLING ON THE WIND AND STILL DRAWN OUT OF ONE BAKED TEXTURE.'],
@@ -1998,14 +1999,16 @@ function renderGear(now, a) {
   ctx.globalAlpha = 1;
 }
 
-// ---- the tech tree screen: what the world is allowed to drop -------------
-// Entered from the TECH TREE plank. `TECH` (js/tools.js) already carries the
-// only edge in the graph - each node's `req` - and it happens to lay out as
-// seven clean lineages of at most three, so the page is a 7x3 grid: one ROW
-// per lineage, one COLUMN per tier, and every edge is a horizontal line from a
-// node to the one it opens. Nothing here is written down but the three tier
-// names and the research total; a node's identity, its stats, its price and
-// its state are all read through the tooltip (bottom left) that any hover
+// ---- the tech tree screen: the whole arsenal, laid out -------------------
+// Entered from the TECH TREE plank. Every node is unlocked - the world may
+// drop all of it for anybody - so this page is not a shop and nothing on it
+// is bought: it is the arsenal you can be handed, in one picture. `TECH`
+// (js/tools.js) already carries the only edge in the graph - each node's
+// `req` - and it happens to lay out as seven clean lineages of at most three,
+// so the page is a 7x3 grid: one ROW per lineage, one COLUMN per tier, and
+// every edge is a horizontal line from a kind to the kind a step above it.
+// Nothing here is written down but the three tier names; a node's identity
+// and its stats are read through the tooltip (bottom left) that any hover
 // raises, which is the whole reason that panel exists.
 const TECH_CELL = 20, TECH_COLW = 96, TECH_ROWH = 24;
 // the lineages, built once from TECH: a tier-0 root, then whatever it opens
@@ -2053,13 +2056,6 @@ function techFlat() {
   for (let r = 0; r < TECH_ROWS.length; r++) for (let c = 0; c < TECH_ROWS[r].length; c++) out.push({ r, c, id: TECH_ROWS[r][c] });
   return out;
 }
-// the one spend: refused out loud rather than silently, since a locked node
-// and an unaffordable one look different but both do nothing
-function techBuy(id) {
-  if (!id) return;
-  if (techResearch(id)) { SFX.levelUp(); return; }
-  SFX.deny();
-}
 function techKey(k) {
   const m = state.menu;
   const flat = techFlat();
@@ -2075,8 +2071,9 @@ function techKey(k) {
   else if (k === 'arrowdown' || k === 's') move(1, 0);
   else if (k === 'arrowleft' || k === 'a') move(0, -1);
   else if (k === 'arrowright' || k === 'd') move(0, 1);
-  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; techBuy(cur.id); }
 }
+// nothing is bought here, so a click only walks the cursor over to what the
+// pointer is already reading - the mouse and the keyboard stay on one node
 function techClick() {
   const m = state.menu;
   if (m.techT < 1) return;
@@ -2084,43 +2081,27 @@ function techClick() {
   if (!id) return;
   const flat = techFlat();
   const i = flat.findIndex((n) => n.id === id);
-  if (i >= 0) m.tsel = i;
-  m.pressT = 0.12;
-  techBuy(id);
+  if (i >= 0 && i !== m.tsel) { m.tsel = i; SFX.pickup(); }
 }
-// one node. Three states and they are told apart by LIGHT, not by a label:
-// done is lit and rimmed in its tier, open is the same plate gone quiet with
-// its price under it, locked is nearly out. The blue pip is "you have held
-// one of these", which is the only thing on the page that is about you rather
-// than about the tree.
+// one node. Every kind is unlocked, so every plate is lit in its own tier
+// exactly as it would be in a bag cell - the page states a tier the one way
+// the game states it everywhere - and hover lights the rim exactly the way a
+// hovered bag cell lights, in the tier's own ink, over a plate lifted a pixel.
+// The blue pip is "you have held one of these", which is the only thing on
+// the page that is about you rather than about the arsenal.
 function drawTechNode(id, r, c, hot, focused, now) {
   const n = techNodeRect(r, c);
-  const done = techDone(id), open = techOpen(id);
-  const cost = techCost(id), afford = techPoints() >= cost;
-  const tp = tierPlate(id, done);
+  const tp = tierPlate(id, hot || focused);
   const y = n.y - (hot ? 1 : 0);
   ctx.fillStyle = 'rgba(4,6,18,0.55)';
   ctx.fillRect(n.x + 2, n.y + 2, n.w, n.h);
-  ctx.fillStyle = done ? tp.rim
-    : hot || focused ? '#8fa0c8'
-    : open ? (afford && Math.sin(now * 6) > 0 ? '#f2cc6a' : '#4a5a8e') : '#232c52';
+  ctx.fillStyle = tp.rim;
   ctx.fillRect(n.x, y, n.w, n.h);
-  ctx.fillStyle = done ? tp.plate : open ? '#141c3c' : '#0a0e23';
+  ctx.fillStyle = tp.plate;
   ctx.fillRect(n.x + 1, y + 1, n.w - 2, n.h - 2);
-  if (done) tierShine(n, y, id, now);
+  tierShine(n, y, id, now);
   const im = SPRITES[ITEMS[id].icon];
-  ctx.globalAlpha = done ? 1 : open ? 0.6 : 0.2;
   ctx.drawImage(im, n.x + ((n.w - im.width) >> 1), y + ((n.h - im.height) >> 1));
-  ctx.globalAlpha = 1;
-  if (done) { // the tick: two gold pixels in the corner, nothing more
-    ctx.fillStyle = '#8fe08a';
-    ctx.fillRect(n.x + n.w - 4, y + n.h - 3, 2, 2);
-  } else if (open) { // the price, in pips under the node
-    for (let k = 0; k < cost; k++) {
-      ctx.fillStyle = afford ? '#f2cc6a' : '#5a6690';
-      ctx.fillRect(n.x + 2 + k * 3, y + n.h + 2, 2, 2);
-    }
-  }
   if (PROFILE.techSeen(id)) { ctx.fillStyle = '#8fd8ff'; ctx.fillRect(n.x + 2, y + 2, 2, 2); }
 }
 function renderTech(now, a) {
@@ -2131,30 +2112,25 @@ function renderTech(now, a) {
   const t0 = 'TECH TREE';
   drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 24 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
   drawGoldRule(cx, toy + 39 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-  // the one number the page is spent from - lifetime gold, turned into points
-  const pts = techPoints();
-  const rt = 'RESEARCH ' + pts;
-  drawPixelTextShadow(ctx, rt, Math.round((VIEW_W - pixelTextWidth(rt)) / 2), toy + 48, pts > 0 ? '#f2cc6a' : '#5a6690', '#0a0e23');
   // tier names over their columns; the plate colour under each node repeats it
   for (let c = 0; c < TOOL_TIERS.length; c++) {
     const nm = TOOL_TIERS[c].name;
     drawPixelTextShadow(ctx, nm, x0 + c * TECH_COLW + Math.round((TECH_CELL - pixelTextWidth(nm)) / 2),
       y0 - 12, TOOL_TIERS[c].ink, '#0a0e23');
   }
-  // edges first, under the nodes: gold once the node they leave is researched
+  // edges first, under the nodes: every wire is live, since every kind is
   for (let r = 0; r < TECH_ROWS.length; r++) {
     for (let c = 0; c + 1 < TECH_ROWS[r].length; c++) {
-      const from = techNodeRect(r, c), lit = techDone(TECH_ROWS[r][c]);
+      const from = techNodeRect(r, c);
       const ly = from.y + (TECH_CELL >> 1);
       ctx.fillStyle = '#0a0e23';
       ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 2);
-      ctx.fillStyle = lit ? '#c89a3c' : '#2c3560';
+      ctx.fillStyle = '#c89a3c';
       ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 1);
-      if (lit) { // a bead running the wire, so a live branch reads as live
-        const t = (now * 0.6 + r * 0.3) % 1;
-        ctx.fillStyle = '#ffd95c';
-        ctx.fillRect(from.x + from.w + Math.round(t * (TECH_COLW - TECH_CELL - 2)), ly - 1, 2, 3);
-      }
+      // a bead running the wire, so the lineage reads as a lineage
+      const t = (now * 0.6 + r * 0.3) % 1;
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(from.x + from.w + Math.round(t * (TECH_COLW - TECH_CELL - 2)), ly - 1, 2, 3);
     }
   }
   const hov = m.techT >= 1 && mouse.inside ? techHit(mouse.x, mouse.y) : null;

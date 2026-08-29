@@ -45,13 +45,12 @@
       // (endMatch('won')); days = days begun (takeoff + each dawn still in).
       // A save written as games/bestDay is a different pair and is not copied.
       stats: { wins: 0, gold: 0, days: 0 },
-      // The tech tree, and the only part of a profile that a MATCH reads back
-      // (js/tools.js decides what the world can drop from `done`). Two id
-      // lists, both of `TECH` node ids: `seen` is every kind this profile has
-      // ever held - written from the pickup, purely a marker on the node -
-      // and `done` is every kind researched. Nothing else is stored: the
-      // research spent is the sum of what `done` costs and the points earned
-      // come from stats.gold, so the two can never drift apart.
+      // The arsenal tree. A MATCH reads nothing back out of here - every kind
+      // is unlocked for every profile alike - so the one live list is `seen`:
+      // every `TECH` node id this profile has ever held, written from the
+      // pickup and drawn as a pip on the node. `done` is the research a save
+      // from before the unlock (PATCH 2.08) had bought; it is still carried
+      // through so a veteran's record is not thrown away, and nothing reads it.
       tech: { seen: [], done: [] },
       // null, not {} - game.js reads a null here as "nothing was ever saved"
       // and skips its own settings migration, which a bare {} would trigger
@@ -226,11 +225,9 @@
     addDay() { profile.stats.days++; scheduleSave(); },
 
     // ---- tech tree ----------------------------------------------------------
-    // Ids in and out; what a node IS, what it costs and what unlocking one
-    // does to a match all live in js/tools.js. This file only remembers.
-    tech() { return profile.tech; },
+    // Ids in and out; what a node IS lives in js/tools.js. This file only
+    // remembers which kinds have been held.
     techSeen(id) { return profile.tech.seen.indexOf(id) >= 0; },
-    techDone(id) { return profile.tech.done.indexOf(id) >= 0; },
     // fired from the pickup, so it is coalesced like the stat calls
     markSeen(id) {
       if (profile.tech.seen.indexOf(id) >= 0) return false;
@@ -238,15 +235,8 @@
       scheduleSave();
       return true;
     },
-    // a deliberate spend at the tree: written through, like setName
-    markDone(id) {
-      if (profile.tech.done.indexOf(id) >= 0) return false;
-      profile.tech.done.push(id);
-      saveNow();
-      return true;
-    },
-    // back to a fresh tree without losing the name or the stats behind it -
-    // the only way to re-stage the tree for a look at it (DBG.wipeTech)
+    // back to an unmarked tree without losing the name or the stats behind it
+    // - the only way to re-stage the page for a look at it (DBG.wipeTech)
     clearTech() {
       profile.tech.seen.length = 0;
       profile.tech.done.length = 0;

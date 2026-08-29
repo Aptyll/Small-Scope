@@ -156,7 +156,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
 | where tools and bits come from, and how often | `dropLoot`, `LOOT_POOL`, `rebuildLootPool`, `ROCK_DROP`, `TREE_DROP`, `CHEST_TOOL`, `LOOT_TOOL` | `tools & bits` › `loot` (its callers: `hitObject`, actions.js) |
-| the tech tree: the graph, what a node costs, what is open, and the one writer | `TECH`, `TECH_BY_ID`, `TECH_COST`, `TECH_GOLD_PER_PT`, `techTier`, `techCost`, `techDone`, `techOpen`, `techPoints`, `techResearch`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.tech`, profile.js; the page: `main menu`, menu.js) |
+| the tech tree: the graph every kind hangs off, all of it unlocked | `TECH`, `TECH_BY_ID`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.techSeen`, profile.js; the page: `main menu`, menu.js) |
 | what each class flies in with | `CLASS_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (the weapon rides the gear pop-up's preview: `drawGearPreview`, menu.js) |
 | a bot putting its loot to work, having no column and no pointer | `botFitLoadout` | `tools & bits` › `a bot fitting what it has found` (called from `updateAI`: `ai`, ai.js) |
 | the icons for both, and the one bake helper they share | `TOOL_ART`, `TOOL_ART_PAL`, `BIT_ART`, `BIT_PAL`, `bakeGrid` | `tools & bits` › `icons` |
@@ -268,7 +268,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
 | picking variants pre-match: the pop-up over class select - live preview, stat ledger with hover deltas, twelve 32×32 icon wells, the equip flash | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearWell`, `drawGearPreview`, `gearPreviewKit`, `GEAR_STATS`, `GEAR32`/`gearIcon32`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the numbers' base: `baseKit`, player.js) |
-| the tech tree page: its 7x3 grid, the edges, a node's three states, and the one spend | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techBuy`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
+| the tech tree page: its 7x3 grid, the edges, and a node lit in its tier | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
 
 ## js/screens.js
 

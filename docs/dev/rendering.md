@@ -328,7 +328,7 @@ then only the flags that are *true*, because four rows of NO would drown the thr
 `tipStack` (food, cards), `tipGear`, `tipAbility` (the pack's skill row), `tipClassAb` (a strip
 ability well in play, or class select's stage wells with `cls` passed — the in-play cooldown
 and cast-hint rows only appear in play), and `tipTech`, which strips the "what is loaded in it"
-half and adds the node's price and state instead.
+half and ends on whether this profile has ever held one.
 
 ### The tech tree screen
 
@@ -338,17 +338,18 @@ carries the only edge in the graph, and it lays out as seven lineages of at most
 page is a **7×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
 from a node to the one it opens.
 
-Three node states, told apart by **light** rather than by a label: *done* is lit, wearing its full
-tier plate with a green corner tick; *open* is the same plate gone quiet with its price in gold
-pips beneath it and a pulsing rim when it is affordable; *locked* is nearly out. A blue pip in the
-corner is `PROFILE.techSeen` — "you have held one of these" — the only thing on the page that is
-about you rather than about the tree. Edges go gold once the node they leave is researched, with a
-bead running the wire so a live branch reads as live.
+Every node is unlocked, so there is one node state and it is the lit one: the full tier plate the
+same item wears in a bag cell (`tierPlate`, plus `tierShine` on the top tier), rimmed in the
+tier's own ink under the pointer or the keyboard cursor and lifted a pixel under the pointer. A
+blue pip in the corner is `PROFILE.techSeen` — "you have held one of these" — the only thing on the
+page that is about you rather than about the arsenal. Every edge is gold with a bead running the
+wire, because every lineage is live.
 
-Nothing on the page is written down but the three tier names and the research total: a node's
-identity, its stats, its price and why it is locked are all read through the **tooltip** any hover
-raises, which is a large part of why that panel exists. `techHit` is shared by the hover, the click
-and the tooltip, so the three can never point at different nodes.
+Nothing on the page is written down but the three tier names: a node's identity and its stats are
+read through the **tooltip** any hover raises, which is a large part of why that panel exists.
+Nothing here is bought — a click only walks the keyboard cursor over to the node the pointer is
+already reading. `techHit` is shared by the hover, the click and the tooltip, so the three can
+never point at different nodes.
 
 ### The hud strip
 

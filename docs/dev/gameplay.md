@@ -303,8 +303,8 @@ bit, and only kinds at or under the given tier are in the pool.
 So the bottom tier lies around loose and the good stuff is in the treeline's chests. A found tool
 comes out **empty** — its bits are the next thing to find.
 
-The pool a roll draws from is not the whole table: it is what this profile has **researched**, so
-a kind nobody has unlocked never appears in any match. See [the tech tree](#the-tech-tree).
+The pool a roll draws from is the **whole table** at or under that tier: every kind is unlocked for
+every profile alike, so any match can roll any of them. See [the tech tree](#the-tech-tree).
 
 ### Tiers, and how a find reads
 
@@ -394,24 +394,26 @@ cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.
 
 ## The tech tree
 
-The one thing in this game that outlives a match, and the **only part of a profile that a match
-reads back**. Every tool and every bit is a node; researching one is permanent; and what it buys
-is that the kind joins the world's loot pool from then on. So the tree is not a shop and not a
-skill tree — it is the arsenal the map is allowed to hand you, and it grows as you play. It is
-reached from the main menu's **TECH TREE** plank (`m.screen = 'tech'`, its own `techT` ease, ESC
-back); the page itself is in [rendering.md](rendering.md#the-tech-tree-screen).
+Every tool and every bit is a node, and **every node is unlocked**. The tree is not a shop, not a
+skill tree and not a gate: it is the picture of the arsenal the map is allowed to hand you, and the
+map is allowed to hand you all of it — a profile on its first flight rolls exactly what one five
+hundred matches old rolls, which is the point (**PATCH 2.08**; before it, nodes were researched
+with lifetime gold and a fresh profile played out of a much smaller pool). It is reached from the
+main menu's **TECH TREE** plank (`m.screen = 'tech'`, its own `techT` ease, ESC back); the page
+itself is in [rendering.md](rendering.md#the-tech-tree-screen).
 
 The table is `TECH` in [js/tools.js](../../js/tools.js), and it carries exactly one edge per node:
 
 ```
-req      the node beneath this one; null on the free tier-0 row
+req      the node beneath this one; null on the tier-0 row
 ```
 
-That is the whole graph, and because each lineage happens to be one root plus at most two
-children, it also lays out as a 7×3 grid — one **row** per lineage, one **column** per tier, and
-every edge a horizontal line. The seven lineages:
+That is the whole graph, and nothing at runtime reads it — the edge exists so the arsenal draws as
+lineages rather than as a heap. Because each lineage happens to be one root plus at most two
+children, it lays out as a 7×3 grid — one **row** per lineage, one **column** per tier, and every
+edge a horizontal line. The seven lineages:
 
-| root (WORN, free) | KEEN | GILDED |
+| root (WORN) | KEEN | GILDED |
 | --- | --- | --- |
 | SHORTBOW | RECURVE BOW | LONGBOW |
 | SLING | HORN BOW | — |
@@ -421,26 +423,16 @@ every edge a horizontal line. The seven lineages:
 | SPEEDUP | FLAME | PYRE |
 | SPLITTER | DUPLICATE | CINDER BURST |
 
-**The whole tier-0 row is free and already done** (`techDone` returns true for tier 0 without
-asking the profile), so a fresh install finds the basics from its first rock and an old save
-needs no migration. Everything above opens one node at a time from the node beneath it
-(`techOpen`), which is what makes this a tree rather than a list.
+**`LOOT_POOL` is every kind at or under a tier**, split into tools and bits, and it is built once
+by `rebuildLootPool()` at boot rather than filtered per roll, because a drop happens in the middle
+of a swing. Nothing narrows it and nothing can empty it, so the tier is the only thing a roll asks
+about; `dropLoot` still returns null on an empty pool rather than throwing.
 
-**Research is not a stored number.** `techPoints()` is
-`floor(PROFILE.stats().gold / TECH_GOLD_PER_PT) − Σ techCost(done)` — earned from lifetime gold,
-spent by what is already researched — so the two halves can never drift apart and there is no
-counter to corrupt. `TECH_GOLD_PER_PT` is 50 and `TECH_COST` is `[0, 2, 4]` by tier, which puts
-the first unlock inside a match or two.
-
-**`techResearch(id)` is the only writer**, and it calls `rebuildLootPool()` itself — so the pool
-and the profile cannot disagree. `LOOT_POOL` is rebuilt at boot (after `PROFILE.load()`, before
-anything can swing) and on every unlock, never filtered per roll, because a drop happens in the
-middle of a swing while the tree only changes between matches. `dropLoot` returns null on an empty
-pool rather than throwing.
-
-`PROFILE.markSeen(id)` is the other half and gates **nothing**: it is fired for the local player
-only (`noteSeen(p, type)`) from the drop pickup and from the loadout they fly in with, and it puts
-a blue pip on the node. The tree doubles as a record of what you have actually met in the snow.
+`PROFILE.markSeen(id)` is all a profile still remembers about the tree, and it gates **nothing**:
+it is fired for the local player only (`noteSeen(p, type)`) from the drop pickup and from the
+loadout they fly in with, and it puts a blue pip on the node. The page doubles as a record of what
+you have actually met in the snow — which, with nothing to research, is the only thing on it that
+is about you.
 
 Storage is [js/profile.js](../../js/profile.js) and nothing here writes a key — see
 [architecture.md](architecture.md#profilejs).

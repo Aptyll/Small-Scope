@@ -469,29 +469,22 @@ function steerBit(a, dt) {
 }
 
 // ---- the tech tree -------------------------------------------------------
-// The one thing in this game that outlives a match. Every tool and every bit
-// is a node; a node is RESEARCHED once and stays researched, and what that
-// buys is that the kind joins the world's loot pool for every match after it.
-// So the tree is not a shop and not a skill tree - it is the arsenal the map
-// is allowed to hand you, and it grows as you play.
-//
-// The whole tier-0 row is free and already done: a fresh profile finds the
-// basics from its first rock, and everything above that is opened one node at
-// a time from a node beneath it, which is what makes this a tree rather than a
-// list. `seen` is a separate mark - "this profile has held one of these" - and
-// gates nothing; it is there so the tree doubles as a record of what you have
+// Every tool and every bit is a node, and every node is UNLOCKED. The world
+// is allowed to drop the whole arsenal for anybody, so a profile on its first
+// flight rolls exactly what one a hundred matches old rolls: nothing here is
+// earned, priced or spent, and a match reads nothing back out of a profile.
+// The tree is the PICTURE of the arsenal - lineages of at most three, each
+// kind beside the kinds it is a step from - and `seen`, "this profile has
+// held one of these", is the one mark on it that is about you rather than
+// about the arsenal. It gates nothing; it is a record of what you have
 // actually met in the snow.
 //
-// Storage is js/profile.js and nothing here writes a key. RESEARCH is not a
-// stored number either: it is earned from lifetime gold and spent by what is
-// already done, so the two can never disagree with each other.
-const TECH_GOLD_PER_PT = 50;   // lifetime gold that earns one research point
-const TECH_COST = [0, 2, 4];   // ...and what a node of each tier costs
+// Storage is js/profile.js and nothing here writes a key.
 // The tree, in draw order down each tier column. `req` is the node beneath
-// this one - null on the free tier-0 row - and is the only edge in the graph,
-// so the picture and the rule are the same thing.
+// this one - null on the tier-0 row - and is the only edge in the graph, so
+// the picture and the lineage are the same thing.
 const TECH = [
-  // tier 0: the free row, and the roots every branch grows out of
+  // tier 0: the roots every branch grows out of
   { id: 'tool:shortbow', req: null },
   { id: 'tool:sling',    req: null },
   { id: 'bit:arrow',     req: null },
@@ -517,28 +510,6 @@ const TECH = [
 ];
 const TECH_BY_ID = {};
 for (const n of TECH) TECH_BY_ID[n.id] = n;
-function techTier(id) { return itemTier(id); }
-function techCost(id) { return TECH_COST[Math.max(0, Math.min(TECH_COST.length - 1, techTier(id)))]; }
-// the free row is done by definition; everything else is what the profile says
-function techDone(id) { return techTier(id) <= 0 || PROFILE.techDone(id); }
-// a node can be worked on once the node beneath it is done
-function techOpen(id) {
-  const n = TECH_BY_ID[id];
-  return !!n && !techDone(id) && (!n.req || techDone(n.req));
-}
-// points earned from lifetime gold, minus what the done list has already spent
-function techPoints() {
-  let spent = 0;
-  for (const id of PROFILE.tech().done) if (TECH_BY_ID[id]) spent += techCost(id);
-  return Math.max(0, Math.floor(PROFILE.stats().gold / TECH_GOLD_PER_PT) - spent);
-}
-// Spend on one node. The only writer, so the pool rebuild can never be missed.
-function techResearch(id) {
-  if (!techOpen(id) || techPoints() < techCost(id)) return false;
-  PROFILE.markDone(id);
-  rebuildLootPool();
-  return true;
-}
 // "this profile has held one of these" - fired from the local player's pickup
 // and from the loadout they fly in with, and nothing reads it but the tree
 function noteSeen(p, type) {
@@ -554,17 +525,17 @@ const ROCK_DROP = 0.2;   // 1 in 5 broken rocks
 const TREE_DROP = 0.04;  // 1 in 25 felled trees
 const CHEST_TOOL = 0.75; // ...and three in four sprung chests, at the TOP tier
 const LOOT_TOOL = 0.3;   // this share of any of those is a tool, the rest bits
-// Every kind at or under `tier` that this profile has RESEARCHED, split into
-// the two pools. Rebuilt at boot and on every unlock rather than filtered per
-// roll, because a drop happens in the middle of a swing and the tree changes
-// between matches. The array itself is never replaced - dropLoot holds it.
+// Every kind at or under `tier`, split into the two pools. The whole arsenal
+// is unlocked, so this is one list per tier built at boot rather than a filter
+// run per roll - a drop happens in the middle of a swing. The array itself is
+// never replaced - dropLoot holds it.
 const LOOT_POOL = [];
 function rebuildLootPool() {
   LOOT_POOL.length = 0;
   for (let t = 0; t < TOOL_TIERS.length; t++) {
     LOOT_POOL.push({
-      tools: Object.keys(TOOLS).filter((k) => TOOLS[k].tier <= t && techDone(toolType(k))),
-      bits: Object.keys(BITS).filter((k) => BITS[k].tier <= t && techDone(bitType(k))),
+      tools: Object.keys(TOOLS).filter((k) => TOOLS[k].tier <= t),
+      bits: Object.keys(BITS).filter((k) => BITS[k].tier <= t),
     });
   }
 }

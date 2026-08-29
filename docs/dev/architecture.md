@@ -14,7 +14,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 
 | File | Lines | Exposes | Role |
 | --- | --- | --- | --- |
-| [js/profile.js](../../js/profile.js) | ~240 | `PROFILE` | the local player profile - name, stats, the tech tree - and the only file that touches storage |
+| [js/profile.js](../../js/profile.js) | ~230 | `PROFILE` | the local player profile - name, stats, which kinds it has held - and the only file that touches storage |
 | [js/font.js](../../js/font.js) | ~100 | `drawPixelText`, `drawPixelTextShadow`, `drawPixelTextOutline`, `pixelTextWidth` | the bitmap font |
 | [js/sprites.js](../../js/sprites.js) | ~2500 | `SPRITES` | every sprite as a char-grid + palette, baked at load |
 | [js/sfxdata.js](../../js/sfxdata.js) | ~40 | `SFXDATA` | **generated** — the sfx bank as base64 |
@@ -70,7 +70,7 @@ eagle, gating the ride's first-flight countdown), the one-shot `practice` flag
 knocks at the title, after which the plank stays a live menu item), `bestLap`
 (`bestLap()`/`setBestLap()`: the ice parkour's all-time record, the one thing the practice
 arena writes — [world.md](world.md#the-practice-arena)), the
-[tech tree](gameplay.md#the-tech-tree)'s two id lists (`tech.seen` / `tech.done`) and the
+[tech tree](gameplay.md#the-tech-tree)'s `tech.seen` (`tech.done` rides along unread) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
 is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the
@@ -91,8 +91,10 @@ file is a save file.
   `setName` and `putSettings` write through immediately. A save written with the old `games` /
   `bestDay` pair keeps its gold and starts wins and days at zero — those were different
   numbers, not a rename.
-- **The tech lists are ids and nothing else.** `markSeen` coalesces (it fires from a pickup);
-  `markDone` writes through (it is a deliberate spend). `load()` copies only strings and
+- **The tech lists are ids and nothing else.** `markSeen` coalesces (it fires from a pickup) and is
+  the only writer left: `tech.done` is what a pre-PATCH-2.08 save had researched, carried through
+  load and save so a veteran's record survives, read by nothing now that the whole arsenal is
+  unlocked. `load()` copies only strings and
   de-duplicates, so a hand-edited save cannot put a number or a repeat into the tree, and a save
   written before the tree existed simply arrives without them. What a node *is*, what it costs and
   what unlocking one does to a match are all in js/tools.js — this file only remembers.
