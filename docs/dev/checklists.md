@@ -303,9 +303,12 @@ in js/tools.js, the flight-path constants beside `steerBit`, the damage roll in 
 `TREE_RARE_CHANCE` in `treeRare()`, the darkness ramp in
 `update()`, the `WIND_*` block in js/sim.js (how hard and how fast the field rustles, and how
 fast it dies at dusk) and the `CLOUD_*` / `RAY_*` / `NIGHT_*` / `STAR_*` blocks in the
-`light & weather` banner of js/draw-world.js. Three of those bake at LOAD, so a change to them
-needs a reload rather than just a repaint: `bakeCloud`'s `lo`/`hi` ramp (both cloud textures) and
-the beam texture `RAY_CV`.
+`light & weather` banner of js/draw-world.js (including `RAY_AFTER` / `RAY_NOON_HALF`, which decide
+how long the sun shafts are up for), and `FLAKE_BASE` / `FLAKE_MIN` / `FLAKE_MAX` beside the flake
+block in js/sim.js. Several of those bake at LOAD, so a change to them needs a reload rather than
+just a repaint: `bakeCloud`'s `lo`/`hi` ramp (both cloud textures), the beam texture `RAY_CV`, and
+the speck atlases `MOTE_CV` / `STAR_CV` / `FLAKE_CV` (colour and shape are baked in; only the alpha
+that picks a level is live).
 
 **Moving code between js files** — the game files share one global scope
 ([architecture.md](architecture.md#shared-global-scope)); these rules stand for any move.

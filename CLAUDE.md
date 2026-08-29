@@ -119,6 +119,9 @@ lives in `docs/dev/*.md` beside the code it protects.
   a new glowing thing adds a pass there rather than registering anywhere.
 - **Anything the weather moves reads `windSway(tx, ty)`**, never a clock of its own: one wave
   (the `wind` banner, js/sim.js) drives the snow and every pine's frame, and it dies at dusk.
+- **A sprite the world holds hundreds of draws from ONE texture** — a `drawImage` whose source
+  canvas differs from the last cannot be batched, and the pines measured 97 fps as sixteen
+  canvases against 199 as one atlas: [rendering](docs/dev/rendering.md#drawing-a-thousand-of-something).
 - **Units are solid to each other.** `separateUnits()` runs once per sim step after every mover has
   stepped; a new kind of thing that walks must join its list (and `UNIT_MASS`, and be marked `small`
   unless a roll should stop on it) or it walks through everyone. A player mid-roll is the exception:

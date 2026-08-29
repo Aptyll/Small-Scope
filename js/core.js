@@ -79,6 +79,9 @@ const state = {
   // the weather's one wind field (the `wind` banner, js/sim.js): windT is its
   // clock, wind its strength 0..1 - full by day, nothing at all by full dark
   wind: 0.7, windT: 0,
+  // seconds of sun shafts still owed after the eagle drop (landPlayer sets it,
+  // updateFx counts it down, rayLight reads it - js/draw-world.js)
+  rayT: 0,
   shake: 0,
   deadTimer: 0,
   // out of the match: the overlay's state. over: 'lost' | 'won' | null; view:

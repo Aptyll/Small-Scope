@@ -174,11 +174,13 @@ label-value rows — one ESC-menu toggle or F3; only the fps line in `title`) �
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
-A **tree** is 27×37 and draws at `(px - 5, py - 21)` — bottom-aligned on its own tile, trunk on
-the tile's centre line, canopy overhanging the tile and a third above it (which the `draws`
+A **tree** is 20×27 and draws at `(px - 2, py - 11)` — bottom-aligned on its own tile, trunk on
+the tile's centre line, canopy overhanging the lower third of the tile above (which the `draws`
 loop's existing 1-tile top margin and 2-tile bottom margin already cover). Which of its sixteen
 sway frames it wears comes from `treeFrame(tx, ty)` off the [wind field](#the-wind-field), never
-from a clock of its own. A **dead tree** is still the old 16×24 snag at `py - 8`. Short ground sprites (rock, bush,
+from a clock of its own, and it is blitted out of **one atlas texture** rather than a per-frame
+canvas — see [Drawing a thousand of something](#drawing-a-thousand-of-something), which is the
+largest performance fact in this file. A **dead tree** is still the old 16×24 snag at `py - 8`. Short ground sprites (rock, bush,
 stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
 a tree on the tile below hides it almost completely.
 
@@ -194,39 +196,49 @@ like every other building's.
 Sprite hit-flash goes through `drawSpriteFlash()`, which recolours via a shared 64×64 `scratch`
 canvas with `source-in` — sprites larger than 64×64 will clip (the 48×38 bot bay is the biggest).
 
-### Snow over a body
-
-A [prone](gameplay.md#prone-under-the-snow) player draws inside the same `draws` slot as a
-standing one — prone pose set, then `drawSnowCover(p, spr, px, py, alpha)` over body and bow
-alike, and `drawBuryRing` under it for the local slot only. The cover closes **from the outside
-in** (each row's covered band grows from both edges toward a seam down the middle that shuts at
-`hide = 1`), so boots and elbows go first and the middle of the back last. Row extents are not
-guessed: `spr.spans` is the per-row `[firstX, lastX]` that [sprites.md](sprites.md) takes off the
-char grid at bake time, so there is **no `getImageData` anywhere in this** and the cover stays
-correct on its own if the poses are redrawn. `poseBounds` caches a dilated copy per sprite — the
-union of each row with its two neighbours, which rounds the jagged bits out and adds the row of
-piled snow above and below the body — and keeps the raw spans beside it, because the taper that
-rounds the drift's two ends must never pull the cover inside the body it is covering (both
-head-on poses run to the bottom of the cell and have no spare row to round into). No cast shadow
-is drawn while lying: a body flat on the snow has nothing to cast one over, and the mound's own
-dark lower rim does the grounding instead.
-
 ### Snow
 
-Flakes are **world-space**, not a screen overlay: each entry of `flakes` (the block at the top of
-the `fx updates` banner) has a world `x/y`, drifts in world px (`spd` down, its own sine sway plus the
-[wind field](#the-wind-field)'s drift — so snow blows sideways in a gust and falls almost
-straight down once the air stills at night), and so scrolls with the camera like everything else. The field is kept exactly one
-view in size — `fitFlakes()` scales the count to `VIEW_W×VIEW_H` (70 at 480×270) — and
-`renderWeather(ex, ey)` draws every flake **wrapped modulo `VIEW_W`/`VIEW_H` around the exact
-camera**, so the screen is always fully covered at constant density at any zoom or view size
-(including the drop view) while a pan still slides every flake the right way; the wrap is invisible
-because it only ever happens at the screen edge. A flake does not fall screen-top to
-screen-bottom: it is born with `h` (30–120) world px left to fall, **lands** when that runs out,
-rests on the ground fading out for `FLAKE_REST` (0.7 s), and is then reborn (`makeFlake`) at a
-fresh spot in the field. Boot flakes and rebirths draw from `rng`; resize/zoom top-ups draw from
-`fxRng` (see [world.md](world.md)). Drawn after `renderLighting` (never graded) and before the
-vignettes and HUD. `DBG.flakes` and `DBG.cam()` expose the array and the exact camera.
+Flakes are **world-space**, not a screen overlay, and the zoom reaches them the way it reaches
+everything else in the world. Each entry of `flakes` (the block at the top of the `fx updates`
+banner) has a world `x/y` and drifts in world px — `spd` down, its own sine sway plus the
+[wind field](#the-wind-field)'s drift, so snow blows sideways in a gust and falls almost straight
+down once the air stills at night.
+
+The field is **one world view** in size, not one screen, and that is what makes the zoom read:
+
+- **Count follows the world area on screen.** `fitFlakes()` targets `FLAKE_BASE` (70) per
+  480×270 **world** px, so zooming out — looking at more sky — puts more snow in frame, clamped
+  to `FLAKE_MIN`…`FLAKE_MAX` (26…240) because physics alone leaves six flakes on screen at the
+  closest rung and a blizzard of specks at the widest, and neither reads as snow. At zoom 1 the
+  target is exactly what it was before, so the baseline look is unchanged.
+- **Grain follows the zoom.** `renderWeather` draws each flake `round(f.size × zoomCur)` px
+  across, so up close a flake is a fat crumb rather than a pixel. Between the two the amount of
+  white in frame stays about constant while its grain changes, which is what "further away"
+  looks like.
+- **`fitFlakes()` therefore runs every frame from `updateFx`**, not just from `relayout()`: the
+  zoom moves the target as surely as a resize does. Both its loops are no-ops when the count
+  already matches, which is every frame but the ones a zoom ease is passing through.
+
+`renderWeather(ex, ey)` wraps every flake **modulo `WV_W`/`WV_H` around the exact camera and
+scales up after**, so the field always covers the canvas (`sizeWorldView` ceils, so `WV × zoomCur`
+is never short of `VIEW`) while a pan still slides every flake the right way; the wrap is
+invisible because it only ever happens at the screen edge. Flakes go through the same
+[speck atlas](#specks) as the motes and the stars — `FLAKE_CV`, one baked cell per size — because
+240 of them as `fillRect`s with their own `globalAlpha` is 240 draw calls.
+
+A flake does not fall screen-top to screen-bottom: it is born with `h` (30–120) world px left to
+fall, **lands** when that runs out, rests on the ground fading out for `FLAKE_REST` (0.7 s), and is
+then reborn (`makeFlake`) at a fresh spot in the field.
+
+**The seventy boot flakes come off the main `rng` and that count is load-bearing** — that loop runs
+before `genWorld()`, so adding or dropping one shifts the rng prefix and every existing seed with
+it. Everything else (resize and zoom top-ups, and **rebirths**) draws from `fxRng`. Rebirths used
+to come off `rng` too, which quietly made the main stream depend on how many flakes were on screen;
+now that the count follows the zoom that would have made a match's rolls depend on the player's
+camera, so they were moved. Worldgen is untouched either way — it runs before the first `updateFx`.
+
+Drawn after `renderLighting` (never graded) and before the vignettes and HUD. `DBG.flakes` and
+`DBG.cam()` expose the array and the exact camera.
 
 ## UI panels are baked once
 
@@ -1172,7 +1184,14 @@ The day half is two things, drawn in that order because a shadow falls across a 
 the other way round:
 
 - **God rays** (`godRays`) — **parallel** shafts of low sun on one heading (`RAY_ANG`, drifting on
-  a long sine). The sun is far away; nothing here converges, and an earlier version that fanned
+  a long sine), and they are a **moment, not weather**. Low sun is the light of an arrival and of
+  the top of the day, and a beam that is always there stops being a beam, so `rayLight()` gates the
+  whole pass to two windows and it is dark the rest of the time: the **entire eagle ride** plus
+  `RAY_AFTER` (4 s) past the landing — `landPlayer` stamps `state.rayT`, `updateFx` counts it down —
+  and a **~15 s window around noon** (`RAY_NOON`, the middle of the daylight half). Both ease in and
+  out over `RAY_WINDOW_FADE`. The gate is read *first*, so outside those windows the eight blits and
+  the two hundred motes behind them never run at all. The practice arena's clock never moves, so
+  its training light never gets them. The sun is far away; nothing here converges, and an earlier version that fanned
   them off a nearby origin read as a spotlight rather than as daylight. What makes a parallel set
   read as *beams* rather than as striping laid over the picture is the **length fade**: each shaft
   swells out of nothing, peaks about a third of the way along and **trails off** before it leaves
@@ -1217,9 +1236,10 @@ the other way round:
   ground is one continuous swell of dimming with **no edge anywhere in it**. `lo` sits just above
   the median, which keeps roughly half the sky genuinely open: a flat plateau of *clear* is fine,
   it is a flat plateau of *shade* that reads as a blob.
-  **The practice arena is exempt** (`PRACTICE`): it keeps the shafts, but a shadow drifting over
-  the dummy's meter or the parkour's ice would change what those instruments are measuring
-  between one lap and the next, and that room's whole point is that its light never changes.
+  **The practice arena is exempt** (`PRACTICE`): a shadow drifting over the dummy's meter or the
+  parkour's ice would change what those instruments are measuring between one lap and the next, and
+  that room's whole point is that its light never changes. (It gets no shafts either, for free —
+  its clock is pinned nowhere near noon and it has no eagle.)
 
 Then the dusk and dawn tints (unchanged), then the night multiply, then **`litShots`** — the one
 light left in the game. A shot carrying a `lit` bit (the CARE ARROW, the WISP, anything a FLAME
@@ -1258,6 +1278,59 @@ and the crack decals but under everything that walks, so a body standing on the 
 reflection — and therefore **under** the night multiply as well. That is deliberate: the same blue
 that cools the snow cools the stars with it, which is what a reflection does.
 
+## Drawing a thousand of something
+
+**A `drawImage` whose source canvas differs from the last one cannot be batched.** The driver has
+to change texture, so it becomes its own GPU draw call, and a wide-open view holds around a
+thousand pines. This is the single largest performance fact in the renderer, and it is not about
+pixels at all — measured on a GTX 1060 at 886×498 over the treeline, same scene, same sprite
+count:
+
+| what the pines drew from | fps |
+| --- | --- |
+| sixteen separate frame canvases, cycling | **97** |
+| the same sixteen, frame pinned so every call hits one canvas | **199** |
+| one canvas at 27×37 | 155 |
+| one canvas at 16×24 | 152 |
+| no trees at all | 205 |
+
+Sprite **area is irrelevant** (155 against 152 for a sprite two and a half times the size). What
+costs is the state change. So `SPRITES.treeAtlas` lays all sixteen sway frames side by side in one
+canvas with `fw`/`fh` riding on it, and `drawFrameFlash(atlas, frame, x, y, flash)` — the
+atlas-aware twin of `drawSpriteFlash` — blits a source rect out of it. `SPRITES.tree` still exists
+because the atlas is baked from it, but nothing draws through it.
+
+**Anything new that the world can hold hundreds of has to do the same**, or it will quietly cost
+more than everything else in the frame put together.
+
+### Specks
+
+The same rule, one level down: the sun's dust motes and the ice's reflected stars are hundreds of
+1–2 px dots a frame, and a `fillRect` per speck with its own `fillStyle` and `globalAlpha` is a
+draw call per speck. Collecting them into a `Path2D` per bucket was tried and is **worse** —
+building and tessellating a path of 1 px rects every frame cost 1.0 ms for 240 motes, against
+~0.05 ms for what replaced it.
+
+What replaced it is `bakeSpecks(kinds, paint)`: one texture holding a cell per *(kind, brightness
+level)* — `SPECK_LV` of them, ten — so `drawSpeck(atlas, kind, alpha, x, y)` picks the level by
+alpha and the whole field draws from a single source with `globalAlpha` pinned at 1 and nothing to
+change between calls. `MOTE_CV` has two kinds (a grain, and a bright one with its catch);
+`STAR_CV` has six (three tints × plain/bright); `FLAKE_CV` has one per pixel size, because the
+[snow](#snow) is sized by the zoom and at the widest rung there are 240 flakes in frame.
+Quantising a twinkle to tenths is invisible on a 2 px speck.
+
+### What this pass costs
+
+Every one of these effects is **screen-bounded and reads nothing the sim writes** — the cloud and
+ray passes fill the view and no more, `drawIceStars` walks only the visible tiles and the sky cells
+over them, and every mote and star is culled against `WV_W`/`WV_H` before it is drawn. None of them
+feed anything back: they are safe to cheapen, skip or reorder without touching a match.
+
+Measured against `PATCH 2.02` — the build before any of this — by navigating one browser tab
+between the two servers six times and taking the median, so the same GPU and thermal state
+measures both: **191 fps before, 190 after, a difference of 0.03 ms per frame**. The atlas is what
+bought that back; before it the same scene ran at 87 fps.
+
 ### The wind field
 
 One travelling wave, in the `wind` banner of [js/sim.js](../../js/sim.js), and everything the
@@ -1280,9 +1353,8 @@ weather moves reads it rather than keeping a clock of its own:
   answer is quantised to sixteen frames, so a lookup is exact enough, and the cost stays flat when
   a zoomed-out view is holding a thousand trees.
 
-Measured against the same scene at `kWant` 1 (the widest world view, 1114×626, over the treeline)
-in a **software** rasteriser — headless Chrome on SwiftShader, so these are fill-rate numbers with
-no GPU under them and the absolute values mean nothing: the whole `renderLighting` pass costs
-~20 ms of a 100 ms frame - ~13.5 ms of it the two full-view cloud multiplies, and only ~3.2 ms
-the whole set of shafts and its motes. The bigger tree sprite (2.6× the pixel area of the 16×24 pine, ~2000
-of them at that zoom) costs about as much as the entire pass.
+On a GTX 1060 at 886×498 over the treeline the whole pass is inside measurement noise of not
+running at all — see [What this pass costs](#what-this-pass-costs). Do not profile this in a
+software rasteriser: headless Chrome on SwiftShader reports the cloud multiplies as the dominant
+cost, and on a real GPU they are nearly free while a texture change the software path does not
+care about is worth half the frame.

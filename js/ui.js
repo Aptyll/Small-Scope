@@ -152,7 +152,7 @@ function drawWorkHint(ox, oy) {
   const d = t.o && OBJECTS[t.o.type];
   const verb = !t.o ? 'CRACK ICE' : isStruct ? 'BREAK' : (d && d.verb) || 'MINE';
   // sit above the sprite: the entry's `lift` is how far above its tile the
-  // prompt goes - 33 for the 37px pine, 20 for a dead tree's 8px overhang, 10
+  // prompt goes - 23 for the 27px pine, 20 for a dead tree's 8px overhang, 10
   // for the short ones. A building is drawn up from its footprint's bottom
   // edge and can be taller than its tiles, so clear its own sprite instead.
   const lift = isStruct ? structSprite(st).height - structH(st.type) * TILE + 12 :

@@ -1531,6 +1531,59 @@ function drawHeldTool(p, px, py) {
 // Everything here runs on the SIM clock (state.windT), not on wall time, so
 // DBG.step reproduces a gust, a shaft and a twinkle exactly.
 
+// ---- specks ----
+// The sun's dust motes and the ice's reflected stars are hundreds of 1-2 px
+// dots a frame. Neither changes anything the sim can see, so they are free to
+// be drawn however is cheapest - and the cheapest is the lesson the pines
+// taught: what costs is STATE CHANGES, not pixels. A fillRect per speck with
+// its own fillStyle and globalAlpha is a draw call per speck.
+//
+// Collecting them into a Path2D per bucket was tried and is worse, not better:
+// building and tessellating a path of 1 px rects every frame cost 1.0 ms for
+// 240 motes on a GTX 1060, against 0.05 ms through this. So instead every
+// speck is BAKED - one texture, one cell per (kind, brightness level), so the
+// whole field draws from a single source with globalAlpha pinned at 1 and
+// nothing to change between calls, and the driver batches the lot.
+const SPECK_CELL = 8;   // px per cell: room for a 2 px core and a +/-3 px catch
+const SPECK_LV = 10;    // brightness levels baked per kind
+
+// paint(g, kind, alpha) draws one cell centred on (SPECK_CELL/2, SPECK_CELL/2)
+function bakeSpecks(kinds, paint) {
+  const c = document.createElement('canvas');
+  c.width = SPECK_CELL * SPECK_LV; c.height = SPECK_CELL * kinds;
+  const g = c.getContext('2d');
+  g.imageSmoothingEnabled = false;
+  for (let k = 0; k < kinds; k++) {
+    for (let l = 0; l < SPECK_LV; l++) {
+      g.save();
+      g.translate(l * SPECK_CELL, k * SPECK_CELL);
+      paint(g, k, (l + 1) / SPECK_LV);
+      g.restore();
+    }
+  }
+  return c;
+}
+
+// one speck, at the level nearest its alpha. Caller keeps globalAlpha at 1.
+function drawSpeck(atlas, kind, a, x, y) {
+  if (a <= 0.04) return;
+  const l = Math.min(SPECK_LV - 1, Math.max(0, Math.round(a * SPECK_LV) - 1));
+  ctx.drawImage(atlas, l * SPECK_CELL, kind * SPECK_CELL, SPECK_CELL, SPECK_CELL,
+    x - (SPECK_CELL >> 1), y - (SPECK_CELL >> 1), SPECK_CELL, SPECK_CELL);
+}
+
+// Snow, baked the same way. A flake is a square of 1..SPECK_CELL px - the
+// zoom decides which (renderWeather) - so the kind IS the size, and the whole
+// field draws from one texture with nothing to change between flakes. At the
+// widest rung that is 240 of them a frame, which as fillRects with their own
+// globalAlpha would be 240 draw calls.
+const FLAKE_CV = bakeSpecks(SPECK_CELL, (g, kind, a) => {
+  const s = kind + 1, o = (SPECK_CELL - s) >> 1;
+  g.globalAlpha = a;
+  g.fillStyle = '#ffffff';
+  g.fillRect(o, o, s, s);
+});
+
 // ---- cloud shadows ----
 // Two tileable noise fields baked once at their FINAL world size, drawn 1:1
 // through repeat patterns: no scaling, so no smoothing question and no seam,
@@ -1647,6 +1700,27 @@ const RAY_A = 0.092;        // peak alpha of a shaft's core
 const RAY_MOTES = 30;       // dust motes riding each shaft
 const RAY_MOTE_SPD = 0.05;  // fraction of the shaft's length a mote drifts per second
 const RAY_MOTE_LIT = 26;    // how much brighter a mote is than the shaft carrying it
+const RAY_AFTER = 4;        // s of shafts still owed once the drop's boots land
+const RAY_NOON = DAY_LEN * 0.5; // the middle of the daylight half of the cycle
+const RAY_NOON_HALF = 7.5;  // s either side of it the shafts are up: a ~15 s window
+const RAY_WINDOW_FADE = 2;  // s of ease at every edge of both windows
+
+// Dust, baked: a warm grain, and the bigger one with a white core and a
+// four-armed catch. Ten brightness levels each - a twinkle stepping in tenths
+// is invisible on a 2 px speck, and it is what lets the whole field draw with
+// no state change between motes.
+const MOTE_CV = bakeSpecks(2, (g, kind, a) => {
+  const c = SPECK_CELL >> 1;
+  g.globalAlpha = a;
+  g.fillStyle = '#ffd177';
+  if (!kind) { g.fillRect(c, c, 1, 1); return; }
+  g.fillRect(c, c, 2, 2);
+  g.fillStyle = '#fff6d8'; g.fillRect(c, c, 1, 1);
+  g.globalAlpha = a * 0.45;
+  g.fillStyle = '#ffdf9b';
+  g.fillRect(c - 2, c, 1, 1); g.fillRect(c + 3, c, 1, 1);
+  g.fillRect(c, c - 2, 1, 1); g.fillRect(c, c + 3, 1, 1);
+});
 
 // One shaft, baked once: length across, width down, alpha carrying BOTH fades -
 // a soft cross-section, and the swell-and-trail along the length. Baking it is
@@ -1680,8 +1754,23 @@ const RAY_CV = (() => {
   return c;
 })();
 
+// The shafts are not weather, they are a MOMENT. Low sun is the light of an
+// arrival and of the top of the day, and a beam that is always there stops
+// being a beam - so they are up for exactly two windows and dark the rest of
+// the time: the whole eagle ride and RAY_AFTER seconds past the landing, and a
+// ~15 s window around noon. Both ease in and out over RAY_WINDOW_FADE, and the
+// practice arena's clock never moves, so its training light never gets them.
+function rayLight() {
+  const drop = state.mode === 'drop' || inAir(player)
+    ? 1 : Math.min(1, state.rayT / RAY_WINDOW_FADE);
+  const noon = (RAY_NOON_HALF - Math.abs(state.time - RAY_NOON)) / RAY_WINDOW_FADE;
+  return Math.max(0, Math.min(1, Math.max(drop, noon)));
+}
+
 function godRays(ox, oy, day) {
-  const s = day * day;
+  // rayLight() first: outside its two windows this pass - the eight blits and
+  // the two hundred motes behind them - never runs at all
+  const s = day * day * rayLight();
   if (s <= 0.02) return;
   const t = state.windT;
   const ang = RAY_ANG + Math.sin(t * 0.09) * RAY_SWING;
@@ -1742,6 +1831,7 @@ function godRays(ox, oy, day) {
   // four-armed catch so the field is not one repeated dot. They carry most of
   // what the eye reads as "a beam", which is why the shafts can stay this faint.
   ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1; // the last shaft's blit left its own alpha behind
   for (const b of beams) {
     if (b.a <= 0.006) continue;
     const bc = Math.cos(b.ang), bs = Math.sin(b.ang);
@@ -1761,18 +1851,7 @@ function godRays(ox, oy, day) {
       const px = Math.round(b.x0 + bc * r - bs * off);
       const py = Math.round(b.y0 + bs * r + bc * off);
       if (px < -2 || py < -2 || px > WV_W + 2 || py > WV_H + 2) continue;
-      const big = h2 > 0.88;
-      ctx.globalAlpha = Math.min(1, a);
-      ctx.fillStyle = '#ffd177';
-      ctx.fillRect(px, py, big ? 2 : 1, big ? 2 : 1);
-      if (big) { // a bright one has a hot core and throws a small catch
-        ctx.fillStyle = '#fff6d8';
-        ctx.fillRect(px, py, 1, 1);
-        ctx.globalAlpha = Math.min(1, a * 0.45);
-        ctx.fillStyle = '#ffdf9b';
-        ctx.fillRect(px - 2, py, 1, 1); ctx.fillRect(px + 3, py, 1, 1);
-        ctx.fillRect(px, py - 2, 1, 1); ctx.fillRect(px, py + 3, 1, 1);
-      }
+      drawSpeck(MOTE_CV, h2 > 0.88 ? 1 : 0, a, px, py);
     }
   }
   ctx.restore();
@@ -1812,6 +1891,24 @@ const STAR_DENS = 0.55;    // share of cells holding a star
 const STAR_PAR = 0.22;     // how much of the camera's motion the sky takes: the parallax
 const STAR_BRIGHT = 0.90;  // above this a star is big enough to throw a cross
 const STAR_RIPPLE = 1.4;   // px the reflection wanders sideways in the ice
+
+// The reflected stars, baked the same way: three tints (a warm one, a cold
+// one, and plain white) each as a plain point and as a bright one throwing a
+// cross with a soft halo. Six kinds, ten levels - one texture for the whole
+// field, which at night is five hundred specks a frame.
+const STAR_TINT = ['#ffe9c6', '#cfe0ff', '#f2f7ff'];
+const STAR_CV = bakeSpecks(6, (g, kind, a) => {
+  const c = SPECK_CELL >> 1, col = STAR_TINT[kind % 3];
+  g.fillStyle = col;
+  g.globalAlpha = a;
+  g.fillRect(c, c, 1, 1);
+  if (kind < 3) return;
+  g.fillRect(c, c - 1, 1, 1); g.fillRect(c, c + 1, 1, 1);
+  g.fillRect(c - 1, c, 1, 1); g.fillRect(c + 1, c, 1, 1);
+  g.globalAlpha = a * 0.4;
+  g.fillRect(c, c - 2, 1, 1); g.fillRect(c, c + 2, 1, 1);
+  g.fillRect(c - 2, c, 1, 1); g.fillRect(c + 2, c, 1, 1);
+});
 
 // is this screen pixel over unbroken ice? the mask every reflected pixel
 // passes, arms of a cross included - without it a bright star's points spill
@@ -1861,20 +1958,14 @@ function drawIceStars(ox, oy, tx0, ty0, tx1, ty1) {
       const twk = 0.28 + 0.72 * (0.5 + 0.5 * Math.sin(t * (0.9 + q * 2.8) + q * 61));
       const a = night * (0.40 + q * 0.60) * twk;
       if (a <= 0.03) continue;
-      ctx.globalAlpha = Math.min(1, a);
-      ctx.fillStyle = q < 0.18 ? '#ffe9c6' : q < 0.34 ? '#cfe0ff' : '#f2f7ff';
-      ctx.fillRect(px, py, 1, 1);
-      if (q > STAR_BRIGHT) { // the bright few throw a cross and a soft halo
-        const arm = (dx, dy) => {
-          if (overIce(px + dx, py + dy, ox, oy)) ctx.fillRect(px + dx, py + dy, 1, 1);
-        };
-        arm(0, -1); arm(0, 1); arm(-1, 0); arm(1, 0);
-        ctx.globalAlpha = Math.min(1, a * 0.4);
-        arm(0, -2); arm(0, 2); arm(-2, 0); arm(2, 0);
-      }
+      const tint = q < 0.18 ? 0 : q < 0.34 ? 1 : 2;
+      // a bright star's cross reaches 2 px, so it only earns one well inside
+      // the sheet - which also keeps every lit pixel over unbroken ice
+      const big = q > STAR_BRIGHT && overIce(px - 2, py, ox, oy) && overIce(px + 2, py, ox, oy)
+        && overIce(px, py - 2, ox, oy) && overIce(px, py + 2, ox, oy);
+      drawSpeck(STAR_CV, big ? tint + 3 : tint, a, px, py);
     }
   }
-  ctx.globalAlpha = 1;
 }
 
 // ---- the pass ----
@@ -1967,14 +2058,17 @@ function litShots(ox, oy, now, dark) {
 // far in the camera is - the drift multiplies by the zoom so the field still
 // scrolls with the ground under it.
 function renderWeather(ex, ey) {
-  ctx.fillStyle = '#ffffff';
+  // the wrap is in WORLD px around the exact camera and the scale-up comes
+  // after it, so the field is one world view wide however far the camera is
+  // in - WV * zoomCur always covers the canvas, since sizeWorldView ceils
+  const z = zoomCur;
   for (const f of flakes) {
-    const sx = (((f.x - ex) * zoomCur) % VIEW_W + VIEW_W) % VIEW_W;
-    const sy = (((f.y - ey) * zoomCur) % VIEW_H + VIEW_H) % VIEW_H;
-    ctx.globalAlpha = f.rest > 0 ? f.a * (f.rest / FLAKE_REST) : f.a;
-    ctx.fillRect(Math.round(sx), Math.round(sy), f.size, f.size);
+    const sx = ((((f.x - ex) % WV_W) + WV_W) % WV_W) * z;
+    const sy = ((((f.y - ey) % WV_H) + WV_H) % WV_H) * z;
+    const s = Math.max(1, Math.min(SPECK_CELL, Math.round(f.size * z)));
+    drawSpeck(FLAKE_CV, s - 1, f.rest > 0 ? f.a * (f.rest / FLAKE_REST) : f.a,
+      Math.round(sx), Math.round(sy));
   }
-  ctx.globalAlpha = 1;
 }
 
 function renderVignettes() {

@@ -915,24 +915,43 @@ function windSway(tx, ty) {
 // lands (rests on the ground fading out for FLAKE_REST s) and is reborn
 // somewhere in the field - the fall is not screen-top to screen-bottom.
 const FLAKE_REST = 0.7;
+// The field is ONE WORLD VIEW in size, not one screen: a flake is a real thing
+// of a real size falling through the world, so the zoom has to reach it like it
+// reaches everything else. Count follows the world AREA on screen (zoom out and
+// you are looking at more sky, so more snow is in it) and size follows the zoom
+// (up close a flake is a fat crumb, not a pixel) - between them the amount of
+// white in frame stays about constant while the grain of it changes, which is
+// what "further away" looks like. Both are clamped: physics alone would leave
+// six flakes on screen at the closest rung and a blizzard of specks at the
+// widest, and neither reads as snow.
+const FLAKE_BASE = 70;       // flakes per 480x270 world px
+const FLAKE_MIN = 26, FLAKE_MAX = 240;
 const flakes = [];
 // a fresh flake somewhere in the field, from the given random stream
 function makeFlake(r) {
   return {
-    x: r() * VIEW_W, y: r() * VIEW_H, // offset inside the field; the camera adds the rest
+    x: r() * WV_W, y: r() * WV_H,      // offset inside the field; the camera adds the rest
     h: 30 + r() * 90,                  // world px left to fall before it lands
     rest: 0,                           // >0: landed, seconds of rest left
     spd: 9 + r() * 17, sway: 0.4 + r(), ph: r() * 9,
     size: r() < 0.75 ? 1 : 2, a: 0.35 + r() * 0.45,
   };
 }
+// EXACTLY seventy, off the main stream, and that count is load-bearing: this
+// runs before genWorld(), so adding or dropping one here shifts the rng prefix
+// and every existing seed with it. fitFlakes() does all the resizing, off fxRng.
 for (let i = 0; i < 70; i++) flakes.push(makeFlake(rng));
 
-// keep snow density constant across view sizes; resize top-ups draw from a
-// separate seeded stream so they never perturb the main rng's worldgen prefix
+// Keep snow density constant per world area, not per screen. Top-ups draw from
+// a separate seeded stream so they never perturb the main rng's worldgen prefix.
+// Called every frame from updateFx as well as from relayout(), because the ZOOM
+// moves the target as surely as a resize does; both loops are no-ops when the
+// count already matches, which is every frame but the ones a zoom is easing
+// through.
 const fxRng = mulberry32((SEED ^ 0x9e3779b9) >>> 0);
 function fitFlakes() {
-  const target = Math.round(70 * (VIEW_W * VIEW_H) / (480 * 270));
+  const target = Math.max(FLAKE_MIN, Math.min(FLAKE_MAX,
+    Math.round(FLAKE_BASE * (WV_W * WV_H) / (480 * 270))));
   while (flakes.length > target) flakes.pop();
   while (flakes.length < target) flakes.push(makeFlake(fxRng));
 }
@@ -943,11 +962,15 @@ function updateFx(dt) {
   // in every mode, and it runs on the SIM clock so DBG.step reproduces a gust
   state.windT += dt;
   state.wind = windAmp();
+  // the sun's shafts are an EVENT, not a constant: this is what is left of the
+  // one the eagle drop lit (rayLight, js/draw-world.js, owns the shape of it)
+  if (state.rayT > 0) state.rayT = Math.max(0, state.rayT - dt);
+  fitFlakes(); // the zoom moves the flake count, so this cannot wait for a resize
   for (const f of flakes) {
     if (f.rest > 0) {
       f.rest -= dt;
       if (f.rest <= 0) { // reborn: same slot, new spot in the field
-        const n = makeFlake(rng);
+        const n = makeFlake(fxRng);
         n.x += camX; n.y += camY;
         Object.assign(f, n);
       }

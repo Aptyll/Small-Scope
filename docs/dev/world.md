@@ -296,7 +296,9 @@ stars reflected in the ice under it, and nothing to carry a lamp for
 - **The wind dies with the light.** `windAmp()` squares `1 - darkness`, so the snow stops blowing
   sideways and every pine goes still over the twelve seconds of dusk and stays still until dawn
   ([the wind field](rendering.md#the-wind-field)).
-- The **sun shafts and the cloud shadows** fade out on the same curve, and the **ice** darkens
+- The **sun shafts** are not on the darkness curve at all: they are up for the eagle drop and for
+  about fifteen seconds around noon, and dark otherwise
+  ([god rays](rendering.md#light-and-weather)). The **cloud shadows** fade out on it, and the **ice** darkens
   into a mirror on it with the **reflected stars** coming up inside that
   ([the reflected sky](rendering.md#the-reflected-sky)) - so a frozen lake reads darker than the
   snow around it after dusk, and an ice hole is a hole in the reflection.

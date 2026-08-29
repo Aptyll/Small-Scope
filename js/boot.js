@@ -218,6 +218,9 @@ function landPlayer(p) {
   p.x = (best.tx + 0.5) * TILE; p.y = (best.ty + 0.5) * TILE;
   p.dropT = 0; p.vx = p.vy = 0;
   p.invuln = 2; // a beat of grace while the snow settles
+  // the shafts that lit the ride hang on a few seconds past the boots landing,
+  // then go: the light of the drop belongs to the drop (RAY_AFTER, draw-world.js)
+  if (p === player) state.rayT = RAY_AFTER;
   burst(p.x, p.y - 2, '#f4f7ff', 16, 70, 0.5, true);
   if (p === player) {
     state.mode = 'play';

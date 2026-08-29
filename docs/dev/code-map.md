@@ -202,6 +202,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the overhead frame and the name over it: where the stack sits, and centring odd-width text on a model | `FRAME_DX`, `drawHealthBar`, `centreTextX` | `entity draw` |
 | the turret's rotating gun, its bolts, its aim line and muzzle flash | `drawTurretHead`, `drawBolt`, `drawTurretFx`, `paintRimmed` | `entity draw` |
 | which sway frame a pine is wearing (off the wind wave) | `treeFrame` | `entity draw` |
+| one baked speck (mote, star, flake) at a quantised brightness, and the atlas behind it | `bakeSpecks`, `drawSpeck` | `light & weather` |
+| whether the sun shafts are up at all (the drop window, and noon) | `rayLight` | `light & weather` |
 | sun shafts, drifting cloud shadows, the tileable noise they are baked from | `godRays`, `cloudShade`, `cloudLayer`, `bakeCloud`, `pnoise` | `light & weather` |
 | the ice's night mirror + the parallax stars in it, and the "is this pixel on unbroken ice" mask | `drawIceStars`, `overIce` | `light & weather` |
 | the night colour, a lit shot's halo, snow (world-space flakes, see `fx updates`), vignette | `renderLighting`, `litShots`, `renderWeather` | `light & weather` |
