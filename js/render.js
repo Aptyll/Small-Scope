@@ -260,12 +260,12 @@ function render() {
     const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
     const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
     if (o.type === 'tree') {
-      // 20x27, bottom-aligned on its own tile: (px - 2, py - 11) puts the
-      // trunk on the tile's centre line and hangs the canopy over the lower
-      // third of the tile above. Which of the sixteen frames it wears is the
-      // WIND's business, not the tree's - see treeFrame() in js/draw-world.js -
-      // and it comes off the one atlas texture, never a per-frame canvas.
-      drawFrameFlash(SPRITES.treeAtlas, treeFrame(d.tx, d.ty), px - 2 + sh, py - 11, o.flash);
+      // 27x37, bottom-aligned on its own tile: (px - 5, py - 21) puts the
+      // trunk on the tile's centre line and hangs the canopy over the tile
+      // above. Which of the sixteen frames it wears is the WIND's business,
+      // not the tree's - see treeFrame() in js/draw-world.js - and it comes
+      // off the one atlas texture, never a per-frame canvas.
+      drawFrameFlash(SPRITES.treeAtlas, treeFrame(d.tx, d.ty), px - 5 + sh, py - 21, o.flash);
     } else if (o.type === 'deadTree') {
       drawSpriteFlash(SPRITES.deadTree[o.variant], px + sh, py - 8, o.flash);
     } else if (o.type === 'den') {

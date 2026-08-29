@@ -79,11 +79,9 @@ White/Green/Blue/Purple/Gold — where the rarity itself is the only colour that
 has to a single gear icon.
 
 **The pine is sixteen frames of one tree**, and the one sprite here that was not drawn by hand:
-`treeSway` is `docs/media/new_media/*.png` area-downscaled to **20×27** and snapped back onto
-`TSPAL` (fourteen colours, `bake`d like everything else). The originals are 27×37, which walled
-the treeline in — 27 px of canopy on a 16 px tile grid is a 69% overlap — so the sprite came down
-to 20×27, which reads as a forest of trees rather than one green mass. It draws at
-`(px - 2, py - 11)` with its trunk on the tile's centre line, and **through `SPRITES.treeAtlas`,
+`treeSway` is `docs/media/new_media/*.png` cropped to **27×37** and snapped onto
+`TSPAL` (fourteen colours, `bake`d like everything else). It draws at
+`(px - 5, py - 21)` with its trunk on the tile's centre line, and **through `SPRITES.treeAtlas`,
 never through `SPRITES.tree`** — all sixteen frames in one canvas, because a `drawImage` that
 changes source texture cannot be batched and a wide view holds a thousand pines
 ([rendering.md](rendering.md#drawing-a-thousand-of-something)). The **source file order is

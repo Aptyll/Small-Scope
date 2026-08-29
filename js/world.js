@@ -19,9 +19,9 @@ function objAt(tx, ty) { return inWorld(tx, ty) ? objects[idx(tx, ty)] : null; }
 // type is one entry here, plus its draw branch in render() and what a swing
 // does to it in hitObject(): checklists.md#common-changes.
 const OBJECTS = {
-  // lift 23: the pine's canopy reaches 11 px above its own tile (drawn at
-  // py - 11), and the prompt clears it by the same 12 px everything else gets
-  tree:     { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 23,
+  // lift 33: the pine's canopy reaches 21 px above its own tile (drawn at
+  // py - 21), and the prompt clears it by the same 12 px everything else gets
+  tree:     { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 33,
               mm: [52, 100, 82],   map: treeMapPx },
   deadTree: { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 20,
               mm: [138, 128, 116], map: [150, 132, 108] },

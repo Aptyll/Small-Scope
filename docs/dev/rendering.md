@@ -174,8 +174,8 @@ label-value rows — one ESC-menu toggle or F3; only the fps line in `title`) �
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
-A **tree** is 20×27 and draws at `(px - 2, py - 11)` — bottom-aligned on its own tile, trunk on
-the tile's centre line, canopy overhanging the lower third of the tile above (which the `draws`
+A **tree** is 27×37 and draws at `(px - 5, py - 21)` — bottom-aligned on its own tile, trunk on
+the tile's centre line, canopy overhanging the tile above (which the `draws`
 loop's existing 1-tile top margin and 2-tile bottom margin already cover). Which of its sixteen
 sway frames it wears comes from `treeFrame(tx, ty)` off the [wind field](#the-wind-field), never
 from a clock of its own, and it is blitted out of **one atlas texture** rather than a per-frame
