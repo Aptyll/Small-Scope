@@ -201,7 +201,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the stun tell: orbiting sparks, and the plate that carries them on a player's frame while it lasts | `drawStunStars`, the overhead block inside `drawPlayer` | `entity draw` |
 | the overhead frame and the name over it: where the stack sits, and centring odd-width text on a model | `FRAME_DX`, `drawHealthBar`, `centreTextX` | `entity draw` |
 | the turret's rotating gun, its bolts, its aim line and muzzle flash | `drawTurretHead`, `drawBolt`, `drawTurretFx`, `paintRimmed` | `entity draw` |
-| which sway frame a pine is wearing (off the wind wave) | `treeFrame` | `entity draw` |
+| which sway frame a pine is wearing (off the wind field) | `treeFrame` | `entity draw` |
 | one baked speck (mote, star, flake) at a quantised brightness, and the atlas behind it | `bakeSpecks`, `drawSpeck` | `light & weather` |
 | whether the sun shafts are up at all (the drop window, and noon) | `rayLight` | `light & weather` |
 | sun shafts, drifting cloud shadows, the tileable noise they are baked from | `godRays`, `cloudShade`, `cloudLayer`, `bakeCloud`, `pnoise` | `light & weather` |

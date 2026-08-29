@@ -117,8 +117,9 @@ lives in `docs/dev/*.md` beside the code it protects.
 - **Nothing on the map emits light, and night is a colour, not a darkness** —
   [`renderLighting`](docs/dev/rendering.md#light-and-weather) grades the finished world frame, so
   a new glowing thing adds a pass there rather than registering anywhere.
-- **Anything the weather moves reads `windSway(tx, ty)`**, never a clock of its own: one wave
-  (the `wind` banner, js/sim.js) drives the snow and every pine's frame, and it dies at dusk.
+- **Anything the weather moves reads `windSway(tx, ty)`**, never a clock of its own: one field
+  (the `wind` banner, js/sim.js — waves summed on crossing bearings under a gust envelope) drives
+  the snow and every pine's frame, and it dies at dusk.
 - **A sprite the world holds hundreds of draws from ONE texture** — a `drawImage` whose source
   canvas differs from the last cannot be batched, and the pines measured 97 fps as sixteen
   canvases against 199 as one atlas: [rendering](docs/dev/rendering.md#drawing-a-thousand-of-something).

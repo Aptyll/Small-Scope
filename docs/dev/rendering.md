@@ -1236,6 +1236,15 @@ the other way round:
   ground is one continuous swell of dimming with **no edge anywhere in it**. `lo` sits just above
   the median, which keeps roughly half the sky genuinely open: a flat plateau of *clear* is fine,
   it is a flat plateau of *shade* that reads as a blob.
+  **Contrast is set on the ramp, not by turning the whole thing up.** `CLOUD_CURVE` (a power > 1)
+  bends the thin half of the ramp thinner, and `CLOUD_GAIN` then pushes what is left into the
+  clamp, so open snow stays open and the deep part of a cloud is the only part that really
+  darkens — the swing across the ground is what grows, not the average. Measured off the two baked
+  textures at full daylight, as a percentage of the ground's own brightness left standing: the
+  deepest 0.1 % of the field sits at **61 %** and the median at **97 %**, against 82 % and 98 %
+  before the curve — a light-to-dark swing of **32 points against 13**, with the mean moving only
+  97 → 94. That is the number to check when retuning it; the shadow tint (`CLOUD_TINT`, cool, never
+  grey) is the other half of how hard it bites.
   **The practice arena is exempt** (`PRACTICE`): a shadow drifting over the dummy's meter or the
   parkour's ice would change what those instruments are measuring between one lap and the next, and
   that room's whole point is that its light never changes. (It gets no shafts either, for free —
@@ -1333,25 +1342,55 @@ bought that back; before it the same scene ran at 87 fps.
 
 ### The wind field
 
-One travelling wave, in the `wind` banner of [js/sim.js](../../js/sim.js), and everything the
+One field, in the `wind` banner of [js/sim.js](../../js/sim.js), and everything the
 weather moves reads it rather than keeping a clock of its own:
 
 - `state.windT` is its clock, stepped in `updateFx` — the **sim** clock, not wall time, so
   `DBG.step` reproduces a gust, a shaft and a twinkle exactly. Every animated thing in this
   section runs off it.
 - `state.wind` is the field's strength, 0..1: `windAmp()` **squares the daylight**, so the air
-  goes still across dusk and is dead calm by full dark.
-- `windSway(tx, ty)` is the signed sway at a tile, −1..1: a fast ripple times a long slow gust
-  envelope travelling the same heading, times the strength. Under `WIND_STILL` it returns a flat
-  0 and every pine simply holds its rest frame.
+  goes still across dusk and is dead calm by full dark. Two swells on coprime periods
+  (`WIND_SWELL`, `WIND_SWELL2`) ride under that, so the day's weather never settles into a rhythm.
+- `windSway(tx, ty)` is the signed sway at a tile, −1..1, and it is a **sum of waves on crossing
+  bearings**, not one wave. A single travelling sine over a grid is a marching corduroy — straight,
+  evenly spaced, every tree at full lean — which is the one thing air does not look like. What
+  crosses the field instead:
+  - **three ripples** (`WIND_R1*`…`WIND_R3*`), each its own bearing as a `(kx, ky)` in rad per
+    tile, its own speed and its own share of the amplitude. Two run with the prevailing down-right
+    air and the third cuts across it. Their amplitudes sum to **1.44**, deliberately past 1: three
+    waves at random phase mostly cancel, so a set summing to exactly 1 leaves the forest
+    permanently half-hearted. The result is clamped to ±1 — at sixteen quantised frames a flat top
+    is invisible, and a wrap past +1 would jerk a tree the wrong way.
+  - **one bend** (`WIND_W*`), a long slow wave folded into the *spatial phase* of all three
+    ripples at once — phase modulation, the trick FM synthesis is. It meanders the whole rustle
+    together, which is what turns the plaid a plain sum of sines gives into wandering fronts.
+  - **a gust envelope**: two waves an order of magnitude longer than the ripples (~85 and ~100
+    tiles against ~18) on crossing bearings, summed and smoothstepped, running between `WIND_LULL`
+    and `WIND_GUST_PEAK`. The sum is what makes a gust a *patch* of field rather than a stripe of
+    it; the smoothstep widens the calm between gusts and squares up their shoulders. Both ends are
+    set against the **view**, not the world: a screen is barely wider than one gust, so the floor
+    cannot sit near zero (a player parked in a lull would be watching a dead forest) and the peak
+    deliberately overshoots 1 so the heart of a gust runs into the clamp and throws those trees
+    fully over.
+
+  Sampled over a view for a minute of sim, the field carries the same amount of motion as the
+  single wave it replaced — mean **1.64** frames off rest against 1.66, and **7.6 %** of tiles
+  hard over (≥5 frames) against 7.4 % — but distributed as gusts and lulls rather than evenly:
+  **26.6 %** of tiles are perfectly still at any moment, against 20.5 %. Under `WIND_STILL` it
+  returns a flat 0 and every pine simply holds its rest frame.
 - `treeFrame(tx, ty)` (js/draw-world.js) turns that into one of the sixteen sway frames:
   `hash2` picks the frame the tree *rests* on — which is what keeps a dead-calm forest from
   reading as one stamp repeated — and the sway walks it ±8 around that. The frames are laid out in
   [js/sprites.js](../../js/sprites.js) as a **cycle** ordered so consecutive frames differ least,
   so ±8 in either direction is smooth and so is the wrap.
-- `wsin` is a 256-entry sine table. `windSway` is read once per visible pine per frame and its
-  answer is quantised to sixteen frames, so a lookup is exact enough, and the cost stays flat when
-  a zoomed-out view is holding a thousand trees.
+- `wsin` is a 256-entry sine table, and it is why the field can afford to be six waves: `windSway`
+  is read once per visible pine per frame and does six lookups, not six `Math.sin` calls, and its
+  answer is quantised to sixteen frames, so a table is exact enough. The cost stays flat when a
+  zoomed-out view is holding a thousand trees. Negative phases are fine — `|0` then `& 255` wraps
+  them, at the price of a truncation a 256th of a cycle wide. Measured over 2000 tiles (about what
+  the widest view holds), the six-wave field costs **0.077 ms a frame against 0.030** for the
+  single wave — 0.3 % of a 60 fps budget, and this is the one number here that *is* safe to take
+  from a headless run, because it is V8 arithmetic rather than the rasteriser.
 
 On a GTX 1060 at 886×498 over the treeline the whole pass is inside measurement noise of not
 running at all — see [What this pass costs](#what-this-pass-costs). Do not profile this in a

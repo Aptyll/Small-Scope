@@ -301,12 +301,14 @@ the slot count (`MAX_PLAYER_SLOTS`, js/player.js) and the bot ranges (`AI_SIGHT`
 the `TOOLS` and `BITS` tables and the loot rates (`ROCK_DROP`/`TREE_DROP`/`CHEST_TOOL`/`LOOT_TOOL`)
 in js/tools.js, the flight-path constants beside `steerBit`, the damage roll in `emitBit()`,
 `TREE_RARE_CHANCE` in `treeRare()`, the darkness ramp in
-`update()`, the `WIND_*` block in js/sim.js (how hard and how fast the field rustles, and how
-fast it dies at dusk) and the `CLOUD_*` / `RAY_*` / `NIGHT_*` / `STAR_*` blocks in the
+`update()`, the `WIND_*` block in js/sim.js (the three ripples, the bend that meanders them, the
+gust envelope's floor and peak, and how fast it all dies at dusk) and the
+`CLOUD_*` / `RAY_*` / `NIGHT_*` / `STAR_*` blocks in the
 `light & weather` banner of js/draw-world.js (including `RAY_AFTER` / `RAY_NOON_HALF`, which decide
 how long the sun shafts are up for), and `FLAKE_BASE` / `FLAKE_MIN` / `FLAKE_MAX` beside the flake
 block in js/sim.js. Several of those bake at LOAD, so a change to them needs a reload rather than
-just a repaint: `bakeCloud`'s `lo`/`hi` ramp (both cloud textures), the beam texture `RAY_CV`, and
+just a repaint: `bakeCloud`'s `lo`/`hi` ramp, its `CLOUD_CURVE` / `CLOUD_GAIN` contrast shaping and
+`CLOUD_TINT` (all three baked into both cloud textures), the beam texture `RAY_CV`, and
 the speck atlases `MOTE_CV` / `STAR_CV` / `FLAKE_CV` (colour and shape are baked in; only the alpha
 that picks a level is live).
 

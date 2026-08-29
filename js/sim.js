@@ -865,44 +865,97 @@ function updatePlayer(p, dt) {
 // ------------------------------------------------------------ wind
 // One wind field, and everything the weather moves reads it: the snow's
 // drift, and which of its 16 sway frames every pine on the field is wearing
-// (treeFrame, js/draw-world.js). It is a TRAVELLING WAVE over the tile grid
-// rather than one number - a gust is a front that crosses the treeline, so
-// the forest rustles in order instead of twitching as one - and it dies with
-// the light: windAmp() squares the daylight, so the air goes still over dusk
-// and by full dark every tree is holding its own rest frame.
-const WIND_KX = 0.29, WIND_KY = 0.19; // rad per tile: the wave's heading, down-right
-const WIND_SPD = 2.4;                 // rad/s: how fast a ripple crest crosses the grid
-const WIND_GUST_K = 0.13;             // the gust envelope's wavelength, per unit of spatial phase
-const WIND_GUST_SPD = 0.5;            // rad/s: how fast a gust front travels
-const WIND_LULL = 0.22;               // the envelope's floor: daylight is never dead calm
-const WIND_SWELL = 31;                // s: the whole field's slow breathing
+// (treeFrame, js/draw-world.js). It is not one number, and it is not one wave
+// either: a single travelling sine over the tile grid is a marching stripe,
+// and a forest does not do that. What crosses the field is a SUM OF WAVES on
+// different bearings, the way an ocean surface is - three fast ripples
+// carrying the rustle, under a long two-wave gust envelope deciding where the
+// air is actually moving at all. No period here is a multiple of another, so
+// no two crests ever meet twice in the same place and the pattern over the
+// treeline never repeats. It dies with the light: windAmp() squares the
+// daylight, so the air goes still over dusk and by full dark every tree is
+// holding its own rest frame.
+//
+// A wave is (kx, ky) rad per TILE - the bearing is the vector and its length
+// is the wavelength - plus rad/s of travel and a share of the amplitude. The
+// three ripple bearings are deliberately spread: two run with the prevailing
+// down-right air, the third cuts across it, and that crossing is what breaks a
+// front into patches instead of bands.
+// The amplitudes deliberately sum past 1: three waves at random phase mostly
+// cancel, so a set that summed to exactly 1 would leave the forest permanently
+// half-hearted. At 1.44 the ordinary rustle matches the old single wave's and
+// a gust that lands all three crests together maxes the sway out.
+const WIND_R1X = 0.29, WIND_R1Y = 0.19, WIND_R1S = 2.40, WIND_R1A = 0.72;
+const WIND_R2X = 0.16, WIND_R2Y = -0.33, WIND_R2S = 1.61, WIND_R2A = 0.42;
+const WIND_R3X = 0.47, WIND_R3Y = 0.41, WIND_R3S = 3.07, WIND_R3A = 0.30;
+// The crests are BENT before they travel. Plain sines added together give
+// straight parallel fronts crossing each other - a plaid, which is exactly
+// what air does not look like - so one long slow wave is folded into the
+// spatial phase of all three ripples at once (phase modulation, the same
+// trick FM synthesis is). It meanders the whole rustle together, so the
+// fronts wander over the field instead of ruling lines across it.
+const WIND_WX = 0.021, WIND_WY = 0.034, WIND_WS = 0.27, WIND_WARP = 2.6;
+// The gust envelope: two waves an order of magnitude longer than the ripples
+// (~85 and ~100 tiles against ~18), one running with the air and one across
+// it. Summing them is what makes a gust a PATCH of field rather than a stripe
+// of it, and the smoothstep on the sum is what makes it arrive - it widens the
+// calm between gusts and squares up their shoulders, so the eye reads a front
+// crossing the treeline rather than the whole forest breathing in and out.
+// Their wavelength is set against the VIEW, not the world: much longer and a
+// gust stops being something you watch arrive and becomes the weather.
+const WIND_G1X = 0.062, WIND_G1Y = 0.041, WIND_G1S = 0.62, WIND_G1A = 0.60;
+const WIND_G2X = -0.034, WIND_G2Y = 0.053, WIND_G2S = 0.37, WIND_G2A = 0.40;
+// The envelope's floor and its peak. The floor is set against the VIEW: a
+// screen is barely wider than one gust, so a floor near zero would leave a
+// player parked in a lull staring at a dead forest for seconds at a time. The
+// peak deliberately overshoots 1, so the heart of a gust runs into the clamp
+// and throws those trees fully over - a gust that only ever reached the same
+// lean as ordinary air would not read as a gust at all.
+const WIND_LULL = 0.26, WIND_GUST_PEAK = 1.30;
+const WIND_SWELL = 31, WIND_SWELL2 = 19; // s: the field's two breathing periods, coprime
 const WIND_STILL = 0.02;              // under this the trees simply hold their rest frame
 
-// A 256-entry sine table. windSway() is read once per visible pine per frame
-// and its answer is quantised to one of sixteen frames, so a table lookup is
-// exact enough - and it keeps the cost flat when a zoomed-out view is holding
-// a thousand trees.
+// A 256-entry sine table, and it is what lets the field afford to be six
+// waves: windSway() is read once per visible pine per frame and does six
+// lookups rather than six Math.sin calls. Its answer is quantised to one of
+// sixteen frames, so a table is exact enough, and the cost stays flat when a
+// zoomed-out view is holding a thousand trees. Negative phases are fine - the
+// `| 0` then `& 255` wraps them, at the price of a truncation a 256th of a
+// cycle wide, which no tree can show.
 const WSIN = new Float32Array(256);
 for (let i = 0; i < 256; i++) WSIN[i] = Math.sin(i / 256 * Math.PI * 2);
 function wsin(a) { return WSIN[((a * (256 / (Math.PI * 2))) | 0) & 255]; }
 
-// the field's strength right now, 0..1; updateFx parks it in state.wind
+// The field's strength right now, 0..1; updateFx parks it in state.wind. Two
+// swells on coprime periods rather than one, so the day's weather rises and
+// falls without ever settling into a rhythm you could count.
 function windAmp() {
-  const day = 1 - state.darkness;
-  return day * day * (0.55 + 0.45 * wsin(state.windT * (Math.PI * 2 / WIND_SWELL)));
+  const day = 1 - state.darkness, t = state.windT;
+  return day * day * (0.52 + 0.30 * wsin(t * (Math.PI * 2 / WIND_SWELL))
+    + 0.18 * wsin(t * (Math.PI * 2 / WIND_SWELL2) + 1.7));
 }
 
-// The signed sway at a tile, -1..1: the ripple, times the gust envelope,
-// times the field's strength. Both waves travel the same heading, the gust
-// far longer and slower than the ripple, which is what makes one band of
-// movement read as a gust crossing the field rather than as noise.
+// The signed sway at a tile, -1..1: the three ripples summed, times the gust
+// envelope, times the field's strength. The ripples carry the rustle and the
+// envelope says how much of it this corner of the field is getting, so a gust
+// reads as a body of moving air crossing the treeline - trees ahead of it
+// still, trees inside it working, trees behind it settling - instead of the
+// whole forest rustling on one clock. The sum can reach 1.44 where all three
+// crests land together, so it is clamped: at sixteen quantised frames a flat
+// top is invisible, and a wrap past +1 would jerk a tree the wrong way.
 function windSway(tx, ty) {
   const w = state.wind;
   if (w <= WIND_STILL) return 0;
-  const sp = tx * WIND_KX + ty * WIND_KY;
-  const gust = WIND_LULL + (1 - WIND_LULL) *
-    (0.5 + 0.5 * wsin(sp * WIND_GUST_K + state.windT * WIND_GUST_SPD));
-  return wsin(sp + state.windT * WIND_SPD) * gust * w;
+  const t = state.windT;
+  const bend = WIND_WARP * wsin(tx * WIND_WX + ty * WIND_WY + t * WIND_WS);
+  const r = WIND_R1A * wsin(tx * WIND_R1X + ty * WIND_R1Y + t * WIND_R1S + bend)
+    + WIND_R2A * wsin(tx * WIND_R2X + ty * WIND_R2Y + t * WIND_R2S + bend)
+    + WIND_R3A * wsin(tx * WIND_R3X + ty * WIND_R3Y + t * WIND_R3S + bend);
+  const e = 0.5 + 0.5 * (WIND_G1A * wsin(tx * WIND_G1X + ty * WIND_G1Y + t * WIND_G1S)
+    + WIND_G2A * wsin(tx * WIND_G2X + ty * WIND_G2Y + t * WIND_G2S));
+  const gust = WIND_LULL + (WIND_GUST_PEAK - WIND_LULL) * (e * e * (3 - 2 * e));
+  const s = r * gust * w;
+  return s < -1 ? -1 : s > 1 ? 1 : s;
 }
 
 // ------------------------------------------------------------ fx updates

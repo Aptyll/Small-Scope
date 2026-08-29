@@ -1593,7 +1593,13 @@ const CLOUD_A = 768, CLOUD_B = 448;       // world px: the two layers' periods
 const CLOUD_A_VX = 11, CLOUD_A_VY = 4.5;  // world px/s of drift, layer A
 const CLOUD_B_VX = 17, CLOUD_B_VY = 7.5;  // ... and layer B, faster and smaller
 const CLOUD_DEEP = 1;                     // ceiling on a layer's baked alpha
-const CLOUD_A_STR = 0.58, CLOUD_B_STR = 0.26; // and how much of each layer reaches the ground
+const CLOUD_A_STR = 0.60, CLOUD_B_STR = 0.30; // and how much of each layer reaches the ground
+// Contrast, not dimming. CLOUD_CURVE bends the thin half of the ramp thinner
+// before CLOUD_GAIN pushes the whole thing, so open snow stays open and the
+// deep part of a cloud is what actually darkens: the light-to-dark swing over
+// the ground roughly doubles while the field's average brightness barely moves.
+const CLOUD_CURVE = 1.35, CLOUD_GAIN = 1.9;
+const CLOUD_TINT = [126, 143, 186];       // a cool shadow, never a grey one
 
 // Value noise on a WRAPPED lattice: hashing (x mod per) is the whole trick -
 // it makes the field seamless at the texture edge, which is what lets one
@@ -1618,8 +1624,10 @@ function pnoise(x, y, perX, perY) {
 // spans nearly three standard deviations of the field, so almost every pixel
 // lands somewhere on the ramp and hardly any reaches either end - what crosses
 // the ground is one continuous swell of dimming with no edge anywhere in it.
-// The extra `^1.35` bends the low end down so the bright half stays bright and
-// only the deepest part of a cloud actually darkens much.
+// CLOUD_CURVE / CLOUD_GAIN then set the CONTRAST of that swell without giving
+// it an edge: the curve bends the thin half down so the bright half stays
+// bright, and the gain pushes what is left, so the deep part of a cloud is the
+// only part that really darkens.
 function bakeCloud(size, octX, octY, lo, hi) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -1630,9 +1638,10 @@ function bakeCloud(size, octX, octY, lo, hi) {
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const n = oc(x, y, 1) * 0.50 + oc(x, y, 2) * 0.27 + oc(x, y, 4) * 0.15 + oc(x, y, 8) * 0.08;
-      const a = Math.max(0, Math.min(1, (n - lo) / (hi - lo)));
+      const r = Math.max(0, Math.min(1, (n - lo) / (hi - lo)));
+      const a = Math.min(1, Math.pow(r, CLOUD_CURVE) * CLOUD_GAIN);
       const i = (y * size + x) * 4;
-      d[i] = 152; d[i + 1] = 168; d[i + 2] = 204; // a cool shadow, never a grey one
+      d[i] = CLOUD_TINT[0]; d[i + 1] = CLOUD_TINT[1]; d[i + 2] = CLOUD_TINT[2];
       d[i + 3] = Math.round(a * (255 * CLOUD_DEEP));
     }
   }
