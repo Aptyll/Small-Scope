@@ -18,7 +18,7 @@ function makeRobot(sp) {
       }
     }
   }
-  return {
+  const b = {
     x: sx, y: sy, hp: t.botHp, maxHp: t.botHp,
     home: sp, team: sp.team === undefined ? 0 : sp.team, owner: sp.owner === undefined ? 0 : sp.owner,
     tgt: null, workT: 0, atkCd: 0, avoid: null, avoidT: 0, nav: null,
@@ -27,8 +27,13 @@ function makeRobot(sp) {
     atkAim: null, mad: null, madT: 0, madX: 0, madY: 0,
     carry: 0, // gold held, deposited at home
     moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
-    animT: rng() * 2, flash: 0, kbx: 0, kby: 0, stunT: 0, stunMax: 0, dead: false,
+    animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
   };
+  // a worker takes every state a player slot can be put under - snared,
+  // netted, marked, alight - written by the same setters (`status effects`,
+  // js/actions.js). A bot rolling out of the bay is not a different rulebook.
+  clearUnitStatus(b);
+  return b;
 }
 
 // A worker is a 12x10 body standing on its treads at b.y + 4, so its middle
@@ -76,6 +81,10 @@ function updateRobot(b, dt) {
   b.atkCd = Math.max(0, b.atkCd - dt);
   b.kbx *= Math.pow(0.02, dt);
   b.kby *= Math.pow(0.02, dt);
+  // every timed state on the chassis first - a burn can scrap it, and a wreck
+  // must not then drive on (js/actions.js, `status effects`)
+  updateUnitStatus(b, dt);
+  if (b.dead) return;
   if (b.stunT > 0) {
     // rattled: the brain is off, but a shove still slides the chassis
     b.stunT = Math.max(0, b.stunT - dt);
@@ -99,13 +108,16 @@ function updateRobot(b, dt) {
     return n.d;
   };
 
-  // loiter around an anchor - home with no orders, the flag's post with them
+  // loiter around an anchor - home with no orders, the flag's post with them.
+  // Steered by hand rather than routed, so the net/crater drag is folded in
+  // here the way navStep does it for every walk with a goal (js/actions.js)
   const wander = (ax, ay) => {
     if (ax === undefined) { ax = hx; ay = hy; }
+    const drag = unitMoveMul(b);
     if (b.moveT > 0) {
       b.moveT -= dt;
       moving = true;
-      const mv = moveEntity(b, (b.mvx * 24 + b.kbx) * dt, (b.mvy * 24 + b.kby) * dt, 3);
+      const mv = moveEntity(b, (b.mvx * 24 * drag + b.kbx) * dt, (b.mvy * 24 * drag + b.kby) * dt, 3);
       if (mv.blockedX || mv.blockedY) b.moveT = 0;
     } else {
       b.idleT -= dt;
@@ -478,16 +490,16 @@ function robotFoeUnit(b, range) {
   return best;
 }
 // the blow itself: a building goes through hurtStruct (the same path an E
-// swing takes), a body through damagePlayer / hurtRobot, all credited to the
-// bay's owner so a worker kill still pays and still levels
+// swing takes), any BODY through the one blow every unit takes (hurtUnit,
+// js/actions.js), all credited to the bay's owner so a worker kill still pays
+// and still levels
 function robotStrike(b, e, pt) {
   const src = players[b.owner] || null;
   const d = Math.hypot(pt.x - b.x, pt.y - (b.y - 1)) || 1;
   const nx = (pt.x - b.x) / d, ny = (pt.y - (b.y - 1)) / d;
   if (nearPlayer(b.x, b.y)) SFX.swing();
   if (e.tx !== undefined) hurtStruct(e, ROBOT_DMG, src);
-  else if (e.input) damagePlayer(e, ROBOT_DMG, nx, ny, src, 'worker');
-  else hurtRobot(e, ROBOT_DMG, nx, ny, src);
+  else hurtUnit(e, ROBOT_DMG, nx, ny, src, { cause: 'worker' });
 }
 
 // ---- who can be ordered, and what the held press is aiming at -----------

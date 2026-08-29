@@ -303,6 +303,11 @@ function navStep(e, gx, gy, r, spd, dt, reach) {
   const n = navTo(e, gx, gy, r, reach, dt);
   if (!n.ok) return n;
   e.mvx = n.dx; e.mvy = n.dy;
+  // The one place a self-mover's speed is spent, so it is the one place the
+  // net, the crater and the snare's jaws have to be folded in: unitMoveMul
+  // (js/actions.js) is abilityMoveMul's twin for everything that is not a
+  // slot, and a rooted animal or bot comes out of it at zero.
+  spd *= unitMoveMul(e);
   const mv = moveEntity(e, (n.dx * spd + e.kbx) * dt, (n.dy * spd + e.kby) * dt, r);
   if ((mv.blockedX || mv.blockedY) && e.nav.replanT < NAV_REPLAN - 0.2) e.nav.replanT = 0;
   return n;

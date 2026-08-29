@@ -149,8 +149,13 @@ with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` k
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
 **projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`stick`/`col` and an
 8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
-envelope in `toolMods`. Both need a `name` and a `blurb` — the tooltip prints them, and they are
-the only words the kind ever gets.
+envelope in `toolMods` — and, because cells fold in whatever order they sit in, that `mod` must
+write order-independent values (a max or a set, never a multiply of what is already there), or two
+of them in one tool give different tools depending on which cell holds which. Both need a `name`
+and a `blurb` — the tooltip prints them, and they are the only words the kind ever gets. A modifier
+that carries a **damage type** sets `m.type` (see `DMG_TYPES`, js/actions.js) and the arrow carries
+it to `hurtUnit` with no per-kind code; add its numbers to `tipBit`'s modifier branch, which reads
+them back out of `toolMods` rather than restating them.
 
 **It also needs a `TECH` node**, or it is unreachable: the loot pool is built from what the
 profile has *researched*, so a kind with no node is never rolled and never appears in any match.
@@ -217,10 +222,37 @@ player somewhere the player can read (a map dot, an icon), gate that on
 `concealOf(p) >= PRONE_MAP` the way both maps do. See
 [gameplay.md](gameplay.md#prone-under-the-snow).
 
-**Adding a way to hurt a player** — pass the attacker as `damagePlayer`'s `src` (or, when the
-world did it, a `DEATH_CAUSE` key as `cause`). Miss it and the kill is uncredited on the TAB
-scoreboard and the event feed reports the death as an accident. See
+**Adding a way to hurt anything** — call `hurtUnit(e, dmg, nx, ny, src, o)`, never `damagePlayer` /
+`hurtAnimal` / `hurtRobot` directly, and put a state on a body with its setter (`stunUnit`,
+`rootUnit`, `slowUnit`, `netUnit`, `markUnit`, `igniteUnit`). One call, and a slot, a deer and a
+worker bot all take it; the three per-kind functions under `hurtUnit` exist for what is genuinely
+per-kind and are not the entry point. For an **area** effect sweep `unitsHit(src, x, y, r)` (a blow:
+i-framed slots dropped) or `unitsNear` (a lasting ground condition, which is not dodged by having
+just taken a hit) rather than writing a loop per kind — that loop is exactly how wildlife and bots
+fall out of a feature. Still pass the attacker as `src` (or, when the world did it, a `DEATH_CAUSE`
+key as `o.cause`): miss it and the kill is uncredited on the TAB scoreboard and the event feed
+reports the death as an accident. A **new damage type** is one row in `DMG_TYPES`; if it lingers on
+the body the way `fire` does, it also needs a `DOT_CAUSE` key, or every bite is eaten by the 0.7 s
+of i-frames the previous one granted. See
+[gameplay.md](gameplay.md#status-effects-one-set-for-every-unit) and
 [multiplayer.md](multiplayer.md#kills-and-the-event-feed).
+
+**Adding a kind of unit (neutral fauna included)** — a new thing that walks and can be hit is
+pushed into `animals` (neutral: give it no `team`, and `unitFoe` makes it fair game to everyone) or
+`robots` (sided). What it gets for free, with no edit at the call sites: every class ability, the
+roll sweep, every bit the left button fires, all six status effects, and the four on-body tells.
+What it must do to get them:
+
+1. build it through a maker that calls **`clearUnitStatus(e)`** (as `makeAnimal`/`makeRobot` do),
+   or it has no status fields and the setters write onto a body nothing reads;
+2. run **`updateUnitStatus(e, dt)`** at the top of its own update, and bail if the burn killed it —
+   a corpse must not then take a step;
+3. move through **`navStep`** (which spends `unitMoveMul`), or fold `unitMoveMul(e)` in by hand if
+   it steers itself the way a bird's flight and a bot's loiter do — otherwise nothing slows it;
+4. call **`drawUnitStates(e, px, py, w, h, now)`** in its draw pass, or its states are invisible and
+   unplayable-around;
+5. join `separateUnits`, `UNIT_MASS` and `unitRadius` (see the CLAUDE.md rule), and give it a hit
+   test the way `animalHit`/`robotHit` do — that is the one thing the arrow loop asks per kind.
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the **build** wheel draws the local team's `SPRITES.teamBuild[team][type][0]` or,
@@ -373,13 +405,22 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   **turret is live** (it shoots enemy players and worker bots) but it does not use `tracers`: it
   fires a travelling bolt through the `arrows` array, so the `tracers` pass still has nothing
   pushing to it. Wolves are hostile but only to players.
-  Worker bots take arrows from any rival, the turret bolts that were already aiming at them, and
-  now a rival worker's axe on an attack [flag](gameplay.md#worker-flags) — but the AI's target
-  picker still ignores them: a bot slot only downs a worker by accident, with a shot meant for a
-  player. Buildings are not immune either: a **player** on another team breaks one with E, and a
-  worker on a siege flag does the same through the same `hurtStruct` (see
-  [Base building](gameplay.md#base-building)), but no wildlife does, and arrows and bolts pass
-  buildings without damaging them.
+  Worker bots take arrows from any rival, the turret bolts that were already aiming at them, a
+  rival worker's axe on an attack [flag](gameplay.md#worker-flags), and now every class ability and
+  the roll like any other body — but the AI's target picker still ignores them: a bot slot only
+  downs a worker by accident, with a shot meant for a player. Buildings are not immune either: a
+  **player** on another team breaks one with E, and a worker on a siege flag does the same through
+  the same `hurtStruct` (see [Base building](gameplay.md#base-building)), but no wildlife does, and
+  arrows and bolts pass buildings without damaging them.
+- **A structure is not a unit, and neither is the roosting eagle.** Everything in
+  [status effects](gameplay.md#status-effects-one-set-for-every-unit) — damage types, fire, the six
+  states — is for bodies that walk. A building has an hp pool and `hurtStruct`; the eagle is an
+  objective with `hurtEagle` and a ceremony of its own. A flaming shot that hits either does its
+  impact damage and nothing more: neither burns. That is deliberate, not an oversight — but it is
+  the obvious next place fire could go, and it would need a burn clock and a draw pass on each.
+- **The AI does not play around the new states.** `updateAI` reads no `burnT`, `netT` or `rootT`,
+  so a bot on fire does not break off and a netted one does not change its mind. Everything lands
+  on them correctly; nothing reacts to it yet.
 - **AI slots never plant a worker flag.** `p.flag` exists on every slot and the whole dispatch is
   slot-generic, but only `sampleHumanInput`'s middle-click writes one, so a bot's bay gathers the
   way it always did. Teaching `updateAI` to plant one is the obvious next move and needs no new

@@ -140,15 +140,13 @@ function tryAbility(p, i) {
 // ability leaves on a body. Called from updatePlayer once the slot is alive.
 function updateAbilities(p, dt) {
   for (let i = 0; i < AB_KEYS; i++) if (p.abCd[i] > 0) p.abCd[i] = Math.max(0, p.abCd[i] - dt);
-  if (p.markT > 0) p.markT = Math.max(0, p.markT - dt);
-  if (p.netT > 0) p.netT = Math.max(0, p.netT - dt);
   if (p.hopT > 0) p.hopT = Math.max(0, p.hopT - dt);
-  if (p.slowT > 0) p.slowT = Math.max(0, p.slowT - dt);
-  else p.slowMul = 1;
-  if (p.rootT > 0) {
-    p.rootT = Math.max(0, p.rootT - dt);
-    p.sliding = false;
-  }
+  // root / slow / net / mark / fire: the shared clock every kind of unit runs
+  // (updateUnitStatus, js/actions.js) - an animal and a worker bot age the
+  // identical states off the identical timers
+  updateUnitStatus(p, dt);
+  if (p.dead) return; // a burn can finish a slot mid-tick
+  if (p.rootT > 0) p.sliding = false;
   // juggernaut: the body is the weapon while it moves. One bowl-over per
   // rival per activation, scaled by the speed actually carried into them.
   if (p.jugT > 0) {
@@ -168,14 +166,15 @@ function updateAbilities(p, dt) {
     }
     if (sp > JUG_MIN_SP) {
       const nx = p.vx / sp, ny = p.vy / sp;
-      for (const q of players) {
-        if (!enemyOf(p, q) || q.invuln > 0 || p.jugHit.includes(q.id)) continue;
-        if (Math.hypot(q.x - p.x, q.y - p.y) > PLAYER_R * 2 + 2) continue;
-        p.jugHit.push(q.id);
+      // anything alive in the way, not only the rival slots: a body running
+      // this hard bowls a deer or a worker over exactly as it does a player
+      for (const q of unitsHit(p, p.x, p.y, PLAYER_R * 2 + 2)) {
+        if (p.jugHit.includes(q)) continue;
+        p.jugHit.push(q);
         const dmg = Math.max(3, Math.round(4 + sp * 0.04));
-        damagePlayer(q, dmg, nx, ny, p);
+        hurtUnit(q, dmg, nx, ny, p, { kb: 140 });
         if (!q.dead) { stunUnit(q, JUG_STUN); q.kbx += nx * 140; q.kby += ny * 140; }
-        burst(q.x, q.y - 6, '#e05a4a', 8, 55, 0.5, true);
+        burst(q.x, unitMidY(q), '#e05a4a', 8, 55, 0.5, true);
         if (p === player || q === player) state.shake = Math.max(state.shake, 3);
       }
     }
@@ -311,7 +310,7 @@ function abRush(p) {
   const d = Math.hypot(dx, dy) || 1;
   p.rushNX = dx / d; p.rushNY = dy / d;
   p.rushT = RUSH_T;
-  p.rushVictim = -1;
+  p.rushVictim = null;
   p.sliding = false;
   if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
   else p.dir = dy > 0 ? 'down' : 'up';
@@ -328,36 +327,38 @@ function rushStep(p, mv, dt) {
     p.rushFxT = 0.04;
     burst(p.x + p.rushNX * 5, p.y + 4, '#eef4fb', 2, 30, 0.35, true);
   }
-  const v = p.rushVictim >= 0 ? players[p.rushVictim] : null;
+  // p.rushVictim is the BODY, whatever kind it is: the charge picks up a deer
+  // or a worker bot the same way it picks up a rival, and slams it just as hard
+  const v = p.rushVictim;
   if (!v) {
-    for (const q of players) {
-      if (!enemyOf(p, q) || q.invuln > 0) continue;
-      if (Math.hypot(q.x - p.x, q.y - p.y) > ROLL_HIT_R + PLAYER_R) continue;
-      p.rushVictim = q.id;
-      risePlayer(q);
+    for (const q of unitsHit(p, p.x, p.y, ROLL_HIT_R + PLAYER_R)) {
+      p.rushVictim = q;
+      if (q instanceof Player) risePlayer(q);
       stunUnit(q, 0.3); // manhandled: nothing they hold survives the grab
-      burst(q.x, q.y - 6, '#eef4fb', 6, 40, 0.4, true);
+      burst(q.x, unitMidY(q), '#eef4fb', 6, 40, 0.4, true);
       if (nearPlayer(q.x, q.y)) SFX.hit();
       break;
     }
-  } else if (!v.dead) {
+  } else if (unitAlive(v)) {
     // carried on the shoulder: held one body ahead, stun refreshed so their
     // own step stays limp until the slam
     stunUnit(v, 0.2);
     const wx = p.x + p.rushNX * 9, wy = p.y + p.rushNY * 9;
-    moveEntity(v, wx - v.x, wy - v.y, PLAYER_R);
+    moveEntity(v, wx - v.x, wy - v.y, unitRadius(v));
+  } else {
+    p.rushVictim = null; // it died on the way: the charge runs on empty
   }
   const wall = mv.blockedX || mv.blockedY;
   if (wall || p.rushT <= 0) rushEnd(p, wall);
 }
 function rushEnd(p, wall) {
   p.rushT = 0;
-  const v = p.rushVictim >= 0 ? players[p.rushVictim] : null;
-  p.rushVictim = -1;
+  const v = p.rushVictim;
+  p.rushVictim = null;
   p.vx = p.rushNX * 60; p.vy = p.rushNY * 60;
-  if (v && !v.dead) {
+  if (v && unitAlive(v)) {
     const mul = wall ? RUSH_WALL_MUL : 1;
-    damagePlayer(v, Math.round(RUSH_DMG * mul), p.rushNX, p.rushNY, p);
+    hurtUnit(v, Math.round(RUSH_DMG * mul), p.rushNX, p.rushNY, p, { kb: 110 * mul });
     if (!v.dead) stunUnit(v, RUSH_STUN * mul);
     burst(v.x, v.y - 5, '#e04a54', 8, 50, 0.5);
     burst(v.x, v.y - 4, '#eef4fb', 10, 55, 0.5, true);
@@ -373,19 +374,13 @@ function rushEnd(p, wall) {
 
 function abStomp(p) {
   const px = p.x, py = p.y;
-  for (const q of players) {
-    if (!enemyOf(p, q) || q.invuln > 0) continue;
-    const d = Math.hypot(q.x - px, q.y - py);
-    if (d > STOMP_R) continue;
-    const nx = (q.x - px) / (d || 1), ny = (q.y - py) / (d || 1);
-    damagePlayer(q, STOMP_DMG, nx, ny, p);
+  // one list, every living thing in the ring: slots, wildlife and worker bots
+  // take the same damage, the same shove and the same beat of stun
+  for (const q of unitsHit(p, px, py, STOMP_R)) {
+    const d = Math.hypot(q.x - px, q.y - py) || 1;
+    const nx = (q.x - px) / d, ny = (q.y - py) / d;
+    hurtUnit(q, STOMP_DMG, nx, ny, p, { kb: STOMP_KB });
     if (!q.dead) { stunUnit(q, STOMP_STUN); q.kbx += nx * STOMP_KB; q.kby += ny * STOMP_KB; }
-  }
-  for (const a of animals) {
-    if (a.dead || a.kind === 'bird') continue;
-    const d = Math.hypot(a.x - px, a.y - py);
-    if (d > STOMP_R) continue;
-    hurtAnimal(a, STOMP_DMG, (a.x - px) / (d || 1), (a.y - py) / (d || 1), STOMP_KB, p.id);
   }
   if (PRACTICE) abHitDummies(px, py, STOMP_R, STOMP_DMG);
   craters.push({ x: px, y: py + 3, team: p.team, t: 0 });
@@ -430,19 +425,27 @@ function abHitDummies(x, y, r, dmg) {
 // Everything the abilities left lying in the world, stepped once per sim
 // step from updatePlay: traps wait and bite, craters drag, the falcon flies
 // its line, nets fly theirs, and a called volley lands when its ring closes.
+
+// Each of them is asked about through `sideOf` (js/actions.js), which hands
+// unitsNear/unitsHit the side a thing in the world is on rather than a living
+// caster. Everything those two return is fair game: slots, wildlife AND worker
+// bots, none of them a special case.
+// This is the other half: who to credit a kill to - the caster, if they are
+// still standing. A trap that outlives its hunter kills for nobody.
+function abCredit(w) { const o = players[w.owner]; return o && !o.dead ? o : null; }
+
 function updateAbilityWorld(dt) {
   for (let i = traps.length - 1; i >= 0; i--) {
     const t = traps[i];
     t.t += dt;
     if (t.t > TRAP_LIFE) { burst(t.x, t.y, '#8b93a8', 4, 25, 0.3, true); traps.splice(i, 1); continue; }
     if (t.t < TRAP_ARM) continue;
-    for (const q of players) {
-      if (!q.active || q.dead || inAir(q) || q.team === t.team || q.invuln > 0) continue;
-      if (Math.hypot(q.x - t.x, q.y + 4 - t.y) > TRAP_R) continue;
+    // iron does not ask what stood on it: the first body over the pan is
+    // bitten, rival, rabbit or worker bot alike
+    for (const q of unitsHit(sideOf(t), t.x, t.y - 4, TRAP_R)) {
       // the bite: pinned on the spot, and the jaws show on the body (rootT)
-      const src = players[t.owner];
-      damagePlayer(q, TRAP_DMG, 0, -0.2, src && !src.dead ? src : null, null);
-      if (!q.dead) { q.rootT = TRAP_ROOT; q.vx = q.vy = 0; q.sliding = false; }
+      hurtUnit(q, TRAP_DMG, 0, -0.2, abCredit(t), { kb: 0 });
+      if (!q.dead) rootUnit(q, TRAP_ROOT);
       burst(t.x, t.y - 2, '#f2cc6a', 10, 55, 0.5, true);
       burst(t.x, t.y - 4, '#8b93a8', 8, 45, 0.45, true);
       if (nearPlayer(t.x, t.y)) SFX.hit();
@@ -454,12 +457,9 @@ function updateAbilityWorld(dt) {
     const z = craters[i];
     z.t += dt;
     if (z.t > CRATER_T) { craters.splice(i, 1); continue; }
-    for (const q of players) {
-      if (!q.active || q.dead || inAir(q) || q.team === z.team) continue;
-      if (Math.hypot(q.x - z.x, q.y + 4 - z.y) > CRATER_R) continue;
-      q.slowT = Math.max(q.slowT, 0.15); // refreshed every step spent inside
-      q.slowMul = Math.min(q.slowMul, CRATER_SLOW);
-    }
+    // deep snow is deep snow for everything that has to cross it, refreshed
+    // every step spent inside
+    for (const q of unitsNear(sideOf(z), z.x, z.y - 4, CRATER_R)) slowUnit(q, 0.15, CRATER_SLOW);
   }
   for (let i = falcons.length - 1; i >= 0; i--) {
     const f = falcons[i];
@@ -467,13 +467,13 @@ function updateAbilityWorld(dt) {
     f.x += f.nx * FALCON_SPD * dt;
     f.y += f.ny * FALCON_SPD * dt;
     f.d += FALCON_SPD * dt;
-    for (const q of players) {
-      if (!q.active || q.dead || inAir(q) || q.team === f.team) continue;
-      if (Math.hypot(q.x - f.x, q.y - f.y) > 18) continue;
-      q.markT = MARK_T;
-      if (!f.seen.includes(q.id)) {
-        f.seen.push(q.id);
-        burst(q.x, q.y - 10, '#f2cc6a', 8, 45, 0.5, true);
+    // the bird's eye is not a blow, so nothing dodges it: everything alive
+    // under the line is marked, a deer and a worker bot included
+    for (const q of unitsNear(sideOf(f), f.x, f.y, 18)) {
+      markUnit(q, MARK_T);
+      if (!f.seen.includes(q)) {
+        f.seen.push(q);
+        burst(q.x, unitMidY(q) - 4, '#f2cc6a', 8, 45, 0.5, true);
         if (nearPlayer(q.x, q.y)) SFX.ambush();
       }
     }
@@ -490,18 +490,14 @@ function updateAbilityWorld(dt) {
       burst(n.x, n.y, '#cfd8e8', 4, 30, 0.3, true);
       dead = true;
     }
-    if (!dead) for (const q of players) {
-      if (!q.active || q.dead || inAir(q) || q.team === n.team || q.invuln > 0) continue;
-      if (Math.hypot(q.x - n.x, q.y - 6 - n.y) > 8) continue;
-      if (abShieldBlocks(q, n.nx, n.ny)) { burst(n.x, n.y, '#cfd8e8', 6, 40, 0.35, true); dead = true; break; }
-      const src = players[n.owner];
-      damagePlayer(q, NET_DMG, n.nx, n.ny, src && !src.dead ? src : null, null);
-      if (!q.dead) {
-        q.slowT = Math.max(q.slowT, NET_SLOW_T);
-        q.slowMul = Math.min(q.slowMul, NET_SLOW);
-        q.netT = NET_SLOW_T; // the drape the slow is read off
+    // the first body in the way tangles in it, whatever kind of body it is
+    if (!dead) for (const q of unitsHit(sideOf(n), n.x, n.y + 6, 8)) {
+      if (q instanceof Player && abShieldBlocks(q, n.nx, n.ny)) {
+        burst(n.x, n.y, '#cfd8e8', 6, 40, 0.35, true); dead = true; break;
       }
-      burst(q.x, q.y - 6, '#cfd8e8', 8, 45, 0.4, true);
+      hurtUnit(q, NET_DMG, n.nx, n.ny, abCredit(n), { kb: 40 });
+      if (!q.dead) netUnit(q, NET_SLOW_T, NET_SLOW); // the drape the slow is read off
+      burst(q.x, unitMidY(q), '#cfd8e8', 8, 45, 0.4, true);
       dead = true;
       break;
     }
@@ -512,17 +508,12 @@ function updateAbilityWorld(dt) {
     v.t -= dt;
     if (v.t > 0) continue;
     const src = players[v.owner];
-    for (const q of players) {
-      if (!q.active || q.dead || inAir(q) || q.team === v.team || q.invuln > 0) continue;
-      const d = Math.hypot(q.x - v.x, q.y - v.y);
-      if (d > VOLLEY_R + 4) continue;
-      damagePlayer(q, VOLLEY_DMG, (q.x - v.x) / (d || 1) * 0.3, 0.4, src && !src.dead ? src : null, null);
-    }
-    for (const a of animals) {
-      if (a.dead || a.kind === 'bird') continue;
-      const d = Math.hypot(a.x - v.x, a.y - v.y);
-      if (d > VOLLEY_R) continue;
-      hurtAnimal(a, VOLLEY_DMG, 0, 0.3, 30, v.owner);
+    const by = src && !src.dead ? src : null;
+    // the rain does not check what it is falling on: everything alive under
+    // the ring takes it, a bird crossing it included
+    for (const q of unitsHit(sideOf(v), v.x, v.y, VOLLEY_R + 4)) {
+      const d = Math.hypot(q.x - v.x, q.y - v.y) || 1;
+      hurtUnit(q, VOLLEY_DMG, (q.x - v.x) / d * 0.3, 0.4, by, { kb: 30 });
     }
     if (PRACTICE) abHitDummies(v.x, v.y, VOLLEY_R, VOLLEY_DMG);
     // the pillar holds even for a called strike: some of the rain sticks in
@@ -695,10 +686,71 @@ function abilityPose(p) {
   return null;
 }
 
-// everything an ability leaves ON a body, drawn over the sprite: the raised
-// shield, the net drape, the sprung jaws at rooted feet, the fury's glow,
-// and the falcon's mark - all visible to every side, because a state you
-// cannot see is a rule you cannot play around.
+// Everything a STATUS leaves on a body, drawn over whatever sprite is
+// wearing it: the net drape, the sprung jaws at rooted feet, the flames, and
+// the falcon's mark. Takes the sprite's own box, so a rabbit, a worker bot
+// and a player slot wear the same four tells at their own size - a state you
+// cannot see is a rule you cannot play around, and that is as true of a deer
+// as of a rival. Called by drawAbilityOnPlayer below and by drawAnimal /
+// drawBird / drawRobot (js/draw-world.js).
+function drawUnitStates(e, px, py, w, h, now) {
+  if (e.netT > 0) {
+    ctx.globalAlpha = Math.min(1, e.netT / 0.4);
+    ctx.fillStyle = '#cfd8e8';
+    // a 3px mesh inside the sprite's own box, however big that box is
+    for (let x = 3; x < w - 2; x += 3) ctx.fillRect(px + x, py + 3, 1, h - 5);
+    for (let y = 4; y < h - 2; y += 3) ctx.fillRect(px + 3, py + y, w - 6, 1);
+    ctx.fillStyle = '#8b93a8';
+    ctx.fillRect(px + 3, py + h - 3, w - 6, 1); // the sag at the hem
+    ctx.globalAlpha = 1;
+  }
+  if (e.rootT > 0) {
+    // the sprung jaws, closed on the feet
+    ctx.fillStyle = '#3c4356';
+    ctx.fillRect(px + 4, py + h - 2, w - 8, 2);
+    ctx.fillStyle = '#c8d2e4';
+    for (let k = 0; k * 2 + 5 < w - 4; k++) ctx.fillRect(px + 5 + k * 2, py + h - 3, 1, 1);
+  }
+  if (e.burnT > 0) {
+    // Alight: tongues licking UP off the crown, and the snow under the feet
+    // lit by them - never a wash over the body, because a burning rival still
+    // has to read as the rival it is. Phased off the body's own burn clock, so
+    // two burning things are never in lockstep and no global clock is involved.
+    const ph = e.burnT * 9;
+    const n = Math.max(2, Math.min(4, w >> 2));
+    for (let k = 0; k < n; k++) {
+      const fx = px + 1 + Math.round((w - 3) * ((k + 0.5) / n));
+      const lift = 2 + Math.round(2.2 * (1 + Math.sin(ph + k * 2.1)));
+      ctx.fillStyle = '#e0533a';
+      ctx.fillRect(fx, py - lift, 2, lift + 1);
+      ctx.fillStyle = '#ff9440';
+      ctx.fillRect(fx, py - lift + 1, 1, lift);
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(fx, py - lift, 1, 1);
+    }
+    ctx.globalAlpha = 0.45 + 0.2 * Math.sin(ph * 1.7);
+    ctx.fillStyle = '#ff9440';
+    ctx.fillRect(px + 2, py + h - 1, w - 4, 1);
+    ctx.globalAlpha = 1;
+  }
+  if (e.markT > 0) {
+    // the falcon's mark: gold chevrons falling toward the head, for everyone
+    const ph = (now * 2.2) % 1;
+    ctx.globalAlpha = e.markT < 0.6 ? e.markT / 0.6 : 1;
+    const mx = px + (w >> 1) - 3;
+    for (let k = 0; k < 2; k++) {
+      const y = py - 8 - 5 * k + Math.round(ph * 4);
+      ctx.fillStyle = '#0f1632';
+      ctx.fillRect(mx, y + 1, 6, 2);
+      ctx.fillStyle = '#f2cc6a';
+      ctx.fillRect(mx, y, 2, 2); ctx.fillRect(mx + 4, y, 2, 2); ctx.fillRect(mx + 2, y + 1, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// The player's own layer: the two states only a slot can be in - a raised
+// shield and the juggernaut's fury - over the four every unit shares.
 function drawAbilityOnPlayer(p, px, py, now) {
   if (p.shieldT > 0) {
     const a = p.shieldA;
@@ -715,24 +767,6 @@ function drawAbilityOnPlayer(p, px, py, now) {
     ctx.fillRect(0, -2, 1, 4);
     ctx.restore();
   }
-  if (p.netT > 0) {
-    ctx.globalAlpha = Math.min(1, p.netT / 0.4);
-    ctx.fillStyle = '#cfd8e8';
-    for (let k = 0; k < 4; k++) {
-      ctx.fillRect(px + 3 + k * 3, py + 3, 1, 11);
-      ctx.fillRect(px + 3, py + 4 + k * 3, 10, 1);
-    }
-    ctx.fillStyle = '#8b93a8';
-    ctx.fillRect(px + 3, py + 13, 10, 1); // the sag at the hem
-    ctx.globalAlpha = 1;
-  }
-  if (p.rootT > 0) {
-    // the sprung jaws, closed on the boots
-    ctx.fillStyle = '#3c4356';
-    ctx.fillRect(px + 4, py + 14, 8, 2);
-    ctx.fillStyle = '#c8d2e4';
-    for (let k = 0; k < 4; k++) ctx.fillRect(px + 5 + k * 2, py + 13, 1, 1);
-  }
   if (p.jugT > 0) {
     // fury: a red rim pulsing off the sprite's own silhouette
     ctx.globalAlpha = 0.35 + 0.2 * Math.sin(now * 10);
@@ -742,19 +776,7 @@ function drawAbilityOnPlayer(p, px, py, now) {
     ctx.fillRect(px + 13, py + 4, 1, 8);
     ctx.globalAlpha = 1;
   }
-  if (p.markT > 0) {
-    // the falcon's mark: gold chevrons falling toward the head, for everyone
-    const ph = (now * 2.2) % 1;
-    ctx.globalAlpha = p.markT < 0.6 ? p.markT / 0.6 : 1;
-    for (let k = 0; k < 2; k++) {
-      const y = py - 8 - 5 * k + Math.round(ph * 4);
-      ctx.fillStyle = '#0f1632';
-      ctx.fillRect(px + 5, y + 1, 6, 2);
-      ctx.fillStyle = '#f2cc6a';
-      ctx.fillRect(px + 5, y, 2, 2); ctx.fillRect(px + 9, y, 2, 2); ctx.fillRect(px + 7, y + 1, 2, 2);
-    }
-    ctx.globalAlpha = 1;
-  }
+  drawUnitStates(p, px, py, 16, 16, now);
 }
 
 // ---- the strip icons -----------------------------------------------------

@@ -127,9 +127,15 @@ lives in `docs/dev/*.md` beside the code it protects.
   stepped; a new kind of thing that walks must join its list (and `UNIT_MASS`, and be marked `small`
   unless a roll should stop on it) or it walks through everyone. A player mid-roll is the exception:
   it skips contact with a small unit, because `rollSweep` turns that contact into a hit instead.
+- **Every living thing takes the same hit.** A blow goes through `hurtUnit(e, dmg, nx, ny, src, o)`
+  and a state through its setter (`stunUnit`/`rootUnit`/`slowUnit`/`netUnit`/`markUnit`/`igniteUnit`,
+  the `status effects` banner); an area effect sweeps `unitsNear`/`unitsHit`, never a loop per kind.
+  Reaching for `damagePlayer` in a new ability is how wildlife and worker bots quietly stop being in
+  the game: [gameplay](docs/dev/gameplay.md#status-effects-one-set-for-every-unit).
 - **Anything that walks to a goal routes there** through `navTo`/`navStep` (the `pathfinding`
   banner), never by steering straight at it, and **drops the goal when they return `ok = false`**
   (no route, or pinned) — there are no stuck timers; a caller that ignores `ok` stands still forever.
+  `navStep` is also where `unitMoveMul` is spent, so a hand-steered walk folds it in itself.
 - **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is

@@ -452,7 +452,6 @@ class Player {
     this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
     this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
     this.rollHit = [];                             // what this roll has already swiped (once each)
-    this.stunT = 0; this.stunMax = 0;              // seeing stars: no intent gets through
     this.stamGhost = 0; this.stamGhostT = 0;      // spent-stamina ghost
     this.sliding = false; this.slideT = 0; this.trailD = 0; this.slideDustT = 0;
     // prone: lying down, how much snow is over you (0..1), the get-up window,
@@ -467,12 +466,13 @@ class Player {
     // falcon, shielded, mid-rush, or five seconds of juggernaut
     this.abCd = [0, 0, 0, 0];
     this.castAb = -1; this.castT = 0;
-    this.rootT = 0;                                // snare trap: pinned where you stand
-    this.slowT = 0; this.slowMul = 1;              // net / crater drag on every speed cap
-    this.netT = 0;                                 // the drape the slow is read off
-    this.markT = 0;                                // falcon sweep: revealed to everything
+    // Every state ANY unit can be under - stun, root (a snare's jaws), slow
+    // and its net drape, the falcon's mark, and fire - is written and cleared
+    // in one place for all three kinds of unit (`status effects`, js/actions.js),
+    // so a slot, a deer and a worker bot wear the identical set.
+    clearUnitStatus(this);
     this.shieldT = 0; this.shieldA = 0;            // the tower shield, and where it faces
-    this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = -1;
+    this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = null;
     this.jugT = 0; this.jugHit = []; this.jugFxT = 0;
     this.hopT = 0;                                 // the net shot's recoil hop, on the body
     // The one weapon slot the button fires. It holds a tool CELL - the same
@@ -585,31 +585,42 @@ const landmarks = []; // named points of interest, placed by worldgen (see the l
 // between a respawn timer and permanent elimination, and the overlay the
 // local slot's ending puts up.
 
+// Causes that are a BURN rather than a blow (see updateBurn, js/actions.js).
+// A bite of one is not a hit: it goes through i-frames (a roll does not put a
+// fire out), grants none of its own, and never shoves - otherwise the 0.7 s
+// of grace every hit hands out would swallow the whole burn.
+const DOT_CAUSE = { fire: true };
+
 // src: the player who dealt it (kill credit + the log line), null for the
 // world; cause: a DEATH_CAUSE key naming what the world did, when src is null
 function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
-  if (p.dead || p.invuln > 0) return;
+  const dot = !!DOT_CAUSE[cause];
+  if (p.dead || (p.invuln > 0 && !dot)) return;
   dmg = Math.max(1, dmg - kitOf(p).dr); // IRONHIDE flattens every hit, but never to zero
   p.hp -= dmg;
   p.hurtT = 0.25;
-  p.invuln = 0.7;
-  // a juggernaut takes the damage and none of the shove (js/abilities.js)
-  if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
-  else { p.kbx = dx * 110; p.kby = dy * 110; }
+  if (!dot) {
+    p.invuln = 0.7;
+    // a juggernaut takes the damage and none of the shove (js/abilities.js)
+    if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
+    else { p.kbx = dx * 110; p.kby = dy * 110; }
+  }
   risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
   breakEat(p);   // ...and the meal goes with it - that is what makes the channel a channel
-  if (p === player) state.shake = Math.max(state.shake, crit ? 6 : 3);
+  // a burn shakes and shouts once, when it lights (igniteUnit) - not four
+  // times a second for as long as it runs
+  if (p === player && !dot) state.shake = Math.max(state.shake, crit ? 6 : 3);
   addDmgFloater(p.x, p.y - 18, dmg, p === player, crit);
-  if (nearPlayer(p.x, p.y)) SFX.hurt();
-  burst(p.x, p.y - 6, '#e04a54', 8, 50, 0.45);
+  if (nearPlayer(p.x, p.y) && !dot) SFX.hurt();
+  burst(p.x, p.y - 6, dot ? '#ff9440' : '#e04a54', 8, 50, 0.45);
   if (p.hp <= 0) die(p, src, cause);
 }
 
 // what the log says when nobody gets the credit
-const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID', eagle: 'LOST THEIR EAGLE' };
+const DEATH_CAUSE = { ice: 'FELL THROUGH THE ICE', wolf: 'WENT TO THE WOLVES', tackle: 'RAN INTO SOMETHING SOLID', eagle: 'LOST THEIR EAGLE', fire: 'BURNED IN THE SNOW' };
 // ...and what the line says when there IS credit but no arrow: `cause` is
 // read for the verb too, so a worker's axe doesn't get written up as a shot
-const KILL_VERB = { worker: 'CUT DOWN' };
+const KILL_VERB = { worker: 'CUT DOWN', fire: 'BURNED' };
 
 // Death empties the wallet AND the backpack. Gold goes to the credited
 // killer outright (through awardGold, so a kill also levels the killer - the
@@ -667,7 +678,6 @@ function die(p, src, cause) {
   p.chargeT = 0;
   p.fireArmed = false;
   p.dodgeT = 0;
-  p.stunT = 0; p.stunMax = 0;
   p.vx = p.vy = 0;
   p.sliding = false;
   p.prone = false; p.hide = 0; p.riseT = 0;
@@ -676,8 +686,9 @@ function die(p, src, cause) {
   // whatever ability the body was mid-way through dies with it, and the meal
   p.eatT = 0; p.eatType = null;
   p.castT = 0; p.castAb = -1;
-  p.shieldT = 0; p.rushT = 0; p.rushVictim = -1;
-  p.jugT = 0; p.rootT = 0; p.slowT = 0; p.netT = 0; p.markT = 0; p.hopT = 0;
+  p.shieldT = 0; p.rushT = 0; p.rushVictim = null;
+  p.jugT = 0; p.hopT = 0;
+  clearUnitStatus(p); // root, slow, net, mark and the fire go out with the body
   burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about
@@ -810,7 +821,8 @@ function checkLastStanding() {
 function practiceRevive(p) {
   p.hp = p.maxHp;
   p.vx = p.vy = 0;
-  p.dodgeT = 0; p.stunT = 0; p.stunMax = 0;
+  p.dodgeT = 0;
+  clearUnitStatus(p); // the fire goes out with the fall, same as the stun
   p.fallT = 0; p.sliding = false;
   p.prone = false; p.hide = 0; p.riseT = 0;
   p.charging = false; p.chargeT = 0; p.fireArmed = false;

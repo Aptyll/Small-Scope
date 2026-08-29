@@ -1934,7 +1934,18 @@ function tipBit(id, cell) {
     if (b.lit) d.notes.push(['LIGHTS THE GROUND IT PASSES', '#ffd95c']);
   } else {
     d.rows.push(['WEIGHT', 'NONE', TIP_DIM]);
+    // A fire modifier is chosen on two numbers - how long the burn runs and
+    // how hard it bites - so it prints them, the same reason the projectile
+    // rows above exist. Read out of the envelope itself rather than written
+    // twice, so a retuned FLAME can never disagree with its own tooltip.
+    const m = toolMods({ bits: [id] });
+    if (m.burn > 0) {
+      d.rows.push(['BURNS FOR', tipSec(m.burn), '#ff9440']);
+      d.rows.push(['BURN RATE', m.burnDps + '/S', '#ff9440']);
+      if (m.cinder > 0) d.rows.push(['EMBER RING', String(m.cinder), '#ffb347']);
+    }
     d.notes.push(['AFFECTS EVERY SHOT ON ITS TOOL', '#8fd8ff']);
+    if (m.type === 'fire') d.notes.push(['FIRE KEEPS BURNING WHATEVER IT LANDS ON', '#ff9440']);
   }
   d.notes.push([b.blurb, TIP_DIM]);
   return d;

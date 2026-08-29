@@ -131,11 +131,17 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `hitObject`, `crackIce` (what a click FIRES: `fireTool`, tools.js) | `actions` |
 | the tuning for everything a player does: the three SWING tools, the quiver and its spent shafts, the shot trail, E's reach, the roll, prone | `SWING_TOOLS`/`SWING_*`, `BOW_Y`, `QUIVER_*`, `SHAFT_*`, `ARROW_*`, `WORK_REACH`, `STRUCT_HIT_DMG`, `ROLL_*`/`TACKLE_*`, `PRONE_*`, `AMBUSH_MUL` | `actions` (its head; the two kit baselines `BOW_CHARGE`/`BOW_NOCK`: `players`, player.js; the weapon's own tuning: `TOOLS`/`BITS`, tools.js) |
-| the roll as a hit: the sweep, the tackle, the stun every unit shares | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg`, `stunUnit` | `actions` › `the roll as a hit` |
+| the roll as a hit: the sweep and the tackle | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg` | `actions` › `the roll as a hit` |
 | going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` |
 | the quiver: spending, fletching, sticking a spent arrow, the empty-press tell | `QUIVER_MAX`, `BOW_NOCK`, `SHAFT_LIFE`, `gainArrow`, `stickArrow`, `dryFire` | `actions` › `the quiver` |
 | one blow against a building on another team (E swing and worker axe alike) | `hurtStruct`, `STRUCT_HIT_DMG`, `destroyStructure` | `actions` (its tail) |
 | every way of hurting the practice dummy (E, every bit, the tackle), and the meter's combo ledger | `hitDummy` | `actions` (its tail; the dummy itself: `practice arena`, world.js; the plate: `drawDummyMeter`, draw-world.js) |
+| **the one blow every kind of unit takes** - a slot, an animal, a worker bot | `hurtUnit` | `status effects` (its per-kind ends: `damagePlayer` player.js, `hurtAnimal` wildlife.js, `hurtRobot` robots.js) |
+| every living thing in a circle an area effect may touch, in one list | `unitsNear`, `unitsHit` (blows only), `unitFoe`, `unitTeam`, `unitAlive`, `unitMidY`, `isAnimalUnit` | `status effects` › `what a unit IS` |
+| asking those two on behalf of a THING in the world (a trap, a net, a shot) rather than a body | `sideOf` | `status effects` › `what a unit IS` (its kill-credit half: `abCredit`, abilities.js) |
+| putting a state ON a body - the one writer for each | `stunUnit`, `rootUnit`, `slowUnit`, `netUnit`, `markUnit`, `igniteUnit` | `status effects` › `the states a unit can be under` |
+| what a damage TYPE is, and the fire that outlives its blow | `DMG_TYPES`, `BURN_T`/`BURN_DPS`/`BURN_TICK`/`BURN_MAX`, `igniteUnit`, `updateBurn`, `douseUnit` | `status effects` › `fire` (the bits that deal it: `BITS.flame`/`pyre`/`cinder`, tools.js; the i-frame exemption: `DOT_CAUSE`, player.js) |
+| ageing those states, and what is left of a non-player's speed | `updateUnitStatus`, `unitMoveMul`, `clearUnitStatus` | `status effects` › `the clock every non-player unit runs` (a slot's own copy: `updateAbilities`, abilities.js; where the speed is spent: `navStep`, nav.js) |
 
 ## js/tools.js
 
@@ -145,6 +151,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the tier a find wears, and where that colour is read back | `TOOL_TIERS`, `itemTier`, `TIER_SHINE` (`tierPlate`/`tierShine`, which paint it: `UI`, ui.js) |`tools & bits` |
 | the bag rows that make tools and bits carryable at all | the `ITEMS` / `RES_COLORS` loops at the foot of the file | `tools & bits` › `icons` |
 | a tool instance and the things that read one | `makeTool`, `heldTool`, `bitsIn`, `bitFires`, `toolMods`, `nextBit`, `peekBit`, `toolRof`, `toolReady` | `tools & bits` › `a tool instance` |
+| the fire a shot carries, and the three modifier bits that put it there | `BITS.flame`/`pyre`/`cinder`, `PYRE_T`/`PYRE_DPS`/`CINDER_R`, `m.type`/`m.burn`/`m.burnDps`/`m.cinder` in `toolMods` | `tools & bits` (beside `BITS`; what a burn then DOES: `status effects`, actions.js) |
 | moving a tool onto a key or a bit into a cell (the two the drag goes through) | `slotPut`, `bitPut` | `tools & bits` › `equipping` |
 | what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
@@ -166,6 +173,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
 | the shield eating a shot, the rush's step/grab/slam | `abShieldBlocks` (read by the arrow loop, sim.js), `rushStep`/`rushEnd` (read by `updatePlayer`'s rush branch) | `class abilities` |
 | drawing it all: ground layer, air layer, the pose on the sprite, the states on a body | `drawAbilityGround`, `drawAbilityAir`, `abilityPose`, `drawAbilityOnPlayer` | `class abilities` › `drawing` (called from render.js and `drawPlayer`, draw-world.js) |
+| the net drape, the snare's jaws, the flames and the falcon's mark, on ANY sprite at its own size | `drawUnitStates` | `class abilities` › `drawing` (its four callers: `drawAbilityOnPlayer` here, `drawAnimal`/`drawBird`/`drawRobot`, draw-world.js) |
+| who a thing left in the world credits its kill to, once the caster may be down | `abCredit` | `class abilities` › `the world tick` (whose SIDE it is on: `sideOf`, actions.js) |
 | the eight 32×32 ability icons and their bake | `AB32`, `AB32_PAL`, `classAbIcon` | `class abilities` › `the strip icons` (drawn by `drawClassAbCell`/`tipClassAb`, ui.js) |
 
 ## js/ai.js

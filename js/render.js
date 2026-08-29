@@ -253,7 +253,7 @@ function render() {
   for (const d of draws) {
     if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
     if (d.a) { drawAnimal(d.a, ex, ey, now); continue; }
-    if (d.r) { drawRobot(d.r, ex, ey); continue; }
+    if (d.r) { drawRobot(d.r, ex, ey, now); continue; }
     if (d.f) { drawFlag(d.f, ex, ey, now); continue; }
     if (d.pt) { drawPTarget(d.pt, ex, ey, now); continue; }
     const o = d.o;

@@ -496,6 +496,17 @@ table and what a buy does are in [gameplay.md](gameplay.md#gear).
 
 ## Overhead health bars
 
+Beside the bar sits the other thing drawn on every body alike: **`drawUnitStates(e, px, py, w, h,
+now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the snare's sprung jaws,
+the fire and the falcon's mark over whatever sprite is wearing them, taking the sprite's own box so
+a rabbit, a worker bot and a player slot get the same four tells at their own size. `drawPlayer`
+reaches it through `drawAbilityOnPlayer` (which adds the two a slot alone can show — a raised
+shield, the juggernaut's rim); `drawAnimal`, `drawBird` and `drawRobot` call it directly. **The
+fire never washes over the body** — tongues off the crown and a lit row under the feet — because a
+burning rival still has to read as the rival it is; the embers themselves are particles, thrown by
+`updateBurn` rather than drawn here. What each state *does* is
+[gameplay.md](gameplay.md#status-effects-one-set-for-every-unit).
+
 `drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
 unit, always visible: every player (in `drawPlayer`), animals (in `drawAnimal`),
 and robots (in `drawRobot`). **Birds are the one exception** — 3 hp means every hit is a kill, and

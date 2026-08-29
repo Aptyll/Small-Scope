@@ -43,7 +43,15 @@ const TIER_SHINE = 2; // the tier whose plate animates
 //
 // A MODIFIER bit (`proj: false`) has no weight and never flies. Its `mod(m)`
 // edits the shot envelope every projectile bit on the SAME tool is fired
-// through, so one FLAME in the list sets the whole tool alight.
+// through, so one FLAME in the list sets the whole tool alight. Cells fold in
+// whatever order they sit in, so a mod must write values that do not depend on
+// the order (a max or a set, never a multiply of what fire is already there) -
+// two fire mods in one tool must give the same tool whichever cell holds which.
+//
+// FIRE is the one damage TYPE a bit can put on a shot (`m.type`, DMG_TYPES in
+// js/actions.js): the hit ignites what it lands on, which then burns for
+// `m.burn` seconds at `m.burnDps` a second - on a rival, a deer or a worker
+// bot alike, because a burn is a unit state like any other.
 //
 // `path` is one of: 'line' straight | 'zig' weaving | 'orbit' circling the
 // shooter | 'boomer' out and back | 'lob' a heavy throw that arcs down.
@@ -94,8 +102,15 @@ const BITS = {
     col: '#cfe0f2', mod: (m) => { m.fan = 3; m.dmgMul *= 0.6; },
   },
   flame: {
-    name: 'FLAME', blurb: 'EVERY SHOT BURNS, AND LIGHTS ITS WAY.', tier: 1, proj: false,
-    col: '#ff9440', mod: (m) => { m.burn = true; m.dmgAdd += 4; m.lit = Math.max(m.lit, 30); },
+    name: 'FLAME', blurb: 'EVERY SHOT SETS WHAT IT HITS ALIGHT, AND LIGHTS ITS WAY.', tier: 1, proj: false,
+    col: '#ff9440',
+    mod: (m) => {
+      m.type = 'fire';
+      m.burn = Math.max(m.burn, BURN_T);
+      m.burnDps = Math.max(m.burnDps, BURN_DPS);
+      m.dmgAdd += 2;                    // the flat bonus is small now: the burn is the damage
+      m.lit = Math.max(m.lit, 30);
+    },
   },
   twin: {
     name: 'DUPLICATE', blurb: 'FIRES THE NEXT TWO BITS AT ONCE.', tier: 1, proj: false,
@@ -109,7 +124,34 @@ const BITS = {
     name: 'LONGSHOT', blurb: 'EVERY SHOT FLIES MUCH FURTHER.', tier: 2, proj: false,
     col: '#7ac0e8', mod: (m) => { m.lifeMul *= 1.8; m.spdMul *= 1.15; },
   },
+  pyre: {
+    name: 'PYRE', blurb: 'THE FIRE TAKES HOLD. IT BURNS TWICE AS LONG, AND TWICE AS HOT.', tier: 2, proj: false,
+    col: '#ff5a2a',
+    mod: (m) => {
+      m.type = 'fire';
+      m.burn = Math.max(m.burn, PYRE_T);
+      m.burnDps = Math.max(m.burnDps, PYRE_DPS);
+      m.lit = Math.max(m.lit, 34);
+    },
+  },
+  cinder: {
+    name: 'CINDER BURST', blurb: 'EVERY IMPACT THROWS EMBERS. EVERYTHING AROUND IT CATCHES.', tier: 2, proj: false,
+    col: '#ffb347',
+    mod: (m) => {
+      m.type = 'fire';
+      m.burn = Math.max(m.burn, BURN_T);
+      m.burnDps = Math.max(m.burnDps, BURN_DPS);
+      m.cinder = CINDER_R;              // ...and the ring the shot lights where it ends
+      m.lit = Math.max(m.lit, 30);
+    },
+  },
 };
+// PYRE's own fire, and how wide a CINDER BURST scatters. The plain fire these
+// two escalate is BURN_T / BURN_DPS, in the `status effects` banner of
+// js/actions.js beside the burn itself.
+const PYRE_T = BURN_T * 2;
+const PYRE_DPS = BURN_DPS * 2;
+const CINDER_R = 26;   // px of ring an ending shot sets alight
 
 // ---- tools ---------------------------------------------------------------
 // `rof` is in game steps between shots (the number the HUD's cooldown wipe
@@ -173,7 +215,12 @@ function bitFires(cell, i) {
 // bits are fired THROUGH this, which is the whole "a modifier affects every
 // projectile on this tool" rule in one function.
 function toolMods(cell) {
-  const m = { spdMul: 1, dmgMul: 1, dmgAdd: 0, lifeMul: 1, fan: 1, burn: false, twin: false, lit: 0 };
+  const m = {
+    spdMul: 1, dmgMul: 1, dmgAdd: 0, lifeMul: 1, fan: 1, twin: false, lit: 0,
+    // the shot's damage TYPE and the fire it carries: 'blunt' until a fire
+    // modifier says otherwise (DMG_TYPES, js/actions.js)
+    type: 'blunt', burn: 0, burnDps: 0, cinder: 0,
+  };
   for (const id of cell.bits) {
     const b = id && BITS[id];
     if (b && !b.proj && b.mod) b.mod(m);
@@ -326,7 +373,10 @@ function emitBit(p, b, id, m, amb, seq) {
       // what makes this a bit rather than the old arrow: how it flies, what
       // stops it, who it is allowed to hurt, and what it leaves behind
       bit: id, path: b.path, solid: b.solid !== false, ff: !!b.ff,
-      stick: !!b.stick, burn: m.burn, lit, col: b.col,
+      stick: !!b.stick, lit, col: b.col,
+      // what it does when it lands: the damage type, the fire it leaves in
+      // the body, and the ring it sets alight where it ends
+      type: m.type, burn: m.burn, burnDps: m.burnDps, cinder: m.cinder,
       ang: a, spd, ox: p.x, oy: p.y - BOW_Y,
     });
   }
@@ -462,6 +512,8 @@ const TECH = [
   { id: 'bit:lance',     req: 'bit:care' },
   { id: 'bit:heft',      req: 'bit:log' },
   { id: 'bit:longshot',  req: 'bit:wisp' },
+  { id: 'bit:pyre',      req: 'bit:flame' },  // the fire line, escalated
+  { id: 'bit:cinder',    req: 'bit:twin' },   // ...and the multiplying line, ending in one
 ];
 const TECH_BY_ID = {};
 for (const n of TECH) TECH_BY_ID[n.id] = n;
@@ -728,10 +780,22 @@ const BIT_ART = {
     '........', '......iI', '.....iII', 'iiiiiiII',
     '.....iII', '......iI', '........', '........',
   ],
+  // PYRE: FLAME's one tongue grown into a banked fire - a deep red body with
+  // a white heart, standing on two logs, so the escalation reads at a glance
+  pyre: [
+    '...F....', '..FhF...', '.RFhFR..', 'RFhhhFR.',
+    'RFhhhFR.', '.RFhFR..', '.wWWWw..', '..wWw...',
+  ],
+  // CINDER BURST: a hot centre throwing sparks to every corner - the
+  // multiplying line's ending, said in fire
+  cinder: [
+    'f...f...', '.f.f..f.', '..FfF...', '.FfhfF.f',
+    '..FfF...', '.f.f....', 'f..f..f.', '....f...',
+  ],
 };
 const BIT_PAL = {
   '.': null, o: '#241a12', s: '#cfd8e8', S: '#8b93a8',
-  f: '#ff9440', F: '#ffd95c', h: '#fff2c0',
+  f: '#ff9440', F: '#ffd95c', h: '#fff2c0', R: '#ff5a2a',
   w: '#6b4a30', W: '#a3794f', v: '#d9ad72',
   i: '#8fd8ff', I: '#4a90e2', g: '#f2cc6a', G: '#ffe08a',
   n: '#5fd18a', p: '#a259e6', P: '#d6b6ff',

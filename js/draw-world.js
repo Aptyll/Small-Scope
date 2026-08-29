@@ -887,7 +887,7 @@ function structSprite(o) {
 }
 
 function drawAnimal(a, ex, ey, now) {
-  if (a.kind === 'bird') { drawBird(a, ex, ey); return; }
+  if (a.kind === 'bird') { drawBird(a, ex, ey, now); return; }
   const rabbit = a.kind === 'rabbit';
   const wolf = a.kind === 'wolf';
   const set = SPRITES[a.kind][a.dir];
@@ -899,6 +899,9 @@ function drawAnimal(a, ex, ey, now) {
   ctx.fillStyle = 'rgba(110,130,170,0.35)';
   ctx.fillRect(Math.round(a.x - ex) - sw, Math.round(a.y + 2 - ey), sw * 2, 2);
   drawSpriteFlash(spr, px, py, a.flash);
+  // netted, snared, alight, marked: the same four tells a player wears, at
+  // this body's size (drawUnitStates, js/abilities.js)
+  drawUnitStates(a, px, py, spr.width, spr.height, now);
   drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
   if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : 10), a, 4);
 }
@@ -907,7 +910,7 @@ function drawAnimal(a, ex, ey, now) {
 // its own shadow by a.alt, which is the whole read on how high a bird is.
 // No health bar - three hp means every hit is a kill, and a bar over
 // something this small is all bar.
-function drawBird(a, ex, ey) {
+function drawBird(a, ex, ey, now) {
   const flying = a.flyT > 0;
   const spr = SPRITES.bird[a.dir][flying ? 1 + (Math.floor(a.animT) % 2) : 0];
   const px = Math.round(a.x - spr.width / 2 - ex);
@@ -915,12 +918,13 @@ function drawBird(a, ex, ey) {
   ctx.fillStyle = flying ? 'rgba(110,130,170,0.22)' : 'rgba(110,130,170,0.3)';
   ctx.fillRect(Math.round(a.x - ex) - 2, Math.round(a.y + 1 - ey), 4, 1);
   drawSpriteFlash(spr, px, py, a.flash);
+  drawUnitStates(a, px, py, spr.width, spr.height, now); // a burning bird still reads as one
 }
 
 // Worker bot: one sprite, two tread frames. The whole thing bobs 1px while
 // driving so body and tread never part. No face - the states are the tread
 // rolling, the tool swinging at a target, and the gold held up front.
-function drawRobot(b, ex, ey) {
+function drawRobot(b, ex, ey, now) {
   const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
   const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
   const bob = b.moving ? Math.floor(b.animT / 2) % 2 : 0;
@@ -968,6 +972,8 @@ function drawRobot(b, ex, ey) {
     ctx.restore();
   }
 
+  // the four shared tells, same as any other body (js/abilities.js)
+  drawUnitStates(b, bx, by, spr.width, spr.height, now);
   drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8);
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
 }

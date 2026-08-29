@@ -199,31 +199,9 @@ function rollPow(p, sp) {
 function rollLerp(r, t) { return r[0] + (r[1] - r[0]) * t; }
 function rollDmg(p, sp) { return Math.max(1, Math.round(rollLerp(ROLL_DMG, rollPow(p, sp)))); }
 
-// One state, three kinds of unit. A stunned player has every intent dropped
-// out of its input struct (so a human and a bot are pinned by exactly the
-// same window), a stunned animal or robot skips its brain for it. Nobody
-// loses their velocity: whatever knocked you still slides you, and the
-// surface spends it the way it spends any other momentum.
-function stunUnit(e, t) {
-  if (t <= 0) return;
-  // a juggernaut cannot be stunned - that is most of what the ability IS
-  if (e instanceof Player && e.jugT > 0) return;
-  const cur = e.stunT || 0;
-  e.stunT = Math.max(cur, t);
-  e.stunMax = cur > 0 ? Math.max(e.stunMax || 0, e.stunT) : e.stunT;
-  if (e instanceof Player) {
-    e.dodgeT = 0;                                  // no roll survives being stunned out of it
-    if (e.charging) { e.charging = false; e.chargeT = 0; }
-    e.fireArmed = false;
-    e.swingT = 0; e.swingHitDone = true;           // the swing in flight never lands
-    e.sliding = false;
-    e.castT = 0; e.castAb = -1;                    // the cast is knocked out of the hands
-    breakEat(e);                                   // ...and so is the meal (js/core.js)
-    if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
-    if (e.rushT > 0) { e.rushT = 0; e.rushVictim = -1; }
-  }
-  burst(e.x, e.y - 9, '#ffe9a8', 4, 26, 0.4, true);
-}
+// The stun the roll deals, and everything else a unit can be put under, live
+// in the `status effects` banner at the foot of this file - one setter per
+// state, written once for all three kinds of unit.
 
 // A tackle: the roll met something it cannot go through. Both sides take it,
 // both are stunned, and the roll ends on the spot - scaled by `sp`, the speed
@@ -284,7 +262,7 @@ function rollSweep(p) {
     if (a.dead || a.kind === 'bird' || p.rollHit.includes(a)) continue;
     if (Math.hypot(a.x - p.x, a.y - p.y) > ROLL_HIT_R + unitRadius(a)) continue;
     p.rollHit.push(a);
-    hurtAnimal(a, dmg, nx, ny, ROLL_KB, p.id);
+    hurtUnit(a, dmg, nx, ny, p, { kb: ROLL_KB });
     if (a.hp > 0) stunUnit(a, stun);
     if (a.kind === 'deer') { rollTackle(p, sp, nx, ny); return; } // too much animal to go through
   }
@@ -292,7 +270,7 @@ function rollSweep(p) {
     if (b.dead || b.team === p.team || p.rollHit.includes(b)) continue;
     if (Math.hypot(b.x - p.x, b.y - p.y) > ROLL_HIT_R + unitRadius(b)) continue;
     p.rollHit.push(b);
-    hurtRobot(b, dmg, nx, ny, p);
+    hurtUnit(b, dmg, nx, ny, p);
     if (!b.dead) stunUnit(b, stun);
   }
   for (const q of players) {
@@ -300,7 +278,7 @@ function rollSweep(p) {
     if (Math.hypot(q.x - p.x, q.y - p.y) > ROLL_HIT_R + PLAYER_R) continue;
     p.rollHit.push(q);
     if (q.invuln > 0) continue; // a rival mid-roll of their own is untouchable: rolls cancel rolls
-    damagePlayer(q, dmg, nx, ny, p);
+    hurtUnit(q, dmg, nx, ny, p);
     if (!q.dead) stunUnit(q, stun);
   }
 }
@@ -624,5 +602,247 @@ function destroyStructure(o, refund, p) {
   // already has zero living players waiting on its respawn timer - only
   // die() calls checkLastStanding() otherwise, and nothing else would notice
   if (o.type === 'keep') checkLastStanding();
+}
+
+// ------------------------------------------------------------ status effects
+// Three kinds of thing walk this world - a player slot, an animal, a worker
+// bot - and ANYTHING that hurts one is allowed to hurt all three the same way.
+// These are the funnels that make that true: `hurtUnit` is the one blow, the
+// setters beside it are the one place each state is written, and
+// `unitsNear`/`unitsHit` are the one list an area effect sweeps. A hit site says
+// what it does ONCE and every kind takes it, which is what stops an ability from
+// quietly meaning "players only" - and what makes the next kind of neutral
+// fauna take the whole game's damage on the day it is added.
+
+// ---- damage types --------------------------------------------------------
+// A blow carries a TYPE. `blunt` is everything that always existed - an arrow,
+// an axe, a shoulder - and is the default when nothing names one. What a type
+// DOES lives in this table, never in an `if` at a hit site: the sparks it
+// throws off a body, and how long it leaves that body burning.
+const BURN_T = 3;        // s a plain fire hit burns for...
+const BURN_DPS = 6;      // ...at this many hp a second, paid...
+const BURN_TICK = 0.4;   // ...in bites this far apart, so a burn reads as ticks rather than a drain
+const BURN_MAX = 8;      // s of burn one body can carry at once, however many shots land on it
+const DMG_TYPES = {
+  blunt: { spark: null, ignite: 0 },
+  fire: { spark: '#ffd95c', ignite: BURN_T }, // sets alight whatever it lands on
+  burn: { spark: null, ignite: 0 },           // the fire already lit, paying a bite: it must never relight itself
+};
+
+// ---- what a unit IS ------------------------------------------------------
+// A player is a Player, an animal has a `kind`, a worker bot is what is left.
+// Asked here rather than duck-typed at each site (`e.input`, `e.tx`), so a new
+// kind of walker is one line rather than a hunt through every hit in the game.
+function isAnimalUnit(e) { return !(e instanceof Player) && e.kind !== undefined; }
+// where a blow lands on a body: a bird rides its altitude, everything else
+// stands on its own feet
+function unitMidY(e) { return e.y - (e.alt || 0) - 6; }
+// can this be hit at all right now
+function unitAlive(e) {
+  if (!e || e.dead) return false;
+  return e instanceof Player ? e.active && !inAir(e) : true;
+}
+// Whose side a unit is on. Wildlife has none (-1): neutral to everyone and
+// therefore fair game to everyone, which is exactly how the world already
+// treats a deer. For the sides that do have one this mirrors enemyOf's rule.
+function unitTeam(e) { return e.team === undefined ? -1 : e.team; }
+// A thing left lying in the world - a trap, a net, a crater, a shot in flight -
+// carries `owner` and `team` rather than being a body itself. This is the
+// `src` to ask the two lists below about on its behalf: the owner while they
+// still stand on that side, otherwise the team alone, since a trap outlives
+// the hunter who set it and still has to know whose it was.
+function sideOf(w) {
+  const o = players[w.owner];
+  return o && o.team === w.team ? o : { team: w.team, id: -1 };
+}
+function unitFoe(src, e) {
+  if (!unitAlive(e) || e === src) return false;
+  const t = unitTeam(e);
+  if (t < 0 || !src) return true;
+  return !PVP || t !== src.team;
+}
+// Every living thing inside a circle that `src` is allowed to touch, in ONE
+// list: slots, animals and worker bots together. An area effect walks this
+// rather than a loop per kind - which is the whole reason a stomp can no
+// longer quietly forget the wildlife.
+function unitsNear(src, x, y, r) {
+  const out = [];
+  for (const q of players) if (unitFoe(src, q) && Math.hypot(q.x - x, q.y - y) <= r) out.push(q);
+  for (const a of animals) if (unitFoe(src, a) && Math.hypot(a.x - x, a.y - (a.alt || 0) - y) <= r) out.push(a);
+  for (const b of robots) if (unitFoe(src, b) && Math.hypot(b.x - x, b.y - y) <= r) out.push(b);
+  return out;
+}
+// The same list minus anyone whose i-frames are up: the one a BLOW sweeps,
+// since a rival mid-roll is untouchable. A lasting ground CONDITION (the
+// crater's deep snow, the falcon's eye) wants unitsNear - neither is a hit,
+// and neither is dodged by having just taken one.
+function unitsHit(src, x, y, r) {
+  return unitsNear(src, x, y, r).filter((e) => !(e.invuln > 0));
+}
+
+// ---- the one blow --------------------------------------------------------
+// `src` is the player who dealt it (kill credit and the feed line) or null for
+// the world. `o` carries the rest: `type` (a DMG_TYPES key), `kb` px/s of shove
+// for an animal or a bot (a slot's shove is damagePlayer's own, so the callers
+// that want a particular one add it themselves), `cause` for the feed line,
+// `ambush`, `crit`, and `burn`/`burnDps` for a shot that names its own fire -
+// otherwise the type's own. Everything an ability or a tool lands comes
+// through here; the three per-kind functions under it stay for what is
+// genuinely per-kind (a den waking, a worker turning on whoever hit it).
+function hurtUnit(e, dmg, nx, ny, src, o) {
+  if (!unitAlive(e)) return;
+  o = o || {};
+  const ty = DMG_TYPES[o.type] || DMG_TYPES.blunt;
+  if (e instanceof Player) {
+    damagePlayer(e, dmg, nx, ny, src, o.cause || null, o.crit);
+  } else if (isAnimalUnit(e)) {
+    hurtAnimal(e, dmg, nx, ny, o.kb === undefined ? 30 : o.kb, src ? src.id : undefined, o.ambush);
+  } else {
+    hurtRobot(e, dmg, nx, ny, src);
+    if (o.kb !== undefined) { e.kbx = nx * o.kb; e.kby = ny * o.kb; }
+  }
+  if (ty.spark) burst(e.x, unitMidY(e), ty.spark, 6, 50, 0.45);
+  // fire outlives its own blow: the shot's `burn` seconds if it named any,
+  // else whatever the damage type is worth on its own
+  const bt = o.burn === undefined ? ty.ignite : o.burn;
+  if (bt > 0) igniteUnit(e, bt, o.burnDps, src);
+}
+
+// ---- the states a unit can be under --------------------------------------
+// One state, three kinds of unit. A stunned player has every intent dropped
+// out of its input struct (so a human and a bot are pinned by exactly the
+// same window), a stunned animal or robot skips its brain for it. Nobody
+// loses their velocity: whatever knocked you still slides you, and the
+// surface spends it the way it spends any other momentum.
+function stunUnit(e, t) {
+  if (t <= 0 || !unitAlive(e)) return;
+  // a juggernaut cannot be stunned - that is most of what the ability IS
+  if (e instanceof Player && e.jugT > 0) return;
+  const cur = e.stunT || 0;
+  e.stunT = Math.max(cur, t);
+  e.stunMax = cur > 0 ? Math.max(e.stunMax || 0, e.stunT) : e.stunT;
+  if (e instanceof Player) {
+    e.dodgeT = 0;                                  // no roll survives being stunned out of it
+    if (e.charging) { e.charging = false; e.chargeT = 0; }
+    e.fireArmed = false;
+    e.swingT = 0; e.swingHitDone = true;           // the swing in flight never lands
+    e.sliding = false;
+    e.castT = 0; e.castAb = -1;                    // the cast is knocked out of the hands
+    breakEat(e);                                   // ...and so is the meal (js/core.js)
+    if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
+    if (e.rushT > 0) { e.rushT = 0; e.rushVictim = null; }
+  }
+  burst(e.x, unitMidY(e) - 3, '#ffe9a8', 4, 26, 0.4, true);
+}
+
+// Rooted: pinned where you stand, and nothing that moves you will fire. A slot
+// reads it through abilityMoveMul, an animal or a bot through unitMoveMul -
+// both end at zero, so a snared deer stands in the jaws exactly as long as a
+// snared rival does.
+function rootUnit(e, t) {
+  if (t <= 0 || !unitAlive(e)) return;
+  if (e instanceof Player && e.jugT > 0) return; // nothing stops a juggernaut, the jaws included
+  e.rootT = Math.max(e.rootT || 0, t);
+  if (e instanceof Player) { e.vx = 0; e.vy = 0; e.sliding = false; }
+}
+// Slowed: a multiplier on everything that moves the body, for a window.
+// Always the WORSE of what is already on you and what has just landed, which
+// is how the net and the crater have stacked on a player from the start.
+function slowUnit(e, t, mul) {
+  if (t <= 0 || !unitAlive(e)) return;
+  e.slowT = Math.max(e.slowT || 0, t);
+  e.slowMul = Math.min(e.slowMul === undefined ? 1 : e.slowMul, mul);
+}
+// Netted: the slow, plus the drape drawn over the body that says why it is slow.
+function netUnit(e, t, mul) {
+  if (!unitAlive(e)) return;
+  slowUnit(e, t, mul);
+  e.netT = Math.max(e.netT || 0, t);
+}
+// Marked: revealed. On a slot seenAt() returns its full range and both maps
+// keep drawing them; an animal or a bot has no cover to strip, so it is the
+// gold chevrons alone - the falcon still says "I have found this".
+function markUnit(e, t) {
+  if (t <= 0 || !unitAlive(e)) return;
+  e.markT = Math.max(e.markT || 0, t);
+}
+
+// ---- fire ----------------------------------------------------------------
+// The one damage type that outlives its own blow. An ignited unit pays
+// `burnDps` in bites BURN_TICK apart until its clock runs out. A fresh
+// ignition REFRESHES that clock (capped at BURN_MAX) and takes the hotter of
+// the two rates rather than lighting a second fire, so a SPLITTER fan sets you
+// properly alight instead of banking half a minute of it. Credit rides along
+// in `burnBy`, so burning to death is a kill for whoever struck the light.
+// Every kind of unit burns, and every kind wears the flames (drawUnitStates).
+function igniteUnit(e, t, dps, src) {
+  if (t <= 0 || !unitAlive(e)) return;
+  const fresh = !(e.burnT > 0);
+  e.burnT = Math.min(BURN_MAX, Math.max(e.burnT || 0, t));
+  e.burnDps = Math.max(e.burnDps || 0, dps || BURN_DPS);
+  e.burnBy = src ? src.id : -1;
+  if (fresh) {
+    e.burnTick = BURN_TICK;
+    e.burnFxT = 0;
+    burst(e.x, unitMidY(e), '#ff9440', 7, 50, 0.5);
+    if (nearPlayer(e.x, e.y)) SFX.hidden();
+  }
+}
+// The burn's own clock, run once per sim step for every kind of unit that has
+// one - updateAbilities for a slot, updateUnitStatus for everything else.
+function updateBurn(e, dt) {
+  if (!(e.burnT > 0)) return;
+  e.burnT = Math.max(0, e.burnT - dt);
+  // embers off the body the whole time it burns: a burning thing has to READ
+  // as burning from across the map, not only on the frames the number ticks
+  e.burnFxT = (e.burnFxT || 0) - dt;
+  if (e.burnFxT <= 0) {
+    e.burnFxT = 0.06;
+    particles.push({
+      x: e.x + rand(-4, 4), y: unitMidY(e) + rand(-3, 4),
+      vx: rand(-8, 8), vy: rand(-30, -14),
+      life: rand(0.25, 0.45), maxLife: 0.4,
+      color: Math.random() < 0.45 ? '#ff9440' : Math.random() < 0.6 ? '#ffd95c' : '#e0533a',
+      size: 1, grav: -22, alpha: 0.85,
+    });
+  }
+  e.burnTick -= dt;
+  if (e.burnTick > 0) return;
+  e.burnTick += BURN_TICK;
+  const src = e.burnBy >= 0 ? players[e.burnBy] : null;
+  // type 'burn', not 'fire': the bite must never relight the fire dealing it
+  hurtUnit(e, Math.max(1, Math.round(e.burnDps * BURN_TICK)), 0, -1,
+    src && !src.dead ? src : null, { type: 'burn', kb: 0, cause: 'fire' });
+}
+// put a body out - a death, a respawn, a fresh landing
+function douseUnit(e) { e.burnT = 0; e.burnDps = 0; e.burnTick = 0; e.burnBy = -1; e.burnFxT = 0; }
+
+// ---- the clock every non-player unit runs --------------------------------
+// A slot ages these inside updateAbilities, which owns most of them; an animal
+// and a worker bot call this from their own update, so the two halves of the
+// world can never drift on how long a net holds.
+function updateUnitStatus(e, dt) {
+  if (e.rootT > 0) e.rootT = Math.max(0, e.rootT - dt);
+  if (e.markT > 0) e.markT = Math.max(0, e.markT - dt);
+  if (e.netT > 0) e.netT = Math.max(0, e.netT - dt);
+  if (e.slowT > 0) e.slowT = Math.max(0, e.slowT - dt);
+  else e.slowMul = 1;
+  updateBurn(e, dt);
+}
+// What is left of a non-player unit's speed - the same root/slow fold
+// abilityMoveMul does for a slot. navStep multiplies its speed by this, so
+// every animal and every worker in the game is slowed by one edit; the two
+// movers that steer themselves instead of routing (a bot loitering, a bird in
+// flight) multiply it in by hand.
+function unitMoveMul(e) {
+  if (!e || e instanceof Player) return 1;
+  if (e.rootT > 0) return 0;
+  return e.slowT > 0 ? e.slowMul : 1;
+}
+// every timed state a fresh body starts with none of, on any kind of unit
+function clearUnitStatus(e) {
+  e.stunT = 0; e.stunMax = 0;
+  e.rootT = 0; e.slowT = 0; e.slowMul = 1; e.netT = 0; e.markT = 0;
+  douseUnit(e);
 }
 

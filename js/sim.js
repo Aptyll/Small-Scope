@@ -219,7 +219,7 @@ function updatePlay(dt) {
         life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE,
         // the trail says WHOSE shot it is, which is what it is for - except a
         // burning one, where the fire is the more urgent fact about it
-        color: a.burn ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[a.team].mark,
+        color: a.burn > 0 ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[a.team].mark,
         size: 1, grav: 0, alpha: ARROW_TRAIL_A,
       });
     }
@@ -274,8 +274,19 @@ function updatePlay(dt) {
     if (!dead && a.solid !== false && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
       dead = true;
       burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
-      if (a.burn) burst(a.x, a.y, '#ff9440', 7, 50, 0.5);
+      if (a.burn > 0) burst(a.x, a.y, '#ff9440', 7, 50, 0.5);
     }
+    // What the shot does to a BODY, said once for all three kinds: the damage
+    // type, the fire it lights and the shove it lands are the bit's, and
+    // hurtUnit (js/actions.js) hands them to a slot, a deer or a worker bot
+    // alike. Only the hit test below differs per kind - a raised shield, a
+    // chassis, a small animal high on its own altitude.
+    const blow = (t, kb) => {
+      hurtUnit(t, a.dmg, nx, ny, players[a.owner], {
+        type: a.type, burn: a.burn, burnDps: a.burnDps, ambush: a.ambush, kb,
+      });
+      if (a.ambush) ambushFx(a.x, a.y);
+    };
     if (!dead) {
       // players first: the same shot that drops a deer drops a rival. A bit
       // with friendly fire on skips the team check - but never the shooter,
@@ -293,10 +304,8 @@ function updatePlay(dt) {
             dead = true;
             break;
           }
-          damagePlayer(t, a.dmg, nx, ny, players[a.owner], null, a.ambush);
+          blow(t);
           burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
-          if (a.burn) burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
-          if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
           break;
         }
@@ -308,8 +317,7 @@ function updatePlay(dt) {
       for (const b of robots) {
         if ((a.team === b.team && !a.ff) || b.dead) continue;
         if (robotHit(b, a.x, a.y)) {
-          hurtRobot(b, a.dmg, nx, ny, players[a.owner]);
-          if (a.ambush) ambushFx(a.x, a.y);
+          blow(b, 40);
           dead = true;
           break;
         }
@@ -317,14 +325,27 @@ function updatePlay(dt) {
     }
     if (!dead) {
       for (const an of animals) {
+        if (an.dead) continue;
         if (animalHit(an, a.x, a.y)) {
-          hurtAnimal(an, a.dmg, nx, ny, 25 + 45 * a.pow, a.owner, a.ambush);
+          blow(an, 25 + 45 * a.pow);
           dead = true;
           break;
         }
       }
     }
     if (dead) {
+      // CINDER BURST: the shot ends and its embers go everywhere. Everything
+      // alive in the ring catches - the ring is the bit, so it does not care
+      // what kind of body is standing in it (unitsNear, js/actions.js).
+      if (a.cinder > 0) {
+        const src = players[a.owner];
+        for (const t of unitsNear(sideOf(a), a.x, a.y, a.cinder)) igniteUnit(t, a.burn, a.burnDps, src);
+        burst(a.x, a.y, '#ff9440', 14, 90, 0.5);
+        burst(a.x, a.y, '#ffd95c', 10, 70, 0.45);
+        if (nearPlayer(a.x, a.y)) SFX.break_();
+      } else if (a.burn > 0) {
+        burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
+      }
       // A shot that ends - a miss, a wall, a body, or the end of its life -
       // leaves a shaft where it stopped IF the bit that fired it is one that
       // comes back (BITS[...].stick, the plain arrow and the barb). That is
@@ -481,6 +502,7 @@ function updatePlayer(p, dt) {
   // the class abilities' own clock: cooldowns, the cast landing, and every
   // timed state one leaves on this body (js/abilities.js)
   updateAbilities(p, dt);
+  if (p.dead) return; // a burn can finish the slot in there; a body takes no more steps
   // ...and the meal's clock beside it: the channel landing its heal, and the
   // one cooldown a berry and a fish share (js/core.js)
   updateEat(p, dt);
@@ -645,7 +667,7 @@ function updatePlayer(p, dt) {
       p.vx = p.vy = 0;
       p.sliding = false;
       p.slideT = 0;
-      if (p.rushT > 0) { p.rushT = 0; p.rushVictim = -1; } // the charge ends in the water
+      if (p.rushT > 0) { p.rushT = 0; p.rushVictim = null; } // the charge ends in the water
       p.castT = 0; p.castAb = -1; p.shieldT = 0;           // and so does whatever was being cast
       breakEat(p);                                         // the meal goes in the water with you
       p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water

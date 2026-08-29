@@ -168,9 +168,27 @@ anyone can pull back out. Optional `lit` is a light radius it carries in flight.
 
 A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
 **every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
-`spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot becomes N in a spread), `burn`, `twin`
-(fire the next two projectile bits in one press) and `lit`. SPEEDUP, SPLITTER, FLAME, DUPLICATE,
-HEFT and LONGSHOT are the six that exist.
+`spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot becomes N in a spread), `twin` (fire the
+next two projectile bits in one press), `lit`, and the fire quartet below. Cells fold **in whatever
+order they sit in**, so a `mod` must write values that do not depend on that order — a max or a set,
+never a multiply of what is already there. Eight exist: SPEEDUP, SPLITTER, DUPLICATE, HEFT,
+LONGSHOT, and the three that carry fire.
+
+#### Fire on a shot
+
+`m.type` is the shot's **damage type** (`DMG_TYPES`, js/actions.js — `blunt` unless a modifier says
+otherwise), and `m.burn` / `m.burnDps` are the fire it leaves in the body it hits. The shot carries
+all four onto the arrow, and every hit branch in the arrow loop hands them to `hurtUnit` — so a
+flaming shot burns a rival, a deer, a bird and a worker bot identically, with no per-kind code.
+What a burn then does is [status effects](#status-effects-one-set-for-every-unit).
+
+| bit | tier | what it writes |
+| --- | --- | --- |
+| **FLAME** | KEEN, under SPEEDUP | `type: 'fire'`, `BURN_T` 3 s at `BURN_DPS` 6, `dmgAdd += 2`, `lit` 30. The flat bonus is small on purpose: the burn is where the damage went |
+| **PYRE** | GILDED, under FLAME | the same fire, `PYRE_T` 6 s at `PYRE_DPS` 12 — twice as long and twice as hot |
+| **CINDER BURST** | GILDED, under DUPLICATE | plain fire, plus `m.cinder` — a `CINDER_R` (26 px) ring lit where the shot **ends**, hit or miss. The multiplying lineage's finish: SPLITTER multiplies the shot, DUPLICATE the press, CINDER the impact |
+
+A tool holding only modifiers fires nothing, the same as one holding only bits too heavy for it.
 
 ### Firing
 
@@ -192,7 +210,7 @@ HEFT and LONGSHOT are the six that exist.
 (`pwScale`), the class kit's `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`), the hero level and then
 the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
 about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
-`stick`, `burn`, `lit` and `col` alongside the old fields.
+`stick`, `type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old fields.
 
 `toolReady(p)` is the second half of the old quiver gate: an empty slot and a tool with no bit
 light enough to throw are both as dry as an empty quiver, and `updatePlayer` refuses the draw on
@@ -212,10 +230,17 @@ carries no `path` and falls straight through.
 | `boomer` | out on the bearing slowing to nothing, then hauled back to whoever threw it; the flight ends when it gets home |
 | `orbit` | a ring of `ORBIT_R` around the shooter, eased out over the first 0.25 s and swept at its own speed |
 
-Three per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
+Four per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
 test (that is the whole of "never hits ground"), `a.ff` lifts the team check on players and worker
-bots (never on the shooter, at any weight), and `a.stick` decides whether the spent shot leaves a
-shaft. A burning shot trails fire instead of team colour and bursts embers where it lands.
+bots (never on the shooter, at any weight), `a.stick` decides whether the spent shot leaves a
+shaft, and `a.cinder` lights a ring around wherever the shot ended. A burning shot trails fire
+instead of team colour and bursts embers where it lands.
+
+**Three hit tests, one blow.** The branches differ only in what they test against — a raised tower
+shield and a 7 px body for a slot, `robotHit` for a chassis, `animalHit` for a body that may be up
+on its own altitude — and all three then call the same local `blow()`, which hands the bit's damage,
+type, fire and shove to `hurtUnit`. Nothing about *what a shot does* is written per kind, which is
+what keeps the left button honest across the whole roster.
 
 ### The bit column
 
@@ -323,6 +348,15 @@ through exactly the key a human presses; `updateAbilities(p, dt)` runs the coold
 cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)` (called from
 `updatePlay`) steps what they leave in the world.
 
+**Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
+bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the
+tables below say "rival" because that is who you are usually casting at, not because anything else
+is exempt. That is not written into each ability: they sweep `unitsNear`/`unitsHit` and land through
+`hurtUnit` and the state setters ([status effects](#status-effects-one-set-for-every-unit)), so the
+next kind of neutral fauna pushed into `animals` is in range of all eight on the day it is added,
+with no edit here. A **structure** is not a unit and takes none of it; the roosting eagle is an
+objective with its own damage path, and takes none of it either.
+
 **A cast is a performance**: `p.castT` runs the ability's `cast` seconds, the body visibly does
 it (`abilityPose` shifts/tilts the sprite — a kneel to set a trap, a hop into the stomp, the
 recoil hop off the net shot), movement halves, and the effect fires at the aim held at the END
@@ -350,9 +384,11 @@ WARRIOR — close pressure, blocking, momentum:
 | 3 | **AVALANCHE STOMP** | 14 s | a leap-stomp at the feet: 12 damage + radial knockback + a beat of stun in `STOMP_R`, and the **crater** (`craters`) is deep snow that slows rivals crossing it for 4 s |
 | 4 | **JUGGERNAUT** | 20 s | 5 s: immune to stun (`stunUnit` head) and knockback (`damagePlayer`), speed ramps +50 % over the duration, and body contact at speed bowls rivals over — damage scales with the speed carried in, once per rival per activation (`p.jugHit`) |
 
-The movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
-crater drag, juggernaut ramps — applied to the walk cap **and** the ice cap in `updatePlayer`.
-All damage passes its `src`, so an ability kill credits like an arrow. Bots spend abilities in
+A slot's movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
+crater drag, juggernaut ramps — applied to the walk cap **and** the ice cap in `updatePlayer`. An
+animal or a bot folds the same root and slow through `unitMoveMul(e)`, spent inside `navStep`.
+All damage passes its `src`, so an ability kill credits like an arrow — a trap or a volley whose
+caster has since gone down credits nobody (`abCredit`) rather than a corpse. Bots spend abilities in
 `updateAI`'s fight rung, off cooldown at ranges each is good at. The strip's ability wells (icons,
 cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.md).
 
@@ -382,8 +418,8 @@ every edge a horizontal line. The seven lineages:
 | ARROW | CARE ARROW | ICE LANCE |
 | BARBED SHOT | THROWING LOG | HEFT |
 | HOOKSHOT | WISP | LONGSHOT |
-| SPEEDUP | FLAME | — |
-| SPLITTER | DUPLICATE | — |
+| SPEEDUP | FLAME | PYRE |
+| SPLITTER | DUPLICATE | CINDER BURST |
 
 **The whole tier-0 row is free and already done** (`techDone` returns true for tier 0 without
 asking the profile), so a fresh install finds the basics from its first rock and an old save
@@ -630,27 +666,82 @@ takes everything inside `ROLL_HIT_R` (7px) of the roller's own radius and splits
 **Everything scales with the speed the roll is actually carrying** — `rollPow` runs from the
 class's own `kit.dodgeSpeed` up to `ROLL_FAST` (340 px/s), which is why a dash launched out of
 an ice slide deals `ROLL_DMG`'s top end (16 and a 1.1s stun) against 5 and 0.5s off a standing
-start. That is the whole reason to chain a dash out of momentum instead of from rest.
+start. That is the whole reason to chain a dash out of momentum instead of from rest. All three
+kinds take it through the same `hurtUnit` + `stunUnit` pair
+([status effects](#status-effects-one-set-for-every-unit)) — the loops differ only in their radius
+and their once-per-roll bookkeeping.
 
-### Stun
+## Status effects: one set for every unit
 
-`stunUnit(e, t)` is one state across all three kinds of unit, and it never touches velocity —
-whatever hit you still slides you, and the surface spends it like any other momentum.
+Everything in this section lives under the **`status effects`** banner at the foot of
+[js/actions.js](../../js/actions.js). Three kinds of thing walk this world — a **player slot**, an
+**animal**, a **worker bot** — and anything that can hurt one can hurt all three the same way. That
+is not a coincidence to be re-established per feature; it is what these funnels are for:
 
-- a **player** has every intent dropped out of `p.input` at the top of `updatePlayer` (movement,
-  fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a
-  human and an AI fill are pinned by the identical window. The draw, the swing in flight and any
-  roll are cancelled outright.
-- an **animal** or a **robot** skips its brain for the window in `updateAnimal`/`updateRobot`; a
-  shove still moves it, and an animal drops the route it was walking when it comes round.
+| Reach for | When |
+| --- | --- |
+| `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, cause, ambush, crit, burn, burnDps }`. Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
+| `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — slots, wildlife **and** bots in one list |
+| `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps. A lasting ground *condition* (a crater, the falcon's eye) wants `unitsNear` — neither is a hit, and neither is dodged by having just taken one |
+| `stunUnit` `rootUnit` `slowUnit` `netUnit` `markUnit` `igniteUnit` | the one place each state is written. Each takes the worse/longer of what is already on the body |
+| `unitMoveMul(e)` | what is left of a non-player's speed — `abilityMoveMul`'s twin. Spent inside `navStep`, so one edit slows every walker; the two movers that steer themselves rather than route (a loitering bot, a bird in flight) fold it in by hand |
+| `clearUnitStatus(e)` / `douseUnit(e)` | a fresh body, and a fire put out. Called by `Player.reset`, `die`, `makeAnimal`, `makeRobot` |
 
-The tell is one visual everywhere: **three sparks orbiting** (`drawStunStars`), phased off the
-unit's own `stunT` so no global clock is involved and two stunned units are never in lockstep.
-Over an animal or a robot they sit above the health bar. On a player they ride a badge that
-**mirrors the level badge on the other side of the overhead frame** — same backing and track, its
-left frame column shared with the health bar backing's right edge — whose 5×5 track drains from
-the bottom as the window runs out (`stunMax` is the height it drains from). It is drawn for every
-slot, like the stamina bar: a rival seeing stars is a tell worth having.
+`unitFoe(src, e)` is the side rule they all share, and it is where **wildlife being neutral** is
+written down once: an animal has no `team` (`unitTeam` → −1), so it is nobody's friend and
+everybody's fair game — exactly how the world already treated a deer. `sideOf(w)` hands one of these
+lists the side of a **thing in the world** — a trap, a net, a shot in flight — rather than a living
+caster, so a trap outlives the hunter who set it and still knows whose it was; `abCredit(w)`
+(js/abilities.js) is its other half, and pays a kill to nobody once that caster is down.
+
+The six states, and what each does to a body:
+
+| state | field | what it does | the tell on the body |
+| --- | --- | --- | --- |
+| **stun** | `stunT`/`stunMax` | a slot has every intent dropped out of `p.input` at the top of `updatePlayer` (movement, fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a human and an AI fill are pinned by the identical window — the draw, the swing in flight and any roll are cancelled outright; an animal or a bot skips its brain for the window in `updateAnimal`/`updateRobot`. Never touches velocity: whatever hit you still slides you | three sparks orbiting (`drawStunStars`) |
+| **root** | `rootT` | move multiplier 0 — no walk, no roll, no slide; tools still work | sprung iron jaws at the feet |
+| **slow** | `slowT`/`slowMul` | the multiplier on every speed cap | — (the net's drape says it, when a net is why) |
+| **net** | `netT` | the slow, plus the reason for it | a mesh drape over the sprite |
+| **mark** | `markT` | on a slot, `seenAt()` returns full range and both maps keep drawing them (its one legal bypass); an animal or a bot has no cover to strip, so it is the reveal alone | gold chevrons falling toward the head |
+| **fire** | `burnT`/`burnDps`/`burnBy` | see below | flame tongues off the crown, and lit snow under the feet |
+
+Every one of them is **drawn on the body, for both sides**, at whatever size that body is —
+`drawUnitStates(e, px, py, w, h, now)` (js/abilities.js) takes the sprite's own box and is called by
+`drawAbilityOnPlayer`, `drawAnimal`, `drawBird` and `drawRobot` alike. A state you cannot see is a
+rule you cannot play around, and that is as true of a deer as of a rival. The player keeps two tells
+of its own on top (a raised shield, the juggernaut's rim), and the stun badge is the one visual that
+differs by kind: over an animal or a robot the sparks sit above the health bar, while on a player
+they ride a badge that **mirrors the level badge on the other side of the overhead frame** — same
+backing and track, its left frame column shared with the health bar backing's right edge — whose
+5×5 track drains from the bottom as the window runs out (`stunMax` is the height it drains from).
+It is drawn for every slot, like the stamina bar: a rival seeing stars is a tell worth having.
+
+### Damage types, and fire
+
+A blow carries a **type**, and `DMG_TYPES` is what a type *is* — the sparks it throws off a body and
+how long it leaves that body burning. `blunt` is everything that always existed (an arrow, an axe, a
+shoulder) and is the default when nothing names one.
+
+**`fire` is the one type that outlives its own blow.** It ignites what it lands on; an ignited unit
+then pays `burnDps` in bites `BURN_TICK` (0.4 s) apart until its clock runs out — `BURN_T` 3 s at
+`BURN_DPS` 6 for a plain fire hit. A fresh ignition **refreshes** the clock (capped at `BURN_MAX`,
+8 s) and takes the hotter of the two rates rather than lighting a second fire, so a SPLITTER fan
+sets you properly alight instead of banking half a minute of it. Credit rides along in `burnBy`, so
+burning to death is a kill for whoever struck the light (`KILL_VERB.fire` — "BURNED"; with nobody to
+credit, `DEATH_CAUSE.fire` — "BURNED IN THE SNOW").
+
+Two rules make the burn behave like fire rather than like a stream of small arrows:
+
+- **`DOT_CAUSE`** (js/player.js) — a bite of fire is *not a blow*. It goes **through** i-frames (a
+  roll does not put a fire out), grants none of its own, and never shoves. Without that, the 0.7 s
+  of grace every hit hands out would swallow the whole burn. It still breaks cover and the meal:
+  you cannot lie hidden, or eat, while you are alight.
+- **The tick's own damage type is `burn`, not `fire`** — otherwise the bite would relight the fire
+  dealing it and nothing would ever go out.
+
+Where fire comes from: the three **fire modifier bits**
+([tools and bits](#tools-and-bits)) — FLAME, PYRE, CINDER BURST. Nothing else on the map is on fire:
+the roosting eagle is an objective with its own damage path, not a unit, and takes no status at all.
 
 ## Prone: under the snow
 
@@ -760,11 +851,22 @@ rabbits (8 HP, biased to spawn near berry bushes) and 10 deer (24 HP). Neither r
 respawns. **Wolves** (30 HP) and **birds** (3 HP) belong to a
 [landmark](world.md#landmarks) instead — `a.home` points at it, and the site restocks them.
 
-`updateAnimal()` is the shared shell: it ages the flash and knockback, dispatches to
+`updateAnimal()` is the shared shell: it ages the flash and knockback, runs
+`updateUnitStatus` (the shared clock — root, slow, net, mark, fire), dispatches to
 `updatePrey` / `updateWolf` / `updateBird`, clamps to the world, and calls `animalDies(a)` — the
 one place a kill pays out, straight from the `YIELD` table. Everything in `animals` is a target
 for arrows (`animalHit(a, x, y)`, shared by the arrow update and the aim line), gets the amber
 hunt reticle, and joins the y-sorted draws.
+
+**An animal is a unit like any other.** `makeAnimal` hands every kind the full status set through
+`clearUnitStatus`, so a rabbit, a deer, a wolf and a bird take the same damage and the same six
+states from every ability and every bit that a player slot does — snared, netted, slowed, marked,
+stunned, set alight — and wear the same tells at their own size
+([status effects](#status-effects-one-set-for-every-unit)). Nothing about wildlife is exempted
+anywhere; what makes them everybody's target rather than nobody's is simply that they carry no
+`team`, which `unitFoe` reads as neutral. **A new kind of neutral fauna pushed into `animals` gets
+all of it for free** — the checklist for one is in
+[checklists.md](checklists.md#common-changes) ("Adding a kind of unit").
 
 Prey behaviour lives in `updatePrey()`, and **every step of it is a routed goal** — grazing
 included, which is what keeps the `.` overlay honest ([rendering.md](rendering.md#routes)).
@@ -789,7 +891,9 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
 
 A kill pays its `YIELD` gold straight to whoever landed the final blow (`a.lastHit`, through
 `awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
-pickup. Arrows are the only thing that hurts any of them (there is no melee); animals are solid
+pickup, and a burn credits the slot that lit it, so an animal that walks away and dies of its
+fire still pays. Shots, rolls and the class abilities are what hurt them (there is no
+melee — the E swing is for scenery, never for a body); animals are solid
 to players, robots and each other except birds, which fly (see
 [Unit collisions](#unit-collisions)), and sprites are side-view only (`dir` is `left|right`).
 They are not shown on the minimap or world map.
@@ -1263,7 +1367,11 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
 
 `robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
 tread frames — see [sprites.md](sprites.md)). `updateRobot()` mirrors the animal state machine plus
-jobs. **What job it runs is decided by the [worker flag](#worker-flags) of the player who owns its
+jobs — `updateUnitStatus` first, so a chassis wears every state a player slot can be put under
+(`makeRobot` clears the full set into it): snared, netted, slowed, marked, stunned, on fire, and
+scrapped by a burn like anything else ([status effects](#status-effects-one-set-for-every-unit)).
+The root and the slow are spent inside `navStep` for a routed drive and folded into `wander()` by
+hand for the loiter, which is the only movement a worker steers itself. **What job it runs is decided by the [worker flag](#worker-flags) of the player who owns its
 bay** (`flagOf(b)`); with no flag it falls back to the original bay-centred gather: pick the
 nearest tree/rock within 8 tiles of the bay's mouth (`structMouth`, also where they deposit)
 (`nearestObj`, the predicate generalisation of `nearestBerryBush`), work it in 0.9 s ticks into a
@@ -1284,9 +1392,9 @@ carried gold shows as a nugget up front), and show a health bar. Their SFX are g
 anything inside `ROBOT_REACH` (15 px) — deliberately flat, with nothing scaling it yet; that is
 the balance pass. `robotStrike(b, e, pt)` is the single blow: a building goes through
 `hurtStruct` (the same path a player's E swing takes, so the wreck, the rubble payout and the
-`WRECKED A` line are one code path), a slot through `damagePlayer` with `cause: 'worker'`, a rival
-worker through `hurtRobot` — all credited to `players[b.owner]`, so a worker kill pays the bounty
-and levels its owner like any other. `cause` doubles as the feed's **verb** (`KILL_VERB`), so a
+`WRECKED A` line are one code path), and any **body** through `hurtUnit` with `cause: 'worker'` —
+all credited to `players[b.owner]`, so a worker kill pays the bounty and levels its owner like any
+other. `cause` doubles as the feed's **verb** (`KILL_VERB`), so a
 worker kill reads `YOU CUT DOWN <NAME>` instead of `SHOT`. Targets come from
 `robotFoeUnit(b, range)` (nearest enemy slot or worker; slots are noticed through `seenAt`, so a
 buried body is as invisible to a worker as to a wolf) and `enemyStructNear(team, x, y, r)`.
@@ -1298,15 +1406,17 @@ had draws it, off `b.atkAim` and `b.atkCd` instead of `b.tgt` and `b.workT`.
 A worker is **shootable**: `robotHit(b, x, y)` is its hitbox (radius 7 about `b.y - 1`, the middle
 of a body whose treads sit at `b.y + 4`), and `hurtRobot(b, dmg, nx, ny, src)` is the single entry
 point for damage — flash, knockback, a damage floater, a scrap-and-sparks burst, `SFX.hit`, and
-`robotDies` at zero. Only arrows reach it, and only from another team (friendly fire is off, as it
-is for players), so a bay's own side drives through its workers safely. `robotDies(b, src)`
+`robotDies` at zero. Shots reach it (only from another team — friendly fire is off, as it is for
+players, so a bay's own side drives through its workers safely), and so does every class ability
+and the roll, all of them through `hurtUnit`. `robotDies(b, src)`
 **hands whatever the worker was hauling to whoever downed it** (`awardGold` on `b.carry`) — which
 is what keeps shooting a loaded worker on its way home worth the arrows — and logs
 `<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed slot, so it never touches
 the kill count. `updateRobot`'s own `hp <= 0` check routes through the same function (with no
 `src`, so the wreck goes unclaimed). Turret bolts ride the arrow pipeline, so a turret's mark
-finally dies; a rival's **worker on an attack flag** melees one; nothing else — a player's swing,
-wildlife, the AI's target picker — goes after a worker.
+finally dies; a rival's **worker on an attack flag** melees one; a rival's abilities and roll catch
+one like any other body; nothing else — a player's E swing, wildlife, the AI's target
+picker — goes after a worker.
 
 `hurtRobot` also sets `b.mad`/`b.madT`/`b.madX`/`b.madY` when the hit came from another team **and
 the worker is under a flag**: it fights back for `ROBOT_MAD` (6 s) from where it was standing, and

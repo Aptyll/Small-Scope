@@ -1012,6 +1012,18 @@ window.DBG = {
   tryWork: (p) => tryWork(p || player),
   workTarget: (p) => workTarget(p || player),
   tryDodge: (p) => tryDodge(p || player),
+  // status effects (js/actions.js): the one blow every kind of unit takes,
+  // every state one can be put under, and the two lists an area effect
+  // sweeps. `e` defaults to the local slot wherever it is the last argument.
+  hurtUnit, unitsNear, unitsHit, unitMoveMul, unitFoe, unitAlive, sideOf, clearUnitStatus,
+  rootUnit: (t, e) => rootUnit(e || player, t),
+  slowUnit: (t, mul, e) => slowUnit(e || player, t, mul),
+  netUnit: (t, mul, e) => netUnit(e || player, t, mul),
+  markUnit: (t, e) => markUnit(e || player, t),
+  // fire: light a body, put it out, and the numbers a burn runs on
+  igniteUnit: (t, dps, e, src) => igniteUnit(e || player, t, dps, src === undefined ? player : src),
+  douseUnit: (e) => douseUnit(e || player),
+  DMG_TYPES, BURN_T, BURN_DPS, BURN_TICK, BURN_MAX, PYRE_T, PYRE_DPS, CINDER_R,
   // the roll as a hit: stun anything by hand, and read back what a roll at a
   // given speed would deal (`.` draws the sweep circle over a live dash)
   stunUnit: (t, e) => stunUnit(e || player, t),

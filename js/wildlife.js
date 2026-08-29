@@ -20,17 +20,22 @@ const PREY_RUN = { rabbit: 80, deer: 92 };   // px/s bolting
 
 function makeAnimal(kind, x, y) {
   const hp = ANIMAL_HP[kind] || 8;
-  return {
+  const a = {
     kind, x, y, hp, maxHp: hp,
     dir: rng() < 0.5 ? 'left' : 'right',
     goal: null, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
-    animT: rng() * 2, flash: 0, kbx: 0, kby: 0, stunT: 0, stunMax: 0,
+    animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
     fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
     home: null,                          // the landmark it belongs to, if any
     target: null, biteCd: 0,           // wolf: its quarry and its bite rhythm
     perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
     dead: false,
   };
+  // stun, root, slow, the net drape, the falcon's mark, fire: an animal wears
+  // the identical set a player slot does, written by the same setters
+  // (`status effects`, js/actions.js) - a rabbit is not a different rulebook
+  clearUnitStatus(a);
+  return a;
 }
 
 // the body an arrow (and the aim line) tests against. Birds ride their alt
@@ -290,6 +295,10 @@ function updateAnimal(a, dt) {
   a.flash = Math.max(0, a.flash - dt);
   a.kbx *= Math.pow(0.02, dt);
   a.kby *= Math.pow(0.02, dt);
+  // every timed state on the body first - the burn can kill, and a corpse
+  // must not then take a step (js/actions.js, `status effects`)
+  updateUnitStatus(a, dt);
+  if (a.hp <= 0 && !a.dead) { animalDies(a); return; }
   if (a.stunT > 0) {
     // seeing stars: no brain for the window, and the route it was walking is
     // dropped rather than resumed - a tackle can slide a body a long way from
@@ -582,8 +591,11 @@ function updateBird(a, dt) {
     } else {
       a.fa += Math.sin(a.animT * 1.7) * 2.2 * dt;
     }
-    a.x += Math.cos(a.fa) * BIRD_SPD * dt;
-    a.y += Math.sin(a.fa) * BIRD_SPD * dt;
+    // a bird steers itself rather than routing, so the net/crater drag has to
+    // be folded in by hand here - navStep does it for everything that walks
+    const bs = BIRD_SPD * unitMoveMul(a);
+    a.x += Math.cos(a.fa) * bs * dt;
+    a.y += Math.sin(a.fa) * bs * dt;
     a.mvx = Math.cos(a.fa);
     // never pop across the stand: stay up until it is actually over the perch
     if (a.flyT <= 0) {
