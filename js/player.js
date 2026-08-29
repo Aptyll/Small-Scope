@@ -575,7 +575,6 @@ const drops = [];
 const particles = []; // {x,y,vx,vy,life,color,size,grav} + optional `alpha` fade ceiling
 const floaters = [];
 const footprints = [];
-const lights = []; // rebuilt from placed objects
 const fish = []; // swimmers under the ice: {x,y,a,spd,t,turnT,spook}
 const iceCracks = new Map(); // tile idx -> pickaxe hits taken (cracked, not yet open)
 const holes = []; // tile idx of open water holes; they refreeze each dawn

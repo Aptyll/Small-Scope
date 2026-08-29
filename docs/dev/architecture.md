@@ -191,7 +191,7 @@ All game state lives in top-level singletons shared across the game files — `s
   [multiplayer.md](multiplayer.md#the-slot-model).
 
 Plus the flat arrays every pass iterates: `animals`, `arrows`, `drops`, `particles`, `floaters`,
-`footprints`, `lights`, `structures`, `robots`, `fish`, `landmarks`.
+`footprints`, `structures`, `robots`, `fish`, `landmarks`.
 
 ## tools/
 

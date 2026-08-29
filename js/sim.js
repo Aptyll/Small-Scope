@@ -862,6 +862,49 @@ function updatePlayer(p, dt) {
   }
 }
 
+// ------------------------------------------------------------ wind
+// One wind field, and everything the weather moves reads it: the snow's
+// drift, and which of its 16 sway frames every pine on the field is wearing
+// (treeFrame, js/draw-world.js). It is a TRAVELLING WAVE over the tile grid
+// rather than one number - a gust is a front that crosses the treeline, so
+// the forest rustles in order instead of twitching as one - and it dies with
+// the light: windAmp() squares the daylight, so the air goes still over dusk
+// and by full dark every tree is holding its own rest frame.
+const WIND_KX = 0.29, WIND_KY = 0.19; // rad per tile: the wave's heading, down-right
+const WIND_SPD = 2.4;                 // rad/s: how fast a ripple crest crosses the grid
+const WIND_GUST_K = 0.13;             // the gust envelope's wavelength, per unit of spatial phase
+const WIND_GUST_SPD = 0.5;            // rad/s: how fast a gust front travels
+const WIND_LULL = 0.22;               // the envelope's floor: daylight is never dead calm
+const WIND_SWELL = 31;                // s: the whole field's slow breathing
+const WIND_STILL = 0.02;              // under this the trees simply hold their rest frame
+
+// A 256-entry sine table. windSway() is read once per visible pine per frame
+// and its answer is quantised to one of sixteen frames, so a table lookup is
+// exact enough - and it keeps the cost flat when a zoomed-out view is holding
+// a thousand trees.
+const WSIN = new Float32Array(256);
+for (let i = 0; i < 256; i++) WSIN[i] = Math.sin(i / 256 * Math.PI * 2);
+function wsin(a) { return WSIN[((a * (256 / (Math.PI * 2))) | 0) & 255]; }
+
+// the field's strength right now, 0..1; updateFx parks it in state.wind
+function windAmp() {
+  const day = 1 - state.darkness;
+  return day * day * (0.55 + 0.45 * wsin(state.windT * (Math.PI * 2 / WIND_SWELL)));
+}
+
+// The signed sway at a tile, -1..1: the ripple, times the gust envelope,
+// times the field's strength. Both waves travel the same heading, the gust
+// far longer and slower than the ripple, which is what makes one band of
+// movement read as a gust crossing the field rather than as noise.
+function windSway(tx, ty) {
+  const w = state.wind;
+  if (w <= WIND_STILL) return 0;
+  const sp = tx * WIND_KX + ty * WIND_KY;
+  const gust = WIND_LULL + (1 - WIND_LULL) *
+    (0.5 + 0.5 * wsin(sp * WIND_GUST_K + state.windT * WIND_GUST_SPD));
+  return wsin(sp + state.windT * WIND_SPD) * gust * w;
+}
+
 // ------------------------------------------------------------ fx updates
 // Snow lives in the world, not on the glass: a flake has a world position,
 // drifts in world px, and scrolls with the camera like everything else. The
@@ -896,6 +939,10 @@ function fitFlakes() {
 
 function updateFx(dt) {
   const now = performance.now() / 1000;
+  // the wind steps here, above everything that reads it: it is fx, so it runs
+  // in every mode, and it runs on the SIM clock so DBG.step reproduces a gust
+  state.windT += dt;
+  state.wind = windAmp();
   for (const f of flakes) {
     if (f.rest > 0) {
       f.rest -= dt;
@@ -908,7 +955,9 @@ function updateFx(dt) {
     }
     const dy = f.spd * dt;
     f.y += dy; f.h -= dy;
-    f.x += Math.sin(now * f.sway + f.ph) * 8 * dt + 4 * dt;
+    // the same field the pines read: the sway is the flake's own, the drift
+    // is the wind's, so snow falls almost straight down once the air stills
+    f.x += Math.sin(now * f.sway + f.ph) * (3 + 7 * state.wind) * dt + (1 + 13 * state.wind) * dt;
     if (f.h <= 0) f.rest = FLAKE_REST;
   }
   for (let i = particles.length - 1; i >= 0; i--) {

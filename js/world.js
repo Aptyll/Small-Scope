@@ -19,7 +19,9 @@ function objAt(tx, ty) { return inWorld(tx, ty) ? objects[idx(tx, ty)] : null; }
 // type is one entry here, plus its draw branch in render() and what a swing
 // does to it in hitObject(): checklists.md#common-changes.
 const OBJECTS = {
-  tree:     { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 20,
+  // lift 33: the pine's canopy reaches 21 px above its own tile (drawn at
+  // py - 21), and the prompt clears it by the same 12 px everything else gets
+  tree:     { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 33,
               mm: [52, 100, 82],   map: treeMapPx },
   deadTree: { solid: true,  tool: 'axe',  needs: 'axe',  verb: 'CHOP', lift: 20,
               mm: [138, 128, 116], map: [150, 132, 108] },
@@ -218,6 +220,10 @@ function genWorld() {
   for (let ty = 0; ty < WORLD; ty++) {
     for (let tx = 0; tx < WORLD; tx++) {
       const d = Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty);
+      // `variant` picks no art any more - there is one pine in sixteen wind
+      // frames and treeFrame() reads the tile's own hash for the one it rests
+      // on - but the ROLL stays: dropping an rng() call here reshuffles every
+      // existing seed (the hard rule in CLAUDE.md).
       if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }

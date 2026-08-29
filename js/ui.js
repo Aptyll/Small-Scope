@@ -151,9 +151,10 @@ function drawWorkHint(ox, oy) {
   const isStruct = !!(st && STRUCTS[st.type]);
   const d = t.o && OBJECTS[t.o.type];
   const verb = !t.o ? 'CRACK ICE' : isStruct ? 'BREAK' : (d && d.verb) || 'MINE';
-  // sit above the sprite: the entry's `lift` is 20 for the two that reach 8px above
-  // their tile and 10 for the short ones. A building is drawn up from its footprint's
-  // bottom edge and can be taller than its tiles, so clear its own sprite instead.
+  // sit above the sprite: the entry's `lift` is how far above its tile the
+  // prompt goes - 33 for the 37px pine, 20 for a dead tree's 8px overhang, 10
+  // for the short ones. A building is drawn up from its footprint's bottom
+  // edge and can be taller than its tiles, so clear its own sprite instead.
   const lift = isStruct ? structSprite(st).height - structH(st.type) * TILE + 12 :
     t.o ? ((d && d.lift) || 10) : 8;
   // a multi-tile building takes the prompt on its centre, not the tile you aimed at
@@ -170,6 +171,10 @@ function drawWorkHint(ox, oy) {
   if (x < px0 + 9 && x + totalW > px0 - 9 && y < py0 + 5 && y + 10 > py0 - 14) {
     y = Math.round(hby - oy + 3);
   }
+  // a 37px pine on a tile near the top of the view puts its prompt off the
+  // top edge at the closest zoom rungs: keep it in the world view (WV_*, not
+  // VIEW_* - this pass draws in world space)
+  y = Math.max(1, Math.min(WV_H - 11, y));
   drawKeyPrompt(x, y, verb, pressed);
 }
 

@@ -114,7 +114,11 @@ lives in `docs/dev/*.md` beside the code it protects.
 - **Runtime ground change?** Call `repaintGround(tx, ty)` — it repaints the tile plus its four
   neighbours into the prerendered ground canvas. Never call `renderGround()` per frame; it bakes
   the entire 3712×3712 world and is a boot-time cost.
-- **Added or removed a light-emitting object?** Call `rebuildLights()`.
+- **Nothing on the map emits light, and night is a colour, not a darkness** —
+  [`renderLighting`](docs/dev/rendering.md#light-and-weather) grades the finished world frame, so
+  a new glowing thing adds a pass there rather than registering anywhere.
+- **Anything the weather moves reads `windSway(tx, ty)`**, never a clock of its own: one wave
+  (the `wind` banner, js/sim.js) drives the snow and every pine's frame, and it dies at dusk.
 - **Units are solid to each other.** `separateUnits()` runs once per sim step after every mover has
   stepped; a new kind of thing that walks must join its list (and `UNIT_MASS`, and be marked `small`
   unless a roll should stop on it) or it walks through everyone. A player mid-roll is the exception:
@@ -139,7 +143,7 @@ lives in `docs/dev/*.md` beside the code it protects.
 - **Never add or remove an `rng()` call inside `genWorld()`** — it reshuffles every existing seed
   (hence landmarks' own `lmRng`). Use `hash2`/`vnoise` per tile, never before the `SEED` const.
 - **At most one object per tile.** Create with `placeObj`, read with `objAt`, and route structures
-  through `placeStruct`/`destroyStructure` so the registry and lights stay in sync. A building with
+  through `placeStruct`/`destroyStructure` so the `structures` registry stays in sync. A building with
   `w`/`h` in `STRUCTS` (the bot bay, 3×2) fills its other tiles with `part` objects pointing at the
   anchor — **read one off a tile with `structOf(objAt(...))`**, create/remove only via
   `createStruct`/`removeStruct`. **What a type *is* lives in its `OBJECTS`/`STRUCTS` entry, never

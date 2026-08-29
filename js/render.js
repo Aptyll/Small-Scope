@@ -155,6 +155,11 @@ function render() {
   const tx1 = Math.min(WORLD - 1, Math.ceil((ox + WV_W) / TILE) + 1);
   const ty1 = Math.min(WORLD - 1, Math.ceil((oy + WV_H) / TILE) + 2);
 
+  // the night sky, reflected in every frozen tile: on the ice surface, so it
+  // covers the fish under it and the cracks in it, and under everything that
+  // walks - a body standing on the ice covers its own reflection
+  drawIceStars(ox, oy, tx0, ty0, tx1, ty1);
+
   // flat objects first (stumps)
   for (let ty = ty0; ty <= ty1; ty++) {
     for (let tx = tx0; tx <= tx1; tx++) {
@@ -236,7 +241,11 @@ function render() {
     const px = d.tx * TILE - ox, py = d.ty * TILE - oy;
     const sh = o.shake > 0 ? Math.round(Math.sin(o.shake * 55) * 1.4) : 0;
     if (o.type === 'tree') {
-      drawSpriteFlash(SPRITES.tree[o.variant], px + sh, py - 8, o.flash);
+      // 27x37, bottom-aligned on its own tile: (px - 5, py - 21) puts the
+      // trunk on the tile's centre line and hangs the canopy over the tile
+      // above. Which of the sixteen frames it wears is the WIND's business,
+      // not the tree's - see treeFrame() in js/draw-world.js.
+      drawSpriteFlash(SPRITES.tree[treeFrame(d.tx, d.ty)], px - 5 + sh, py - 21, o.flash);
     } else if (o.type === 'deadTree') {
       drawSpriteFlash(SPRITES.deadTree[o.variant], px + sh, py - 8, o.flash);
     } else if (o.type === 'den') {
@@ -460,7 +469,7 @@ function render() {
   }
 
   drawDropAir(ex, ey, now); // the eagle, its rider and anyone falling from it
-  renderLighting(ox, oy, ex, ey, now);
+  renderLighting(ox, oy, now);
   // the two debug views, above the lighting on purpose - see the banner
   if (settings.hitbox > 1 || window.DBG.showPaths) drawNavPaths(ox, oy, ex, ey);
   drawHitboxes(ox, oy, ex, ey);

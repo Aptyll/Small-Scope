@@ -1,5 +1,5 @@
 'use strict';
-// The canvas stack: screen + world + light buffers, pixel-exact world zoom,
+// The canvas stack: screen + world buffers, pixel-exact world zoom,
 // fitCanvas(), the pillarbox frost bars, and the panel layout anchors that
 // relayout() (core.js) assigns on every resize.
 // ------------------------------------------------------------ canvas
@@ -25,10 +25,6 @@ ctx.imageSmoothingEnabled = false;
 // per frame - resizing a canvas reallocates it and resets its context state.
 const worldCv = document.createElement('canvas');
 const wctx = worldCv.getContext('2d');
-
-// offscreen light canvas (sized by fitCanvas alongside the world buffer)
-const lightCv = document.createElement('canvas');
-const lctx = lightCv.getContext('2d');
 
 // full-window canvas behind the game: the pillarbox bars' frost frame
 const barsCv = document.getElementById('bars');
@@ -128,15 +124,13 @@ function fitCanvas() {
   // devScale may have just changed (resize, fullscreen, a different monitor):
   // re-rung the zoom onto the new ladder at the nearest scale to what it was
   kWant = Math.max(kMin(), Math.min(kMax(), Math.round(zoomCur * dev)));
-  // world buffer + light canvas at the most zoomed-out size we can ever ask
-  // for, so neither is ever reallocated mid-play; each frame uses the
-  // WV_W x WV_H corner. imageSmoothing off on both: the scale-up must be
-  // nearest-neighbour or the pixel art turns to soup.
+  // world buffer at the most zoomed-out size we can ever ask for, so it is
+  // never reallocated mid-play; each frame uses the WV_W x WV_H corner.
+  // imageSmoothing off: the scale-up must be nearest-neighbour or the pixel
+  // art turns to soup.
   const wMax = Math.ceil(VIEW_W / ZOOM_FLOOR), hMax = Math.ceil(VIEW_H / ZOOM_FLOOR);
   worldCv.width = wMax; worldCv.height = hMax;
   wctx.imageSmoothingEnabled = false;
-  lightCv.width = wMax; lightCv.height = hMax;
-  lctx.imageSmoothingEnabled = false;
   sizeWorldView();
   canvas.style.width = (VIEW_W * scale) + 'px';
   canvas.style.height = (VIEW_H * scale) + 'px';

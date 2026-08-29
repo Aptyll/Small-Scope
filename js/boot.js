@@ -848,7 +848,6 @@ buildSettingsPanel();
 buildNamePanel();
 buildHelpPanel();
 buildPatchPanel();
-rebuildLights();
 camX = player.x - WV_W / 2;
 camY = player.y - WV_H / 2;
 // practice boots straight onto the snow: no title, no eagle. The other nine
@@ -886,7 +885,7 @@ try {
 
 // debug/dev harness: lets external tooling step frames & stage scenes
 window.DBG = {
-  SEED, state, animals, objects, ground, lights, mouse, keys, drops, footprints, flakes,
+  SEED, state, animals, objects, ground, mouse, keys, drops, footprints, flakes,
   fish, iceCracks, holes, crackIce, addFish, spawnEmerger, netAt, buildSiteAt,
   // named places: the live registry, the table behind it, and what is where
   landmarks, LANDMARKS, landmarkAt, stockLandmarks, flushBirds,
@@ -979,7 +978,7 @@ window.DBG = {
   bagUsed: (p) => bagUsed(p || player),
   // hand a slot to an AI, a human, or nobody (a ghost at its camp)
   setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
-  placeObj, rebuildLights, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
+  placeObj, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
   // the two end screens: their timelines, the frozen numbers they print, and
   // a way to open the loss summary without pressing its plank. Set
   // state.defeatT / state.deadTimer to scrub either ceremony to a beat.

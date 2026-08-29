@@ -64,8 +64,8 @@ Consequences a new pass has to respect:
 
 - **A world pass bounds itself against `WV_W`/`WV_H`, never `VIEW_W`/`VIEW_H`.** Below zoom 1
   the world view is *wider* than the canvas, and culling to the canvas eats the edges.
-- `worldCv` and `lightCv` are allocated at the most zoomed-out size (`ZOOM_FLOOR`) once per
-  canvas size, and each frame uses the `WV_W`×`WV_H` corner — never resize them per frame.
+- `worldCv` is allocated at the most zoomed-out size (`ZOOM_FLOOR`) once per
+  canvas size, and each frame uses the `WV_W`×`WV_H` corner — never resize it per frame.
 - Anything **UI-layer but anchored to a world point** (only the radial wheel today) converts
   through `wToSX`/`wToSY`, and keeps its own pixel size.
 - **A pointer position becomes a world position only through `mouseWX()`/`mouseWY()`**
@@ -138,7 +138,9 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 ## Render pass order
 
 `render()` runs: ground blit → under-ice fish → ice-crack decals → the parkour start line
-(`drawParkourLine`, `PRACTICE` only) → footprints (walking prints,
+(`drawParkourLine`, `PRACTICE` only) → **the stars reflected in the ice**
+(`drawIceStars`, night only — on the surface, so it covers the fish and the cracks, and under
+everything that walks) → footprints (walking prints,
 slide grooves, skate scratches and belly-crawl furrows all share the one `footprints` array,
 branching on `f.k`) → flat objects
 (stumps, and **fish nets** via `drawNet`) → spent arrows (`drawShafts`) → item drops → **y-sorted
@@ -172,8 +174,11 @@ label-value rows — one ESC-menu toggle or F3; only the fps line in `title`) �
 `drawAimLine` sits between the particles and the arrows pass. Anything that should be occluded by trees goes into `draws`
 with a sort key; anything flat goes in the pre-pass.
 
-Trees draw at `py - 8`, so a tree's canopy overhangs the bottom half of the tile *above* it; a
-**dead tree** shares that 16×24 footprint and that offset. Short ground sprites (rock, bush,
+A **tree** is 27×37 and draws at `(px - 5, py - 21)` — bottom-aligned on its own tile, trunk on
+the tile's centre line, canopy overhanging the tile and a third above it (which the `draws`
+loop's existing 1-tile top margin and 2-tile bottom margin already cover). Which of its sixteen
+sway frames it wears comes from `treeFrame(tx, ty)` off the [wind field](#the-wind-field), never
+from a clock of its own. A **dead tree** is still the old 16×24 snag at `py - 8`. Short ground sprites (rock, bush,
 stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
 a tree on the tile below hides it almost completely.
 
@@ -209,8 +214,9 @@ dark lower rim does the grounding instead.
 ### Snow
 
 Flakes are **world-space**, not a screen overlay: each entry of `flakes` (the block at the top of
-the `fx updates` banner) has a world `x/y`, drifts in world px (`spd` down, a sine sway plus a
-light wind), and so scrolls with the camera like everything else. The field is kept exactly one
+the `fx updates` banner) has a world `x/y`, drifts in world px (`spd` down, its own sine sway plus the
+[wind field](#the-wind-field)'s drift — so snow blows sideways in a gust and falls almost
+straight down once the air stills at night), and so scrolls with the camera like everything else. The field is kept exactly one
 view in size — `fitFlakes()` scales the count to `VIEW_W×VIEW_H` (70 at 480×270) — and
 `renderWeather(ex, ey)` draws every flake **wrapped modulo `VIEW_W`/`VIEW_H` around the exact
 camera**, so the screen is always fully covered at constant density at any zoom or view size
@@ -219,7 +225,7 @@ because it only ever happens at the screen edge. A flake does not fall screen-to
 screen-bottom: it is born with `h` (30–120) world px left to fall, **lands** when that runs out,
 rests on the ground fading out for `FLAKE_REST` (0.7 s), and is then reborn (`makeFlake`) at a
 fresh spot in the field. Boot flakes and rebirths draw from `rng`; resize/zoom top-ups draw from
-`fxRng` (see [world.md](world.md)). Drawn after `renderLighting` (never darkened) and before the
+`fxRng` (see [world.md](world.md)). Drawn after `renderLighting` (never graded) and before the
 vignettes and HUD. `DBG.flakes` and `DBG.cam()` expose the array and the exact camera.
 
 ## UI panels are baked once
@@ -1148,14 +1154,135 @@ the minimap disc and the M map as the same bird diamond in team colour.
 Airborne slots (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
 drops, wildlife scares, `enemyOf`, the y-sorted draws, the minimap and the M map.
 
-## Lighting
+## Light and weather
 
-**Nothing currently emits light.** Campfires and torches were removed with the old hotbar, so
-`rebuildLights()` just empties the `lights` array — but the whole pipeline is kept intact as
-the single rebuild point for any future glowing object: `renderLighting()` punches `lights`
-entries (`{x, y, r, warm}`) out of a dark overlay on the offscreen `lightCv` using
-`destination-out`, then `drawWarmGlows()` adds `multiply` colour grading plus a `lighter` core.
-**Any code that adds or removes a light-emitting object must call `rebuildLights()`.** The only
-night light today is the player's personal glow (radius 44) baked into `renderLighting()`.
-There is no warmth/cold system anymore — night darkness is purely visual.
+Everything over the finished world frame, in world pixels, in `renderLighting()`
+([js/draw-world.js](../../js/draw-world.js), the `light & weather` banner). It is the last world
+pass; the debug overlays are the only thing above it.
 
+**Nothing on the map emits light, and there is no light registry.** The `lights` array,
+`rebuildLights()` and the offscreen `lightCv` are gone with the darkness they existed for, and so
+is the player's personal glow. **Night is a colour**: a `multiply` of `NIGHT_TINT` at
+`globalAlpha = state.darkness`, plus a little `NIGHT_DEEP` for depth. It cools and dims what is
+already drawn instead of laying a slab over it, so snow stays snow, team colours stay legible at
+midnight, and dusk eases into it off the darkness curve with nothing to schedule. A new glowing
+object adds a pass here; it does not register anywhere.
+
+The day half is two things, drawn in that order because a shadow falls across a sunbeam and not
+the other way round:
+
+- **God rays** (`godRays`) — **parallel** shafts of low sun on one heading (`RAY_ANG`, drifting on
+  a long sine). The sun is far away; nothing here converges, and an earlier version that fanned
+  them off a nearby origin read as a spotlight rather than as daylight. What makes a parallel set
+  read as *beams* rather than as striping laid over the picture is the **length fade**: each shaft
+  swells out of nothing, peaks about a third of the way along and **trails off** before it leaves
+  the view, so it arrives from somewhere and dies in the air instead of running edge to edge. They
+  are slim (`RAY_W`, a fraction of `WV_H`) and deliberately faint — on snow already sitting at 0.95
+  a shaft that states itself is a shaft that has blown the ground out, which is why they read
+  strongest on ice and on the treeline and barely at all on an open drift.
+  Placement is done in the **rotated frame**: the view's four corners are projected onto the
+  heading and its normal, and the shafts are laid across that span, so none is ever placed where it
+  could not be seen. The set breathes sideways on a slow sine rather than drifting and wrapping —
+  a wrap would pop a shaft into existence mid-screen — and each shaft is staggered along its own
+  length and wanders a little off the shared heading, so the set never reads as a comb.
+  The shaft is one **baked** 256×64 texture (`RAY_CV`) carrying *both* fades — a soft-shouldered
+  cross-section and the swell-and-trail along its length — drawn scaled and rotated per shaft. That
+  is why it is baked: drawn as gradient strips the length fade bands, and two gradients cannot
+  multiply in one fill. Eight `drawImage`s carry the whole pass, against twenty-six full-width
+  gradient fills in the first version, and it costs a third of what that did.
+  The set is anchored to the **view**, not the world, and every dimension is a fraction of
+  `WV_W`/`WV_H`. Crepuscular rays are air, not ground, so nothing about them should slide when you
+  pan — and it means the shafts are composed identically at every zoom, which is what a
+  world-anchored version needed a subdivision ladder to fake.
+- **Dust motes** — the sparkle in the shafts, drawn by the same function, and the half of the
+  effect that actually carries on snow. They live in **shaft coordinates** (`u` along, `v` across),
+  so they can only ever exist where a shaft does and they drift *down* it rather than falling with
+  the snow; they carry the shaft's own swell-and-trail, so a mote fades with its light. Their hash
+  keys off the shaft's **index**, never its angle — the angle wobbles every frame, and a mote whose
+  seed moves teleports instead of drifting. They are drawn `source-over` in warm **gold**, not
+  additively in white: snow sits at 0.95 and has no headroom left to brighten, so a white additive
+  mote over a sunlit drift is invisible while a warm speck reads. The biggest get a white core and
+  a four-armed catch. ~180 of them a frame.
+- **Cloud shadows** (`cloudShade`) — two tileable noise fields (`bakeCloud`) baked once at their
+  **final world size** and drawn 1:1 through `repeat` patterns: no scaling, so no smoothing
+  question and no seam. `pnoise` is value noise on a lattice wrapped per axis, which is the whole
+  trick — it is what lets one 768 px canvas tile the entire 3712 px world. Fewer features across
+  than down stretches the shade along its drift, which keeps it from reading as circles. The two
+  periods (768 and 448) never come round together, so what crosses the field never visibly
+  repeats. World-anchored and world-sized, so zooming in walks you *under* a cloud.
+  **The mapping is the whole look.** A threshold with a narrow ramp gives a plateau of full shade
+  inside a visible rim, and a screen of those reads as clip-art blobs sliding over the snow. So
+  there is no threshold: `lo`…`hi` spans about three standard deviations of the field, so almost
+  every pixel lands somewhere on the ramp and hardly any reaches either end — what crosses the
+  ground is one continuous swell of dimming with **no edge anywhere in it**. `lo` sits just above
+  the median, which keeps roughly half the sky genuinely open: a flat plateau of *clear* is fine,
+  it is a flat plateau of *shade* that reads as a blob.
+  **The practice arena is exempt** (`PRACTICE`): it keeps the shafts, but a shadow drifting over
+  the dummy's meter or the parkour's ice would change what those instruments are measuring
+  between one lap and the next, and that room's whole point is that its light never changes.
+
+Then the dusk and dawn tints (unchanged), then the night multiply, then **`litShots`** — the one
+light left in the game. A shot carrying a `lit` bit (the CARE ARROW, the WISP, anything a FLAME
+modifier is riding — see [tools and bits](gameplay.md#tools-and-bits)) gets an additive warm
+halo read straight off the live `arrows`, so it warms the night blue rather than cutting a hole
+in it. It is drawn **after** the night grade, which is why it reads at midnight and barely at all
+at noon.
+
+### The reflected sky
+
+`drawIceStars` is night's one bright thing, and the only place the stars are visible in a game
+with no sky in frame: they are **in the ice**. Two halves, and the first is what makes the second
+work at all.
+
+**The mirror.** Sheet ice is painted at 0.72–0.93 brightness — most of the way to white — so a
+white dot on it has almost no contrast, and the night `multiply` grades star and ice down together
+and *keeps* it that way. There is no headroom to fix it with. So the ice itself goes **dark**
+first: every intact tile takes a deep-blue wash scaled by `state.darkness` (`STAR_MIRROR`), which
+is what a frozen lake at night actually looks like from above — a black mirror, darker than the
+snow around it — and it is what gives the stars something to be bright against. Without it the
+whole effect is invisible, which is exactly how the first version of this failed. Filled in
+horizontal **runs** of adjacent ice, one `fillRect` per run rather than one per tile.
+
+**The sky.** The stars do not sit *on* the ice, they sit in a sky reflected *in* it, so they are
+anchored neither to the world nor to the screen: the field is sampled at `STAR_PAR` (0.22) of the
+camera's offset, so it slides against the ground as you walk — a long way off, moving slowly,
+which is the whole read of a reflection. The loop therefore runs over **sky cells** and asks what
+tile each one landed on, not over tiles. A star draws only where it fell on **unbroken** ice
+(`ground` 1 — `overIce()`, which every reflected pixel passes, the arms of a bright star's cross
+included), so the field is cut to the shape of the lake and **an ice hole is a hole in the stars
+too**. Each twinkles on its own rate, and the whole reflection ripples a pixel sideways on a slow
+wave down the field, because ice is not a perfect mirror.
+
+It is drawn **early** — right after the visible tile range is computed, above the under-ice fish
+and the crack decals but under everything that walks, so a body standing on the ice covers its own
+reflection — and therefore **under** the night multiply as well. That is deliberate: the same blue
+that cools the snow cools the stars with it, which is what a reflection does.
+
+### The wind field
+
+One travelling wave, in the `wind` banner of [js/sim.js](../../js/sim.js), and everything the
+weather moves reads it rather than keeping a clock of its own:
+
+- `state.windT` is its clock, stepped in `updateFx` — the **sim** clock, not wall time, so
+  `DBG.step` reproduces a gust, a shaft and a twinkle exactly. Every animated thing in this
+  section runs off it.
+- `state.wind` is the field's strength, 0..1: `windAmp()` **squares the daylight**, so the air
+  goes still across dusk and is dead calm by full dark.
+- `windSway(tx, ty)` is the signed sway at a tile, −1..1: a fast ripple times a long slow gust
+  envelope travelling the same heading, times the strength. Under `WIND_STILL` it returns a flat
+  0 and every pine simply holds its rest frame.
+- `treeFrame(tx, ty)` (js/draw-world.js) turns that into one of the sixteen sway frames:
+  `hash2` picks the frame the tree *rests* on — which is what keeps a dead-calm forest from
+  reading as one stamp repeated — and the sway walks it ±8 around that. The frames are laid out in
+  [js/sprites.js](../../js/sprites.js) as a **cycle** ordered so consecutive frames differ least,
+  so ±8 in either direction is smooth and so is the wrap.
+- `wsin` is a 256-entry sine table. `windSway` is read once per visible pine per frame and its
+  answer is quantised to sixteen frames, so a lookup is exact enough, and the cost stays flat when
+  a zoomed-out view is holding a thousand trees.
+
+Measured against the same scene at `kWant` 1 (the widest world view, 1114×626, over the treeline)
+in a **software** rasteriser — headless Chrome on SwiftShader, so these are fill-rate numbers with
+no GPU under them and the absolute values mean nothing: the whole `renderLighting` pass costs
+~20 ms of a 100 ms frame - ~13.5 ms of it the two full-view cloud multiplies, and only ~3.2 ms
+the whole set of shafts and its motes. The bigger tree sprite (2.6× the pixel area of the 16×24 pine, ~2000
+of them at that zoom) costs about as much as the entire pass.

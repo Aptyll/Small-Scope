@@ -33,8 +33,8 @@ anything that must stay stable per tile.
   building on both maps, ignored by work swings, and resolved by `structOf()` for every "what building
   is here" read (right-click, cursor, wheel, orders).
 - Index with `idx(tx, ty)`, read safely with `objAt`, create with `placeObj`. Deleting is
-  `objects[idx] = null` (structures should go through `destroyStructure` so lights rebuild and
-  the `structures` registry stays in sync — it routes tiered types through `removeStruct`).
+  `objects[idx] = null` (structures should go through `destroyStructure` so the `structures`
+  registry stays in sync — it routes tiered types through `removeStruct`).
 - `wall`, `turret`, `generator`, `spawner` are the **stump-built structures** (see
   [Base building](gameplay.md#base-building)). Each carries `{ tier, maxHp, building, buildT,
   buildTotal, dustT, sparkT }` plus per-type fields (turret `cd`; generator `payT`; spawner `mode`,
@@ -162,8 +162,10 @@ landmarks, chests, wildlife spawns and the eagle drop entirely. **The practice w
 small — `WORLD` is 64 under `PRACTICE`, against the match's 232** (the conditional above the
 `WORLD` const, js/core.js; everything downstream sizes itself off `WORLD`, so the match world is
 untouched). The **clock never runs**: js/boot.js pins `state.time` to early morning and sim.js
-never advances it under `PRACTICE` — crisp daylight forever, no dusk, no dawn refreeze, and
-nothing glows (`rebuildLights` currently finds no light-emitting object in any world).
+never advances it under `PRACTICE` — crisp daylight forever, no dusk, no dawn refreeze. The
+**cloud shadows are skipped there too** for the same reason the clock is pinned: a shadow drifting
+over the dummy's meter or the parkour's ice would change what those instruments measure between
+one lap and the next. The sun shafts stay ([rendering.md](rendering.md#light-and-weather)).
 
 The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
 **dummy** on a small packed-earth pad in the middle, the two-tile bow **rack** squared directly
@@ -283,12 +285,21 @@ in `title` mode the main menu prints the seed instead, next to the reroll die.
 `state.day` increments at wrap. `update()` derives `state.darkness` (0→1) from a hand-written
 ramp: dusk over the last 12 s of day, full dark, then a 10 s dawn.
 
-Night is visual pressure (darkness + lighting) plus one real edge: a wolf's sight range scales
+Night is visual pressure plus one real edge: a wolf's sight range scales
 with `state.darkness` (×1.75 at full dark), so a den is a different proposition after sunset.
-What else keys off the cycle:
+The visual half is a **colour**, not a darkness — a blue multiply over the finished frame with the
+stars reflected in the ice under it, and nothing to carry a lamp for
+([rendering.md](rendering.md#light-and-weather)). What else keys off the cycle:
 
 - `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every slot.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
+- **The wind dies with the light.** `windAmp()` squares `1 - darkness`, so the snow stops blowing
+  sideways and every pine goes still over the twelve seconds of dusk and stays still until dawn
+  ([the wind field](rendering.md#the-wind-field)).
+- The **sun shafts and the cloud shadows** fade out on the same curve, and the **ice** darkens
+  into a mirror on it with the **reflected stars** coming up inside that
+  ([the reflected sky](rendering.md#the-reflected-sky)) - so a frozen lake reads darker than the
+  snow around it after dusk, and an ice hole is a hole in the reflection.
 - Carved ice holes refreeze at dawn and cracks heal — **unless a fish net stands on the hole**,
   which is what holds that water open. The shoal is *not* topped up here any more; it refills
   continuously instead. See [Ice holes and fishing](#ice-holes-and-fishing).

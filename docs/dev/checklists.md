@@ -119,7 +119,9 @@ generically, the same rule buildings answer through `ownsStruct`.
 What is still per-type and has to be written by hand: the sprite branch in the flat pass or the
 `draws` y-sort in `render()` (the draw *order* is one ordered function on purpose — see
 [rendering.md](rendering.md)), what a swing actually **does** to it in `hitObject()` (its
-particles, its sounds, what it leaves behind), and `rebuildLights()` if it glows. A **building**
+particles, its sounds, what it leaves behind), and a pass of its own in `renderLighting` if it
+glows — there is no light registry to add it to
+([rendering](rendering.md#light-and-weather)). A **building**
 is not an object type: it is a `STRUCTS` entry in [js/structures.js](../../js/structures.js),
 which carries the same `mm`/`map` pair and gets solidity, both maps and the E prompt for free.
 
@@ -298,8 +300,12 @@ momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/play
 the slot count (`MAX_PLAYER_SLOTS`, js/player.js) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
 the `TOOLS` and `BITS` tables and the loot rates (`ROCK_DROP`/`TREE_DROP`/`CHEST_TOOL`/`LOOT_TOOL`)
 in js/tools.js, the flight-path constants beside `steerBit`, the damage roll in `emitBit()`,
-`TREE_RARE_CHANCE` in `treeRare()`, and the darkness ramp in
-`update()`.
+`TREE_RARE_CHANCE` in `treeRare()`, the darkness ramp in
+`update()`, the `WIND_*` block in js/sim.js (how hard and how fast the field rustles, and how
+fast it dies at dusk) and the `CLOUD_*` / `RAY_*` / `NIGHT_*` / `STAR_*` blocks in the
+`light & weather` banner of js/draw-world.js. Three of those bake at LOAD, so a change to them
+needs a reload rather than just a repaint: `bakeCloud`'s `lo`/`hi` ramp (both cloud textures) and
+the beam texture `RAY_CV`.
 
 **Moving code between js files** — the game files share one global scope
 ([architecture.md](architecture.md#shared-global-scope)); these rules stand for any move.
@@ -329,6 +335,10 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   newer pillars sit in text below the table. New captures would let the table carry them instead.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
+- A tree's `variant` (rolled by `randi(0, 1)` in `genWorld`) picks no art any more: there is one
+  pine in sixteen wind frames, and `treeFrame` reads the tile's own `hash2` for the frame it rests
+  on. **The roll has to stay** — removing an `rng()` call inside `genWorld` reshuffles every
+  existing seed. `deadTree` still uses its `variant` for real.
 - The flat `SPRITES.spawner` (the old 16×16 hut grid in the three tier palettes) is baked but
   unreferenced since the bot bay; the live sprite is `teamBuild[team].spawner[0]`.
 - `SPRITES.spikes`, `SPRITES.fire`, `SPRITES.torch`, and the three heart sprites are baked but

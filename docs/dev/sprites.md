@@ -78,6 +78,18 @@ White/Green/Blue/Purple/Gold — where the rarity itself is the only colour that
 `itemCardWhite`…`itemCardGold` are five palette swaps of one grid, the same relationship `GEAR_MATS`
 has to a single gear icon.
 
+**The pine is sixteen frames of one tree**, and the one sprite here that was not drawn by hand:
+`treeSway` is `docs/media/new_media/*.png` converted to char grids on `TSPAL` (fourteen colours,
+`bake`d like everything else), 27×37 - wider and taller than the 16×24 pine it replaced, so it
+draws at `(px - 5, py - 21)` with its trunk on the tile's centre line. The **source file order is
+not the animation order**: the sixteen files are variants of one tree rather than a hand-animated
+sway, so they are laid out here as a **cycle**, ordered so consecutive frames differ least (a
+2-opt tour of the pixel distance between them) - which also sorted the 1-2px vertical bob baked
+into them into one smooth rise and fall. That ordering is what makes `treeFrame`'s ±8 walk either
+side of a rest frame smooth, and smooth across the wrap. `TPAL` above it stays: it still dresses
+the `stump` a felled pine leaves. Which frame a tree is wearing is decided by the wind, not here -
+[rendering.md](rendering.md#the-wind-field).
+
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not
 baked at all: `drawTurretHead()` in draw-world.js rasterises them pixel by pixel at the live bearing and
@@ -91,7 +103,7 @@ side-view only — rabbits are 12×11 (sit) / 14×9 (hop), deer are 26×22 (stan
 sharing a `deerHead` upper body), wolves are 16×13 (a shared `wolfBody` plus three leg rows per
 frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — and left variants are
 `flipH` of the right-facing grids. The two [landmark](world.md#landmarks) props are
-`deadTree` (two 16×24 snags on `DTPAL`, the same footprint as a pine so they draw in the same
+`deadTree` (two 16×24 snags on `DTPAL`, the footprint the pine used to share so they draw in the same
 band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
 Anything drawn through `drawSpriteFlash` must stay within 64×64.
 

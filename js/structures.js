@@ -226,14 +226,6 @@ function removeStruct(o) {
   }
 }
 
-function rebuildLights() {
-  // the single rebuild point for anything glowing. Nothing emits light since
-  // the practice braziers went (and the campfires before them): every world
-  // currently rebuilds to an empty list, and this is where the next glowing
-  // object registers itself.
-  lights.length = 0;
-}
-
 // ------------------------------------------------------------ the building sim
 const RES_COLORS = {
   gold: '#f2cc6a', berry: '#f2707a', fish: '#7ac0e8',
