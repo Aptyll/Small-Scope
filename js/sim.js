@@ -911,6 +911,7 @@ function updateFx(dt) {
     if (f.t > 0.9) floaters.splice(i, 1);
   }
   if (bagFlash > 0) bagFlash -= dt; // the backpack's refusal red is chrome: wall time
+  if (toolFlash > 0) toolFlash -= dt; // ... and the weapon well's, beside it
   for (let i = footprints.length - 1; i >= 0; i--) {
     const f = footprints[i];
     f.t += dt;

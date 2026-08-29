@@ -235,6 +235,34 @@ while a drag off either one picks it up. A release over any well that will take 
 over the rest of the HUD it goes home; **over the world it is thrown**, which is the only way to
 get rid of a tool — and it goes with its bits.
 
+**A plain click is the whole move**, because every one of these wells has exactly one sensible
+destination (`sendBagCell` / `sendBitCell` / `sendSlot`): a **bit** in the grid loads into the
+weapon's first free cell, a **bit** in the column comes back to the pack (merging its own stack,
+`bagAdd`), a **tool** in the grid trades places with the weapon in hand, and the **weapon well**
+stows what it holds in the pack the way a bit does. That completes the grammar the backpack
+already had — clicking a cell *uses* what is in it, a berry by eating it and a card by drawing
+from it — for the two kinds that had no use and could only deny.
+
+It is resolved on the **release** (`hudRelease`), never on the press, which is what keeps the
+drag: a press that travels past `DRAG_SLOP` is still a pick-up and arranging the pack by hand is
+untouched. Each helper returns whether it *handled* the click, so a berry, a card and an empty
+cell fall through to the click they always were. Nothing can be destroyed: when the destination
+has no room the item does not move at all, and the container that is full is the one that
+refuses — the pack through `bagDenied()`, the weapon through its twin `toolDenied()`, which bands
+the weapon well in the same red for the same 0.6 s. The hover tooltip names what the click will
+do where the item actually sits (`tipSend`), which is why a tool reads TAKE IT IN HAND in the
+grid and STOW IT IN THE PACK in the well.
+
+**Shift is for when something is already riding the cursor.** A plain press while carrying puts
+the item down where it lands; a press begun with shift held is remembered on `state.dragPend`
+(`keep`) and its release runs `sendAt(mx, my)` instead — the same wells `dragDrop` tries, in the
+same order, but acting on what is already *sitting* there and leaving what is in hand in hand.
+Over anything else — the bare frame, an empty cell, the rest of the HUD — it does nothing at all,
+because that promise is the whole point. Recording the modifier at the press rather than reading
+it at the release is deliberate: letting go of shift mid-click cannot change what the gesture
+turns out to be. (Carrying an item with no button held is an ordinary state, not a trick — a
+drop onto an occupied well swaps, and the displaced item rides the cursor.)
+
 ### Where tools and bits come from
 
 `dropLoot(x, y, tier, chance)` rolls one find on the shared `rng` at the moment a swing lands
@@ -911,7 +939,10 @@ owns `p.bag[i]` directly for exactly the length of one gesture.
 `bagDenied()` reddens and shakes the whole backpack frame for 0.6 s with one `SFX.deny()`, and re-firing while
 it is already up does nothing, so standing on a drop you cannot carry is one flash and not sixty a
 second. A bow-fishing press with a full bag denies **and returns** (the tool still cycles) rather
-than falling through and firing at the floor.
+than falling through and firing at the floor. The **weapon** refuses in the same language:
+`toolDenied()` / `toolFlash` (UI › `hud strip`) bands the weapon well in that red and shakes it
+for the same 0.6 s when a bit has nowhere to go in it, so the container that is full is always
+the one that answers.
 
 The HUD is in the `UI` › `backpack` banner — see
 [the backpack](rendering.md#the-gear-row-and-the-backpack).

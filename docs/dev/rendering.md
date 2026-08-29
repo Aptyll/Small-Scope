@@ -352,6 +352,12 @@ bit, hollow is a free cell, the bright one is what the next press fires, and red
 tool is not strong enough to throw. And the **cooldown wipe** covers the whole well for exactly
 `toolRof`, so the rate of fire is the shape of the wipe rather than a number.
 
+A fifth thing, and the only one that is an *event*: the well takes a **red band all the way round
+it and the pack's own 1px shake** for `toolFlash` seconds when a bit has nowhere to go in the
+tool ([one click sends it](gameplay.md#the-bit-column)) — `toolDenied()`, the twin of `bagDenied()` in
+the same red and aged in `updateFx` beside it, so the two containers refuse in one language and
+the one that is full is the one that answers.
+
 An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB[p.cls][i]`: its
 detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
 top-down cover is its cooldown, and the key digit sits in the corner (the keybind-indicator
@@ -452,7 +458,12 @@ grows upward, so opening the bag lifts the row instead of pushing the gold off t
   cell's rim, and a stack of one prints no number — an empty corner says it.
 - **Two things are said in colour rather than in words**: the pack's rim goes amber when no cell
   is free, and the whole frame reddens and shakes for `bagFlash` seconds when something could not
-  be carried (`bagDenied()`, aged in `updateFx` on wall time like the rest of the chrome).
+  be carried (`bagDenied()`, aged in `updateFx` on wall time like the rest of the chrome). The
+  weapon well has the same tell in the same red for the other direction ([the hud
+  strip](#the-hud-strip), `toolDenied()`).
+- **A click on a cell uses what is in it** — a berry by eating it, a card by drawing from it, and
+  a bit or a tool by [sending it to the weapon](gameplay.md#the-bit-column) — resolved on the
+  release so that a press which travels is still a drag.
 - **The frame swallows every click over itself.** `bagHit` reports `btn` (the pack), `cell` (a
   grid slot) or `frame` (anywhere else inside, inert but eaten), so nothing is ever fired at the
   world through the panel; `gearHit` owns the four gear cells and is asked *first* by the click

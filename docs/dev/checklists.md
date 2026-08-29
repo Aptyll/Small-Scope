@@ -129,7 +129,8 @@ What is *not* generic and must be written per item: an 8×8 icon sprite (bake it
 code, not in the byte-fragile js/sprites.js — see `bakeGrid` in js/tools.js and `CHEST_SPR`), a
 colour in `RES_COLORS` for the pickup floater, whatever *makes* the item, and what using it does —
 `bagClick` maps a cell click onto an input flag, so a new item needs its own branch there or
-clicking its cell will just deny — and a branch in `tipStack` (the `tooltips` banner, js/ui.js) or
+clicking its cell will just deny (`sendBagCell` runs first and handles only the two kinds that
+have somewhere to *go*, a bit and a tool) — and a branch in `tipStack` (the `tooltips` banner, js/ui.js) or
 hovering it says only its raw type name. The drop draw pass and the bag cell both centre an icon
 on its own width, so a 12×12 needs no branch. Gold is **not** an `ITEMS` entry and must not become
 one: it is a wallet number with no ceiling. See
@@ -137,7 +138,8 @@ one: it is a wallet number with no ceiling. See
 
 **Adding a weapon (a tool) or a bit** — both are one entry in `TOOLS` / `BITS`
 ([js/tools.js](../../js/tools.js)); the loop at the foot of that file registers the `ITEMS` and
-`RES_COLORS` rows, so storage, drops, the death spill, the drag and the loot pools all pick it up
+`RES_COLORS` rows, so storage, drops, the death spill, the drag, the click that sends it between
+pack and weapon, and the loot pools all pick it up
 with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` key — reuse one of
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
 **projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`stick`/`col` and an

@@ -1043,6 +1043,17 @@ const AB_RAIL = 9; // the quiver + dodge rail between the wells and the bar
 const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_RAIL + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
 const AB_COVER = 'rgba(8,12,30,0.82)';
+// The weapon well's half of the refusal the backpack already has: a bit that
+// will not fit in the tool reddens and shakes the WELL, exactly as one that
+// will not fit in the pack reddens and shakes the frame (bagDenied) - so the
+// two containers say "full" in one language, and the one that is full is the
+// one that answers. updateFx ages it on wall time, beside bagFlash.
+let toolFlash = 0;
+function toolDenied() {
+  if (toolFlash > 0) return;
+  toolFlash = 0.6;
+  SFX.deny();
+}
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
@@ -1153,15 +1164,102 @@ function dragDrop(mx, my) {
   state.drag = null;
 }
 
+// ---- one click sends it to the other side -------------------------------
+// Every well here has exactly ONE sensible destination, so the CLICK is the
+// whole move: a bit in the grid loads into the weapon's first free cell, a
+// bit in the column comes back to the pack, a tool in the grid trades places
+// with the weapon in hand, and the weapon well stows what it holds in the
+// pack the way a bit does. That completes the grammar the backpack already
+// had - clicking a cell USES what is in it, a berry by eating it and a card
+// by drawing from it - for the two kinds that had no use and could only deny.
+//
+// It is resolved on the RELEASE like every other click (hudRelease), never on
+// the press, so a press that travels is still a drag and arranging the pack
+// by hand is untouched. Each returns whether it HANDLED the click: a berry, a
+// card and an empty cell are not transfers, and there it falls through to the
+// click it always was.
+//
+// Nothing here can destroy anything - when the destination has no room the
+// item does not move at all, and the container that is full is the one that
+// reddens and buzzes (bagDenied / toolDenied), which is the same refusal a
+// drop you cannot carry already fires.
+
+// a grid cell: a tool swaps into the hand, a bit loads into the weapon
+function sendBagCell(i) {
+  const s = player.bag[i];
+  if (!s) return false;
+  if (isToolCell(s)) {
+    // the swap is one move each way: what was in hand lands in the cell the
+    // tool just left, so the grid never grows or loses a row
+    player.bag[i] = slotPut(player, player.toolSel, s) || null;
+    SFX.place();
+    return true;
+  }
+  const id = bitIdOf(s.type);
+  if (!id) return false;            // a berry, a fish, a card: nowhere else to be
+  const cell = heldTool(player);
+  const free = cell ? cell.bits.indexOf(null) : -1;
+  if (free < 0) { toolDenied(); return true; } // no weapon, or every cell loaded
+  bitPut(cell, free, id);
+  if (--s.n <= 0) player.bag[i] = null;
+  SFX.stash();
+  return true;
+}
+// a bit cell of the risen column: back into the pack, topping up a stack of
+// its own kind first (bagAdd), and staying put if none of it fits
+function sendBitCell(s, i) {
+  const cell = player.tools[s];
+  const id = cell && cell.bits[i];
+  if (!id) return false;
+  if (!bagAdd(player, bitType(id), 1)) { bagDenied(); return true; }
+  bitPut(cell, i, null);
+  SFX.stash();
+  return true;
+}
+// the weapon well: the tool stows in the pack, bits and all, exactly as a bit
+// does - the same gesture, one well over
+function sendSlot(i) {
+  const cell = player.tools[i];
+  if (!cell) return false;
+  if (!bagPut(player, cell)) { bagDenied(); return true; } // put it down before lifting it
+  slotPut(player, i, null);
+  SFX.place();
+  return true;
+}
+// Where a SHIFT-held release lands while something is riding the cursor: the
+// same wells dragDrop tries, in the same order, but acting on what is already
+// SITTING there instead of on what is in hand. Everything else - the rest of
+// the frame, the world - does nothing at all, because shift's whole promise
+// is that the item in hand is still in hand afterwards.
+function sendAt(mx, my) {
+  const bc = bitColHit(mx, my);
+  if (bc >= 0) return sendBitCell(bitEditSlot(), bc);
+  const sh = stripHit(mx, my);
+  if (sh) return sh.kind === 'slot' && sendSlot(sh.i);
+  const bh = bagHit(mx, my);
+  if (bh) return bh.kind === 'cell' && sendBagCell(bh.i);
+  return false;
+}
+
 // ---- the press / move / release the drag is made of ---------------------
 // A press ARMS a pick-up rather than performing one, and only movement past a
 // few pixels promotes it into a live drag. That is what keeps one gesture
-// doing two jobs: a tap on a berry still eats it and a tap on a weapon slot
-// still selects it, while a drag off either one picks it up. `state.dragPend`
-// is the armed press; it never survives the release that resolves it.
+// doing two jobs: a tap on a berry still eats it and a tap on a bit sends it
+// into the weapon, while a drag off either one picks it up. `state.dragPend`
+// is the armed press; it never survives the release that resolves it, and it
+// is also where a press made WHILE CARRYING records which of the two things
+// this gesture is (`keep`), so letting go of shift mid-click cannot change
+// its mind halfway through.
 const DRAG_SLOP = 3; // px of travel before a press becomes a drag
 function hudPress(mx, my) {
-  if (state.drag) { dragDrop(mx, my); return true; }
+  // Already carrying something: a plain press puts it down where it lands
+  // (dragDrop), while a press begun with SHIFT is held for the release, which
+  // acts on the well under the pointer and leaves the item in hand.
+  if (state.drag) {
+    if (keys['shift']) state.dragPend = { keep: true };
+    else dragDrop(mx, my);
+    return true;
+  }
   const bc = bitColHit(mx, my);
   if (bc >= 0) {
     const cell = player.tools[bitEditSlot()];
@@ -1187,7 +1285,7 @@ function hudPress(mx, my) {
 // drag itself, lifting the item out of wherever it was sitting
 function hudMove(mx, my) {
   const q = state.dragPend;
-  if (!q || q.empty) return;
+  if (!q || q.empty || q.keep) return; // neither an empty well nor a shift-hold picks anything up
   if (Math.abs(mx - q.x) < DRAG_SLOP && Math.abs(my - q.y) < DRAG_SLOP) return;
   state.dragPend = null;
   if (q.src.k === 'bag') {
@@ -1206,16 +1304,25 @@ function hudMove(mx, my) {
     if (was) dragTake({ type: bitType(was), n: 1 }, q.src);
   }
 }
-// the release. A live drag is put down; an armed press that never moved is
-// the click it always was.
+// The release, where every click in this widget is actually decided. A live
+// drag is put down - or, when the press was begun with shift held, spends
+// itself on the well under the pointer and stays in hand (sendAt). An armed
+// press that never travelled is the click it always was, and that click is
+// the TRANSFER: the bag cell's own use (a bit into the weapon, a tool into
+// the hand, otherwise bagClick's eat/draft), the weapon well and a bit cell
+// of the column both stowing what they hold in the pack.
 function hudRelease(mx, my) {
-  if (state.drag) { dragDrop(mx, my); state.dragPend = null; return true; }
   const q = state.dragPend;
   state.dragPend = null;
+  if (state.drag) {
+    if (q && q.keep) sendAt(mx, my);
+    else dragDrop(mx, my);
+    return true;
+  }
   if (!q) return false;
-  if (q.src.k === 'bag') bagClick({ kind: 'cell', i: q.src.i });
-  // a tap on the one weapon well selects nothing any more - there is only
-  // the one - so an unmoved press there simply ends
+  if (q.src.k === 'bag') { if (!sendBagCell(q.src.i)) bagClick({ kind: 'cell', i: q.src.i }); }
+  else if (q.src.k === 'slot') sendSlot(q.src.i);
+  else sendBitCell(q.src.slot, q.src.i);
   return true;
 }
 // o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
@@ -1474,9 +1581,18 @@ function drawToolCell(i, now, hov) {
   const y = r.y - (sel ? 1 : 0);
   const dry = sel && (p.quiver <= 0 || !toolReady(p));
   const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
+  // "it does not fit in here": a red band all the way round the well and the
+  // pack's own 1px shake, so the two containers refuse in one language
+  const red = toolFlash > 0;
+  if (red) {
+    ctx.save();
+    ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
+    ctx.fillStyle = '#c2465a';
+    ctx.fillRect(r.x - 2, y - 2, r.w + 4, r.h + 4);
+  }
   // the rim is the selection: one lit well, three quiet ones. A selected tool
   // that cannot answer the button goes red instead - the old dry-bow tell.
-  ctx.fillStyle = dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
+  ctx.fillStyle = red ? '#c2465a' : dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
   ctx.fillRect(r.x, y, r.w, r.h);
   ctx.fillStyle = dry ? '#241028' : tp.plate;
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
@@ -1508,6 +1624,7 @@ function drawToolCell(i, now, hov) {
       }
     }
   }
+  if (red) ctx.restore();
 }
 // An ability well says everything without a word: the 32px icon is the
 // ability, the top-down wipe is its cooldown (the same cover every other well
@@ -1808,6 +1925,14 @@ function tipStack(s) {
   d.rows.push(['CARRIED', String(s.n), '#f4f7ff']);
   return d;
 }
+// What a click on this well will DO, said where the item actually SITS - a
+// tool means "take it in hand" in the grid and "stow it" in the well, so the
+// note is pushed on by tipAt's branches rather than by tipCell, which does
+// not know where it is. Same phrasing as the food rows' own CLICK TO EAT.
+function tipSend(d, txt) {
+  if (d) d.notes.push(['CLICK TO ' + txt, TIP_DIM]);
+  return d;
+}
 // whatever is in a bag cell, a slot, a bit cell or on the cursor
 function tipCell(s, cell) {
   if (!s) return null;
@@ -1912,14 +2037,20 @@ function tipAt(mx, my) {
     return null;
   }
   if (state.mode !== 'play') return null;
-  if (state.drag) return tipCell(state.drag.cell, null);
+  if (state.drag) {
+    // what is in hand, and the one thing shift is for: spending the click on a
+    // well without putting this down
+    const d = tipCell(state.drag.cell, null);
+    if (d) d.notes.push(['SHIFT CLICK KEEPS THIS IN HAND', TIP_DIM]);
+    return d;
+  }
   const gi = gearHit(mx, my);
   if (gi >= 0) return tipGear(gi);
   const bc = bitColHit(mx, my);
   if (bc >= 0) {
     const cell = player.tools[bitEditSlot()];
     const id = cell.bits[bc];
-    if (id) return tipBit(id, cell);
+    if (id) return tipSend(tipBit(id, cell), 'STOW IT IN THE PACK');
     const T = TOOLS[toolIdOf(cell.type)];
     const d = tipBase(cell.type, 'EMPTY BIT CELL', TOOL_TIERS[T.tier].name + ' TOOL');
     d.icon = null; d.tcol = TIP_DIM;
@@ -1931,7 +2062,7 @@ function tipAt(mx, my) {
   if (sh && sh.kind === 'ab') return tipClassAb(sh.i);
   if (sh && sh.kind === 'slot') {
     const cell = player.tools[sh.i];
-    if (cell) return tipCell(cell, null);
+    if (cell) return tipSend(tipCell(cell, null), 'STOW IT IN THE PACK');
     return { title: 'EMPTY SLOT ' + (sh.i + 1), tcol: TIP_DIM, kind: 'WEAPON', rows: [], plate: BAG_WELL, rim: '#35426e',
       notes: [['DRAG A TOOL HERE FROM THE PACK', TIP_DIM]] };
   }
@@ -1945,7 +2076,13 @@ function tipAt(mx, my) {
       notes: [['DRAG ONTO THE SNOW TO THROW AWAY', TIP_DIM]] };
   }
   if (bh.kind === 'ab') return bh.i >= 0 ? tipAbility(bh.i) : null;
-  if (bh.kind === 'cell') return tipCell(player.bag[bh.i], null);
+  if (bh.kind === 'cell') {
+    const s = player.bag[bh.i];
+    const d = tipCell(s, null);
+    if (d && isToolCell(s)) tipSend(d, 'TAKE IT IN HAND');
+    else if (d && bitIdOf(s.type) && heldTool(player)) tipSend(d, 'LOAD IT IN THE WEAPON');
+    return d;
+  }
   return null;
 }
 // resolved once a frame, before anything that has to lay out around it
