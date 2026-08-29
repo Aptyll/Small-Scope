@@ -10,6 +10,7 @@
 // around obstacles (see pathfinding) and reports an unreachable goal as -1 -
 // that, not a timer, is what makes a bot drop a target.
 const AI_SIGHT = 150;   // px: how far a bot notices a rival
+const AI_EAT_R = 110;   // px: a rival closer than this will knock the meal out of its hands, so it waits
 const AI_HUNT = 120;    // px: how far it will go after an animal
 const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
 
@@ -113,9 +114,17 @@ function updateAI(p, dt) {
     if (best >= 0) inp.cmd = { kind: 'skill', i: best };
   }
 
-  // 1. food, exactly as a human eats it (Q / F)
-  if (p.hp < p.maxHp * 0.5 && bagCount(p, 'fish') > 0) inp.eatFish = true;
-  else if (p.hp < p.maxHp * 0.8 && bagCount(p, 'berry') > 0) inp.eatBerry = true;
+  // 1. food, exactly as a human eats it (Q / F) - but a meal is a 1.5 s
+  //    channel now and a hit knocks it out of the hands (js/core.js), so a bot
+  //    only starts one with nobody close enough to do that. Standing there
+  //    chewing under fire is not patience, it is a free kill. `foe` is read
+  //    here rather than at rung 2 because this rung is the first to need it.
+  const foe = aiNearestEnemy(p);
+  const foeD = foe ? Math.hypot(foe.x - p.x, foe.y - p.y) : Infinity;
+  if (p.eatT <= 0 && p.foodCd <= 0 && foeD > AI_EAT_R) {
+    if (p.hp < p.maxHp * 0.5 && bagCount(p, 'fish') > 0) inp.eatFish = true;
+    else if (p.hp < p.maxHp * 0.8 && bagCount(p, 'berry') > 0) inp.eatBerry = true;
+  }
 
   // 2. the burrow. Decided before the ladder because two rungs below read the
   //    answer: a bot that has come off worse and has nobody looking at it goes
@@ -127,7 +136,6 @@ function updateAI(p, dt) {
   //    feet, which is also what keeps it from planting itself on a river and
   //    standing there. `hideT` doubles as the give-up: a plant that will not
   //    take burns it four times as fast and ends in the lockout.
-  const foe = aiNearestEnemy(p);
   const wolf = foe ? null : aiNearestWolf(p);
   if (p.prone) ai.hideT -= dt;
   const btx = Math.floor(p.x / TILE), bty = Math.floor((p.y + 4) / TILE);
@@ -152,7 +160,7 @@ function updateAI(p, dt) {
 
   // 3. a rival in sight: circle at bow range and shoot
   if (foe) {
-    const d = Math.hypot(foe.x - p.x, foe.y - p.y);
+    const d = foeD;
     aimAt(foe.x, foe.y - 6);
     // hold ~70px: close in when far, back off when crowded, strafe in between
     const clear = aiLineClear(p, foe.x, foe.y - 6);

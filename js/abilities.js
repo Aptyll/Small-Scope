@@ -119,7 +119,7 @@ const volleyFx = []; // falling shafts, visual only: {x, y, delay, t}
 // own key is the one toggle - pressing it again lowers the shield early.
 function tryAbility(p, i) {
   if (i < 0 || i >= AB_KEYS || p.dead || p.stunT > 0 || p.fallT > 0 ||
-    p.dodgeT > 0 || p.rushT > 0 || p.castT > 0 || inAir(p)) return;
+    p.dodgeT > 0 || p.rushT > 0 || p.castT > 0 || p.eatT > 0 || inAir(p)) return; // a meal occupies the hands the same way a cast does
   const ab = CLASS_AB[p.cls][i];
   if (!ab) return;
   if (ab.id === 'shield' && p.shieldT > 0) { abShieldDown(p, true); return; }

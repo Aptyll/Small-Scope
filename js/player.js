@@ -140,9 +140,11 @@ function playerTint(p) {
 // (`bits`, `idx` - see js/tools.js), which is why a tool stacks to 1 and is
 // moved with bagPut() rather than rebuilt from a type name. Nothing else in
 // the bag has state of its own.
+// `heal` is what a meal is worth before HEARTHWEAVE - the ONE place the number
+// lives, so the tooltip and the meal that lands can never disagree (js/core.js).
 const ITEMS = {
-  berry: { icon: 'itemBerry', stack: 3 },
-  fish: { icon: 'itemFish', stack: 2 },
+  berry: { icon: 'itemBerry', stack: 3, heal: 20 },
+  fish: { icon: 'itemFish', stack: 2, heal: 50 },
   // unopened roguelike cards - one ITEMS entry per rarity, so bag storage,
   // the drop pickup, the refusal flash and death-spill are all free (see
   // checklists.md "adding a carried item"). Opening one (bagClick) starts
@@ -441,6 +443,8 @@ class Player {
     this.hp = this.maxHp;
     this.dead = false;
     this.charging = false; this.chargeT = 0;      // bow draw state
+    // the meal being chewed and the clock BOTH meals share (js/core.js)
+    this.eatT = 0; this.eatType = null; this.eatFxT = 0; this.foodCd = 0;
     // the quiver: what is left, the renock cooldown, and the fletching timer
     this.quiver = QUIVER_MAX; this.nockT = 0; this.fletchT = 0;
     this.fireArmed = false;                        // the bow button has been pressed since the last loose
@@ -594,6 +598,7 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
   if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
   else { p.kbx = dx * 110; p.kby = dy * 110; }
   risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
+  breakEat(p);   // ...and the meal goes with it - that is what makes the channel a channel
   if (p === player) state.shake = Math.max(state.shake, crit ? 6 : 3);
   addDmgFloater(p.x, p.y - 18, dmg, p === player, crit);
   if (nearPlayer(p.x, p.y)) SFX.hurt();
@@ -669,7 +674,8 @@ function die(p, src, cause) {
   p.prone = false; p.hide = 0; p.riseT = 0;
   p.fallT = 0;
   p.swingT = p.swingCd = 0;
-  // whatever ability the body was mid-way through dies with it
+  // whatever ability the body was mid-way through dies with it, and the meal
+  p.eatT = 0; p.eatType = null;
   p.castT = 0; p.castAb = -1;
   p.shieldT = 0; p.rushT = 0; p.rushVictim = -1;
   p.jugT = 0; p.rootT = 0; p.slowT = 0; p.netT = 0; p.markT = 0; p.hopT = 0;
@@ -809,6 +815,7 @@ function practiceRevive(p) {
   p.fallT = 0; p.sliding = false;
   p.prone = false; p.hide = 0; p.riseT = 0;
   p.charging = false; p.chargeT = 0; p.fireArmed = false;
+  p.eatT = 0; p.eatType = null;                  // the meal dies with the body here too
   const s = p.spawn || { tx: WORLD >> 1, ty: WORLD >> 1 };
   p.x = (s.tx + 0.5) * TILE; p.y = (s.ty + 0.5) * TILE;
   p.invuln = 2;

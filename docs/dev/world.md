@@ -349,8 +349,9 @@ sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net
   pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, hot orange while
   pressed/charging — so nothing hints at right-click) reading
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
-  mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP (`eatFish`, mirroring
-  the berry's Q/+20), counted beside the berries on the backpack strip
+  mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP over a 1.5 s channel a
+  hit can break (`eatFish`, mirroring the berry's Q/+20; both meals share one 3 s clock - see
+  [Food](gameplay.md#food-the-meal-is-a-channel)), counted beside the berries on the backpack strip
   (`SPRITES.itemFish`, 8×8, own `FIPAL`). `SFX.splash()` was added for the water sounds. `DBG`
   exposes `fish`, `iceCracks`, `holes`, `crackIce`, `addFish`, `spawnEmerger`, `netAt`,
   `buildSiteAt`.

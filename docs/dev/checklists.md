@@ -123,7 +123,7 @@ particles, its sounds, what it leaves behind), and `rebuildLights()` if it glows
 is not an object type: it is a `STRUCTS` entry in [js/structures.js](../../js/structures.js),
 which carries the same `mm`/`map` pair and gets solidity, both maps and the E prompt for free.
 
-**Adding a carried item** — one `ITEMS` entry (`icon`, `stack`) is the storage half: the bag,
+**Adding a carried item** — one `ITEMS` entry (`icon`, `stack`, plus `heal` if it is food) is the storage half: the bag,
 the drop pickup, the death spill, the drag and the refusal tell are all generic over that table.
 What is *not* generic and must be written per item: an 8×8 icon sprite (bake it beside its own
 code, not in the byte-fragile js/sprites.js — see `bakeGrid` in js/tools.js and `CHEST_SPR`), a
@@ -131,7 +131,10 @@ colour in `RES_COLORS` for the pickup floater, whatever *makes* the item, and wh
 `bagClick` maps a cell click onto an input flag, so a new item needs its own branch there or
 clicking its cell will just deny (`sendBagCell` runs first and handles only the two kinds that
 have somewhere to *go*, a bit and a tool) — and a branch in `tipStack` (the `tooltips` banner, js/ui.js) or
-hovering it says only its raw type name. The drop draw pass and the bag cell both centre an icon
+hovering it says only its raw type name. **A new FOOD is the one item that is already generic**:
+give its `ITEMS` row a `heal` and it picks up the meal channel, the shared clock, the cell/strip
+wipe and the tooltip rows for free (`startEat`, js/core.js — see
+[Food](gameplay.md#food-the-meal-is-a-channel)); it still needs its own key or `bagClick` branch. The drop draw pass and the bag cell both centre an icon
 on its own width, so a 12×12 needs no branch. Gold is **not** an `ITEMS` entry and must not become
 one: it is a wallet number with no ceiling. See
 [gameplay.md](gameplay.md#inventory-and-the-backpack).

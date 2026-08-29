@@ -126,7 +126,7 @@ function fishInRange(f, p) {
 // cooldown; the bow comes back on its own once the cooldown runs out.
 function tryWork(p) {
   if (p.swingCd > 0 || p.fallT > 0 || p.dodgeT > 0 || p.stunT > 0 ||
-    p.castT > 0 || p.rushT > 0 || p.shieldT > 0) return; // both hands are on the ability
+    p.castT > 0 || p.rushT > 0 || p.shieldT > 0 || p.eatT > 0) return; // both hands are on the ability, or on the meal
   if (p.prone) { risePlayer(p); return; } // no swinging an axe on your belly: E stands you up
   const t = workTarget(p);
   if (!t || !t.near) return;
@@ -150,6 +150,7 @@ function tryDodge(p) {
   if (p.dodgeT > 0 || p.dodgeCharges <= 0 || p.fallT > 0 || p.dead || p.stunT > 0 ||
     p.rootT > 0 || p.rushT > 0) return; // a trap pins the roll too, and a charge is already a dash
   risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
+  breakEat(p);   // ...and out of a meal: the roll is the one way YOU end your own channel
   let dx = p.input.mx, dy = p.input.my;
   if (!dx && !dy) {
     dx = p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0;
@@ -217,6 +218,7 @@ function stunUnit(e, t) {
     e.swingT = 0; e.swingHitDone = true;           // the swing in flight never lands
     e.sliding = false;
     e.castT = 0; e.castAb = -1;                    // the cast is knocked out of the hands
+    breakEat(e);                                   // ...and so is the meal (js/core.js)
     if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
     if (e.rushT > 0) { e.rushT = 0; e.rushVictim = -1; }
   }

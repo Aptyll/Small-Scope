@@ -843,7 +843,7 @@ Every player owns a wallet **and** a bag. `p.inv` is `{ gold }` — currency onl
 while everything you *carry* lives in `p.bag`, the slot array described in
 [Inventory and the backpack](#inventory-and-the-backpack). (`inv` is an alias for the local
 slot's wallet.) **Gold is the only resource** — there is no wood or stone —
-and berries/fish are consumables (Q/F heals), never spent on anything. The whole economy is the
+and berries/fish are consumables ([Food](#food-the-meal-is-a-channel)), never spent on anything. The whole economy is the
 `YIELD` table in the constants banner of [js/core.js](../../js/core.js) - the one tuning table
 with no single owner - which gives every source a different **yield profile**
 rather than a different resource (the League model: one number, many ways to earn it):
@@ -905,8 +905,8 @@ nothing else. The table:
 
 | Item | Icon | Stack | Used by |
 | --- | --- | --- | --- |
-| `berry` | `itemBerry` | 3 | Q, or clicking its cell — eats it |
-| `fish` | `itemFish` | 2 | F, or clicking its cell — eats it |
+| `berry` | `itemBerry` | 3 | Q, or clicking its cell — eats it (see [Food](#food-the-meal-is-a-channel)) |
+| `fish` | `itemFish` | 2 | F, or clicking its cell — eats it (same) |
 | `cardWhite`/`cardGreen`/`cardBlue`/`cardPurple`/`cardGold` | `itemCard<Rarity>` | 5 each | clicking its cell — opens the pick-1-of-3 draft (see [Roguelike cards](#roguelike-cards)) instead of eating |
 | `tool:<id>` | `toolArt_<shape>_<tier>` | 1 | dragged onto one of the four weapon slots (see [Tools and bits](#tools-and-bits)) |
 | `bit:<id>` | `bitArt_<id>` | 4 each | dragged into a cell of a tool's bit column |
@@ -930,7 +930,7 @@ genuinely refuse. Six helpers in the `players` banner are the entire API — `ba
 `bagAdd(p, type, n)` (tops up partial stacks before opening a cell, returns how many went in),
 `bagTake(p, type, n)` (spends from the **last** stack backwards, so partials empty and free their
 cell) and `bagPut(p, cell)` (an instanced cell into the first free slot, or false). Nothing outside
-them touches `p.bag` — `eatBerry`/`eatFish`, the fish catch, the drop pickup, the AI's food check
+them touches `p.bag` — `updateEat` (the meal landing), the fish catch, the drop pickup, the AI's food check
 and `spillInventory` all go through the six. The one deliberate exception is the **drag**
 ([UI banner](../../js/ui.js)), which is moving cells between wells rather than storing items, and
 owns `p.bag[i]` directly for exactly the length of one gesture.
@@ -946,6 +946,61 @@ the one that answers.
 
 The HUD is in the `UI` › `backpack` banner — see
 [the backpack](rendering.md#the-gear-row-and-the-backpack).
+
+## Food: the meal is a channel
+
+Berries and fish are the only heal a slot carries, and they answer the same question — *can I take
+this fight* — so the whole thing is **one clock and one channel**, in the `food` banner of
+[js/core.js](../../js/core.js):
+
+| | |
+| --- | --- |
+| `FOOD_CD` | **3 s**, and it is **shared**: eating either meal puts *both* away |
+| `FOOD_EAT` | **1.5 s** of channel, interruptible for its whole length |
+| `FOOD_SLOW` | **×0.5** on the walk cap and the ice cap while chewing — the drag a cast puts on the legs |
+| `ITEMS[type].heal` | what the meal is worth before `foodMul`: berry **20**, fish **50** |
+
+**Nothing is spent up front.** `startEat(p, type)` only arms `p.eatT`/`p.eatType`; the food leaves
+the bag and `p.foodCd` starts when `updateEat` lands the channel — exactly the way an ability's
+cooldown starts when its *cast* lands, not when the key is pressed
+([Class abilities](#class-abilities-keys-1-4)). So a meal knocked out of your hands costs the time
+and the tempo and **nothing out of the bag**, and can be restarted on the spot.
+
+`eatBerry(p)` / `eatFish(p)` are still the two edge-triggered intents Q and F set (two keys, two
+meals); both are one line into `startEat`. It refuses — with the `SFX.deny()` an ability well
+speaks — while the clock is up, the body is busy (stunned, falling, rolling, mid-cast, mid-rush,
+airborne), or there is nothing a meal could do (no food, or already at full hp).
+
+**What breaks a meal** is `breakEat(p)`, and every side that can break one calls it. The world
+takes it away: a hit (`damagePlayer`), a stun (`stunUnit`), the ice (the hole plunge in
+`updatePlayer`), death (`die`, `practiceRevive`). And **you** drop it on purpose, two ways — a
+**dodge roll** (`tryDodge`), and the **fire button**: the rising edge of `inp.fire` in
+`updatePlayer` cancels the meal and the draw gate two lines below arms in the *same frame*, so a
+body mid-chew is never a body that cannot fight back. The food is unspent, so the cancel costs the
+1.5 s and the tempo and nothing else, and the meal can be started again the moment the shot is
+away.
+
+**What a meal still refuses** is the E swing (`tryWork`) and an ability (`tryAbility`) — the two
+presses that spend a cooldown, which a stray keypress should not be able to throw away. A meal does
+*not* break the burrow — you can eat lying in the snow — and its crumbs fade with the cover exactly
+as the overhead tells do (`alpha: 1 - concealOf(p)`).
+
+**It reads without a word of it** ([UI rule](../../CLAUDE.md#ui-rule-show-dont-label)):
+
+- the **overhead frame** carries the channel in the same slot as the bow-draw meter, filled in the
+  heal green — gold = drawing, slate = reloading, **green = eating** — so a rival can see the meal
+  and take it away ([Overhead health bars](rendering.md#overhead-health-bars));
+- crumbs in the meal's own colour fly at the mouth for the whole channel;
+- the shared clock **wipes top-down over the food itself** (`drawFoodClock`, UI › `backpack`) — in
+  the bag cell the click that eats lands on *and* on the bottom strip's counters, which is the only
+  food readout while the pack is shut. Both meals wipe together: that is the point of one clock.
+  The meal being chewed lights its own well white, the way a casting ability well does.
+- the food tooltip carries `HEALS` / `EAT` / `COOLDOWN` / `CARRIED` and a red `READY IN` while the
+  clock runs — the same rows `tipClassAb` prints.
+
+**Bots eat through the same one path** (`updateAI` rung 1, which is why it reads `foe` before the
+burrow rung): a bot only starts a meal with no rival inside `AI_EAT_R` (110 px), because standing
+there chewing under fire is not patience, it is a free kill.
 
 ## Gear
 
@@ -981,7 +1036,7 @@ iron → steel → gold at a glance, the same materials the HUD plates wear.
 `nightHeal`, `walkMul`, `harvest`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
 returns that cache, so every existing kit read site (movement, `emitBit`, dodge timing, the AI,
 the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
-Sites that read the gear-only fields: `damagePlayer` (`dr`), `eatBerry`/`eatFish` and the daylight
+Sites that read the gear-only fields: `damagePlayer` (`dr`), `updateEat`'s landing and the daylight
 regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvest`), `animalDies`
 (`huntMul`, paid to `a.lastHit` — stamped by the arrow loop — as one extra coin), **`seenAt()`**
 (`stealth` — see [Prone](#prone-under-the-snow); the wolf pack, both turret checks *and*
@@ -1022,7 +1077,7 @@ the exact shape a `GEAR` variant's `mod(k, L)` is, minus the level argument, sin
 one-shot pick rather than a leveled buy. Every effect stays inside `kitOf`'s existing field
 vocabulary (`dmgBase`, `dr`, `maxHp`, `walkMul`, `stealth`, `ambushMul`, `iceMax`, …) except one
 genuinely new field, `killHeal` — a flat heal on a confirmed kill, hooked at `die()`'s existing
-kill-credit line the same way `eatBerry` applies its heal.
+kill-credit line the same way `updateEat` applies a meal's.
 
 **The draft**: clicking an unopened card's bag cell (`bagClick`, instead of the eat branch berry/fish
 take) calls `openDraft(rarity)`, which sets `state.draft = { rarity, options }` — three distinct

@@ -481,6 +481,9 @@ function updatePlayer(p, dt) {
   // the class abilities' own clock: cooldowns, the cast landing, and every
   // timed state one leaves on this body (js/abilities.js)
   updateAbilities(p, dt);
+  // ...and the meal's clock beside it: the channel landing its heal, and the
+  // one cooldown a berry and a fish share (js/core.js)
+  updateEat(p, dt);
 
   // input
   let mx = inp.mx, my = inp.my;
@@ -572,8 +575,10 @@ function updatePlayer(p, dt) {
   } else {
     const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
     // every cap an ability may drag on (root, net, crater, cast, shield) or
-    // ramp up (juggernaut), folded once - js/abilities.js
-    const abMul = abilityMoveMul(p);
+    // ramp up (juggernaut), folded once - js/abilities.js - with the meal's
+    // own drag beside them (js/core.js): a body chewing walks, exactly the way
+    // a body mid-cast does
+    const abMul = abilityMoveMul(p) * (p.eatT > 0 ? FOOD_SLOW : 1);
     // a belly crawl is a flat crawl on any surface - no ice cap, no draw
     // penalty, nothing to stack. Getting back up costs a moment of it too.
     const walkMax = (p.prone ? PRONE_SPEED
@@ -642,6 +647,7 @@ function updatePlayer(p, dt) {
       p.slideT = 0;
       if (p.rushT > 0) { p.rushT = 0; p.rushVictim = -1; } // the charge ends in the water
       p.castT = 0; p.castAb = -1; p.shieldT = 0;           // and so does whatever was being cast
+      breakEat(p);                                         // the meal goes in the water with you
       p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water
       if (p.charging) { p.charging = false; p.chargeT = 0; }
       p.fireArmed = false;
@@ -814,12 +820,20 @@ function updatePlayer(p, dt) {
   // in it, or a tool with no bit light enough to throw, is just as dry.
   const armed = p.quiver > 0 && toolReady(p);
   if (inp.fire && !p.firePrev) {
+    // THE BUTTON IS THE CANCEL. A meal must never trap the hands: deciding
+    // mid-chew that the fight matters more drops it on the spot and the draw
+    // below arms in the same frame. It costs the 1.5 s and nothing else - the
+    // food is only spent when the channel lands (js/core.js) - so a cancelled
+    // meal can be started again the moment the shot is away. The roll is the
+    // other escape; E and the ability keys stay refused instead, because those
+    // spend a cooldown a stray press should not.
+    breakEat(p);
     p.fireArmed = true;
     if (!armed && p.dryT <= 0) dryFire(p);
   }
   if (!inp.fire) p.fireArmed = false;
   if (p.fireArmed && !p.charging && p.nockT <= 0 && armed && p.fallT <= 0 && p.swingT <= 0 &&
-    p.castT <= 0 && p.shieldT <= 0 && p.rushT <= 0) { // a body mid-ability has no hand free for the draw
+    p.castT <= 0 && p.shieldT <= 0 && p.rushT <= 0 && p.eatT <= 0) { // a body mid-ability has no hand free for the draw (a meal is already cancelled by the press above)
     p.charging = true;
     p.chargeT = 0;
     if (nearPlayer(p.x, p.y)) SFX.bowDraw();

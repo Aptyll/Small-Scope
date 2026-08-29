@@ -30,6 +30,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | settings persistence and the minimap-size helpers | `saveSettings`, `loadSettings`, `mmScale`, `applyMinimapSize` | `state` |
 | `relayout()` — the resize pair's second half | `relayout` | `state` (`fitCanvas`: `canvas`, canvas.js — still the resize pair) |
 | floaters, particles, drops, cost math | `addFloater`, `burst`, `spawnDrop`, `canAfford` | `helpers` |
+| food: the 1.5 s meal, the 3 s clock berries and fish share, and every way one is broken | `FOOD_CD`/`FOOD_EAT`/`FOOD_SLOW`/`FOOD_FX_T`, `startEat`, `eatBerry`/`eatFish`, `updateEat`, `breakEat` | `helpers` › `food` (the heal numbers: `ITEMS[type].heal`, `players`, player.js; the wells that draw the clock: `drawFoodClock`, ui.js) |
 | the gold flare and crack an ambush arrow lands with | `ambushFx`, the `crit` flag on `addDmgFloater` | `helpers` |
 
 ## js/canvas.js
@@ -220,7 +221,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel`, `drawWheelHub`, `drawWheelStick` | `selection, hints & wheel` |
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` | `UI` (the disc's per-tile colour comes from `objMapColor(o, 'mm')`: `world`, world.js) |
 | is the pointer over HUD that owns its own clicks, rather than over the world | `overHud` | `UI` (its callers are input.js's middle-button handlers and `flagTarget`, robots.js) |
-| the backpack + gear widget (bottom-right): its frame, the gear row, the ability row under it, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagOpenNow`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagAbRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawBag`, `drawAbilityRow` | `UI` › `backpack and gear` |
+| the backpack + gear widget (bottom-right): its frame, the gear row, the ability row under it, the grid, the bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagOpenNow`, `bagFrameRect`, `bagRowRect`, `bagBtnRect`, `bagAbRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawFoodClock`, `drawBag`, `drawAbilityRow` | `UI` › `backpack and gear` |
 | carrying an item between the grid, the four weapon slots and a bit column | `state.drag`/`state.dragPend`, `DRAG_SLOP`, `hudPress`, `hudMove`, `hudRelease`, `dragTake`, `dragReturn`, `dragDrop`, `dragDropBag`, `dragDropBit`, `dragDropSlot`, `throwCell`, `drawDragGhost` | `UI` › `carrying an item on the cursor` (its three listeners: `input`, input.js) |
 | a click SENDING an item to its one other side (bag <-> weapon, bag <-> bit column) | `sendBagCell`, `sendBitCell`, `sendSlot` (each returns whether it handled the click), `sendAt` (the shift-while-carrying hit test), `tipSend` | `UI` › `one click sends it to the other side` (resolved in `hudRelease`, refused by `bagDenied`/`toolDenied`) |
 | the pick-1-of-3 card draft: opening it, hit-testing a card, applying a pick, drawing it | `openDraft`, `draftLayout`, `draftHit`, `draftClick`, `renderDraft`, `state.draft` | `UI` › `backpack and gear` |

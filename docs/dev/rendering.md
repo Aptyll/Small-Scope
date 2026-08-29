@@ -484,11 +484,16 @@ and robots (in `drawRobot`). **Birds are the one exception** — 3 hp means ever
 a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow
 by `a.alt` instead, which is the only read on how high one is.
 The overhead bar is the **only** player health display — the old top-left Minecraft-style hearts
-were removed in the HUD redesign (their sprites are still baked, unreferenced). While the bow is
-drawn, a second small meter renders just above it: yellow while charging,
-turning hot orange at full draw (two discrete states — a gradient is unreadable at 14 px) — drawn
-for **everyone**, because it is the tell that a shot is coming. The overhead stack floats clear of
-the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both bars), health at `py - 7`, draw meter at
+were removed in the HUD redesign (their sprites are still baked, unreferenced). Above it sits one
+more small meter — **the slot the hands report to**, and it carries three states that can never
+overlap, since a meal puts the bow down and blocks the draw for its whole length: yellow while
+charging, turning hot orange at full draw (two discrete states — a gradient is unreadable at
+14 px); slate while the renock runs, white the instant it comes back; and **heal green** filling
+left to right while a meal is being chewed (`FOOD_EAT`, [Food](gameplay.md#food-the-meal-is-a-channel)).
+All three are drawn for **everyone**, because each is a tell somebody can act on — a shot is
+coming, a shot is not coming, a heal is coming and hitting them takes it away. The overhead stack
+floats clear of the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both
+bars), health at `py - 7`, that meter at
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
 the stamina bar), and the slot's name tag in team colour at `py - 18`, a clear row above the meter's
 frame — **every** slot, the local one included: the name is the profile's

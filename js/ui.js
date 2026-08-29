@@ -918,6 +918,27 @@ function drawGearCells(now, hov) {
   }
 }
 
+// The shared meal clock over one food well: the cooldown wiping top-down
+// behind a bright edge, or a white lift while THIS meal is the one being
+// chewed - the two states an ability well already draws, said about food.
+// Shared by the bag cell and the bottom strip so the two can never disagree
+// about what the food is doing. (x, y, w, h) is the well's inner rect.
+function drawFoodClock(x, y, w, h, type) {
+  const p = player;
+  if (p.eatT > 0 && p.eatType === type) {
+    ctx.globalAlpha = 0.32;
+    ctx.fillStyle = '#f4f7ff';
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (p.foodCd <= 0) return;
+  const cov = Math.max(1, Math.round(p.foodCd / FOOD_CD * h));
+  ctx.fillStyle = AB_COVER;
+  ctx.fillRect(x, y, w, cov);
+  if (cov < h) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(x, y + cov, w, 1); }
+}
+
 function drawBag(now) {
   if (player.dead) return;
   const hov = mouse.inside ? bagHit(mouse.x, mouse.y) : null;
@@ -975,6 +996,13 @@ function drawBag(now) {
           ctx.fillRect(r.x + 3 + k * 3, y + r.h - 4, 2, 2);
         }
       }
+      // Food answers to one shared clock (FOOD_CD, js/core.js), so it wipes
+      // top-down over the very cell the click that eats lands on - the same
+      // language the weapon well's rate of fire speaks. BOTH meals wipe
+      // together, which is the whole point of the clock being shared.
+      if (ITEMS[s.type] && ITEMS[s.type].heal) {
+        drawFoodClock(r.x + 1, y + 1, r.w - 2, r.h - 2, s.type);
+      }
     }
   }
   // The bottom strip: everything that is a NUMBER rather than a slot. It
@@ -996,6 +1024,10 @@ function drawBag(now) {
     const n = bagCount(player, type);
     if (n <= 0) continue;
     ctx.drawImage(SPRITES[ITEMS[type].icon], fx, st.y + 2);
+    // ...wearing the same clock the grid's cells wear. The strip is the ONLY
+    // food readout while the pack is shut, so the wipe has to run here too or
+    // the shared cooldown is invisible for most of a match.
+    drawFoodClock(fx, st.y + 2, 8, 8, type);
     fx += 9;
     const t = String(n);
     drawPixelTextOutline(ctx, t, fx, st.y + 4, '#f4f7ff', '#0f1632');
@@ -1912,12 +1944,18 @@ function tipStack(s) {
     d.notes.push(['CLICK: DRAW ONE OF THREE BUFFS', TIP_DIM]);
     return d;
   }
-  if (s.type === 'berry' || s.type === 'fish') {
-    const heal = Math.round((s.type === 'berry' ? 20 : 45) * kitOf(player).foodMul);
+  if (ITEMS[s.type] && ITEMS[s.type].heal) {
+    const heal = Math.round(ITEMS[s.type].heal * kitOf(player).foodMul);
     const d = tipBase(s.type, s.type === 'berry' ? 'BERRIES' : 'FISH', 'FOOD');
     d.tcol = RES_COLORS[s.type];
     d.rows.push(['HEALS', '+' + heal, '#8fe08a']);
+    // the two halves of a meal, said the way an ability well says them: how
+    // long you stand there eating it, and how long BOTH meals are away after
+    d.rows.push(['EAT', tipSec(FOOD_EAT), '#f4f7ff']);
+    d.rows.push(['COOLDOWN', tipSec(FOOD_CD), '#f4f7ff']);
     d.rows.push(['CARRIED', String(s.n), '#f4f7ff']);
+    if (player.foodCd > 0) d.rows.push(['READY IN', tipSec(player.foodCd), '#e0637a']);
+    d.notes.push(['A HIT BREAKS THE MEAL - CLICK OR ROLL TO CANCEL', TIP_DIM]);
     d.notes.push([s.type === 'berry' ? 'Q OR CLICK TO EAT' : 'F OR CLICK TO EAT', TIP_DIM]);
     return d;
   }

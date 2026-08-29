@@ -35,7 +35,7 @@ on from the eagle), `aboard`/`dropT`/`dropU`
 decides whether the slot gets 3 s of i-frames, so a future respawn path can pass `false`.
 
 Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireTool`, `tryDodge`,
-`eatBerry`, `damagePlayer`, `die`, `spillInventory`, `placeStruct`, …), matching the rest of the file's
+`startEat`, `damagePlayer`, `die`, `spillInventory`, `placeStruct`, …), matching the rest of the file's
 style — the class is the state container, not a god object.
 
 ## The input struct
@@ -45,14 +45,17 @@ style — the class is the state container, not a god object.
 ```
 mx, my        movement axis, -1..1 (the sim normalises)
 aimX, aimY    world-space aim point — cursor for a human, target for a bot
-fire          bow held: rising edge draws, falling edge looses
+fire          bow held: rising edge draws, falling edge looses. The rising edge
+              also CANCELS a meal in progress (see Food in gameplay.md), so the
+              button a player reaches for in a fight is never refused
 work          E held
 slide         shift held
 dodge         edge-triggered, cleared by the sim when it reads it
 prone         edge-triggered (Ctrl): TOGGLES the burrow, never a held level -
               holding a modifier while tapping W is Ctrl+W, which closes the tab
-eatBerry      edge-triggered (Q)
-eatFish       edge-triggered (F)
+eatBerry      edge-triggered (Q): STARTS the 1.5s meal, it does not heal on the spot
+eatFish       edge-triggered (F): same, and off the same shared 3s clock
+              (startEat, js/core.js - see Food in gameplay.md)
 ability       edge-triggered (keys 1-4): cast that class ability, -1 = none
               (tryAbility, js/abilities.js - see Classes below)
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id}

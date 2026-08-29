@@ -274,23 +274,87 @@ function costText(cost) {
   return parts.join('  ');
 }
 
-function eatBerry(p) {
-  if (bagCount(p, 'berry') <= 0 || p.hp >= p.maxHp) return;
-  bagTake(p, 'berry', 1);
-  const heal = Math.round(20 * kitOf(p).foodMul); // HEARTHWEAVE makes meals bigger
-  p.hp = Math.min(p.maxHp, p.hp + heal);
-  if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
-  addFloater(p.x, p.y - 14, '+' + heal, '#8fe08a');
-  burst(p.x, p.y - 8, '#f2707a', 6, 30, 0.4);
+// ---- food: a meal is a channel, not a keypress ---------------------------
+// Berries and fish answer the same question - "can I take this fight" - so
+// they share ONE clock: eating either puts both away for FOOD_CD. And the meal
+// itself takes time you have to survive, because a heal you can tap out from
+// under an arrow is a heal nobody gets to play around.
+//
+// Nothing is spent up front. The food leaves the bag and the cooldown starts
+// when the channel LANDS, exactly the way an ability's cooldown starts when
+// its cast does (js/abilities.js), so a meal knocked out of your hands costs
+// the time and nothing else. `breakEat` is every way one is knocked out - a
+// hit, a stun, the ice - and every way one is DROPPED on purpose: the roll,
+// and the fire button, which cancels the meal and draws in the same frame so a
+// body chewing is never a body that cannot fight back (updatePlayer, sim.js).
+// The two keys that stay refused mid-meal are the E swing and an ability -
+// both spend a cooldown a stray press should not.
+const FOOD_CD = 3;       // shared by both meals: the clock belongs to the food, not the type
+const FOOD_EAT = 1.5;    // the channel, interruptible for its whole length
+const FOOD_SLOW = 0.5;   // eating walks you - the same drag a cast puts on the legs
+const FOOD_FX_T = 0.12;  // seconds between crumbs while chewing
+
+// Q / F and a click on a food cell all arrive here. Refused - with the deny
+// the ability wells already speak - while the clock is up, the body is busy,
+// or there is nothing a meal could do.
+function startEat(p, type) {
+  if (p.dead || p.eatT > 0 || p.foodCd > 0 || p.hp >= p.maxHp ||
+    bagCount(p, type) <= 0 || p.stunT > 0 || p.fallT > 0 || p.dodgeT > 0 ||
+    p.castT > 0 || p.rushT > 0 || inAir(p)) {
+    if (p === player) SFX.deny();
+    return;
+  }
+  p.eatT = FOOD_EAT;
+  p.eatType = type;
+  p.eatFxT = 0;
+  if (p.charging) { p.charging = false; p.chargeT = 0; } // the bow comes down for the meal
+  p.fireArmed = false;
+  if (nearPlayer(p.x, p.y)) SFX.eat();
 }
 
-function eatFish(p) {
-  if (bagCount(p, 'fish') <= 0 || p.hp >= p.maxHp) return;
-  bagTake(p, 'fish', 1);
-  const heal = Math.round(50 * kitOf(p).foodMul);
+// the two edge-triggered intents (the input struct, multiplayer.md) - still
+// two names because Q and F are two keys and two meals, even though one clock
+// now covers both
+function eatBerry(p) { startEat(p, 'berry'); }
+function eatFish(p) { startEat(p, 'fish'); }
+
+// The meal ticking, and the shared clock beside it. Called from updatePlayer
+// next to the ability clock, for every slot alike.
+function updateEat(p, dt) {
+  if (p.foodCd > 0) p.foodCd = Math.max(0, p.foodCd - dt);
+  if (p.eatT <= 0) return;
+  p.eatT -= dt;
+  // crumbs at the mouth for the whole channel: a meal is a tell a rival can
+  // act on, and a buried body gives it away exactly as little as its bars do
+  p.eatFxT -= dt;
+  if (p.eatFxT <= 0) {
+    p.eatFxT = FOOD_FX_T;
+    particles.push({
+      x: p.x + rand(-3, 3), y: p.y - 5, vx: rand(-9, 9), vy: rand(-20, -8),
+      life: rand(0.3, 0.5), maxLife: 0.4, color: RES_COLORS[p.eatType],
+      size: 1, grav: 45, alpha: 1 - concealOf(p),
+    });
+  }
+  if (p.eatT > 0) return;
+  const type = p.eatType;
+  p.eatT = 0;
+  p.eatType = null;
+  if (bagCount(p, type) <= 0) return; // spilled out from under the meal
+  bagTake(p, type, 1);
+  p.foodCd = FOOD_CD;
+  const heal = Math.round(ITEMS[type].heal * kitOf(p).foodMul); // HEARTHWEAVE makes meals bigger
   p.hp = Math.min(p.maxHp, p.hp + heal);
-  if (nearPlayer(p.x, p.y)) { SFX.eat(); setTimeout(() => SFX.heal(), 90); }
+  if (nearPlayer(p.x, p.y)) SFX.heal();
   addFloater(p.x, p.y - 14, '+' + heal, '#8fe08a');
-  burst(p.x, p.y - 8, '#7ac0e8', 6, 30, 0.4);
+  burst(p.x, p.y - 8, RES_COLORS[type], 6, 30, 0.4);
+}
+
+// The meal dropped, from every side that can drop one. Nothing is spent, so an
+// interruption costs the time and the tempo and nothing out of the bag.
+function breakEat(p) {
+  if (p.eatT <= 0) return;
+  burst(p.x, p.y - 6, RES_COLORS[p.eatType] || '#f4f7ff', 4, 34, 0.35, true);
+  p.eatT = 0;
+  p.eatType = null;
 }
 

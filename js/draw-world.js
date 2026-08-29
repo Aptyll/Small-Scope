@@ -1278,22 +1278,28 @@ function drawPlayer(p, ex, ey, now) {
   // mirror of the stamina bar below it: its backing adds the rows above the
   // hp backing (frame top at hy-11, fill hy-10..-9) and the hp backing's top
   // row hy-8 becomes the track-grey gap row, so the frame stays one outline.
-  // The same slot carries the renock cooldown when the bow is not drawn, so
-  // one strip above a head answers the only question a fight asks about it:
-  // gold filling = drawing (a shot is coming), slate filling = reloading (it
-  // is not), white = the instant it came back. Both use the identical
-  // geometry, so the bar never jumps when one hands over to the other.
+  // The same slot carries the renock cooldown when the bow is not drawn, AND
+  // the meal being chewed (js/core.js) - the three states of one pair of
+  // hands, and never two at once, since a meal puts the bow down and blocks
+  // the draw for its whole length. So one strip above a head answers the only
+  // question a fight asks about it: gold filling = drawing (a shot is coming),
+  // slate filling = reloading (it is not), white = the instant it came back,
+  // GREEN filling = eating (a heal is coming, and hitting them takes it away).
+  // All three use the identical geometry, so the bar never jumps when one
+  // hands over to the next.
   const nockKit = kitOf(p);
-  if (p.charging || p.nockT > 0 || p.readyFlash > 0) {
-    const drawing = p.charging;
-    const frac = drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
+  if (p.eatT > 0 || p.charging || p.nockT > 0 || p.readyFlash > 0) {
+    const eating = p.eatT > 0, drawing = p.charging;
+    const frac = eating ? 1 - p.eatT / FOOD_EAT
+      : drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
       : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, nockKit.nock);
     const x = fx - 7, y = hy - 10;
     ctx.fillStyle = 'rgba(12,18,42,0.78)';
     ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
     ctx.fillStyle = '#3a3448';
     ctx.fillRect(x, y, 14, 3);         // fill rows + the gap row
-    ctx.fillStyle = !drawing ? (p.readyFlash > 0 ? '#f4f7ff' : '#6f7ca8')
+    ctx.fillStyle = eating ? '#8fe08a' // the heal colour the floater lands in
+      : !drawing ? (p.readyFlash > 0 ? '#f4f7ff' : '#6f7ca8')
       : frac >= 1 ? '#ff9440' : '#ffd95c';
     ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
   }
