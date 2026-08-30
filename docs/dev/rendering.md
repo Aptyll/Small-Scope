@@ -1354,7 +1354,12 @@ Quantising a twinkle to tenths is invisible on a 2 px speck.
 Every one of these effects is **screen-bounded and reads nothing the sim writes** — the cloud and
 ray passes fill the view and no more, `drawIceStars` walks only the visible tiles and the sky cells
 over them, and every mote and star is culled against `WV_W`/`WV_H` before it is drawn. None of them
-feed anything back: they are safe to cheapen, skip or reorder without touching a match.
+feed anything back: they are safe to cheapen, skip or reorder without touching a match — which is
+exactly what the ESC panel's **VIDEO page** does: `settings.vidClouds`/`vidRays` gate their calls
+in `renderLighting`, `vidStars` gates `drawIceStars` in `render()`, `vidSnow` gates
+`renderWeather`'s draw (the sim still moves the flakes) and `vidVig` the frame vignette, so a
+weak GPU sheds the whole dressing without touching the sim
+([settings](gameplay.md#settings)).
 
 Measured against `PATCH 2.02` — the build before any of this — by navigating one browser tab
 between the two servers six times and taking the median, so the same GPU and thermal state

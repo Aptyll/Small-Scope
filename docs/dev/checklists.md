@@ -80,9 +80,11 @@ there for two rounds while every served check passed.
   the `jump → foxglove → silence` chain in seconds instead of nine minutes. `duration` is only
   finite because [tools/serve.js](../../tools/serve.js) answers Range requests — a plain 200 makes an element
   treat a multi-MB mp3 as an unbounded stream.
-- For the ESC panel, `DBG.settingsRows` and `DBG.muteBtnRect()` give the row anchors and the
-  speaker's plate, so a driver can click a dial through the real pointer instead of guessing at
-  the 14 px pitch.
+- For the ESC panel, `DBG.settingsRows` gives the open page's row anchors (already scrolled -
+  a row's `y` is where it is on screen), the navbar cells and the scroll state;
+  `DBG.setSettingsTab(id)` flips the page, `DBG.settingsScrollBy(px)` walks it, and
+  `DBG.muteBtnRect()` is the speaker's plate (`null` unless the AUDIO page is open) - so a
+  driver can click a dial through the real pointer instead of guessing at the 14 px pitch.
 
 A page that loads the same script set as index.html, stages through `DBG` and POSTs the canvas is enough to
 drive the whole game from a headless browser; keep such a rig out of the repo (or delete it when

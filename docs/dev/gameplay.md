@@ -1588,7 +1588,8 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`) persists
+`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`,
+and the five video toggles `vidClouds`/`vidRays`/`vidStars`/`vidSnow`/`vidVig`) persists
 **under the player profile** — `saveSettings()` is a call to `PROFILE.putSettings()` and
 `loadSettings()` reads `PROFILE.settings()`, which returns `null` when this profile has never
 saved any. A pre-profile save under the old `localStorage['softfall.settings']` key is folded in
@@ -1601,12 +1602,33 @@ not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may sti
 There is no fullscreen control in the ESC menu (players use F11); a `fullscreenchange` listener
 still refits the canvas when the browser toggles it.
 
-The panel has **seven** rows — MASTER, MUSIC, SOUNDS, MINIMAP SIZE, SCREEN SHAKE, INFO DISPLAY,
-CURSOR — at a **14 px pitch** rather than 16, which is what lets the three sound dials fit above
-the CONTROLS divider without `SET_H` growing: 218 is already close to the 240-row floor
-`fitCanvas()` guarantees, so the slab cannot get taller. `settingsHit()`'s row bands are
-`y-3 .. y+10` to match that pitch — 14 px each, touching but never overlapping, so one click can
-never land on two rows.
+**The panel is tabbed.** A navbar under the title splits the rows into four pages — GAME
+(minimap size, screen shake, info display, cursor), VIDEO (below), AUDIO (the three sound dials
+and the speaker), CONTROLS (the baked hotkey listing) — and each page scrolls independently
+inside the content window (`SET_CONTENT_Y`..`SET_CONTENT_B`, panel-local 36..202) when its rows
+outgrow it, which is what lets the slab hold any number of future settings: 218 is already close
+to the 240-row floor `fitCanvas()` guarantees, so it can never get taller. The wheel over the
+open panel scrolls the open page (both the in-match ESC slab and the title's slide-in — the
+title also takes W/S and the arrows), a 1 px thumb on the right edge appears only when a page
+overflows, and the open page's name wears gold with a gold underline while the others sit dim
+until hovered. Everything inside the panel is laid out by **`settingsLayout()`** (panels.js) off
+the row tables in `SET_TABS` — draw, hit test and the `DBG.settingsRows` anchors all read the
+same function, so a click can never disagree with a pixel. Rows keep the **14 px pitch**;
+`settingsHit()`'s bands are `y-3 .. y+10`, touching but never overlapping, so one click can
+never land on two rows. It answers a row id, `'mute'`, `'leave'`, `'tab:<id>'` or
+`'q:<preset>'`.
+
+**The VIDEO page** holds one QUALITY row and five toggles, every one a cosmetic-only render
+pass a weak GPU can shed (they read at draw time; nothing the sim computes changes):
+CLOUD SHADOWS (`vidClouds` — `cloudShade`'s two full-view multiply fills, the one pass that
+costs every daytime frame), SUN SHAFTS (`vidRays` — `godRays` and its motes), ICE STARS
+(`vidStars` — the whole `drawIceStars` pass, mirror included), SNOWFALL (`vidSnow` — the
+falling flakes' draw; the sim still moves them), VIGNETTE (`vidVig` — the frame vignette only,
+the hurt flash is feedback and never goes). The QUALITY row's LOW / MEDIUM / HIGH words are a
+macro over the first four plus VIGNETTE (`VID_PRESETS`): LOW turns them all off, MEDIUM keeps
+everything but the cloud shadows, HIGH is everything, and the word matching the current mix
+wears gold — a hand-picked mix golds none of them. SNOWFALL is deliberately in no preset:
+falling snow is the game's identity and nearly free, so only a deliberate hand turns it off.
 
 **In [practice](world.md#the-practice-arena) the slab grows one hanger.** A LEAVE PRACTICE frost
 plank (`leavePlankRect`, drawn by the title's own `drawMenuButton`) hangs under the panel — the
@@ -1615,16 +1637,15 @@ for it (PRACTICE only) and the click is `leavePractice()` (js/menu.js): the rero
 onto a bare URL, landing on a fresh title world.
 
 **Mute is not a row.** It is a 9×9 speaker plate (`muteBtnRect`, `drawMuteBtn`) hard against the
-left end of the MASTER track: a cone with two waves coming off it, the waves swapped for a red ×
-when it is off. `settingsHit()` tests it *before* the track's x-gate, since it sits left of
-`SL_X`. While muted all three sound dials draw grey rather than gold (`drawSliderRow`'s `dim`)
-while MINIMAP SIZE stays gold, so what the speaker silences reads off the panel without a word of
+left end of the MASTER track on the AUDIO page — `muteBtnRect()` returns `null` on any other
+page, and its callers null-check: a cone with two waves coming off it, the waves swapped for a
+red × when it is off. While muted all three sound dials draw grey rather than gold
+(`drawSliderRow`'s `dim`), so what the speaker silences reads off the page without a word of
 text. **N** still toggles the same flag from anywhere.
 
-Below those rows, the baked CONTROLS block lists the hotkeys in two columns of **seven**
-(`buildSettingsPanel`) — `CTRL SNEAK` joined the left one and `. HITBOX` the right one, and the
-rows start at y 137 rather than 140 so the last still clears `ESC CLOSE`. The title screen's TUTORIAL panel carries the same key
-as `CTRL HIDE IN SNOW`.
+The CONTROLS page is the hotkey listing in two columns, baked once into `controlsCv`
+(`bakeControls`, panels.js) and blitted into the content window at the page's scroll. The title
+screen's TUTORIAL panel carries the same key as `CTRL HIDE IN SNOW`.
 
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows

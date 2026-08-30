@@ -177,7 +177,7 @@ function render() {
   // the night sky, reflected in every frozen tile: on the ice surface, so it
   // covers the fish under it and the cracks in it, and under everything that
   // walks - a body standing on the ice covers its own reflection
-  drawIceStars(ox, oy, tx0, ty0, tx1, ty1);
+  if (settings.vidStars) drawIceStars(ox, oy, tx0, ty0, tx1, ty1);
 
   // flat objects first (stumps)
   for (let ty = ty0; ty <= ty1; ty++) {

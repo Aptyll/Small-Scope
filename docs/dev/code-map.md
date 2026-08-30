@@ -253,8 +253,9 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | the TAB standings, the event feed | `logEvent`, `renderEventLog`, `scoreGroups`, `renderScoreboard` | `scoreboard & log` |
 | the M map, and the chart point -> world tile inverse a map order needs | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap`, `mapTileAt` | `world map (M)` (the parchment's per-tile colour comes from `objMapColor(o, 'map', i, h)`: `world`, world.js) |
-| the ESC menu | `buildSettingsPanel`, `settingsHit`, `renderSettings` | `settings menu (ESC)` |
-| the three sound dials, the speaker that mutes them, the grey-when-muted fill | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow` | `settings menu (ESC)` |
+| the ESC menu: its tabbed pages, their rows, the scroll, the layout every reader shares | `SET_TABS`, `settingsLayout`, `settingsScrollBy`, `setTab`/`setScroll`, `buildSettingsPanel`, `bakeControls`/`controlsCv`, `settingsHit`, `settingsMouseDown`, `renderSettings` | `settings menu (ESC)` |
+| the VIDEO page's quality macro over the render-pass toggles | `VID_PRESETS`, `vidPreset` (the flags themselves: `settings.vid*`, core.js; their gates sit at each pass's call site) | `settings menu (ESC)` |
+| the three sound dials, the speaker that mutes them, the grey-when-muted fill | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow`, `drawSliderById`, `toggleVal` | `settings menu (ESC)` |
 | practice's exit plank under the slab | `leavePlankRect` (the click: `leavePractice`, menu.js) | `settings menu (ESC)` |
 | the PLAYER panel: the name field, its validation, the two planks | `openNamePanel`, `nameKey`, `nameOk`, `nameCommit`, `nameDismiss`, `namePanelHit`, `renderNamePanel`, `buildNamePanel` | `player profile` |
 | the profile name bottom-left of the title screen, and the slot that wears it | `nameTagRect`, `overNameTag`, `drawNameTag`, `applyProfileName` | `player profile` |

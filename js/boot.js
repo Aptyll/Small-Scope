@@ -1061,14 +1061,20 @@ window.DBG = {
   getSwing: (p) => (p || player).swing,
   cam: () => ({ x: camX, y: camY }),
   startGame, beginIntro, beginSelect, lockIn, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
-  // the ESC panel: what the pointer is over, the speaker's plate, and every
-  // row anchor - so a driver can click a dial without guessing at the pitch
-  settingsHit, muteBtnRect,
+  // the ESC panel: what the pointer is over, the speaker's plate, the open
+  // page's row anchors (already scrolled - a row's y is where it is on
+  // screen) and the navbar cells - so a driver can click a dial without
+  // guessing at the pitch. setSettingsTab flips the page directly.
+  settingsHit, muteBtnRect, settingsScrollBy,
+  setSettingsTab: (id) => { setTab = id; },
   get settingsRows() {
-    return { vol: ROW_SOUND, music: ROW_MUSIC, sfx: ROW_SFX, map: ROW_MAP,
-      shake: ROW_SHAKE, info: ROW_INFO, cursor: ROW_CURSOR, x: SL_X, w: SL_W, panel: { x: SET_X, y: SET_Y, w: SET_W, h: SET_H } };
+    const L = settingsLayout();
+    const rows = {};
+    for (const r of L.rows) rows[r.id] = r.y - L.scroll;
+    return { tab: setTab, tabs: L.tabs, rows, scroll: L.scroll, maxScroll: L.maxScroll,
+      x: SL_X, w: SL_W, panel: { x: SET_X, y: SET_Y, w: SET_W, h: SET_H } };
   },
-  layout: () => ({ VIEW_W, VIEW_H, SET_X, SET_Y, SL_X, ROW_SHAKE, PANEL_X, PANEL_Y, MM_CX, MM_CY }),
+  layout: () => ({ VIEW_W, VIEW_H, SET_X, SET_Y, SL_X, PANEL_X, PANEL_Y, MM_CX, MM_CY }),
   hideUI: false,
   step: (dt, n) => { for (let i = 0; i < (n || 1); i++) { update(dt || 1 / 60); } render(); },
 };

@@ -219,11 +219,14 @@ canvas.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefaul
 canvas.addEventListener('wheel', (e) => {
   if (state.mode === 'title') {
     if (state.menu.panel === 'patch') { e.preventDefault(); patchScrollBy(e.deltaY > 0 ? 16 : -16); }
+    else if (state.menu.panel === 'settings') { e.preventDefault(); settingsScrollBy(e.deltaY > 0 ? 14 : -14); }
     return;
   }
   if (state.mode !== 'play') return;
   e.preventDefault();
-  if (state.mapOpen || state.settingsOpen || state.wheel) return;
+  // over the open ESC panel the wheel walks the open settings page
+  if (state.settingsOpen) { settingsScrollBy(e.deltaY > 0 ? 14 : -14); return; }
+  if (state.mapOpen || state.wheel) return;
   // over the minimap the wheel zooms the minimap instead of the camera
   if (overMinimap()) {
     settings.mmZoom = Math.max(0, Math.min(MM_ZOOMS.length - 1, (settings.mmZoom | 0) + (e.deltaY > 0 ? -1 : 1)));

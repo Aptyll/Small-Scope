@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.09'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.10'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.10', 'THE ESC MENU GREW TABS AND A VIDEO PAGE - GAME, VIDEO, AUDIO AND CONTROLS EACH GET THEIR OWN SCROLLING PAGE NOW, AND THE VIDEO PAGE CARRIES A ONE-CLICK LOW / MEDIUM / HIGH QUALITY DIAL PLUS TOGGLES FOR CLOUD SHADOWS, SUN SHAFTS, ICE STARS, SNOWFALL AND THE VIGNETTE, SO A WEAKER PC CAN SHED THE WEATHER DRESSING AND KEEP THE GAME.'],
   ['2.09', 'THE GAME RUNS FASTER THE MOMENT YOUR BOOTS TOUCH THE SNOW - THE MINIMAP WAS QUIETLY REDRAWING ITS WHOLE DISC AND RE-SWEEPING THE ENTIRE WORLD EVERY SINGLE FRAME, A THIRD OF THE FRAME BUDGET, AND NOW IT ONLY REPAINTS WHAT ACTUALLY CHANGED.'],
   ['2.08', 'THE WHOLE ARSENAL IS UNLOCKED FROM YOUR FIRST MATCH NOW - EVERY TOOL AND EVERY BIT CAN DROP FOR ANYBODY, SO A BRAND-NEW PLAYER AND A VETERAN FIND EXACTLY THE SAME THINGS IN THE ROCKS, THE TREES AND THE CHESTS, AND THE TECH TREE IS THE PICTURE OF THAT ARSENAL RATHER THAN A THING TO GRIND.'],
   ['2.07', 'EVERY LIVING THING PLAYS BY ONE RULEBOOK NOW - RABBITS, DEER, BIRDS, WOLVES AND BOT BAY WORKERS TAKE THE SAME DAMAGE AND THE SAME SNARES, NETS, SLOWS, MARKS AND STUNS FROM EVERY ABILITY AND EVERY SHOT A PLAYER WOULD - AND FIRE IS A REAL DAMAGE TYPE, SO FLAME, PYRE AND CINDER BURST SET WHATEVER THEY HIT ALIGHT AND IT BURNS.'],
@@ -318,6 +319,8 @@ function menuKey(e) {
     if (k === 'escape' || k === 'backspace' || (m.panel !== 'settings' && (k === 'enter' || k === ' '))) closeMenuPanel();
     else if (m.panel === 'patch' && (k === 'arrowup' || k === 'w')) patchScrollBy(-8);
     else if (m.panel === 'patch' && (k === 'arrowdown' || k === 's')) patchScrollBy(8);
+    else if (m.panel === 'settings' && (k === 'arrowup' || k === 'w')) settingsScrollBy(-8);
+    else if (m.panel === 'settings' && (k === 'arrowdown' || k === 's')) settingsScrollBy(8);
     return;
   }
   if (k === 'arrowup' || k === 'w') menuSelect(m.sel - 1);

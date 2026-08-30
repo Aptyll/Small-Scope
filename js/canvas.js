@@ -234,12 +234,9 @@ let SET_X = Math.round((VIEW_W - SET_W) / 2);       // relayout() recenters thes
 let SET_Y = Math.round((VIEW_H - SET_H) / 2);
 let SL_X = SET_X + 112;
 const SL_W = 66;  // slider track
-// Seven rows at a 14px pitch, so the three sound dials fit above the CONTROLS
-// divider (still at panel-local 126) without the panel growing: SET_H is
-// already close to the 240-row floor fitCanvas() guarantees. Mute is not a
-// row of its own - it is the speaker beside the MASTER track (SET_MUTE_X).
-let ROW_SOUND = SET_Y + 28, ROW_MUSIC = SET_Y + 42, ROW_SFX = SET_Y + 56, ROW_MAP = SET_Y + 70,
-  ROW_SHAKE = SET_Y + 84, ROW_INFO = SET_Y + 98, ROW_CURSOR = SET_Y + 112;
+// The panel's rows have no fixed anchors any more: the ESC slab is tabbed and
+// each page lays its rows out (and scrolls them) through settingsLayout()
+// in panels.js, off SET_X/SET_Y/SL_X alone.
 let SET_MUTE_X = SL_X - 14; // the speaker button: 9x9, hard against the master track
 
 const mmCv = document.createElement('canvas');

@@ -152,7 +152,10 @@ const state = {
 // volume is the master dial; musicVol and sfxVol sit under it (SFX.setVolume /
 // setMusicVolume / setSfxVolume). A save written before the split simply has
 // neither key and keeps the defaults - no version bump needed.
-const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0 };
+const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0,
+  // the VIDEO page's dressing toggles, all cosmetic-only passes a weak GPU
+  // can shed (the ESC panel's QUALITY row presets them; panels.js)
+  vidClouds: true, vidRays: true, vidStars: true, vidSnow: true, vidVig: true };
 // Minimap zoom ladder, px per world tile: index settings.mmZoom (5 = the 1:1
 // baseline). Twice the rungs and twice the reach of the old six, and like the
 // camera it eases between them rather than snapping - mmCur is what anything
@@ -208,8 +211,6 @@ function relayout() {
   SET_Y = Math.round((VIEW_H - SET_H) / 2);
   SL_X = SET_X + 112;
   SET_MUTE_X = SL_X - 14;
-  ROW_SOUND = SET_Y + 28; ROW_MUSIC = SET_Y + 42; ROW_SFX = SET_Y + 56; ROW_MAP = SET_Y + 70;
-  ROW_SHAKE = SET_Y + 84; ROW_INFO = SET_Y + 98; ROW_CURSOR = SET_Y + 112;
   fitFlakes();
   renderBars();
   layoutReplay();

@@ -465,35 +465,117 @@ function bakeFrostSlab(g, w, h, title) {
   g.fillRect(tx0 - 30, 10, 2, 3); g.fillRect(tx0 + tw + 28, 10, 2, 3);
 }
 
+// The panel is TABBED: a navbar under the title splits the rows into pages,
+// and each page scrolls independently when its rows outgrow the content
+// window - which is what makes the slab, pinned at 240x218 by the 240-row
+// floor fitCanvas() guarantees, able to hold any number of future settings.
+// Row tables, not row code: a page is a list of {id, label, kind} and the
+// layout, the draw, the hit test and the DBG anchors all read the same table.
+const SET_TABS = [
+  { id: 'game', label: 'GAME', rows: [
+    { id: 'map', label: 'MINIMAP SIZE', kind: 'slider' },
+    { id: 'shake', label: 'SCREEN SHAKE', kind: 'toggle' },
+    { id: 'info', label: 'INFO DISPLAY', kind: 'toggle' },
+    { id: 'cursor', label: 'CURSOR', kind: 'toggle' },
+  ] },
+  { id: 'video', label: 'VIDEO', rows: [
+    { id: 'quality', label: 'QUALITY', kind: 'choice',
+      opts: [{ id: 'low', label: 'LOW' }, { id: 'medium', label: 'MEDIUM' }, { id: 'high', label: 'HIGH' }] },
+    { id: 'vidClouds', label: 'CLOUD SHADOWS', kind: 'toggle' },
+    { id: 'vidRays', label: 'SUN SHAFTS', kind: 'toggle' },
+    { id: 'vidStars', label: 'ICE STARS', kind: 'toggle' },
+    { id: 'vidSnow', label: 'SNOWFALL', kind: 'toggle' },
+    { id: 'vidVig', label: 'VIGNETTE', kind: 'toggle' },
+  ] },
+  { id: 'audio', label: 'AUDIO', rows: [
+    { id: 'vol', label: 'MASTER', kind: 'slider' },
+    { id: 'music', label: 'MUSIC', kind: 'slider' },
+    { id: 'sfx', label: 'SOUNDS', kind: 'slider' },
+  ] },
+  { id: 'controls', label: 'CONTROLS', rows: [] }, // the baked hotkey listing
+];
+// The QUALITY row is a macro over the video toggles, one click for a weak
+// machine: LOW turns the whole weather-and-light dressing off, MEDIUM keeps
+// everything but the cloud shadows (the one pass that costs every daytime
+// frame - two full-view multiply fills), HIGH is everything. SNOWFALL is
+// deliberately not in any preset: falling snow is the game's identity and
+// nearly free (baked speck atlas), so only a deliberate hand turns it off.
+const VID_PRESETS = {
+  low: { vidClouds: false, vidRays: false, vidStars: false, vidVig: false },
+  medium: { vidClouds: false, vidRays: true, vidStars: true, vidVig: true },
+  high: { vidClouds: true, vidRays: true, vidStars: true, vidVig: true },
+};
+// which preset the toggles currently spell, or null for a hand-picked mix
+function vidPreset() {
+  outer: for (const name in VID_PRESETS) {
+    for (const k in VID_PRESETS[name]) if (settings[k] !== VID_PRESETS[name][k]) continue outer;
+    return name;
+  }
+  return null;
+}
+
+let setTab = 'game';                                        // the open page
+const setScroll = { game: 0, video: 0, audio: 0, controls: 0 }; // px scrolled per page
+const SET_TAB_Y = 20;      // navbar baseline, panel-local
+const SET_CONTENT_Y = 36;  // content window top
+const SET_CONTENT_B = 202; // ... and bottom (the ESC CLOSE hint sits below)
+
+// Everything positioned inside the panel comes from here: the navbar cells,
+// the open page's rows (each carrying its y in view space, pre-scroll), the
+// content window, and how far this page can scroll. Draw, hit test and the
+// DBG anchors all call it, so a click can never disagree with a pixel.
+function settingsLayout() {
+  const n = SET_TABS.length, cw = Math.floor((SET_W - 24) / n);
+  const tabs = SET_TABS.map((t, i) => ({ id: t.id, label: t.label,
+    x: SET_X + 12 + i * cw, y: SET_Y + SET_TAB_Y, w: cw, h: 9 }));
+  const tab = SET_TABS.find(t => t.id === setTab) || SET_TABS[0];
+  const clipY0 = SET_Y + SET_CONTENT_Y, clipY1 = SET_Y + SET_CONTENT_B;
+  const rows = [];
+  let y = clipY0 + 6;
+  for (const r of tab.rows) {
+    const row = { id: r.id, label: r.label, kind: r.kind, y };
+    if (r.kind === 'choice') {
+      let x = SL_X;
+      row.opts = r.opts.map(o => { const w = pixelTextWidth(o.label); const q = { id: o.id, label: o.label, x, w }; x += w + 8; return q; });
+    }
+    rows.push(row); y += 14;
+  }
+  const contentH = setTab === 'controls' ? controlsCv.height : (y + 2 - clipY0);
+  const maxScroll = Math.max(0, contentH - (clipY1 - clipY0));
+  setScroll[setTab] = Math.max(0, Math.min(setScroll[setTab] || 0, maxScroll));
+  return { tabs, rows, clipY0, clipY1, scroll: setScroll[setTab], maxScroll };
+}
+
+// the wheel over the open panel walks the open page (input.js, both the
+// in-match ESC slab and the title menu's slide-in)
+function settingsScrollBy(d) {
+  const L = settingsLayout();
+  setScroll[setTab] = Math.max(0, Math.min(L.maxScroll, setScroll[setTab] + d));
+}
+
 function buildSettingsPanel() {
   const g = setPanelCv.getContext('2d');
   bakeFrostSlab(g, SET_W, SET_H, 'SETTINGS');
-  // row labels
-  const L = '#cfe0ff';
-  drawPixelText(g, 'MASTER', 14, ROW_SOUND - SET_Y, L);
-  drawPixelText(g, 'MUSIC', 14, ROW_MUSIC - SET_Y, L);
-  drawPixelText(g, 'SOUNDS', 14, ROW_SFX - SET_Y, L);
-  drawPixelText(g, 'MINIMAP SIZE', 14, ROW_MAP - SET_Y, L);
-  drawPixelText(g, 'SCREEN SHAKE', 14, ROW_SHAKE - SET_Y, L);
-  drawPixelText(g, 'INFO DISPLAY', 14, ROW_INFO - SET_Y, L);
-  drawPixelText(g, 'CURSOR', 14, ROW_CURSOR - SET_Y, L);
-  // controls divider
-  const ct = 'CONTROLS';
-  const cw = pixelTextWidth(ct);
-  const cx0 = Math.round((SET_W - cw) / 2);
-  drawPixelText(g, ct, cx0, 126, '#7a8bb8');
-  g.fillStyle = '#2c3a68';
-  g.fillRect(14, 129, cx0 - 22, 1); g.fillRect(cx0 + cw + 8, 129, SET_W - cx0 - cw - 22, 1);
-  // hotkey listing, two columns
-  // HOLD 1-4 is in the left column because only that one has a 36px key
-  // field; it is the one binding in the game with nothing on screen to
-  // discover it from, which is exactly what this block is the carve-out for.
+  // close hint
+  const hint = 'ESC CLOSE';
+  drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 208, '#5a6690');
+}
+
+// The CONTROLS page: the hotkey listing, baked once (it never changes) and
+// blitted into the content window at the page's scroll like any other page.
+// HOLD 1-4 is in the left column because only that one has a 36px key field;
+// it is the one binding in the game with nothing on screen to discover it
+// from, which is exactly what this block is the carve-out for.
+const controlsCv = document.createElement('canvas');
+controlsCv.width = SET_W; controlsCv.height = 84;
+(function bakeControls() {
+  const g = controlsCv.getContext('2d');
   const cols = [
     [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['HOLD 1-4', 'BITS'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
     [['1-4', 'WEAPON'], ['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
   ];
   for (let c = 0; c < 2; c++) {
-    let y = 137; // nine rows in the left column: pitch 8 so the last still clears ESC CLOSE
+    let y = 6;
     const x0 = c === 0 ? 16 : 128;
     for (const [k, desc] of cols[c]) {
       drawPixelText(g, k, x0, y, '#ffd95c');
@@ -501,10 +583,7 @@ function buildSettingsPanel() {
       y += 8;
     }
   }
-  // close hint
-  const hint = 'ESC CLOSE';
-  drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 208, '#5a6690');
-}
+})();
 
 function applySliderDrag() {
   const t = Math.max(0, Math.min(1, (mouse.x - SL_X) / SL_W));
@@ -523,8 +602,15 @@ function applySliderDrag() {
   }
 }
 
-// the speaker beside the MASTER track: 9x9, the same plate the toggle rows use
-function muteBtnRect() { return { x: SET_MUTE_X, y: ROW_SOUND - 1, w: 9, h: 9 }; }
+// the speaker beside the MASTER track: 9x9, the same plate the toggle rows
+// use. It lives on the AUDIO page, so it only has a rect while that page is
+// open - callers null-check.
+function muteBtnRect() {
+  if (setTab !== 'audio') return null;
+  const L = settingsLayout();
+  const r = L.rows.find(r => r.id === 'vol');
+  return r ? { x: SET_MUTE_X, y: r.y - L.scroll - 1, w: 9, h: 9 } : null;
+}
 
 // Practice only: the way back out of the training arena - a frost plank
 // hanging under the settings slab (the ESC panel is the room's one menu).
@@ -534,24 +620,31 @@ function leavePlankRect() { return { x: Math.round((VIEW_W - 132) / 2), y: SET_Y
 
 // which settings widget is under the pointer (null for none); shared by the
 // click handler and the cursor so the hand cursor can never disagree with a click
+// Answers: a row id ('vol', 'shake', 'vidClouds', ...), 'mute', 'leave',
+// 'tab:<id>' for a navbar cell, or 'q:<preset>' for a QUALITY word.
 function settingsHit() {
   const mx = mouse.x, my = mouse.y;
+  const L = settingsLayout();
+  for (const t of L.tabs)
+    if (t.id !== setTab && mx >= t.x && mx < t.x + t.w && my >= t.y - 3 && my < t.y + t.h + 3) return 'tab:' + t.id;
   const b = muteBtnRect();
-  if (mx >= b.x - 2 && mx < b.x + b.w + 2 && my >= b.y - 2 && my < b.y + b.h + 2) return 'mute';
+  if (b && mx >= b.x - 2 && mx < b.x + b.w + 2 && my >= b.y - 2 && my < b.y + b.h + 2) return 'mute';
   if (PRACTICE && state.settingsOpen) {
     const l = leavePlankRect();
     if (mx >= l.x - 2 && mx < l.x + l.w + 2 && my >= l.y - 3 && my < l.y + l.h + 3) return 'leave';
   }
-  if (mx < SL_X - 4 || mx > SL_X + SL_W + 6) return null;
-  // 14px pitch, so the bands must not overlap or a click lands on two rows
-  const inRow = (y) => my >= y - 3 && my <= y + 10;
-  if (inRow(ROW_SOUND)) return 'vol';
-  if (inRow(ROW_MUSIC)) return 'music';
-  if (inRow(ROW_SFX)) return 'sfx';
-  if (inRow(ROW_MAP)) return 'map';
-  if (inRow(ROW_SHAKE)) return 'shake';
-  if (inRow(ROW_INFO)) return 'info';
-  if (inRow(ROW_CURSOR)) return 'cursor';
+  if (my < L.clipY0 || my >= L.clipY1) return null; // the content window scrolls; nothing outside it is live
+  for (const r of L.rows) {
+    const y = r.y - L.scroll;
+    // 14px pitch, so the bands must not overlap or a click lands on two rows
+    if (my < y - 3 || my > y + 10) continue;
+    if (r.kind === 'choice') {
+      for (const o of r.opts) if (mx >= o.x - 2 && mx < o.x + o.w + 4) return 'q:' + o.id;
+      return null;
+    }
+    if (mx < SL_X - 4 || mx > SL_X + SL_W + 6) return null;
+    return r.id;
+  }
   return null;
 }
 
@@ -559,12 +652,13 @@ function settingsMouseDown() {
   SFX.unlock();
   const hit = settingsHit();
   if (!hit) return;
+  if (hit.startsWith('tab:')) { setTab = hit.slice(4); SFX.pickup(); return; }
   if (hit === 'vol' || hit === 'music' || hit === 'sfx' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
   if (hit === 'leave') { leavePractice(); return; }
-  if (hit === 'mute') settings.muted = SFX.toggleMute();
-  else if (hit === 'shake') settings.shake = !settings.shake;
-  else if (hit === 'info') settings.info = !settings.info;
+  if (hit.startsWith('q:')) Object.assign(settings, VID_PRESETS[hit.slice(2)]);
+  else if (hit === 'mute') settings.muted = SFX.toggleMute();
   else if (hit === 'cursor') settings.pixelCursor = !settings.pixelCursor;
+  else settings[hit] = !settings[hit]; // every plain toggle row's id IS its settings key
   SFX.pickup();
   saveSettings();
 }
@@ -609,6 +703,17 @@ function drawToggleRow(y, on, onTxt, offTxt) {
     on ? '#cfe0ff' : '#7a8bb8', 'rgba(8,12,28,0.9)');
 }
 
+// one slider row's live half, by row id - the labels come off the row table
+function drawSliderById(id, y, off) {
+  if (id === 'vol') drawSliderRow(y, settings.volume, String(Math.round(settings.volume * 100)), off);
+  else if (id === 'music') drawSliderRow(y, settings.musicVol, String(Math.round(settings.musicVol * 100)), off);
+  else if (id === 'sfx') drawSliderRow(y, settings.sfxVol, String(Math.round(settings.sfxVol * 100)), off);
+  else if (id === 'map') drawSliderRow(y, (settings.mmR - 16) / 18, 'R' + settings.mmR);
+}
+
+// one toggle row's state, by row id
+function toggleVal(id) { return id === 'cursor' ? settings.pixelCursor : !!settings[id]; }
+
 // opts.slide (px): draw the panel shifted down by that much - the main menu
 // slides it in over the living world and skips the dim + minimap preview
 function renderSettings(now, opts) {
@@ -624,14 +729,47 @@ function renderSettings(now, opts) {
   ctx.drawImage(setPanelCv, SET_X, SET_Y);
   const off = SFX.isMuted();
   const hit = slide ? null : settingsHit(); // the menu's slide-in is not hoverable mid-flight
-  drawSliderRow(ROW_SOUND, settings.volume, String(Math.round(settings.volume * 100)), off);
-  drawMuteBtn(hit === 'mute');
-  drawSliderRow(ROW_MUSIC, settings.musicVol, String(Math.round(settings.musicVol * 100)), off);
-  drawSliderRow(ROW_SFX, settings.sfxVol, String(Math.round(settings.sfxVol * 100)), off);
-  drawSliderRow(ROW_MAP, (settings.mmR - 16) / 18, 'R' + settings.mmR);
-  drawToggleRow(ROW_SHAKE, settings.shake);
-  drawToggleRow(ROW_INFO, settings.info);
-  drawToggleRow(ROW_CURSOR, settings.pixelCursor, 'PIXEL', 'BROWSER');
+  const L = settingsLayout();
+  // the navbar: the open page's name in gold over a gold underline, the rest
+  // dim until hovered - the underline is the whole "you are here"
+  for (const t of L.tabs) {
+    const active = t.id === setTab;
+    const col = active ? '#ffd95c' : hit === 'tab:' + t.id ? '#cfe0ff' : '#7a8bb8';
+    drawPixelTextShadow(ctx, t.label, Math.round(t.x + (t.w - pixelTextWidth(t.label)) / 2), t.y, col, 'rgba(8,12,28,0.9)');
+    if (active) { ctx.fillStyle = '#ffd95c'; ctx.fillRect(t.x + 4, t.y + 8, t.w - 8, 1); }
+  }
+  ctx.fillStyle = '#2c3a68';
+  ctx.fillRect(SET_X + 10, L.clipY0 - 3, SET_W - 20, 1);
+  // the open page, clipped to the content window and shifted by its scroll
+  ctx.save();
+  ctx.beginPath(); ctx.rect(SET_X + 2, L.clipY0, SET_W - 4, L.clipY1 - L.clipY0); ctx.clip();
+  if (setTab === 'controls') {
+    ctx.drawImage(controlsCv, SET_X, L.clipY0 - L.scroll);
+  } else {
+    const preset = setTab === 'video' ? vidPreset() : null;
+    for (const r of L.rows) {
+      const y = r.y - L.scroll;
+      if (y < L.clipY0 - 12 || y > L.clipY1 + 4) continue;
+      drawPixelText(ctx, r.label, SET_X + 14, y, '#cfe0ff');
+      if (r.kind === 'slider') drawSliderById(r.id, y, r.id === 'map' ? false : off);
+      else if (r.kind === 'toggle') drawToggleRow(y, toggleVal(r.id), r.id === 'cursor' ? 'PIXEL' : undefined, r.id === 'cursor' ? 'BROWSER' : undefined);
+      else if (r.kind === 'choice') for (const o of r.opts) {
+        const col = preset === o.id ? '#ffd95c' : hit === 'q:' + o.id ? '#f4f7ff' : '#7a8bb8';
+        drawPixelTextShadow(ctx, o.label, o.x, y, col, 'rgba(8,12,28,0.9)');
+      }
+    }
+    if (setTab === 'audio') drawMuteBtn(hit === 'mute');
+  }
+  ctx.restore();
+  // the scroll track: only there when the page outgrows the window, thumb
+  // position IS the affordance - grab the wheel, not a widget
+  if (L.maxScroll > 0) {
+    const x = SET_X + SET_W - 8, h = L.clipY1 - L.clipY0;
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(x, L.clipY0, 3, h);
+    const th = Math.max(8, Math.round(h * h / (h + L.maxScroll)));
+    const ty = L.clipY0 + Math.round((h - th) * (L.scroll / L.maxScroll));
+    ctx.fillStyle = '#4a5480'; ctx.fillRect(x + 1, ty, 1, th);
+  }
   // the arena's one exit, on the same frost plank the title menu is made of
   // (drawMenuButton, js/menu.js). Practice never opens this panel from the
   // title, so it only ever appears on the in-match ESC slab.

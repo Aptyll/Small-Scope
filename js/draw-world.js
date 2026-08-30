@@ -1994,13 +1994,14 @@ function renderLighting(ox, oy, now) {
   const day = 1 - dark;
 
   if (day > 0.02) {
-    godRays(ox, oy, day);
+    // both halves of the day's dressing answer to the ESC panel's VIDEO page
+    if (settings.vidRays) godRays(ox, oy, day);
     // The training grounds keep the one fixed hour the rest of that room
     // keeps (sim.js never advances its clock): the shafts stay, because they
     // are a quality of the light, but a cloud shadow drifting over the
     // dummy's meter or the parkour's ice would change what the instruments
     // are measuring between one lap and the next.
-    if (!PRACTICE) cloudShade(ox, oy, day);
+    if (!PRACTICE && settings.vidClouds) cloudShade(ox, oy, day);
   }
 
   // dusk warm tint
@@ -2073,6 +2074,7 @@ function litShots(ox, oy, now, dark) {
 // far in the camera is - the drift multiplies by the zoom so the field still
 // scrolls with the ground under it.
 function renderWeather(ex, ey) {
+  if (!settings.vidSnow) return; // the VIDEO page can still the air
   // the wrap is in WORLD px around the exact camera and the scale-up comes
   // after it, so the field is one world view wide however far the camera is
   // in - WV * zoomCur always covers the canvas, since sizeWorldView ceils
@@ -2095,7 +2097,9 @@ function renderVignettes() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.globalAlpha = 1;
   }
-  // soft frame vignette; the gradient is rebuilt only when the view resizes
+  // soft frame vignette (a VIDEO toggle - the hurt flash above is feedback
+  // and never goes); the gradient is rebuilt only when the view resizes
+  if (!settings.vidVig) return;
   if (vigKey !== VIEW_W * 4096 + VIEW_H) {
     vigKey = VIEW_W * 4096 + VIEW_H;
     vigGrd = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.5, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.95);
