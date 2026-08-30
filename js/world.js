@@ -627,6 +627,14 @@ function agPos(s, laneU) {
   if (s < w * 2 + h) return { x: AG_RECT.x1 - (s - w - h), y: AG_RECT.y1 - inset };
   return { x: AG_RECT.x0 + inset, y: AG_RECT.y1 - (s - w * 2 - h) };
 }
+// which run of the ring s is on (0 top, 1 right, 2 bottom, 3 left) - odd
+// means the rail runs vertically, which is how drawPTarget knows to seat a
+// carriage's wheels along the rail's own axis
+function agEdge(s) {
+  const w = AG_RECT.x1 - AG_RECT.x0, h = AG_RECT.y1 - AG_RECT.y0;
+  s = ((s % AG_LEN) + AG_LEN) % AG_LEN;
+  return s < w ? 0 : s < w + h ? 1 : s < w * 2 + h ? 2 : 3;
+}
 
 function addPTarget(kind, s, opts) {
   const t = Object.assign({
@@ -634,6 +642,10 @@ function addPTarget(kind, s, opts) {
     lane: 0, laneU: 0, dir: 1, spd: 0, spdClass: 0, size: 1,
     up: 1, t: 0, pop: null, broken: 0, wob: 0, swapT: 0,
     stock: false, gone: false, x: 0, y: 0,
+    // the little tells: dustD paces a mover's snow trail by distance rolled,
+    // hopping arms the lane-swap landing puff, warned/prevUp edge a pop-up's
+    // pre-rise rattle fleck and its lock-up bounce once per cycle
+    dustD: 0, hopping: false, warned: -1, prevUp: 0,
   }, opts || {});
   if (t.kind === 'pop') { t.up = 0; if (!t.pop) t.pop = PT_POP; }
   t.laneU = t.lane;
@@ -668,6 +680,11 @@ function hitPTarget(t, hx, hy) {
   burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
   burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
   agStreak++;
+  // a milestone run flares at the face: gold at every fifth in a row, hot
+  // orange from ten - the popup says the number, this says the moment
+  if (agStreak >= 5 && agStreak % 5 === 0) {
+    burst(f.x, f.y, agStreak >= 10 ? '#ff9440' : '#ffd95c', 10, 70, 0.5, true);
+  }
   if (t.stock) { t.broken = PT_RESPAWN; t.wob = 0; }
   else t.gone = true;  // updatePractice sweeps it out of the array
   if (!t.stock && agame.phase === 'play') {
@@ -1404,9 +1421,22 @@ function updatePractice(dt) {
       else if (u < C.hide + C.rise) t.up = (u - C.hide) / C.rise;
       else if (u < C.hide + C.rise + C.hold) t.up = 1;
       else t.up = 1 - (u - C.hide - C.rise - C.hold) / C.sink;
+      // the telegraph: one snow fleck as the pre-rise rattle starts (the
+      // rattle itself is drawPTarget's jitter over the same window), and a
+      // little bounce as the face locks fully up - each once per cycle
+      const cyc = (t.t / total) | 0;
+      if (t.warned !== cyc && u > C.hide - 0.35 && u < C.hide) {
+        t.warned = cyc;
+        burst(t.x, t.y - 4, '#f4f7ff', 3, 22, 0.3, true);
+      }
+      if (t.up === 1 && t.prevUp < 1) t.wob = Math.max(t.wob, 0.22);
+      t.prevUp = t.up;
     }
     if (t.spd > 0) {
       t.s = (t.s + t.spd * t.dir * dt + AG_LEN) % AG_LEN;
+      // a rolling carriage kicks up a thin snow trail, paced by distance
+      t.dustD += t.spd * dt;
+      if (t.dustD > 26) { t.dustD = 0; burst(t.x, t.y + 1, '#f4f7ff', 1, 14, 0.3, true); }
       // a mover about to run into anything parked - or rolling slower - on
       // its rail hops to the other lane and keeps going. Never mid-hop
       // (swapT), and one at a time in array order, which is what lets two
@@ -1421,11 +1451,17 @@ function updatePractice(dt) {
           if (o.spd > 0 && o.dir === t.dir && o.spd >= t.spd) continue; // pulling away
           block = true; break;
         }
-        if (block && !agBlocked(1 - t.lane, t.s, 20, t)) { t.lane = 1 - t.lane; t.swapT = 0.9; }
+        if (block && !agBlocked(1 - t.lane, t.s, 20, t)) { t.lane = 1 - t.lane; t.swapT = 0.9; t.hopping = true; }
       }
     }
-    // ease onto the lane it wants, then stand where the track says
+    // ease onto the lane it wants, then stand where the track says - the
+    // draw lifts the carriage through the swap (the hop), and the landing
+    // puffs the moment it settles back onto its rail
     t.laneU += Math.max(-dt / 0.22, Math.min(dt / 0.22, t.lane - t.laneU));
+    if (t.hopping && Math.abs(t.lane - t.laneU) < 0.02) {
+      t.hopping = false;
+      burst(t.x, t.y + 1, '#f4f7ff', 3, 25, 0.3, true);
+    }
     const tp = agPos(t.s, t.laneU);
     t.x = tp.x; t.y = tp.y;
   }

@@ -270,7 +270,16 @@ arrow loop (js/sim.js) tests every live face disc (`ptFace`/`ptLive`/`ptHitR` �
 scales with the target's `size`, small or large, `AG_SIZE`). A target lives at track distance
 `s` (`agPos` maps it to world x/y) on one of **two lanes** (`AG_LANE_GAP` px apart), with three
 habits: `still`, `move` (rolling `dir × spd` along the rail, `AG_SPD` slow/medium/fast) and
-`pop` (flipping up out of its trolley on its own `{hide, rise, hold, sink}` clock). **A mover
+`pop` (flipping up out of its trolley on its own `{hide, rise, hold, sink}` clock). **Every
+habit tells at a glance** (`drawPTarget`): a target is a rail *carriage* — plank body, steel
+wheels seated on the rail along the rail's own axis (`agEdge`, so a side-rail target rides its
+rail rather than dangling beside it), a mast sized to its face and planted in the body with the
+face overlapping it, so the stack never gaps — whose wheels visibly turn while it rolls (plus a
+snow trail paced by distance), whose lane hop lifts the whole carriage and lands with a puff,
+and whose hidden pop-up form rattles on the rail with a snow fleck for a beat before the face
+flips up, bouncing as it locks. The two face sizes are separate per-pixel bakes
+(`bakeTargetFace` → `TARGET_SPR`/`TARGET_SPR_S`, draw-world.js), never runtime downscales, and
+a milestone run (every fifth consecutive hit) flares at the face. **A mover
 about to run into anything parked — or rolling slower — on its rail hops to the free lane and
 keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occupied stretch),
 which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`: chips, straw and

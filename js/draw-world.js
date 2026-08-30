@@ -271,54 +271,60 @@ const DUMMY_SPR = (() => {
   return c;
 })();
 // ---- the training grounds' pixels (practice arena only) -------------------
-// The 32x32 archery target face. Baked per-pixel rather than from a grid:
+// The archery target face, baked per-pixel rather than from a grid:
 // concentric rings want true circles, and the hand-made feel comes back in
 // through hash dithering on every band edge, a top-left light direction on
 // every band, straw ticks around the batt, four iron pins and a dusting of
-// snow on the wooden rim. Same bake-beside-the-draw rule as the chest.
-const TARGET_SPR = (() => {
+// snow on the wooden rim. Same bake-beside-the-draw rule as the chest. One
+// bake, two sizes: every ring threshold scales with the face, so the small
+// face is its own crisp sprite instead of a runtime downscale of the big one.
+function bakeTargetFace(size) {
   const c = document.createElement('canvas');
-  c.width = 32; c.height = 32;
+  c.width = size; c.height = size;
   const g = c.getContext('2d');
   const put = (x, y, col) => { g.fillStyle = col; g.fillRect(x, y, 1, 1); };
-  for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-    const dx = x - 15.5, dy = y - 15.5;
+  const k = size / 32, cc = size / 2 - 0.5;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const dx = x - cc, dy = y - cc;
     let d = Math.hypot(dx, dy);
-    d += (hash2(x * 7 + 3, y * 11 + 5) - 0.5) * 0.9; // hand-jitter every band edge
-    if (d > 15.4) continue;
-    const lit = (-dx * 0.55 - dy * 0.83) > 0.5;      // light from the upper left
+    d += (hash2(x * 7 + 3, y * 11 + 5) - 0.5) * 0.9 * k; // hand-jitter every band edge
+    if (d > 15.4 * k) continue;
+    const lit = (-dx * 0.55 - dy * 0.83) > 0.5 * k;      // light from the upper left
     const h = hash2(x * 13 + 1, y * 17 + 9);
-    if (d > 14.6) { put(x, y, '#241a12'); continue; }                 // outline
-    if (d > 13.1) {                                                    // wooden frame ring
+    if (d > 14.4 * k) { put(x, y, '#241a12'); continue; }              // outline
+    if (d > 13.1 * k) {                                                 // wooden frame ring
       put(x, y, lit ? (h > 0.75 ? '#a3794f' : '#8a6142') : (h > 0.8 ? '#5c4226' : '#4a3421'));
       continue;
     }
-    if (d > 12.5) { put(x, y, '#3a2c1c'); continue; }                  // the batt's shadow ring
-    if (d > 9.4) {                                                     // outer straw ring
+    if (d > 12.5 * k) { put(x, y, '#3a2c1c'); continue; }               // the batt's shadow ring
+    if (d > 9.4 * k) {                                                  // outer straw ring
       const a = Math.atan2(dy, dx);
-      const tick = hash2(((a * 9) | 0) * 5 + 2, 7) > 0.6 && h > 0.45;  // radial straw grain
+      const tick = hash2(((a * 9) | 0) * 5 + 2, 7) > 0.6 && h > 0.45;   // radial straw grain
       put(x, y, tick ? '#c9b078' : lit ? '#ece0c2' : '#d9c9a8');
       continue;
     }
-    if (d > 6.2) { put(x, y, lit ? '#d0453a' : '#a83232'); continue; } // red ring
-    if (d > 3.2) { put(x, y, lit ? '#f0e6cc' : '#ddd0b0'); continue; } // inner cream
-    put(x, y, d > 1.4 ? (lit ? '#d0453a' : '#b03428') : '#e05548');    // the bullseye
+    if (d > 6.2 * k) { put(x, y, lit ? '#d0453a' : '#a83232'); continue; } // red ring
+    if (d > 3.2 * k) { put(x, y, lit ? '#f0e6cc' : '#ddd0b0'); continue; } // inner cream
+    put(x, y, d > 1.4 * k ? (lit ? '#d0453a' : '#b03428') : '#e05548');    // the bullseye
   }
   // four iron pins holding the batt to its frame
-  for (const [px2, py2] of [[15, 1], [15, 29], [1, 15], [29, 15]]) {
+  const m = cc | 0, e = size - 3;
+  for (const [px2, py2] of [[m, 1], [m, e], [1, m], [e, m]]) {
     g.fillStyle = '#241a12'; g.fillRect(px2, py2, 2, 2);
     g.fillStyle = '#8b93a8'; g.fillRect(px2, py2, 1, 1);
   }
   // snow settled along the top of the rim
-  for (let x = 8; x < 24; x++) {
+  for (let x = (size >> 2); x < size - (size >> 2); x++) {
     if (hash2(x * 3 + 1, 51) > 0.35) {
-      const y = 1 + Math.round(Math.abs(x - 15.5) * Math.abs(x - 15.5) / 60);
+      const y = 1 + Math.round(Math.abs(x - cc) * Math.abs(x - cc) / (60 * k));
       g.fillStyle = '#f4f7ff'; g.fillRect(x, y, 1, 1);
       if (hash2(x * 5, 53) > 0.6) { g.fillStyle = '#c4d4ea'; g.fillRect(x, y + 1, 1, 1); }
     }
   }
   return c;
-})();
+}
+const TARGET_SPR = bakeTargetFace(32);   // the large face
+const TARGET_SPR_S = bakeTargetFace(20); // the small one (32 * AG_SIZE[0])
 
 // The weapon rack, TWO TILES wide (the `rack` entry in js/world.js carries
 // the lead/follower pair). Baked per-pixel like the target face rather than
@@ -571,48 +577,75 @@ function drawAgTrack(ox, oy) {
   }
 }
 
-// One target, whatever its habit: every target is a trolley riding the
-// perimeter track now - trolley first, then its post (or the hatch mouth a
-// pop-up flips out of), then the face, scaled by its size, squashed while a
-// pop-up is mid-rise, bounced just after a spawn or respawn. ptFace()
-// (js/world.js) is the same geometry the arrow test reads, so what you see
-// is exactly what a shot can hit.
+// One target, whatever its habit: a rail CARRIAGE - plank body, two steel
+// wheels gripping the rail along the rail's own axis (agEdge, js/world.js),
+// wheels visibly turning while it rolls - then a mast sized to its face and
+// planted in the body (or the hatch mouth a pop-up flips out of), then the
+// face from its own baked sprite. The whole carriage lifts through a lane
+// swap (the hop) and a hidden pop-up rattles on its rail for a beat before
+// the face flips up. ptFace() (js/world.js) is the same geometry the arrow
+// test reads, so what you see is exactly what a shot can hit.
 function drawPTarget(t, ex, ey, now) {
   if (t.gone) return; // shot this very frame; the sweep collects it next tick
-  const bx = Math.round(t.x - ex), by = Math.round(t.y - ey);
-  // the trolley on its rail
-  ctx.fillStyle = 'rgba(40,60,100,0.28)'; ctx.fillRect(bx - 4, by + 2, 9, 2);
-  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 5, by - 3, 10, 5);
-  ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 4, by - 2, 8, 3);
-  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 4, by - 2, 8, 1);
-  ctx.fillStyle = '#3c4250'; ctx.fillRect(bx - 4, by + 1, 2, 2); ctx.fillRect(bx + 2, by + 1, 2, 2); // the wheels
+  const vert = agEdge(t.s) % 2 === 1; // side rails run vertically
+  // the lane hop: the carriage lifts off its rail through a swap
+  const hd = Math.abs(t.lane - t.laneU);
+  const hop = hd > 0.01 ? Math.round(Math.sin(Math.PI * (1 - hd)) * 3) : 0;
+  const gy = Math.round(t.y - ey);       // the rail line
+  const bx = Math.round(t.x - ex), by = gy - hop;
+  // the pre-rise rattle: a hidden pop-up shudders side to side on its rail
+  let rx = 0;
+  if (t.kind === 'pop' && t.up <= 0) {
+    const C = t.pop || PT_POP;
+    const u = t.t % (C.hide + C.rise + C.hold + C.sink);
+    if (C.hide - u < 0.35) rx = Math.round(Math.sin(t.t * 42));
+  }
+  // shadow on the ground (never lifted - the hop reads against it)
+  ctx.fillStyle = 'rgba(40,60,100,0.28)';
+  ctx.fillRect(bx - 5, gy + 2, 11, 2);
+  // the wheels, seated on the rail along its axis; spoke glints alternate
+  // with track distance, so a rolling carriage's wheels visibly turn
+  const wf = t.spd > 0 ? ((t.s / 5) | 0) % 2 : 0;
+  const wheel = (wx, wy) => {
+    ctx.fillStyle = '#241a12'; ctx.fillRect(wx, wy, 3, 3);
+    ctx.fillStyle = '#3c4250'; ctx.fillRect(wx + 1, wy + 1, 1, 1);
+    ctx.fillStyle = '#8b93a8';
+    if (wf) { ctx.fillRect(wx + 1, wy, 1, 1); ctx.fillRect(wx + 1, wy + 2, 1, 1); }
+    else { ctx.fillRect(wx, wy + 1, 1, 1); ctx.fillRect(wx + 2, wy + 1, 1, 1); }
+  };
+  if (vert) { wheel(bx - 1 + rx, by - 8); wheel(bx - 1 + rx, by - 1); }
+  else { wheel(bx - 5 + rx, by - 1); wheel(bx + 2 + rx, by - 1); }
+  // the plank body, over the wheels
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 6 + rx, by - 6, 13, 5);
+  ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 5 + rx, by - 5, 11, 3);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 5 + rx, by - 5, 11, 1);
   if (t.kind === 'pop') {
     // the mouth the face flips up out of
-    ctx.fillStyle = '#1c1208'; ctx.fillRect(bx - 4, by - 3, 8, 2);
+    ctx.fillStyle = '#1c1208'; ctx.fillRect(bx - 4 + rx, by - 5, 9, 2);
   } else {
-    // the post (the face covers its top)
-    const ph = AG_POST + 3;
-    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 2, by - ph, 5, ph - 2);
-    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 1, by - ph + 1, 3, ph - 3);
-    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 1, by - ph + 1, 1, ph - 3);
-    if (t.broken > 0) { // the bare post, splintered where the face was shot off
+    // the mast: sized to its face, planted in the body, overlapped by the
+    // face bottom - face, mast, carriage and rail read as one built thing
+    const pw = t.size ? 7 : 5;
+    const px0 = bx - (pw >> 1) + rx;
+    ctx.fillStyle = '#241a12'; ctx.fillRect(px0, by - 15, pw, 12);
+    ctx.fillStyle = '#5c4226'; ctx.fillRect(px0 + 1, by - 14, pw - 2, 10);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(px0 + 1, by - 14, 1, 10);
+    if (t.broken > 0) { // the bare mast, splintered where the face was shot off
       ctx.fillStyle = '#a3794f';
-      ctx.fillRect(bx - 2, by - ph - 2, 1, 2); ctx.fillRect(bx + 1, by - ph - 3, 1, 3); ctx.fillRect(bx, by - ph - 1, 1, 1);
+      ctx.fillRect(px0, by - 17, 1, 2); ctx.fillRect(px0 + pw - 2, by - 18, 1, 3); ctx.fillRect(px0 + (pw >> 1), by - 16, 1, 1);
     }
   }
   if (t.broken > 0) return;
-  // the face itself, off the shared geometry and scaled by its size
-  const sc = AG_SIZE[t.size];
+  // the face itself, from its own size's baked sprite (wob is the only
+  // runtime scaling left - spawn/respawn bounce and the pop-up's lock-up)
+  const spr = t.size ? TARGET_SPR : TARGET_SPR_S;
   const rise = t.kind === 'pop' ? Math.max(0, Math.min(1, t.up)) : 1;
   if (rise <= 0.02) return;
   const wobS = t.wob > 0 ? 1 + Math.sin(t.wob * 22) * 0.14 * (t.wob / 0.45) : 1;
-  const w = Math.round(TARGET_SPR.width * sc * wobS);
-  const h = Math.max(1, Math.round(TARGET_SPR.height * sc * rise * wobS));
-  if (t.kind === 'pop') ctx.drawImage(TARGET_SPR, bx - (w >> 1), by - 4 - h, w, h);
-  else {
-    const f = ptFace(t);
-    ctx.drawImage(TARGET_SPR, bx - (w >> 1), Math.round(f.y - ey) - (h >> 1), w, h);
-  }
+  const w = Math.round(spr.width * wobS);
+  const h = Math.max(1, Math.round(spr.height * rise * wobS));
+  if (t.kind === 'pop') ctx.drawImage(spr, bx - (w >> 1) + rx, by - 5 - h, w, h);
+  else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
 }
 
 // ---- the range bell's pixels ---------------------------------------------
