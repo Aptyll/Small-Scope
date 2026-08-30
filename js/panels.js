@@ -269,12 +269,6 @@ function buildWorldMapImg() {
         else if (h > 0.7) { r = 158; g = 190; b = 206; }
         else { r = 122; g = 156; b = 176; }
       }
-      else if (ground[i] === 3) {
-        // the training grounds' packed earth: worked dirt on the parchment
-        if (h > 0.82) { r = 158; g = 128; b = 90; }
-        else if (h < 0.08) { r = 138; g = 110; b = 76; }
-        else { r = 150; g = 121; b = 84; }
-      }
       else {
         // open ground on parchment; tree to the north casts a soft shadow
         const up = ty > 0 ? objects[i - WORLD] : null;

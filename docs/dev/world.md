@@ -168,11 +168,11 @@ over the dummy's meter or the parkour's ice would change what those instruments 
 one lap and the next. The sun shafts stay ([rendering.md](rendering.md#light-and-weather)).
 
 The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
-**dummy** on a small packed-earth pad in the middle, the two-tile bow **rack** in the open snow
+**dummy** standing in the open snow in the middle, the two-tile bow **rack** in the open snow
 east of the dummy on its own row (`lead` on the left tile, a solid silent follower right; a
 two-tile pair can only centre on a tile boundary, so the lead carries `dx: -8` and the sprite,
 brackets and prompt all draw nudged 8px left — `RACK_SPR` itself is baked per-pixel
-in js/draw-world.js so the strung staves get true curves), the spawn just south of the pad —
+in js/draw-world.js so the strung staves get true curves), the spawn just south of the dummy —
 **the rack is the armory**: standing within E's own reach of it (`rackNear`) raises an `E ARM`
 key-cap over it (`drawRackHint`, ui.js — proximity, not hover), **holding E opens a radial
 wheel** of every tool in the game (`state.wheel` kind `'rack'`, the ordinary wheel pipeline),
@@ -183,7 +183,7 @@ replacing the selected slot with a fresh instance of the picked tool, a plain ar
 it fires the moment it is taken — the **archery targets riding a two-rail track around the
 field's whole perimeter** (below), and the **range bell** that runs the timed archery round
 over that track, standing west of the dummy as the rack's mirror: bell and rack flank the
-dummy on its row, each five tiles out with a one-tile snow gap off the pad. No fences, no wildlife, no chests, no pond, no
+dummy on its row, each five tiles out. No fences, no wildlife, no chests, no pond, no
 harvest, and nothing spawns or restocks outside a round. `PRACTICE`
 (js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed` parse, so the field is
 bit-identical on every visit and no seed can reshape it.
@@ -252,12 +252,9 @@ what it claims to be, the stock lap. Track rolls draw on the runtime `rng()` str
 calls reshuffle nothing ([determinism](#determinism-and-noise)), and the arena's boot remains
 bit-identical: the stock loop is carved before any roll can happen.
 
-**Ground 3 is packed earth**, the dummy pad's floor, and exists only inside this arena
-(`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,
-straw, snow dust blown over every snowy edge), coloured on both maps, and walked exactly like
-snow — `updatePlayer`'s surface block only special-cases ice and holes, so no movement branch
-was needed — but it refuses prone (`tryProne` wants ground 0; there is no snow to dig into) and
-leaves no footprints.
+**There is no ground type 3 any more** — the dummy's packed-earth pad was the only thing that
+ever wrote it (2.27 returned that patch to snow and removed the earth paint branches with it),
+so the live grounds are 0 snow, 1 ice, 2 open water.
 
 **The archery targets** (Link's-Crossbow-Training-style) all ride one piece of furniture: a
 **two-rail track ringing the field** (`AG_RECT`, `AG_INSET` tiles in from the rim, so the ring

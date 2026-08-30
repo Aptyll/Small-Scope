@@ -532,9 +532,9 @@ function landmarkAt(x, y) {
 // The TRAINING FIELD behind the PRACTICE TOOL plank: one open snowfield, cut
 // to pure combat. The practice world itself is SMALL - WORLD is 76 under
 // PRACTICE (js/core.js) - so the forest is a collar, not a wilderness. In the
-// middle of the field: one dummy on a small packed-earth pad, spawn just
+// middle of the field: one dummy standing in the open snow, spawn just
 // south of it, and the range BELL and bow rack flanking the dummy on its own
-// row - bell west, rack east, mirrored in the open snow clear of the pad.
+// row - bell west, rack east, mirrored about its axis.
 // The archery targets all ride one TWO-RAIL TRACK around the
 // field's perimeter - stills, movers and pop-ups on trolleys, movers hopping
 // lanes around anything in their way - shoot them from anywhere, roll
@@ -558,13 +558,6 @@ function landmarkAt(x, y) {
 // the spot and the profile is never written (js/player.js), with ONE
 // exception: a record parkour lap goes through PROFILE.setBestLap, so the
 // gate plate's BEST stands across visits.
-//
-// Ground 3 is PACKED EARTH, the pad's floor: painted by paintGroundTile's
-// earth branch, coloured on both maps, walks exactly like snow
-// (updatePlayer's surface block only special-cases ice and holes) but
-// refuses prone (tryProne wants ground 0 - there is no snow to dig into) and
-// leaves no footprints. It exists only inside this arena; genWorld never
-// writes it.
 const PR_W = 40, PR_H = 23;                      // the open field, in tiles
 const PR_X0 = (WORLD - PR_W) >> 1, PR_Y0 = (WORLD - PR_H) >> 1;
 const PR_SPAWN = { tx: PR_X0 + 20, ty: PR_Y0 + 17 }; // south of the rack, facing it and the dummy behind
@@ -761,7 +754,7 @@ const AG_T = 30;         // s a round runs
 const AG_COUNT_T = 3;    // the countdown, one tick per second
 const AG_SINK_T = 0.9;   // s the dummy, rack and bell take to sink / rise
 const AG_END_T = 2.4;    // s the final score stands before the field resets
-const AG_BELL = { tx: PR_X0 + 15, ty: PR_Y0 + 12 }; // the bell, west of the pad on the dummy's own row
+const AG_BELL = { tx: PR_X0 + 15, ty: PR_Y0 + 12 }; // the bell, west of the dummy on its own row
 // one spawn table per difficulty, picked off the bell's wheel: spd = the
 // three mover speeds (scored by class, not raw px/s), small/still/pop the
 // mix odds (move takes the rest), max/spawnT the crowd and its refill pace
@@ -1077,21 +1070,14 @@ function genPracticeWorld() {
       placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
-  // ---- the pad: packed earth under the dummy, corners rounded off --------
-  for (let ty = ay + 10; ty <= ay + 14; ty++) for (let tx = ax + 17; tx <= ax + 23; tx++) {
-    if (!objects[idx(tx, ty)]) ground[idx(tx, ty)] = 3;
-  }
-  for (const [cx2, cy2] of [[17, 10], [23, 10], [17, 14], [23, 14]]) {
-    ground[idx(ax + cx2, ay + cy2)] = 0;
-  }
-  // ---- the dummy on its pad, the armory rack squared under it ------------
+  // ---- the dummy in the open snow, the armory rack squared under it ------
   const put = (tx, ty, type, extra) => { if (!objects[idx(ax + tx, ay + ty)]) return placeObj(ax + tx, ay + ty, type, extra); return null; };
   const d = put(20, 12, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
     mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
   if (d) practiceDummies.push(d);
   // the bell and the rack FLANK the dummy on its own row, mirrored about its
-  // axis in the open snow - a one-tile gap off either side of the pad, five
-  // tiles out each way. A two-tile pair can only centre on a tile boundary,
+  // axis in the open snow, five tiles out each way. A two-tile pair can only
+  // centre on a tile boundary,
   // so the rack sits at (25,12)-(26,12) and `dx` nudges the drawn sprite
   // (and its brackets and prompt) 8px left, landing its visual centre
   // exactly opposite the bell's - the tiles stay honest, the picture mirrors

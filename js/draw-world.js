@@ -78,44 +78,6 @@ function paintGroundTile(g, tx, ty) {
         if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] === 0) g.fillRect(px, py + TILE - 1, TILE, 1);
         if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] === 0) g.fillRect(px, py, 1, TILE);
         if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] === 0) g.fillRect(px + TILE - 1, py, 1, TILE);
-      } else if (gv === 3) {
-        // packed earth: the training grounds' worked floor (practice arena
-        // only - genWorld never writes a 3). Trampled mud-and-gravel with
-        // ruts, stones and straw dropped off the targets, and a dusting of
-        // snow creeping in from every snowy neighbour so the yard reads as
-        // swept out of the drifts rather than pasted onto them.
-        quad(g, '#85765a', '#7d6f55');
-        // boot-churned ruts: short dark dashes with a low-sun highlight
-        const rn = 2 + ((h * 7) | 0) % 3;
-        for (let i = 0; i < rn; i++) {
-          const rx = px + ((h * (41 + i * 59)) | 0) % 12 + 1, ry = py + ((h * (67 + i * 37)) | 0) % 12 + 2;
-          g.fillStyle = '#655741'; g.fillRect(rx, ry, 3 + ((h * (i + 3) * 17) | 0) % 3, 1);
-          g.fillStyle = '#948468'; g.fillRect(rx, ry + 1, 2, 1);
-        }
-        // gravel: a stone with its own shadow
-        if (h > 0.55 && h < 0.62) {
-          const sx2 = px + ((h * 730) | 0) % 12 + 2, sy2 = py + ((h * 910) | 0) % 12 + 2;
-          g.fillStyle = '#a5977a'; g.fillRect(sx2, sy2, 2, 1);
-          g.fillStyle = '#5e4f36'; g.fillRect(sx2, sy2 + 1, 2, 1);
-        }
-        // straw dropped off the butts and dummies
-        if (h > 0.86 && h < 0.9) {
-          g.fillStyle = '#c9b078';
-          g.fillRect(px + ((h * 530) | 0) % 13 + 1, py + ((h * 350) | 0) % 13 + 1, 2, 1);
-        }
-        // snow dust blown in over every edge that borders snow
-        g.fillStyle = '#dfe6f0';
-        const dust = (x0, y0, sx, sy) => {
-          for (let i = 0; i < TILE; i += 2) {
-            if (hash2(tx * 29 + x0 + sx * i, ty * 41 + y0 + sy * i) > 0.45) {
-              g.fillRect(px + x0 + sx * i, py + y0 + sy * i, sx ? 2 : 1, sy ? 2 : 1);
-            }
-          }
-        };
-        if (!inWorld(tx, ty - 1) || ground[idx(tx, ty - 1)] === 0) dust(0, 0, 1, 0);
-        if (!inWorld(tx, ty + 1) || ground[idx(tx, ty + 1)] === 0) dust(0, TILE - 1, 1, 0);
-        if (!inWorld(tx - 1, ty) || ground[idx(tx - 1, ty)] === 0) dust(0, 0, 0, 1);
-        if (!inWorld(tx + 1, ty) || ground[idx(tx + 1, ty)] === 0) dust(TILE - 1, 0, 0, 1);
       } else {
         quad(g, '#ebf2fa', '#e7eff8');
         // dither speckles

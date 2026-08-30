@@ -124,9 +124,9 @@ function addFish(x, y, a, born) {
 
 function fishWater(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  // ice or open water only - named outright rather than "not snow", because
-  // the practice arena's packed earth (ground 3) is land a fish must not
-  // count as swimmable
+  // ice or open water only - named outright rather than "not snow", so any
+  // future land ground type is automatically land a fish must not count as
+  // swimmable
   const g = inWorld(tx, ty) ? ground[idx(tx, ty)] : 0;
   return g === 1 || g === 2;
 }

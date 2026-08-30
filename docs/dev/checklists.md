@@ -296,9 +296,10 @@ can hurt a player — a `DEATH_CAUSE` key), and rolling **only** through `lmRng`
 **Adding a ground type** — extend `paintGroundTile()`, `updateMinimap()`, and `buildWorldMapImg()`,
 give it a surface branch in `updatePlayer()`'s momentum block (steer/decay/target rates — ice is
 the template; a ground that should walk like snow needs none, because only ice and holes are
-special-cased — packed earth, ground 3, is that precedent), and remember `genWorld()`'s `free()`
-helper treats "ground must be 0" as the placement rule — as do `tryProne` (snow to dig into) and
-the footprint emitter. Check `fishWater()` too: it names the swimmable grounds outright.
+special-cased — the practice pad's packed earth walked that way until 2.27 retired it), and
+remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placement rule — as do
+`tryProne` (snow to dig into) and the footprint emitter. Check `fishWater()` too: it names the
+swimmable grounds outright.
 
 **Adding a sound** — drop the file in `audio/sfx/`, **run `node tools/bake-sfx.js`** (this is not
 optional: without it the clip works when served and is silently dead when `index.html` is opened

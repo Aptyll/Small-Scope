@@ -471,7 +471,6 @@ function updateMinimap() {
       r = c[0]; g = c[1]; b = c[2];
     } else if (ground[i] === 2) { r = 58; g = 92; b = 128; } // open water hole
     else if (ground[i] === 1) { r = 145; g = 188; b = 212; } // ice
-    else if (ground[i] === 3) { r = 148; g = 128; b = 94; } // packed earth (the training grounds)
     else { r = 205; g = 216; b = 232; } // snow
     const j = i * 4;
     d[j] = r; d[j + 1] = g; d[j + 2] = b; d[j + 3] = 255;
