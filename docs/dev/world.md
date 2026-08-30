@@ -188,24 +188,47 @@ fences, no wildlife, no chests, no pond, no harvest, and nothing spawns or resto
 bit-identical on every visit and no seed can reshape it.
 
 **The ice parkour** runs through the forest collar around the field: a narrow carved-ice loop
-(`PK_PATH`, the centreline in world tiles, carved 2–3 wide by `genPracticeWorld` — trees hug
+(`PK_PATH` is the *stock* centreline in world tiles, carved by `pkCarve` — trees hug
 both sides, and ice being mechanically slippery is the whole game of it). A flag gate on the
-field's west side (two `banner` objects over a cleared walk) leads onto the track, where a
-**checkered start/finish line** is painted flat on the ice (`drawParkourLine`, render.js's flat
-pass). The lap: stepping onto the line-row ice starts the clock (`parkour`, the module state
-beside `PK_*`), the far leg's checkpoint row keeps a lap honest (`PK_CP_X0`), and recrossing the
+field's west side (two `banner` objects over a cleared walk, `PK_WALK`) leads onto the track,
+where a **checkered start/finish line** is painted flat on the ice (`drawParkourLine`,
+render.js's flat pass). The lap: stepping onto the line-row ice starts the clock (`parkour`, the
+module state beside `PK_*`), a checkpoint at the current track's farthest-east waypoint keeps a
+lap honest (`parkour.cpTx/cpTy`, a radius test on the ice), and recrossing the
 line records it and rolls straight into the next lap. Leaving the ice for `PK_OFF_T` seconds (or
 dying) abandons the run. The live clock rides over the runner's head (gold, icy blue once the
 checkpoint is armed) and BEST / LAST hang on a frost plate above the gate (`drawParkour`,
 js/draw-world.js) — the dummy meter's instrument language, same recorded carve-out. **BEST is
-the profile's all-time record**: seeded from `PROFILE.bestLap()` at gen, written back through
+the profile's all-time record on the stock track**: seeded from `PROFILE.bestLap()` at gen,
+written back through
 `PROFILE.setBestLap()` on a record (stored at the plate's own 0.1 s precision; only a strictly
 lower time writes) — the one thing practice ever puts in the profile, while LAST stays
 session-only. Everything
 is coordinate tests against the carved ice — no objects, no triggers. The trickle that refills a
 match's shoal is **off entirely under `PRACTICE`** (js/wildlife.js), because the only ice in the
 world is the race line and a fish emerging into it would be absurd; `crackIce` still works on
-the track (a hole in the racing line is the player's own doing, and re-entering rebuilds).
+the track (a hole in the racing line is the player's own doing, and re-entering rebuilds —
+and a reroll unregisters the old track's cracks and holes before the forest regrows).
+
+**The roll station** stands just inside the gate: a die on a plinth (`pkdie`, `PK_DIE`) and —
+once any lap has ever been recorded — three pip stones (`pkstone`, `PK_STONES`, one/two/three
+pips in green/amber/red, taller with the count). Both work on the armory rack's proximity-E
+grammar: `pkPadNear` resolves the pad in reach (shared by the `E ROLL` prompt, `drawPkHint` in
+js/ui.js, and the press in js/input.js), and `pkPadPress` rolls a **fresh random track** —
+the die at the armed difficulty, a stone arming *its* difficulty in the same press. The die's
+top face wears the armed count in its colour, the armed stone's pips are lit while the others
+stay dim engraving, and the stones springing up out of the snow (targets' respawn wobble,
+`pkPlaceStones`) *is* the unlock announcement — first lap ever recorded, or at gen for a
+profile with a `bestLap` already. `pkRoll` generates the loop (`pkGenPath`: waypoints on a
+jittered ellipse per `PK_DIFF` — easy few points/wide carve, hard many alternating slalom
+points/narrow carve — pinned to the west gate, pushed out of the field's two-tile apron with
+chord segments routed around its corners), grows forest back over the old carve (`pkTiles`
+remembers it; the gate, walk, line and station never move), repaints only touched tiles, and
+re-aims the checkpoint. **A rolled track flips `parkour.custom`**: BEST/LAST restart and the
+profile is never written from one — random loops are not comparable, so the stored record stays
+what it claims to be, the stock lap. Track rolls draw on the runtime `rng()` stream — post-boot
+calls reshuffle nothing ([determinism](#determinism-and-noise)), and the arena's boot remains
+bit-identical: the stock loop is carved before any roll can happen.
 
 **Ground 3 is packed earth**, the pad's floor, and exists only inside this arena
 (`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,

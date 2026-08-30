@@ -53,6 +53,12 @@ window.addEventListener('keydown', (e) => {
     if (!t || !t.near) {
       const rk = rackNear(player);
       if (rk) { SFX.unlock(); state.wheel = { kind: 'rack', tx: rk.tx, ty: rk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
+      else {
+        // the parkour roll station: E on the die or a pip stone rolls a fresh
+        // track (pkPadPress, the practice arena banner in js/world.js)
+        const pk = pkPadNear(player);
+        if (pk) pkPadPress(pk);
+      }
     }
   }
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and

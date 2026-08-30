@@ -297,6 +297,10 @@ function render() {
         ctx.fillRect(rx + 2, py + TILE - 2, TILE * 2 - 4, 2);
         drawSpriteFlash(RACK_SPR, rx + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
       }
+    } else if (o.type === 'pkdie') {
+      drawPkDie(o, px, py, now);
+    } else if (o.type === 'pkstone') {
+      drawPkStone(o, px, py, now);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {

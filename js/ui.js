@@ -146,7 +146,7 @@ function drawWorkHint(ox, oy) {
   if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
   if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
   const t = workTarget(player);
-  if (!t || !t.near) { drawRackHint(ox, oy); return; } // no work target: the armory may still be in reach
+  if (!t || !t.near) { drawRackHint(ox, oy); drawPkHint(ox, oy); return; } // no work target: the armory or the roll station may still be in reach
   const st = t.o && structOf(t.o);
   const isStruct = !!(st && STRUCTS[st.type]);
   const d = t.o && OBJECTS[t.o.type];
@@ -207,6 +207,20 @@ function drawRackHint(ox, oy) {
   const totalW = 9 + 3 + pixelTextWidth(verb);
   const hx = (rk.tx + 1) * TILE + (rk.dx || 0); // the pair's centre, nudged with the sprite
   drawKeyPrompt(Math.round(hx - ox - totalW / 2), Math.round(rk.ty * TILE - oy - 24), verb, !!keys['e']);
+}
+
+// The parkour roll station's prompt, the rack's own proximity grammar: an
+// E ROLL cap over whichever pad is in reach (pkPadNear, js/world.js - the
+// same resolver the press uses). Die and stones share the one verb because
+// every press does the one thing: a fresh track. Which difficulty is the
+// stone's shape's business, not a word's.
+function drawPkHint(ox, oy) {
+  const pk = pkPadNear(player);
+  if (!pk) return;
+  const verb = 'ROLL';
+  const totalW = 9 + 3 + pixelTextWidth(verb);
+  const lift = pk.type === 'pkstone' ? 24 + pk.pips * 3 : 28;
+  drawKeyPrompt(Math.round((pk.tx + 0.5) * TILE - ox - totalW / 2), Math.round(pk.ty * TILE - oy - lift), verb, !!keys['e']);
 }
 
 // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour
