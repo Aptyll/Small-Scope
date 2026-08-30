@@ -608,7 +608,7 @@ function drawPTarget(t, ex, ey, now) {
 
 // ---- the range bell's pixels ---------------------------------------------
 // The bell that runs the archery round: a bronze bell hung in a two-post
-// frame beside the spawn, rope off the clapper. While o.ring runs (the press
+// frame west of the dummy, rope off the clapper. While o.ring runs (the press
 // just landed, js/world.js) the bell swings on its yoke - the whole "the
 // round heard you" announcement at the spot the press happened.
 function drawAgBell(o, px, py, now) {

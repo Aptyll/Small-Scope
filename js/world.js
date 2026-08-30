@@ -533,8 +533,9 @@ function landmarkAt(x, y) {
 // to pure combat. The practice world itself is SMALL - WORLD is 76 under
 // PRACTICE (js/core.js) - so the forest is a collar, not a wilderness. In the
 // middle of the field: one dummy on a small packed-earth pad, spawn just
-// south of it, the bow rack beside the spawn, the range BELL a step west of
-// the spawn. The archery targets all ride one TWO-RAIL TRACK around the
+// south of it, and the range BELL and bow rack flanking the dummy on its own
+// row - bell west, rack east, mirrored in the open snow clear of the pad.
+// The archery targets all ride one TWO-RAIL TRACK around the
 // field's perimeter - stills, movers and pop-ups on trolleys, movers hopping
 // lanes around anything in their way - shoot them from anywhere, roll
 // straight past them; ringing the bell runs the timed, scored round over the
@@ -680,7 +681,7 @@ function hitPTarget(t, hx, hy) {
 }
 
 // ---- the archery round: one bell -----------------------------------------
-// The BELL beside the spawn starts the round (kind 'agbell' through the same
+// The BELL west of the dummy starts the round (kind 'agbell' through the same
 // input.cmd -> runCmd path every order takes - agBellNear resolves who is
 // beside it, shared by the E RING cap, drawBellHint in js/ui.js, and the
 // press in js/input.js). Ringing it clears the range for shooting: the stock
@@ -701,7 +702,7 @@ const AG_SINK_T = 0.9;   // s the dummy and rack take to sink / rise
 const AG_END_T = 2.4;    // s the final score stands before the field resets
 const AG_MAX = 7;        // most round targets on the track at once
 const AG_SPAWN_T = 1.5;  // s between top-up spawns while under AG_MAX
-const AG_BELL = { tx: PR_X0 + 18, ty: PR_Y0 + 17 }; // the bell, one step west of the spawn
+const AG_BELL = { tx: PR_X0 + 15, ty: PR_Y0 + 12 }; // the bell, west of the pad on the dummy's own row
 // phase: off | sink | count | play | end. `best` is the profile's record,
 // seeded at gen and written on a strictly higher score; last/lastHits are
 // this visit's. `tick` edges the countdown SFX, dustT paces the sink dust.
@@ -1006,15 +1007,17 @@ function genPracticeWorld() {
   const d = put(20, 12, 'dummy', { hp: DUMMY_HP, maxHp: DUMMY_HP, hitT: 99,
     mLast: 0, mTotal: 0, mT0: 0, mT1: 0 }); // the meter's combo ledger
   if (d) practiceDummies.push(d);
-  // centred below the pad, on the dummy's own axis: a two-tile pair can only
-  // centre on a tile boundary, so the pair sits at (20,15)-(21,15) and `dx`
-  // nudges the drawn sprite (and its brackets and prompt) 8px left onto the
-  // dummy's centre line - the tiles stay honest, the picture stays square
-  const rk1 = put(20, 15, 'rack', { lead: true, dx: -8 }), rk2 = put(21, 15, 'rack', {});
+  // the bell and the rack FLANK the dummy on its own row, mirrored about its
+  // axis in the open snow - a one-tile gap off either side of the pad, five
+  // tiles out each way. A two-tile pair can only centre on a tile boundary,
+  // so the rack sits at (25,12)-(26,12) and `dx` nudges the drawn sprite
+  // (and its brackets and prompt) 8px left, landing its visual centre
+  // exactly opposite the bell's - the tiles stay honest, the picture mirrors
+  const rk1 = put(25, 12, 'rack', { lead: true, dx: -8 }), rk2 = put(26, 12, 'rack', {});
   // the archery round sinks exactly these under the snow and raises them back
   agFurniture = [d, rk1, rk2].filter(Boolean);
-  // ---- the range bell, one step west of the spawn ------------------------
-  agBellObj = put(18, 17, 'agbell', { ring: 0 });
+  // ---- the range bell, the rack's western mirror -------------------------
+  agBellObj = put(15, 12, 'agbell', { ring: 0 });
   // ---- the targets: the free-practice roster, out on the perimeter track -
   agStock(true);
   // ---- the ice parkour: the gate walk, the carved loop, the flags --------

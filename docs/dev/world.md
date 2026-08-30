@@ -168,11 +168,11 @@ over the dummy's meter or the parkour's ice would change what those instruments 
 one lap and the next. The sun shafts stay ([rendering.md](rendering.md#light-and-weather)).
 
 The arena is one open **40×23-tile snowfield** (`PR_W`/`PR_H`) cut to pure combat: a single
-**dummy** on a small packed-earth pad in the middle, the two-tile bow **rack** squared directly
-under the pad on the dummy's own axis (`lead` on the left tile, a solid silent follower right;
-a two-tile pair can only centre on a tile boundary, so the lead carries `dx: -8` and the sprite,
-brackets and prompt all draw nudged onto the centre line — `RACK_SPR` itself is baked per-pixel
-in js/draw-world.js so the strung staves get true curves), the spawn just south of the rack —
+**dummy** on a small packed-earth pad in the middle, the two-tile bow **rack** in the open snow
+east of the dummy on its own row (`lead` on the left tile, a solid silent follower right; a
+two-tile pair can only centre on a tile boundary, so the lead carries `dx: -8` and the sprite,
+brackets and prompt all draw nudged 8px left — `RACK_SPR` itself is baked per-pixel
+in js/draw-world.js so the strung staves get true curves), the spawn just south of the pad —
 **the rack is the armory**: standing within E's own reach of it (`rackNear`) raises an `E ARM`
 key-cap over it (`drawRackHint`, ui.js — proximity, not hover), **holding E opens a radial
 wheel** of every tool in the game (`state.wheel` kind `'rack'`, the ordinary wheel pipeline),
@@ -181,8 +181,9 @@ moved onto the key (a real work target in reach keeps E's day job, the same rule
 which prompt shows). The pick lands in `rackEquip` (`PRACTICE`-gated, the practice banner),
 replacing the selected slot with a fresh instance of the picked tool, a plain arrow seated so
 it fires the moment it is taken — the **archery targets riding a two-rail track around the
-field's whole perimeter** (below), and the **range bell** one step west of the spawn that runs
-the timed archery round over that track. No fences, no wildlife, no chests, no pond, no
+field's whole perimeter** (below), and the **range bell** that runs the timed archery round
+over that track, standing west of the dummy as the rack's mirror: bell and rack flank the
+dummy on its row, each five tiles out with a one-tile snow gap off the pad. No fences, no wildlife, no chests, no pond, no
 harvest, and nothing spawns or restocks outside a round. `PRACTICE`
 (js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed` parse, so the field is
 bit-identical on every visit and no seed can reshape it.
@@ -276,7 +277,7 @@ splinters either way, then a **stock** target (the free-practice roster, `agStoc
 its points. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
 baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a grid.
 
-**The archery round** hangs off the **bell** (`agbell`, `AG_BELL`) beside the spawn: standing
+**The archery round** hangs off the **bell** (`agbell`, `AG_BELL`) west of the dummy: standing
 within E's reach (`agBellNear`) raises an `E RING` cap (`drawBellHint`, ui.js), and the press
 lands in `agRing` through the same `input.cmd` → `runCmd` path every order takes. Ringing it
 runs the show (`agame.phase`, ticked by `agUpdate` from `updatePractice`): the stock roster
