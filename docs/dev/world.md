@@ -278,8 +278,10 @@ face overlapping it, so the stack never gaps — whose wheels visibly turn while
 snow trail paced by distance), whose lane hop lifts the whole carriage and lands with a puff,
 and whose hidden pop-up form rattles on the rail with a snow fleck for a beat before the face
 flips up, bouncing as it locks. The two face sizes are separate per-pixel bakes
-(`bakeTargetFace` → `TARGET_SPR`/`TARGET_SPR_S`, draw-world.js), never runtime downscales, and
-a milestone run (every fifth consecutive hit) flares at the face. **A mover
+(`bakeTargetFace` → `TARGET_SPR`/`TARGET_SPR_S`, draw-world.js), never runtime downscales,
+every break snaps a quick shock ring out from the hit, sized to the face it came off
+(`agRings`/`drawAgRings` — rasterised dots over a dark rim pass, white-hot cooling to gold),
+and a milestone run (every fifth consecutive hit) flares at the face. **A mover
 about to run into anything parked — or rolling slower — on its rail hops to the free lane and
 keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occupied stretch),
 which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`: chips, straw and

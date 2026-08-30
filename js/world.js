@@ -679,6 +679,7 @@ function hitPTarget(t, hx, hy) {
   burst(f.x, f.y, '#d0453a', Math.round(10 * sc), 60, 0.5, true);   // painted chips
   burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
   burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
+  agRings.push({ x: f.x, y: f.y, t: 0, max: ptHitR(t) + 5 });       // the shock ring
   agStreak++;
   // a milestone run flares at the face: gold at every fifth in a row, hot
   // orange from ten - the popup says the number, this says the moment
@@ -755,6 +756,11 @@ let agFurniture = [];    // the dummy + rack + bell objects the round sinks away
 // (the arrow loop, js/sim.js). The hit popup carries it from the second hit
 // on - hotter-coloured as the run grows - and a fresh round starts it over.
 let agStreak = 0;
+// the hit-ring flash: every face break snaps one quick shock ring out from
+// the hit, sized to the face it came off (hitPTarget pushes, updatePractice
+// ages, drawAgRings in js/draw-world.js draws)
+const AG_RING_T = 0.22;  // s a ring lives
+const agRings = [];      // { x, y, t, max }
 
 // how far apart two track distances are, the short way round the ring
 function agDist(a, b) {
@@ -1467,6 +1473,11 @@ function updatePractice(dt) {
   }
   // a round target that has been shot is spent for good
   for (let i = ptargets.length - 1; i >= 0; i--) if (ptargets[i].gone) ptargets.splice(i, 1);
+  // the hit rings age out fast - a flash, not a decoration
+  for (let i = agRings.length - 1; i >= 0; i--) {
+    agRings[i].t += dt;
+    if (agRings[i].t >= AG_RING_T) agRings.splice(i, 1);
+  }
   // ---- the parkour clock -------------------------------------------------
   // plain coordinate tests against the carved ice: stepping onto the line
   // starts a lap, the far checkpoint keeps it honest, recrossing the line

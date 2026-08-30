@@ -648,6 +648,34 @@ function drawPTarget(t, ex, ey, now) {
   else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
 }
 
+// The hit-ring flash: one quick shock ring snapping out from every face
+// break (agRings, js/world.js), sized to the face it came off. Rasterised
+// 1px dots rather than an arc stroke, so the ring stays as crisp as the
+// pixel grid; white-hot young, cooling to gold as it spreads and fades.
+function drawAgRings(ex, ey) {
+  for (const g of agRings) {
+    const u = g.t / AG_RING_T;
+    const r = 3 + (g.max - 3) * (1 - (1 - u) * (1 - u)); // eased out fast
+    const cx = g.x - ex, cy = g.y - ey;
+    if (cx < -20 || cy < -20 || cx > WV_W + 20 || cy > WV_H + 20) continue;
+    // a dark rim pass under the lit pass - the outline-text rule: light
+    // pixels on white snow are invisible without a dark edge to stand on
+    ctx.globalAlpha = 1 - u;
+    const n = Math.max(10, (r * 6) | 0);
+    ctx.fillStyle = '#1c2130';
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2;
+      ctx.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r) + 1, 1, 1);
+    }
+    ctx.fillStyle = u < 0.45 ? '#f4f7ff' : '#ffd95c';
+    for (let i = 0; i < n; i++) {
+      const a = i / n * Math.PI * 2;
+      ctx.fillRect(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), 1, 1);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
 // ---- the range bell's pixels ---------------------------------------------
 // The bell that runs the archery round: a bronze bell hung in a two-post
 // frame west of the dummy, rope off the clapper. While o.ring runs (the press

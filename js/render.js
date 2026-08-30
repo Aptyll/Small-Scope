@@ -404,8 +404,9 @@ function render() {
   drawFishHint(ex, ey, now);
   // the parkour's two readouts: the lap clock over the runner, BEST / LAST
   // on the frost plate at the gate (drawParkour, js/draw-world.js) - and the
-  // archery range's own BEST / LAST plate over the bell (drawAgame)
-  if (PRACTICE) { drawParkour(ex, ey, now); drawAgame(ex, ey, now); }
+  // archery range's own BEST / LAST plate over the bell (drawAgame), with
+  // the hit-ring flash snapping over whatever face just broke (drawAgRings)
+  if (PRACTICE) { drawParkour(ex, ey, now); drawAgame(ex, ey, now); drawAgRings(ex, ey); }
 
   // construction AND card-crafting progress bars - same bar, same "over the
   // roof" placement for a big building; a craft in flight (a finished Keep,
