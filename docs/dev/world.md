@@ -7,7 +7,7 @@ anything that must stay stable per tile.
 ## The tile world
 
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world (under `PRACTICE` the const is
-  64 instead — see [the practice arena](#the-practice-arena)). The forest border keeps its
+  76 instead — see [the practice arena](#the-practice-arena)). The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
   open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
   (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is `RING_N`
@@ -159,7 +159,7 @@ The TRAINING FIELD behind the title's PRACTICE TOOL plank (three knocks break it
 [rendering.md](rendering.md#main-menu-title)): `?practice=1` boots `genPracticeWorld()` (the
 `practice arena` banner, js/world.js) **instead of** `genWorld()`, and js/boot.js skips
 landmarks, chests, wildlife spawns and the eagle drop entirely. **The practice world itself is
-small — `WORLD` is 64 under `PRACTICE`, against the match's 232** (the conditional above the
+small — `WORLD` is 76 under `PRACTICE`, against the match's 232** (the conditional above the
 `WORLD` const, js/core.js; everything downstream sizes itself off `WORLD`, so the match world is
 untouched). The **clock never runs**: js/boot.js pins `state.time` to early morning and sim.js
 never advances it under `PRACTICE` — crisp daylight forever, no dusk, no dawn refreeze. The
@@ -219,12 +219,23 @@ the die at the armed difficulty, a stone arming *its* difficulty in the same pre
 top face wears the armed count in its colour, the armed stone's pips are lit while the others
 stay dim engraving, and the stones springing up out of the snow (targets' respawn wobble,
 `pkPlaceStones`) *is* the unlock announcement — first lap ever recorded, or at gen for a
-profile with a `bestLap` already. `pkRoll` generates the loop (`pkGenPath`: waypoints on a
-jittered ellipse per `PK_DIFF` — easy few points/wide carve, hard many alternating slalom
-points/narrow carve — pinned to the west gate, pushed out of the field's two-tile apron with
-chord segments routed around its corners), grows forest back over the old carve (`pkTiles`
-remembers it; the gate, walk, line and station never move), repaints only touched tiles, and
-re-aims the checkpoint. **A rolled track flips `parkour.custom`**: BEST/LAST restart and the
+profile with a `bestLap` already. `pkRoll` picks the loop (`pkGenPath`: waypoints on a
+jittered ellipse per `PK_DIFF` around `PK_CX`/`PK_CY` at `PK_RX`/`PK_RY` — easy few points/wide
+carve, hard many alternating slalom points/narrow carve — pinned to the west gate with lightly
+jittered approach legs so consecutive rolls visibly differ where the roller stands, kept out of
+the field's `PK_APRON` (6) tile **tree belt** with chord segments routed around its corners,
+and the carve plan itself refuses field tiles) and re-aims the checkpoint at the new
+farthest-east waypoint. **The terrain change is a watched sweep, not a blink**: `pkRoll` sorts
+every affected tile into events keyed by ring angle (`pkAngKey`, 0 at the gate) and
+`pkAnimStep` (from `updatePractice`) spends them as one eased carving front laps the collar in
+`PK_ANIM_T` seconds — slow off the gate, quick round the far side, slow home — closing forest
+over the old track (tree + flash + snow poof, never onto the player) and cutting the new lane
+(needle burst as each pine falls, frost sparkle on fresh ice, a sparse `break_` tick, the line
+flashing when the front comes home). Each event is one ground write plus one `repaintGround` —
+a handful per frame, `PK_ANIM_CAP` bounds dt spikes — and the die tumbles for the whole sweep
+while `pkRoll`/`pkPadPress` refuse a re-roll and the `E ROLL` cap hides. `pkTiles` remembers
+the current carve (the gate, walk, line and station never move). **A rolled track flips
+`parkour.custom`**: BEST/LAST restart and the
 profile is never written from one — random loops are not comparable, so the stored record stays
 what it claims to be, the stock lap. Track rolls draw on the runtime `rng()` stream — post-boot
 calls reshuffle nothing ([determinism](#determinism-and-noise)), and the arena's boot remains

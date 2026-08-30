@@ -215,6 +215,7 @@ function drawRackHint(ox, oy) {
 // every press does the one thing: a fresh track. Which difficulty is the
 // stone's shape's business, not a word's.
 function drawPkHint(ox, oy) {
+  if (pkAnim) return; // mid-sweep the station is busy - the tumbling die says so
   const pk = pkPadNear(player);
   if (!pk) return;
   const verb = 'ROLL';

@@ -898,8 +898,9 @@ window.DBG = {
   PRACTICE, practiceDummies, PR_SPAWN, hitDummy, leavePlankRect,
   ptargets, ptFace, ptLive, hitPTarget, parkour,
   // the parkour roll station: roll a track by hand, stand the stones up,
-  // resolve the pad E would press
-  pkRoll, pkPlaceStones, pkPadNear, PK_DIFFS,
+  // resolve the pad E would press, and watch the sweep (pkAnim rebinds, so a
+  // getter; pkAnimStep lets a driver fast-forward the front)
+  pkRoll, pkPlaceStones, pkPadNear, PK_DIFFS, pkAnimState: () => pkAnim, pkAnimStep,
   // drop a slot (default the local one) on a tile - how to stage a landmark
   warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
   settings, perf, treeRare, cursorInfo,
