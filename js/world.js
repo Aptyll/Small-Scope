@@ -725,9 +725,14 @@ const pkPads = [];         // die + stones, for updatePractice's timers
 // each per frame, so the whole show costs less than a particle burst. The
 // die tumbles for the full sweep and the station refuses a new roll until
 // the front comes home.
-const PK_ANIM_T = 3.4;         // s for the front to lap the collar
+const PK_ANIM_T = 6.0;         // s for the front to lap the collar - a slow, watchable carve
+const PK_WARN = 0.45;          // rad the shudder runs ahead of the front: pines shake, THEN fall
 const PK_ANIM_CAP = 48;        // max tile events spent per frame (dt-spike guard)
-let pkAnim = null;             // { t, ev: [{k:0 grow|1 ice, i, a}], next, sfxT }
+// { t, ev: [{k:0 grow|1 ice|2 shudder, i, a}], next, sfxT,
+//   trail: [{x,y,a}] dense samples along the new lane, ti, plumeT } - the
+// trail is what the front's sparkle plume rides, so the sweep stays visible
+// even where the old and new track share tiles and no event fires
+let pkAnim = null;
 
 // The rack is the practice armory: right-clicking either of its tiles opens
 // a radial wheel of every tool in the game (kind 'rack' - input.js opens it,
@@ -978,9 +983,32 @@ function pkRoll(diff) {
   }
   const ev = [];
   for (const i of old) if (!pkTiles.has(i)) ev.push({ k: 0, i, a: pkAngKey(i) });
-  for (const i of pkTiles) if (!old.has(i)) ev.push({ k: 1, i, a: pkAngKey(i) });
+  for (const i of pkTiles) if (!old.has(i)) {
+    const a = pkAngKey(i);
+    ev.push({ k: 1, i, a });
+    // a pine in the new lane shudders a beat before the front reaches it -
+    // the anticipation is half the show
+    const o = objects[i];
+    if (o && o.type === 'tree') ev.push({ k: 2, i, a: Math.max(0, a - PK_WARN) });
+  }
   ev.sort((a, b) => a.a - b.a);
-  pkAnim = { t: 0, ev, next: 0, sfxT: 0 };
+  // the plume's rail: dense samples along the new lane in sweep order (the
+  // path is angle-ordered by construction; the running max irons out the
+  // slalom's tiny local wobbles so the index only ever advances)
+  const trail = [];
+  let ka = 0;
+  for (let s = 0; s < gen.path.length - 1; s++) {
+    const [x0, y0] = gen.path[s], [x1, y1] = gen.path[s + 1];
+    const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)) * 2);
+    for (let i = 0; i < steps; i++) {
+      const fx = x0 + (x1 - x0) * i / steps, fy = y0 + (y1 - y0) * i / steps;
+      let a = Math.PI - Math.atan2(PK_CY - fy, fx - PK_CX);
+      if (a >= Math.PI * 2) a -= Math.PI * 2;
+      ka = Math.max(ka, a);
+      trail.push({ x: fx * TILE + 8, y: fy * TILE + 8, a: ka });
+    }
+  }
+  pkAnim = { t: 0, ev, next: 0, sfxT: 0, trail, ti: 0, plumeT: 0 };
   parkour.cpTx = gen.cp[0]; parkour.cpTy = gen.cp[1];
   parkour.custom = true;
   parkour.on = false; parkour.t = 0; parkour.cp = false; parkour.offT = 0;
@@ -1013,15 +1041,23 @@ function pkAnimStep(dt) {
     const e = pkAnim.ev[pkAnim.next++]; spent++;
     const tx = e.i % WORLD, ty = (e.i / WORLD) | 0;
     const px = tx * TILE + 8, py = ty * TILE + 8;
+    if (e.k === 2) {
+      // the shudder: the pine shakes on its feet a beat before it falls
+      // (o.shake decays in sim.js's object-timer loop) - no ground change,
+      // so no repaint either
+      const o = objects[e.i];
+      if (o && o.type === 'tree') o.shake = 0.55;
+      continue;
+    }
     if (e.k === 1) {
       const hadTree = !!objects[e.i];
       pkIceTile(e.i);
       if (hadTree) {
-        burst(px, py - 8, '#88b090', 3, 45, 0.4, true);   // needles off the falling pine
-        if (rng() < 0.5) burst(px, py - 4, '#f4f7ff', 3, 40, 0.4, true);
-        if (pkAnim.sfxT > 0.24 && nearPlayer(px, py)) { pkAnim.sfxT = 0; SFX.break_(); }
-      } else if (rng() < 0.35) {
-        burst(px, py, '#ddf1f8', 2, 35, 0.35, true);       // frost settling on fresh ice
+        burst(px, py - 8, '#88b090', 4, 45, 0.45, true);  // needles off the falling pine
+        if (rng() < 0.6) burst(px, py - 4, '#f4f7ff', 3, 40, 0.4, true);
+        if (pkAnim.sfxT > 0.28 && nearPlayer(px, py)) { pkAnim.sfxT = 0; SFX.break_(); }
+      } else if (rng() < 0.5) {
+        burst(px, py, '#ddf1f8', 2, 35, 0.4, true);        // frost settling on fresh ice
       }
     } else {
       ground[e.i] = 0;
@@ -1031,10 +1067,27 @@ function pkAnimStep(dt) {
       if (!inField && !inWalk && !onMe && !objects[e.i]) {
         const t = placeObj(tx, ty, 'tree', { hp: 4, variant: hash2(tx * 3 + 1, ty * 3 + 2) > 0.5 ? 1 : 0, rare: treeRare(tx, ty) });
         t.flash = 0.2;
-        if (rng() < 0.4) burst(px, py - 10, '#f4f7ff', 3, 40, 0.4, true);
+        if (rng() < 0.5) burst(px, py - 10, '#f4f7ff', 3, 40, 0.45, true);
       }
     }
     repaintGround(tx, ty);
+  }
+  // the plume: a steady sparkle riding the front along the new lane (rate is
+  // time-based, so a 240Hz screen gets the same shower as a 60Hz one), with
+  // a faint comet tail dropped on the samples the front passed this frame
+  while (pkAnim.ti < pkAnim.trail.length - 1 && pkAnim.trail[pkAnim.ti + 1].a <= front) {
+    pkAnim.ti++;
+    if (rng() < 0.3) { const s = pkAnim.trail[pkAnim.ti]; burst(s.x, s.y - 4, '#6fc4f2', 1, 22, 0.5, true); }
+  }
+  if (pkAnim.t < PK_ANIM_T) {
+    pkAnim.plumeT += dt;
+    const s = pkAnim.trail[Math.min(pkAnim.ti, pkAnim.trail.length - 1)];
+    while (pkAnim.plumeT > 0.03) {
+      pkAnim.plumeT -= 0.03;
+      // deep blue against snow and ice, white against the dark pines - the
+      // pair keeps the head visible over everything it crosses
+      burst(s.x + rand(-4, 4), s.y - 6 + rand(-4, 3), rng() < 0.6 ? '#3a86c8' : '#f4f7ff', 2, 30, 0.5, true);
+    }
   }
   if (pkAnim.next >= pkAnim.ev.length && pkAnim.t >= PK_ANIM_T) {
     pkAnim = null;

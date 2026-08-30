@@ -237,8 +237,14 @@ every affected tile into events keyed by ring angle (`pkAngKey`, 0 at the gate) 
 `pkAnimStep` (from `updatePractice`) spends them as one eased carving front laps the collar in
 `PK_ANIM_T` seconds — slow off the gate, quick round the far side, slow home — closing forest
 over the old track (tree + flash + snow poof, never onto the player) and cutting the new lane
-(needle burst as each pine falls, frost sparkle on fresh ice, a sparse `break_` tick, the line
-flashing when the front comes home). Each event is one ground write plus one `repaintGround` —
+(each pine **shudders `PK_WARN` radians before it falls** — a `k:2` event sets `o.shake`, which
+sim.js's object-timer loop decays — then goes down in a needle burst; frost sparkles settle on
+fresh ice, a sparse `break_` ticks, and the line flashes when the front comes home). A **sparkle
+plume rides the front** the whole way: the roll samples the new path into a dense angle-ordered
+trail (`pkAnim.trail`) and the step emits deep-blue-and-white sparks at the front's trail
+position on a time-based clock (refresh-rate independent), so the sweep stays visible even
+where old and new track share tiles and no event fires. Each event is one ground write plus
+one `repaintGround` (a shudder is neither) —
 a handful per frame, `PK_ANIM_CAP` bounds dt spikes — and the die tumbles for the whole sweep
 while `pkRoll`/`pkPadPress` refuse a re-roll and the `E ROLL` cap hides. `pkTiles` remembers
 the current carve (the gate, walk, line and station never move). **A rolled track flips
