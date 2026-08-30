@@ -73,6 +73,8 @@ The game code is organized only by `// ------ name` banners inside its twenty-on
 **Every commit pushed to main bumps the patch by 0.01** — `PATCH_TXT` in [js/menu.js](js/menu.js),
 same commit, before the push; it prints bottom-right of the title screen, so a screenshot carries
 its build. That commit also tops `PATCH_NOTES` with **one sentence**: plain English, uppercase.
+**The commit message begins with the patch name** — `PATCH 2.11 — ...` as the first thing on the
+first line, so `git log --oneline` reads as a build history.
 
 ## UI rule: show, don't label
 
