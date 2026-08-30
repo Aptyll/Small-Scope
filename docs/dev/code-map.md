@@ -203,7 +203,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the dummy's LAST HIT / DPS / TOTAL plate | `drawDummyMeter` (its linger: `DUMMY_METER_LINGER`, world.js) | `entity draw` |
 | the training field's pixels: the target face bakes (both sizes), the perimeter track's rails, a carriage target in any habit, the range bell, the round's readouts, the big gate flag, the two-tile bow rack, the parkour's line and readouts, the roll die | `bakeTargetFace`/`TARGET_SPR`/`TARGET_SPR_S`, `drawAgTrack`, `drawPTarget`, `drawAgRings`, `drawAgBell`, `drawAgame`, `drawAgameUI`, `drawBanner`, `RACK_SPR`, `drawParkourLine`, `drawParkour`, `drawPkDie`, `PK_DIE_COL`/`PK_PIP_COL`/`PK_PIP_AT` | `entity draw` (the records they draw: `practice arena`, world.js) |
 | the packed-earth floor's painting | `paintGroundTile` (the `gv === 3` branch) | `ground prerender` |
-| spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts`, `SHAFT_PX` | `entity draw` |
+| the one arrow body every shaft draws (flying, spent, stuck, volley rain): the symmetric rasteriser and its rim/colour painter | `arrowBodyPx`, `paintArrowPx` (the master: `ARROW_MAP`/`ARROW_BODY`, actions.js) | `entity draw` |
+| spent arrows lying in the snow and their pick-me-up marker | `shafts`, `drawShafts` | `entity draw` |
 | drawing players / animals / robots / held tool | `drawPlayer`, `drawGhost`, `drawHeldTool`, `drawAnimal`, `drawRobot` | `entity draw` |
 | the landmark glyph both maps stamp | `drawLandmarkIcon` | `entity draw` › `the landmark glyph` (its `LANDMARKS` spec: `landmarks`, world.js) |
 | what a worker flag looks like: the job glyph, the map pennant, the planted banner, and the held-press preview's two halves | `drawFlagIcon`, `drawFlagPennant`, `drawFlag`, `drawFlagAim`, `drawFlagCursor` | `entity draw` › `what a flag looks like` (what they read, `flagTarget`/`FLAG_JOBS`: `worker flags`, robots.js) |

@@ -549,32 +549,40 @@ Five indicators carry it, and none of them is a word:
   fraction, 1 = ready) and `dry` (empty quiver), whatever the pointer is over. While the renock
   runs, four gold corner marks fall inward and land on the ring; an empty quiver drops the centre
   pixel and greys the ticks — the crosshair goes hollow.
-- **The shafts themselves** (`drawShafts`, in the flat pass just before drops). Body at the
-  bearing it flew in on, head buried, fletching in the shooter's colour, rimmed like a flying
-  arrow. Inside `SHAFT_NEAR` (34 px) of a local player with room for it, the whole thing turns
-  gold — this HUD's "you can take this" colour — and grows a bobbing arrowhead. It blinks over its
-  last 1.6 s so nobody walks toward one that is about to go.
+- **The shafts themselves** (`drawShafts`, in the flat pass just before drops). The shared arrow
+  body from `SHAFT_BURY` back — head and bit collar under the snow — lying on the bearing it flew
+  in on, centred on the stored point (`stickArrow` pulls it back `SHAFT_MID` px so the pickup
+  circle and the drawing agree). Inside `SHAFT_NEAR` (34 px) of a local player with room for it,
+  the whole thing turns gold — this HUD's "you can take this" colour — and grows a bobbing
+  arrowhead. It blinks over its last 1.6 s so nobody walks toward one that is about to go.
 
 Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot),
 `SFX.dryFire()` on an empty press, `SFX.shaftPull()` on a retrieval.
 
 A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodies of their own —
 a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
-with no bearing at all (`drawMote`) — and everything else is the arrow silhouette, **rasterised
-pixel by pixel** rather than stroked so it stays opaque and crisp at any angle: an 8 px shaft in
-the bit's own `col`, two barbs 2 px back that keep the head pointing whatever direction it flies,
-and 4 px of fletching at the tail in `TEAMS[a.team].mark` — so the bit is readable from the shaft
-and whose shot it is from the tail. Every one of those
-pixels is dilated into `ARROW_RIM` first (a plus-shaped 1 px dark edge) so the shaft reads over
-snow, and the tip is left pure white. The body is built into the `ARROW_PX` scratch array, and a
-shot off the edge of the view is skipped before any of it runs.
+with no bearing at all (`drawMote`) — and everything else is **the one arrow body**: `ARROW_MAP`
+(js/actions.js), an ASCII master parsed once into `ARROW_BODY` — a white tip, a tapered flint
+head, a 2 px collar in the bit's own `col` (the bit is readable from the collar; the shaft never
+recolours), a single-gold shaft, and swept swallow-tail feathers in `TEAMS[a.team].mark` edged
+with the team's `coatD` — so whose shot it is reads from the tail. `arrowBodyPx`
+(js/draw-world.js) rasterises it at the live bearing with **spine-offset rounding** (spine rounded
+per column, sideways offset per row with sign-symmetric rounding) so the two vanes land on
+mirrored pixels at every angle — per-pixel `Math.round` breaks its .5 ties upward and fattens one
+vane on any diagonal. `paintArrowPx` dilates every pixel into `ARROW_RIM` first (a plus-shaped
+1 px dark edge) so the shaft reads over snow. The body is built into the `ARROW_PX` scratch
+array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` px behind
+it, which is why the view cull uses the widened ±36 bound. The spent shaft, the arrow standing in
+a target face and the volley's rain all draw stretches of this same body.
 
 Behind it, each shot lays a **trail of team-coloured motes** into `particles` (fire instead, if a
 FLAME modifier is riding it — the burn is the more urgent fact about that shot than whose it is),
 one every
 `ARROW_TRAIL_STEP` (4) px of *flight distance* — not per tick, so a slow arrow streaks as evenly
 as a fast one, and a long frame is subdivided instead of leaving a gap. Motes are dropped at the
-distance behind the head they are owed (`a.trailD` banks the remainder), drift back at 8 px/s and
+distance behind the TAIL they are owed (`a.trailD` banks the remainder; a shaft's body runs
+`ARROW_LEN` px behind the tip, so the trail flows off the fletching — and none lay until the tail
+has cleared the bow, `a.flown`), drift back at 8 px/s and
 fade from `ARROW_TRAIL_A` (0.7) over `ARROW_TRAIL_LIFE` (0.22 s), leaving a tail that thins out
 behind the shot. The particle draw pass is what makes that possible: a particle's
 `maxLife` is the seconds it spends fading (`burst` uses 0.4) and its optional `alpha` caps how

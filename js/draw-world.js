@@ -647,20 +647,17 @@ function drawPTarget(t, ex, ey, now) {
   if (t.kind === 'pop') ctx.drawImage(spr, bx - (w >> 1) + rx, by - 5 - h, w, h);
   else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
   // the stuck arrow, standing in the face for the beat before the shatter:
-  // shaft out of the impact point along the bearing it flew in on, fletching
-  // at the tail, a dark rim pixel under each so it reads on the pale rings
+  // the shared body out of the impact point on the bearing it flew in on -
+  // head and collar driven into the straw, shaft and team feathers proud
   if (t.stuck > 0 && rise > 0.5) {
     const f = ptFace(t);
     const ix = Math.round(f.x - ex) + Math.round(t.stickX);
     const iy = Math.round(f.y - ey) - hop + Math.round(t.stickY);
-    const ca = Math.cos(t.stickA + Math.PI), sa = Math.sin(t.stickA + Math.PI);
-    for (let i = 0; i <= 6; i++) {
-      const sx2 = Math.round(ix + ca * i), sy2 = Math.round(iy + sa * i);
-      ctx.fillStyle = '#241a12';
-      ctx.fillRect(sx2, sy2 + 1, 1, 1);
-      ctx.fillStyle = i === 0 ? '#241a12' : i >= 5 ? (i === 5 ? '#d0453a' : '#e0c890') : '#a3794f';
-      ctx.fillRect(sx2, sy2, 1, 1);
-    }
+    const tm = TEAMS[t.stickTeam || 0];
+    ARROW_PX.length = 0;
+    arrowBodyPx(ARROW_PX, ix, iy, Math.cos(t.stickA), Math.sin(t.stickA),
+      8, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
+    paintArrowPx(ARROW_PX);
   }
 }
 
@@ -860,49 +857,78 @@ function drawBanner(o, px, py, now) {
   ctx.fillStyle = '#c89a3c'; ctx.fillRect(bx + 2, top + H - 2, 1, 2);
 }
 
-// Spent arrows in the snow, drawn flat under everything that walks: a stub of
-// shaft on the bearing it came in on (the head is buried, so it starts at the
-// entry point and runs backwards), fletching in the shooter's team colour, a
-// smear of shadow along it. The head is missing on purpose - the same body the
-// flying arrow draws, minus the part that is in the ground.
+// ---- the arrow body, shared -----------------------------------------------
+// One silhouette for every shaft in the game: the flying arrow (render.js),
+// the spent shaft below, the arrow standing in a target face (drawPTarget)
+// and the volley's rain (abilities.js) all rasterise ARROW_BODY (js/actions.js)
+// through this pair. hx/hy is the tip's exact (unrounded) screen position,
+// i0..i1 the stretch of the body to draw (a buried head is skipped by raising
+// i0), cT/cD the team feather and its dark edge, cB the bit collar, cG an
+// optional shaft override (0 = the master's gold).
+// SPINE-OFFSET ROUNDING, not per-pixel rounding: the spine is rounded once
+// per column and the sideways offset once per row with sign-symmetric
+// rounding, so the two vanes land on mirrored pixels at every bearing -
+// Math.round alone breaks its .5 ties upward and visibly fattens one vane
+// on any diagonal shot.
+function arrowBodyPx(out, hx, hy, nx, ny, i0, i1, cT, cD, cB, cG) {
+  const qx = -ny, qy = nx;
+  for (let k = 0; k < ARROW_BODY.length; k += 3) {
+    const i = ARROW_BODY[k];
+    if (i < i0 || i > i1) continue;
+    const j = ARROW_BODY[k + 1], key = ARROW_BODY[k + 2];
+    const ox = qx * j, oy = qy * j;
+    out.push(
+      Math.round(hx - nx * i) + (ox < 0 ? -Math.round(-ox) : Math.round(ox)),
+      Math.round(hy - ny * i) + (oy < 0 ? -Math.round(-oy) : Math.round(oy)),
+      key === 'T' ? cT : key === 'D' ? cD : key === 'B' ? cB :
+      key === 'G' ? (cG || ARROW_INK.G) : ARROW_INK[key]);
+  }
+}
+// rim first - a plus-shaped dilation of every pixel, so the whole body wears
+// a 1px dark edge whatever direction it lies - then the colours over it
+function paintArrowPx(px) {
+  ctx.fillStyle = ARROW_RIM;
+  for (let k = 0; k < px.length; k += 3) {
+    const x = px[k], y = px[k + 1];
+    ctx.fillRect(x - 1, y, 1, 1); ctx.fillRect(x + 1, y, 1, 1);
+    ctx.fillRect(x, y - 1, 1, 1); ctx.fillRect(x, y + 1, 1, 1);
+  }
+  for (let k = 0; k < px.length; k += 3) {
+    ctx.fillStyle = px[k + 2];
+    ctx.fillRect(px[k], px[k + 1], 1, 1);
+  }
+}
+
+// Spent arrows in the snow, drawn flat under everything that walks: the shared
+// body from SHAFT_BURY back - head and bit collar under the snow - lying on
+// the bearing it came in on, centred on s.x/s.y (stickArrow pulls the stored
+// point back to the visible middle, so the pickup circle and the drawing agree).
 // Inside SHAFT_NEAR of a local player who has room for it, the whole thing
 // goes gold and grows a bobbing arrowhead: that, and nothing written down, is
 // how "walk over it to take it back" gets taught. It blinks over its last
 // second and a half so nobody plans a route to one that is about to go.
-const SHAFT_PX = [];
 function drawShafts(ex, ey, now) {
   const want = state.mode === 'play' && !player.dead && !inAir(player) && player.quiver < QUIVER_MAX;
   for (const s of shafts) {
     const sx = Math.round(s.x - ex), sy = Math.round(s.y - ey);
-    if (sx < -12 || sy < -12 || sx > WV_W + 12 || sy > WV_H + 12) continue;
+    if (sx < -18 || sy < -18 || sx > WV_W + 18 || sy > WV_H + 18) continue;
     const left = SHAFT_LIFE - s.t;
     if (left < 1.6 && ((now * 7) | 0) % 2) continue;
     const fade = Math.min(1, left / 4);
     const near = want && Math.hypot(s.x - player.x, s.y - player.y) < SHAFT_NEAR;
     ctx.globalAlpha = fade;
-    // the shadow sits under the middle of the body, not under the buried head
     ctx.fillStyle = 'rgba(120,140,175,0.32)';
-    ctx.fillRect(Math.round(sx - s.nx * 3) - 2, Math.round(sy - s.ny * 3) + 2, 5, 1);
-    const qx = -s.ny, qy = s.nx;
-    SHAFT_PX.length = 0;
-    const at = (i, j) => SHAFT_PX.push(
-      Math.round(sx - s.nx * i + qx * j), Math.round(sy - s.ny * i + qy * j));
-    for (let i = 0; i < 6; i++) at(i, 0);
-    const shaftEnd = SHAFT_PX.length;
-    at(4, -1); at(4, 1); at(5, -1); at(5, 1);
-    ctx.fillStyle = ARROW_RIM; // the same plus-shaped dilation the flying arrow uses
-    for (let k = 0; k < SHAFT_PX.length; k += 2) {
-      const px = SHAFT_PX[k], py = SHAFT_PX[k + 1];
-      ctx.fillRect(px - 1, py, 1, 1); ctx.fillRect(px + 1, py, 1, 1);
-      ctx.fillRect(px, py - 1, 1, 1); ctx.fillRect(px, py + 1, 1, 1);
-    }
+    ctx.fillRect(sx - 4, sy + 2, 9, 1);
     // in range the whole thing goes gold - the colour this HUD already uses for
     // "you can take this" (the gear row's buy chevron, every hover). White was
     // tried and vanished into the snow.
-    ctx.fillStyle = near ? '#ffd95c' : '#cbbf99';
-    for (let k = 0; k < shaftEnd; k += 2) ctx.fillRect(SHAFT_PX[k], SHAFT_PX[k + 1], 1, 1);
-    ctx.fillStyle = near ? '#fff3c4' : TEAMS[s.team].mark;
-    for (let k = shaftEnd; k < SHAFT_PX.length; k += 2) ctx.fillRect(SHAFT_PX[k], SHAFT_PX[k + 1], 1, 1);
+    ARROW_PX.length = 0;
+    arrowBodyPx(ARROW_PX, s.x - ex + s.nx * SHAFT_MID, s.y - ey + s.ny * SHAFT_MID,
+      s.nx, s.ny, SHAFT_BURY, ARROW_LEN,
+      near ? '#fff3c4' : TEAMS[s.team].mark,
+      near ? '#ffd95c' : TEAMS[s.team].coatD,
+      ARROW_INK.G, near ? '#ffd95c' : 0);
+    paintArrowPx(ARROW_PX);
     if (near) {
       // a small arrowhead bobbing over it - the same wedge a flying arrow wears
       const by = sy - 11 - Math.round(Math.abs(Math.sin(now * 4)) * 2);

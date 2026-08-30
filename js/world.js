@@ -649,8 +649,9 @@ function addPTarget(kind, s, opts) {
     dustD: 0, hopping: false, warned: -1, prevUp: 0,
     // the stuck arrow: stuck counts down to the shatter, stickX/Y is the
     // impact point relative to the face centre (it rides a mover), stickA
-    // the shaft's flight bearing (the tail stands out the way it came)
-    stuck: 0, stickX: 0, stickY: 0, stickA: 0,
+    // the shaft's flight bearing (the tail stands out the way it came),
+    // stickTeam whose feathers it wears
+    stuck: 0, stickX: 0, stickY: 0, stickA: 0, stickTeam: 0,
   }, opts || {});
   if (t.kind === 'pop') { t.up = 0; if (!t.pop) t.pop = PT_POP; }
   t.laneU = t.lane;
@@ -690,6 +691,7 @@ function hitPTarget(t, hx, hy, a) {
   t.stickX = Math.max(-rr, Math.min(rr, hx - f.x));
   t.stickY = Math.max(-rr, Math.min(rr, hy - f.y));
   t.stickA = a ? Math.atan2(a.vy, a.vx) : Math.PI / 2;
+  t.stickTeam = a ? a.team : 0;
   t.wob = 0.35; // the impact recoil
   burst(hx, hy, '#efe6d0', 3, 35, 0.35, true); // straw off the punch
   agStreak++;

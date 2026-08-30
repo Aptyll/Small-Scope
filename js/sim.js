@@ -209,12 +209,19 @@ function updatePlay(dt) {
     // reads as a streak, and whose shot it is reads from across the map. The
     // step just walked is subdivided (rather than one mote per tick) so the
     // spacing survives both a slow arrow and a long frame; the motes are laid
-    // behind the head at the distance they are owed and left to fade in place.
+    // off the TAIL (the body runs ARROW_LEN px behind the tip a shaft flies
+    // by, so the trail flows off the fletching, never through the body) at
+    // the distance they are owed and left to fade in place - and not before
+    // the tail has cleared the bow, or every launch flicks a mote across the
+    // archer's back.
     a.trailD += vd * dt;
+    a.flown = (a.flown || 0) + vd * dt;
+    const tailB = (a.kind === 'bolt' || a.path === 'lob' || a.path === 'orbit') ? 0 : ARROW_LEN;
     while (a.trailD >= ARROW_TRAIL_STEP) {
       a.trailD -= ARROW_TRAIL_STEP;
+      if (a.flown < tailB + a.trailD) continue;
       particles.push({
-        x: a.x - nx * a.trailD, y: a.y - ny * a.trailD,
+        x: a.x - nx * (tailB + a.trailD), y: a.y - ny * (tailB + a.trailD),
         vx: -nx * 8, vy: -ny * 8,
         life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE,
         // the trail says WHOSE shot it is, which is what it is for - except a

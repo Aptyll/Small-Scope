@@ -277,7 +277,7 @@ function abVolley(p) {
   for (let i = 0; i < 8; i++) {
     volleyFx.push({
       x: x + rand(-VOLLEY_R + 4, VOLLEY_R - 4), y: y + rand(-VOLLEY_R + 6, VOLLEY_R - 6),
-      delay: VOLLEY_T + i * 0.03, t: 0,
+      delay: VOLLEY_T + i * 0.03, t: 0, team: p.team,
     });
   }
   if (nearPlayer(p.x, p.y)) SFX.arrow();
@@ -645,17 +645,18 @@ function drawAbilityAir(ex, ey, now) {
     ctx.fillStyle = '#f4f7ff';
     ctx.fillRect(px + 4, py, 1, 1); // the head
   }
+  // the rain wears the shared arrow body, falling tip-first (the tail
+  // stretches up ARROW_LEN px, which is why the top cull bound is deep)
   for (const f of volleyFx) {
     if (f.delay > 0) continue;
     const drop = Math.min(1, f.t / 0.14);
     const px = Math.round(f.x - ex), py = Math.round(f.y - ey - 34 * (1 - drop));
-    if (px < -8 || py < -40 || px > WV_W + 8 || py > WV_H + 8) continue;
-    ctx.fillStyle = '#0d1226';
-    ctx.fillRect(px - 1, py - 6, 1, 7); ctx.fillRect(px + 1, py - 6, 1, 7);
-    ctx.fillStyle = '#e8dcb4';
-    ctx.fillRect(px, py - 6, 1, 7);
-    ctx.fillStyle = '#f4f7ff';
-    ctx.fillRect(px, py + 1, 1, 1);
+    if (px < -12 || py < -70 || px > WV_W + 12 || py > WV_H + 12) continue;
+    const tm = TEAMS[f.team || 0];
+    ARROW_PX.length = 0;
+    arrowBodyPx(ARROW_PX, f.x - ex, f.y - ey - 34 * (1 - drop), 0, 1,
+      0, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
+    paintArrowPx(ARROW_PX);
   }
 }
 

@@ -440,44 +440,27 @@ function render() {
 
   drawAimLine(ex, ey, now);
 
-  // arrows: a barbed head, a shaft and team-coloured fletching, rasterised
-  // pixel by pixel and rimmed in dark so the shot stays readable over snow.
-  // Points are addressed as (back along the shaft, sideways): i px behind the
-  // head, j px along the perpendicular.
+  // arrows: the one shared body (ARROW_MAP, js/actions.js - white tip, flint
+  // head, the loaded bit's collar, one-gold shaft, team feathers) rasterised
+  // at the live bearing by arrowBodyPx and rimmed in dark so the shot stays
+  // readable over snow. a.x/a.y is the TIP - the point the sim tests - and
+  // the body trails ARROW_LEN px behind it.
   for (const a of arrows) {
     if (a.kind === 'bolt') { drawBolt(a, ex, ey); continue; }
     const vd = Math.hypot(a.vx, a.vy) || 1;
     const nx = a.vx / vd, ny = a.vy / vd;
     const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
-    if (hx < -16 || hx > WV_W + 16 || hy < -16 || hy > WV_H + 16) continue;
+    if (hx < -36 || hx > WV_W + 36 || hy < -36 || hy > WV_H + 36) continue;
     // Not everything a tool fires is a shaft. A thrown log tumbles as a block
     // and a conjured mote is a glow with no bearing at all, so those two get
-    // bodies of their own; every other bit is the arrow silhouette below,
-    // inked in the bit's own colour.
+    // bodies of their own; every other bit is the arrow silhouette, wearing
+    // the bit's own colour on the collar behind the head.
     if (a.path === 'lob') { drawTumbler(a, hx, hy); continue; }
     if (a.path === 'orbit') { drawMote(a, hx, hy, now); continue; }
-    const qx = -ny, qy = nx;
     ARROW_PX.length = 0;
-    const at = (i, j) => ARROW_PX.push(
-      Math.round(hx - nx * i + qx * j), Math.round(hy - ny * i + qy * j));
-    at(0, 0); at(1, 0); at(2, 0); at(3, 0); at(4, 0); at(5, 0); at(6, 0); at(7, 0);
-    at(2, -1); at(2, 1);        // barbs: the head still points at any angle
-    const shaftEnd = ARROW_PX.length;
-    at(6, -1); at(6, 1); at(7, -1); at(7, 1); // fletching, in the team colour
-    // rim first: a plus-shaped dilation of every pixel, so the whole arrow
-    // carries a 1px dark edge whatever direction it flies
-    ctx.fillStyle = ARROW_RIM;
-    for (let k = 0; k < ARROW_PX.length; k += 2) {
-      const px = ARROW_PX[k], py = ARROW_PX[k + 1];
-      ctx.fillRect(px - 1, py, 1, 1); ctx.fillRect(px + 1, py, 1, 1);
-      ctx.fillRect(px, py - 1, 1, 1); ctx.fillRect(px, py + 1, 1, 1);
-    }
-    ctx.fillStyle = a.col || '#e8dcb4'; // the bit's own colour is the shaft
-    for (let k = 0; k < shaftEnd; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
-    ctx.fillStyle = TEAMS[a.team].mark;
-    for (let k = shaftEnd; k < ARROW_PX.length; k += 2) ctx.fillRect(ARROW_PX[k], ARROW_PX[k + 1], 1, 1);
-    ctx.fillStyle = '#ffffff'; // the tip stays the brightest pixel on screen
-    ctx.fillRect(hx, hy, 1, 1);
+    arrowBodyPx(ARROW_PX, a.x - ex, a.y - ey, nx, ny, 0, ARROW_LEN,
+      TEAMS[a.team].mark, TEAMS[a.team].coatD, a.col || ARROW_INK.G, 0);
+    paintArrowPx(ARROW_PX);
   }
 
   // airborne ability bodies: the spinning net, the falcon and its shadow,

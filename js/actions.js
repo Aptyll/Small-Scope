@@ -34,10 +34,37 @@ const SHAFT_R = 10;       // px: walk this close to pull one out
 const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
 const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
 const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
+const SHAFT_BURY = 12;    // body pixels 0..this-1 (head, collar, some shaft) are under the snow
+const SHAFT_MID = 20;     // stickArrow stores the shaft at this body pixel - the visible middle
 const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
 const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
 const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
 const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
+// The arrow's body, one ASCII master: i runs 0 (tip) .. ARROW_LEN (tail) along
+// the flight, j -4..+4 across it. W the white tip, F the flint head, B the
+// loaded bit's colour (the collar behind the head - the shaft itself never
+// recolours), G the shaft's one gold, T the team feather (TEAMS mark), D the
+// feather's dark edge (TEAMS coatD). The flying arrow, the spent shaft, the
+// arrow standing in a target face and the volley's rain all draw THIS body
+// through arrowBodyPx/paintArrowPx (js/draw-world.js) - change it here and
+// every shaft in the game follows.
+const ARROW_MAP = [
+  '.........................DDDDD',
+  '......................TTTTTDD.',
+  '....F...............TTTTTTTD..',
+  '..FFF.............TTTTTTTT....',
+  'WFFFFBBGGGGGGGGGGGGGGGG.......',
+  '..FFF.............TTTTTTTT....',
+  '....F...............TTTTTTTD..',
+  '......................TTTTTDD.',
+  '.........................DDDDD',
+];
+const ARROW_LEN = 29;     // i of the tail pixel: trail motes lay off behind this
+const ARROW_INK = { W: '#ffffff', F: '#9aa3b8', G: '#d09549' }; // T/D per team, B per bit
+const ARROW_BODY = [];    // flat [i, j, key] triples parsed from the map once
+for (let r = 0; r < ARROW_MAP.length; r++)
+  for (let i = 0; i < ARROW_MAP[r].length; i++)
+    if (ARROW_MAP[r][i] !== '.') ARROW_BODY.push(i, r - 4, ARROW_MAP[r][i]);
 const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
 const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
 
@@ -335,7 +362,10 @@ function gainArrow(p, n) {
 // a spent arrow, left where its flight ended. Open water swallows it; a
 // solid tile keeps it on the near side so it never sits inside a wall.
 function stickArrow(a, nx, ny) {
-  const x = a.x - nx * 3, y = a.y - ny * 3;
+  // stored at the middle of the VISIBLE body (head and collar sink in the
+  // snow), so the pickup circle, the hover chevron and the drawn shaft all
+  // share one centre instead of measuring to a buried point
+  const x = a.x - nx * SHAFT_MID, y = a.y - ny * SHAFT_MID;
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
   if (!inWorld(tx, ty)) return;
   if (ground[idx(tx, ty)] === 2) { // straight into the water: gone
