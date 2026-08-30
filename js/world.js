@@ -582,9 +582,9 @@ const practiceDummies = [];  // every dummy standing, for updatePractice's mend 
 
 // ---- the archery track ---------------------------------------------------
 // Link's-Crossbow-Training-style targets, all riding ONE piece of furniture:
-// a two-rail TRACK around the field's whole perimeter (AG_RECT, one tile in
-// from the rim so the treeline never covers a face; drawAgTrack,
-// js/draw-world.js). Every target is a trolley on a rail - ENTITIES in
+// a two-rail TRACK ringing the field (AG_RECT, AG_INSET tiles in from the
+// rim, so the ring sits in open snow with the treeline well clear of every
+// face; drawAgTrack, js/draw-world.js). Every target is a trolley on a rail - ENTITIES in
 // `ptargets`, never tile objects (a mover crosses tiles every frame and a
 // raised face should not block a walker) - so only arrows meet them: the
 // PRACTICE branch of the arrow loop (js/sim.js) tests every live face disc
@@ -607,9 +607,10 @@ const AG_SPD = [26, 46, 70]; // the stock roster's mover speeds (a round rolls i
 const AG_SIZE = [0.625, 1];  // small / large, as a scale on the 32px face
 const AG_LANE_GAP = 7;       // px between the outer and inner rail
 const AG_POST = 8;           // px of post between trolley and face bottom
-const AG_RECT = {            // the outer rail, one tile in from the field's rim
-  x0: (PR_X0 + 1) * TILE, y0: (PR_Y0 + 1) * TILE,
-  x1: (PR_X0 + PR_W - 1) * TILE, y1: (PR_Y0 + PR_H - 1) * TILE,
+const AG_INSET = 3;          // tiles the ring sits in from the field's rim
+const AG_RECT = {            // the outer rail, ringing the open snow well inside the treeline
+  x0: (PR_X0 + AG_INSET) * TILE, y0: (PR_Y0 + AG_INSET) * TILE,
+  x1: (PR_X0 + PR_W - AG_INSET) * TILE, y1: (PR_Y0 + PR_H - AG_INSET) * TILE,
 };
 const AG_LEN = 2 * ((AG_RECT.x1 - AG_RECT.x0) + (AG_RECT.y1 - AG_RECT.y0));
 const ptargets = [];
@@ -666,18 +667,23 @@ function hitPTarget(t, hx, hy) {
   burst(f.x, f.y, '#d0453a', Math.round(10 * sc), 60, 0.5, true);   // painted chips
   burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
   burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
+  agStreak++;
   if (t.stock) { t.broken = PT_RESPAWN; t.wob = 0; }
-  else {
-    t.gone = true;  // updatePractice sweeps it out of the array
-    if (agame.phase === 'play') {
-      // speed pays by CLASS (slow/medium/fast), not raw px/s - the classes
-      // mean the same thing on every difficulty's speed table
-      const pts = 10 + (t.size === 0 ? 10 : 0) + (t.kind === 'pop' ? 10 : 0) +
-        (t.spd > 0 ? [0, 5, 10][t.spdClass] || 0 : 0);
-      agame.score += pts;
-      agame.hits++;
-      addFloater(f.x, f.y - 6, '+' + pts, '#ffd95c');
-    }
+  else t.gone = true;  // updatePractice sweeps it out of the array
+  if (!t.stock && agame.phase === 'play') {
+    // speed pays by CLASS (slow/medium/fast), not raw px/s - the classes
+    // mean the same thing on every difficulty's speed table
+    const pts = 10 + (t.size === 0 ? 10 : 0) + (t.kind === 'pop' ? 10 : 0) +
+      (t.spd > 0 ? [0, 5, 10][t.spdClass] || 0 : 0);
+    agame.score += pts;
+    agame.hits++;
+    // the popup: the points, wearing the run from the second hit on
+    addFloater(f.x, f.y - 6, '+' + pts + (agStreak > 1 ? ' X' + agStreak : ''), '#ffd95c');
+  } else if (agStreak > 1) {
+    // free practice pays nothing, so the popup IS the run - white, gold from
+    // five in a row, hot orange from ten
+    addFloater(f.x, f.y - 6, 'X' + agStreak,
+      agStreak >= 10 ? '#ff9440' : agStreak >= 5 ? '#ffd95c' : '#f4f7ff');
   }
   if (nearPlayer(f.x, f.y)) { SFX.hit(); SFX.break_(); }
 }
@@ -705,7 +711,7 @@ function hitPTarget(t, hx, hy) {
 // readout); the readouts (the countdown, the top-centre TIME/SCORE/HITS
 // plate, the bell's BEST/LAST frost plate) live in drawAgameUI / drawAgame,
 // js/draw-world.js.
-const AG_T = 45;         // s a round runs
+const AG_T = 30;         // s a round runs
 const AG_COUNT_T = 3;    // the countdown, one tick per second
 const AG_SINK_T = 0.9;   // s the dummy, rack and bell take to sink / rise
 const AG_END_T = 2.4;    // s the final score stands before the field resets
@@ -726,7 +732,12 @@ const AG_DIFF = {
 const agame = { phase: 'off', t: 0, score: 0, hits: 0, last: 0, lastHits: 0,
   best: 0, record: false, diff: 'medium', spawnT: 0, tick: 0, dustT: 0 };
 let agBellObj = null;    // the bell object, for its ring animation
-let agFurniture = [];    // the dummy + rack objects the round sinks away
+let agFurniture = [];    // the dummy + rack + bell objects the round sinks away
+// the consecutive-hit run: every arrow into a face extends it, minigame or
+// not, and any practice arrow that ends without striking a face breaks it
+// (the arrow loop, js/sim.js). The hit popup carries it from the second hit
+// on - hotter-coloured as the run grows - and a fresh round starts it over.
+let agStreak = 0;
 
 // how far apart two track distances are, the short way round the ring
 function agDist(a, b) {
@@ -776,6 +787,7 @@ function agRing(p, c) {
   SFX.dawnChime();
   agame.phase = 'sink'; agame.t = 0; agame.dustT = 0;
   agame.score = 0; agame.hits = 0;
+  agStreak = 0; // the round's run is its own
   for (const t of ptargets) { const f = ptFace(t); burst(f.x, f.y, '#f4f7ff', 5, 40, 0.4, true); }
   ptargets.length = 0;
 }

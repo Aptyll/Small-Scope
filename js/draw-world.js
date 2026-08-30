@@ -528,27 +528,36 @@ function drawAgTrack(ox, oy) {
   const x0 = Math.round(R.x0 - ox), x1 = Math.round(R.x1 - ox);
   const y0 = Math.round(R.y0 - oy), y1 = Math.round(R.y1 - oy);
   if (x0 > WV_W || y0 > WV_H || x1 < 0 || y1 < 0) return;
-  // the ties first, under both rails
+  // a hollow rectangular band of thickness t whose four bars share EXACT
+  // corner extents - each rail below is two of these (dark rim over the
+  // ground, light wood core on top), so no bar can overhang or gap another
+  const band = (bx0, by0, bx1, by1, t, col) => {
+    ctx.fillStyle = col;
+    ctx.fillRect(bx0, by0, bx1 - bx0 + t, t);
+    ctx.fillRect(bx0, by1, bx1 - bx0 + t, t);
+    ctx.fillRect(bx0, by0, t, by1 - by0 + t);
+    ctx.fillRect(bx1, by0, t, by1 - by0 + t);
+  };
+  // the ties first, under both rails and kept clear of the corner joins so
+  // no tie ever pokes through a rail's turn
   ctx.fillStyle = '#6e4f2f';
-  for (let x = x0 + 6; x <= x1 - 6; x += 14) {
-    if (x < -2 || x > WV_W + 2) continue;
-    if (y0 > -9 && y0 < WV_H + 2) ctx.fillRect(x, y0 - 1, 2, g + 3);
-    if (y1 > -2 && y1 < WV_H + 9) ctx.fillRect(x, y1 - g - 1, 2, g + 3);
+  for (let wx = Math.round(R.x0) + g + 6; wx <= R.x1 - g - 6; wx += 14) {
+    const x = wx - ox;
+    if (x < -3 || x > WV_W + 3) continue;
+    if (y0 > -12 && y0 < WV_H + 12) ctx.fillRect(x, y0 - 1, 2, g + 3);
+    if (y1 > -12 && y1 < WV_H + 12) ctx.fillRect(x, y1 - g - 1, 2, g + 3);
   }
-  for (let y = y0 + 6; y <= y1 - 6; y += 14) {
-    if (y < -2 || y > WV_H + 2) continue;
-    if (x0 > -9 && x0 < WV_W + 2) ctx.fillRect(x0 - 1, y, g + 3, 2);
-    if (x1 > -2 && x1 < WV_W + 9) ctx.fillRect(x1 - g - 1, y, g + 3, 2);
+  for (let wy = Math.round(R.y0) + g + 6; wy <= R.y1 - g - 6; wy += 14) {
+    const y = wy - oy;
+    if (y < -3 || y > WV_H + 3) continue;
+    if (x0 > -12 && x0 < WV_W + 12) ctx.fillRect(x0 - 1, y, g + 3, 2);
+    if (x1 > -12 && x1 < WV_W + 12) ctx.fillRect(x1 - g - 1, y, g + 3, 2);
   }
-  // the two rails: outer on AG_RECT, inner AG_LANE_GAP inside it
+  // the two rails: outer on AG_RECT, inner AG_LANE_GAP inside it - each a
+  // dark rim band with a light wood core, corners joining exactly
   for (const n of [0, g]) {
-    const rx0 = x0 + n, rx1 = x1 - n, ry0 = y0 + n, ry1 = y1 - n;
-    ctx.fillStyle = '#241a12';
-    ctx.fillRect(rx0, ry0 + 1, rx1 - rx0 + 1, 1); ctx.fillRect(rx0, ry1 + 1, rx1 - rx0 + 1, 1);
-    ctx.fillRect(rx0 + 1, ry0, 1, ry1 - ry0); ctx.fillRect(rx1 + 1, ry0, 1, ry1 - ry0 + 2);
-    ctx.fillStyle = '#8a6142';
-    ctx.fillRect(rx0, ry0, rx1 - rx0 + 1, 1); ctx.fillRect(rx0, ry1, rx1 - rx0 + 1, 1);
-    ctx.fillRect(rx0, ry0, 1, ry1 - ry0); ctx.fillRect(rx1, ry0, 1, ry1 - ry0 + 1);
+    band(x0 + n - 1, y0 + n - 1, x1 - n - 1, y1 - n - 1, 3, '#241a12');
+    band(x0 + n, y0 + n, x1 - n, y1 - n, 1, '#8a6142');
   }
   // snow settled on the wood, keyed to world position so it never crawls
   ctx.fillStyle = '#f4f7ff';

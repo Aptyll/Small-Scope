@@ -263,6 +263,7 @@ function updatePlay(dt) {
         const f = ptFace(t);
         if (Math.hypot(f.x - a.x, f.y - a.y) < ptHitR(t)) {
           hitPTarget(t, a.x, a.y);
+          a.ptHit = true; // this shot keeps the consecutive-hit run alive
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
           break;
@@ -347,6 +348,9 @@ function updatePlay(dt) {
       } else if (a.burn > 0) {
         burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
       }
+      // a practice shot that ends any way but in a target face breaks the
+      // range's consecutive-hit run (agStreak, js/world.js) - minigame or not
+      if (PRACTICE && !a.ptHit) agStreak = 0;
       // A shot that ends - a miss, a wall, a body, or the end of its life -
       // leaves a shaft where it stopped IF the bit that fired it is one that
       // comes back (BITS[...].stick, the plain arrow and the barb). That is

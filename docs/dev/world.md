@@ -260,8 +260,10 @@ was needed — but it refuses prone (`tryProne` wants ground 0; there is no snow
 leaves no footprints.
 
 **The archery targets** (Link's-Crossbow-Training-style) all ride one piece of furniture: a
-**two-rail track around the field's whole perimeter** (`AG_RECT`, one tile in from the rim so
-the treeline never covers a face; rails drawn flat by `drawAgTrack`). Every target is a trolley
+**two-rail track ringing the field** (`AG_RECT`, `AG_INSET` tiles in from the rim, so the ring
+sits in open snow with the treeline well clear of every face; rails drawn flat by
+`drawAgTrack` — two nested bands built from one exact-cornered `band` helper, with ties
+spanning the rails kept clear of the corner joins). Every target is a trolley
 on a rail — ENTITIES in `ptargets`, never tile objects (a mover crosses tiles every frame, and
 a raised face should not block a walker) — so only arrows meet them: the PRACTICE branch of the
 arrow loop (js/sim.js) tests every live face disc (`ptFace`/`ptLive`/`ptHitR` — the hit disc
@@ -274,7 +276,11 @@ keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occu
 which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`: chips, straw and
 splinters either way, then a **stock** target (the free-practice roster, `agStock`) stands bare
 `PT_RESPAWN` seconds and springs a fresh face, while a round target is spent for good and banks
-its points. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
+its points. **Every arrow into a face also extends a consecutive-hit run** (`agStreak`),
+minigame or not: the hit popup carries it from the second hit on (`X3` alone in free practice —
+white, gold from five, hot orange from ten — appended to the points during a round), any
+practice arrow that ends without striking a face breaks it (the arrow loop, js/sim.js — the
+dummy counts as a break: the run is a *target* run), and ringing a round in starts it over. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
 baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a grid.
 
 **The archery round** hangs off the **bell** (`agbell`, `AG_BELL`) west of the dummy: standing
