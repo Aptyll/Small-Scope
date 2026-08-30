@@ -646,6 +646,22 @@ function drawPTarget(t, ex, ey, now) {
   const h = Math.max(1, Math.round(spr.height * rise * wobS));
   if (t.kind === 'pop') ctx.drawImage(spr, bx - (w >> 1) + rx, by - 5 - h, w, h);
   else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
+  // the stuck arrow, standing in the face for the beat before the shatter:
+  // shaft out of the impact point along the bearing it flew in on, fletching
+  // at the tail, a dark rim pixel under each so it reads on the pale rings
+  if (t.stuck > 0 && rise > 0.5) {
+    const f = ptFace(t);
+    const ix = Math.round(f.x - ex) + Math.round(t.stickX);
+    const iy = Math.round(f.y - ey) - hop + Math.round(t.stickY);
+    const ca = Math.cos(t.stickA + Math.PI), sa = Math.sin(t.stickA + Math.PI);
+    for (let i = 0; i <= 6; i++) {
+      const sx2 = Math.round(ix + ca * i), sy2 = Math.round(iy + sa * i);
+      ctx.fillStyle = '#241a12';
+      ctx.fillRect(sx2, sy2 + 1, 1, 1);
+      ctx.fillStyle = i === 0 ? '#241a12' : i >= 5 ? (i === 5 ? '#d0453a' : '#e0c890') : '#a3794f';
+      ctx.fillRect(sx2, sy2, 1, 1);
+    }
+  }
 }
 
 // The hit-ring flash: one quick shock ring snapping out from every face

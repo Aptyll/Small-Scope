@@ -262,7 +262,7 @@ function updatePlay(dt) {
         if (!ptLive(t)) continue;
         const f = ptFace(t);
         if (Math.hypot(f.x - a.x, f.y - a.y) < ptHitR(t)) {
-          hitPTarget(t, a.x, a.y);
+          hitPTarget(t, a.x, a.y, a); // the arrow hands over its bearing: it sticks in the face
           a.ptHit = true; // this shot keeps the consecutive-hit run alive
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
