@@ -2086,6 +2086,7 @@ function renderWeather(ex, ey) {
   }
 }
 
+let vigGrd = null, vigKey = 0; // the frame vignette, rebuilt only on resize
 function renderVignettes() {
   // hurt flash
   if (player.hurtT > 0) {
@@ -2094,11 +2095,14 @@ function renderVignettes() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
     ctx.globalAlpha = 1;
   }
-  // soft frame vignette
-  const grd = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.5, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.95);
-  grd.addColorStop(0, 'rgba(10,14,35,0)');
-  grd.addColorStop(1, 'rgba(10,14,35,0.35)');
-  ctx.fillStyle = grd;
+  // soft frame vignette; the gradient is rebuilt only when the view resizes
+  if (vigKey !== VIEW_W * 4096 + VIEW_H) {
+    vigKey = VIEW_W * 4096 + VIEW_H;
+    vigGrd = ctx.createRadialGradient(VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.5, VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.95);
+    vigGrd.addColorStop(0, 'rgba(10,14,35,0)');
+    vigGrd.addColorStop(1, 'rgba(10,14,35,0.35)');
+  }
+  ctx.fillStyle = vigGrd;
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
 }
 

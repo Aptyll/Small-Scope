@@ -384,7 +384,15 @@ function renderWheel(now) {
 }
 
 // ------------------------------------------------------------ UI
+// The terrain image is a full WORLD x WORLD sweep with a structOf() call per
+// tile - far too much to pay every frame for a picture that only changes when
+// something is built or the ground is cut. It rebuilds at most twice a
+// second; at one map pixel per tile nothing can be seen arriving late.
+const MM_REBUILD = 30; // sim ticks between terrain sweeps (half a second)
+let mmBuiltAt = -1e9;  // tick of the last sweep; > tick means a fresh match reset the clock
 function updateMinimap() {
+  if (state.tick - mmBuiltAt < MM_REBUILD && state.tick >= mmBuiltAt) return;
+  mmBuiltAt = state.tick;
   const d = mmImg.data;
   for (let i = 0; i < WORLD * WORLD; i++) {
     let r, g, b;
@@ -435,6 +443,52 @@ function mmMask(r) {
 const mmView = document.createElement('canvas'); // the clipped map view, rebuilt each frame
 const mmViewCtx = mmView.getContext('2d');
 
+// The disc's chrome - the opaque silhouette, its rim, the day ring's track
+// and the dusk tick - and the day/night arcs are all mmRing, and mmRing is a
+// per-pixel hypot/atan2 loop issuing a fillRect per lit pixel. Run every
+// frame that was ~1.6 ms - a third of the whole frame, the largest single
+// cost in the game - for pixels that never change. So the chrome is baked
+// per (radius, hover) and the arc band per (radius, progress step): the arcs
+// only move as fast as the clock, so quantising the cycle to MM_ARC_STEPS
+// repaints the band every couple of real seconds instead of every frame.
+const mmChromes = new Map();
+function mmChrome(hov) {
+  const key = MM_R * 2 + (hov ? 1 : 0);
+  let c = mmChromes.get(key);
+  if (!c) {
+    const R = MM_R + 8, S = R * 2 + 2;
+    c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d'), cc = R + 1;
+    mmRing(g, cc, cc, MM_R + 7, MM_R + 8, hov ? '#9aa8d0' : '#6f7ca8'); // rim
+    mmRing(g, cc, cc, 0, MM_R + 7, '#0f1632');                          // silhouette disc
+    mmRing(g, cc, cc, MM_R + 2, MM_R + 5, '#2a3358');                   // day ring track
+    mmChromes.set(key, c);
+  }
+  return c;
+}
+const MM_ARC_STEPS = 512; // day-ring granularity: ~a pixel of arc per step
+const mmArc = { key: '', cv: document.createElement('canvas') };
+function mmArcBand(prog) {
+  const q = Math.min(MM_ARC_STEPS, Math.floor(prog * MM_ARC_STEPS));
+  const key = MM_R + ':' + q;
+  if (mmArc.key !== key) {
+    mmArc.key = key;
+    const R = MM_R + 6, S = R * 2 + 2;
+    if (mmArc.cv.width !== S) mmArc.cv.width = mmArc.cv.height = S;
+    const g = mmArc.cv.getContext('2d'), cc = R + 1;
+    g.clearRect(0, 0, S, S);
+    const p = q / MM_ARC_STEPS, dayFrac = DAY_LEN / CYCLE, a0 = -Math.PI / 2;
+    const r0 = MM_R + 2, r1 = MM_R + 5;
+    if (p > 0) mmRing(g, cc, cc, r0, r1, '#ffd95c', a0, a0 + Math.min(p, dayFrac) * Math.PI * 2);
+    if (p > dayFrac) mmRing(g, cc, cc, r0, r1, '#7a90d8', a0 + dayFrac * Math.PI * 2, a0 + p * Math.PI * 2);
+    // dusk boundary tick: one pixel column across the band, a little past it,
+    // over the arcs exactly as the per-frame draw laid it
+    const ba = a0 + dayFrac * Math.PI * 2;
+    mmRing(g, cc, cc, r0 - 1, r1 + 1, '#8f9cc4', ba - 0.03, ba + 0.03);
+  }
+  return mmArc.cv;
+}
+
 function renderMinimap(now) {
   updateMinimap();
   const vp = viewPlayer();
@@ -443,9 +497,8 @@ function renderMinimap(now) {
   const hov = overMinimap() && state.mode === 'play' && !state.mapOpen && !state.settingsOpen && !state.wheel;
 
   // silhouette: an opaque dark disc under everything, rimmed by a pale line
-  // so the whole control reads as one solid shape on the snow
-  mmRing(ctx, MM_CX, MM_CY, MM_R + 7, MM_R + 8, hov ? '#9aa8d0' : '#6f7ca8');
-  mmRing(ctx, MM_CX, MM_CY, 0, MM_R + 7, '#0f1632');
+  // so the whole control reads as one solid shape on the snow (baked, above)
+  ctx.drawImage(mmChrome(hov), MM_CX - MM_R - 9, MM_CY - MM_R - 9);
 
   // pixel-clipped map view centered on the player
   const half = MM_R / s; // tiles from the centre to the edge
@@ -505,16 +558,11 @@ function renderMinimap(now) {
 
   // day/night cycle ring: a 3 px band of pixels, the elapsed part painted
   // clockwise from 12 o'clock in the day colour, then the night colour
+  // (the track is in the baked chrome; the arcs come from the cached band)
   const prog = state.time / CYCLE;
-  const dayFrac = DAY_LEN / CYCLE;
   const a0 = -Math.PI / 2; // start at 12 o'clock
-  const r0 = MM_R + 2, r1 = MM_R + 5;
-  mmRing(ctx, MM_CX, MM_CY, r0, r1, '#2a3358'); // track
-  if (prog > 0) mmRing(ctx, MM_CX, MM_CY, r0, r1, '#ffd95c', a0, a0 + Math.min(prog, dayFrac) * Math.PI * 2);
-  if (prog > dayFrac) mmRing(ctx, MM_CX, MM_CY, r0, r1, '#7a90d8', a0 + dayFrac * Math.PI * 2, a0 + prog * Math.PI * 2);
-  // dusk boundary tick: one pixel column across the band, a little past it
-  const ba = a0 + dayFrac * Math.PI * 2;
-  mmRing(ctx, MM_CX, MM_CY, r0 - 1, r1 + 1, '#8f9cc4', ba - 0.03, ba + 0.03);
+  const r0 = MM_R + 2;
+  ctx.drawImage(mmArcBand(prog), MM_CX - MM_R - 7, MM_CY - MM_R - 7);
   // progress tip: a 3x3 pixel block on the band
   const ta = a0 + prog * Math.PI * 2;
   const pulse = state.darkness > 0.5 ? (Math.sin(now * 6) * 0.15 + 0.85) : 1;

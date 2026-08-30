@@ -276,6 +276,15 @@ game resolution that reads as blur, so `mmRing(g, cx, cy, r0, r1, col, a0?, a1?)
 backing, rims and the day/night band one pixel at a time (pixel-centre distance test, optional
 clockwise angle span), and the map view is clipped by `mmMask(r)` — a cached pixel disc
 composited with `destination-in` on the `mmView` scratch canvas — instead of `clip()`.
+**But `mmRing` never runs per frame**: a per-pixel `hypot`/`atan2` loop issuing a `fillRect`
+per lit pixel was ~1.6 ms a frame — the largest single cost in the game. The static chrome
+(silhouette, both rim variants, the ring's track) is baked per `(MM_R, hover)` in `mmChrome`,
+and the day/night arcs plus the dusk tick per `(MM_R, progress step)` in `mmArcBand` — the
+cycle quantised to `MM_ARC_STEPS` (512), about a pixel of arc per step, so the band repaints
+every couple of real seconds. Only the progress tip, the centre dot and the markers are
+per-frame fills. The terrain image is throttled the same way: `updateMinimap()`'s full
+`WORLD²` sweep (a `structOf` call per tile) reruns at most every `MM_REBUILD` (30) sim ticks —
+at one map pixel per tile, a build or a cut ice hole arriving half a second late is invisible.
 
 ## The HUD corners
 
