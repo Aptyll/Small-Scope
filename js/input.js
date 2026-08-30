@@ -54,10 +54,10 @@ window.addEventListener('keydown', (e) => {
       const rk = rackNear(player);
       if (rk) { SFX.unlock(); state.wheel = { kind: 'rack', tx: rk.tx, ty: rk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
       else {
-        // the parkour roll station: E on the die or a pip stone rolls a fresh
-        // track (pkPadPress, the practice arena banner in js/world.js)
-        const pk = pkPadNear(player);
-        if (pk) pkPadPress(pk);
+        // the parkour die: holding E beside it opens the roll wheel - ROLL
+        // plus the three difficulties - on the rack wheel's own grammar
+        const pk = pkDieNear(player);
+        if (pk) { SFX.unlock(); state.wheel = { kind: 'pkdie', tx: pk.tx, ty: pk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
       }
     }
   }
@@ -85,9 +85,10 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
-  // letting go of E with the armory wheel up takes what the pointer is on
-  // (or cancels from the hub), exactly as releasing the right button does
-  if (e.key.toLowerCase() === 'e' && state.wheel && state.wheel.kind === 'rack') {
+  // letting go of E with an E-held wheel up (armory or roll die) takes what
+  // the pointer is on (or cancels from the hub), exactly as releasing the
+  // right button does
+  if (e.key.toLowerCase() === 'e' && state.wheel && (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie')) {
     resolveWheel();
     state.wheel = null;
   }
@@ -102,9 +103,9 @@ window.addEventListener('blur', () => {
   state.flagAim = false;
   state.dragPend = null;
   if (state.drag) dragReturn();
-  // the E-held armory wheel is a held gesture too: its keyup is lost with the
-  // focus, so it closes (choosing nothing) instead of sticking open
-  if (state.wheel && state.wheel.kind === 'rack') state.wheel = null;
+  // an E-held wheel (armory or roll die) is a held gesture too: its keyup is
+  // lost with the focus, so it closes (choosing nothing) instead of sticking open
+  if (state.wheel && (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie')) state.wheel = null;
 });
 
 canvas.addEventListener('mousemove', (e) => {

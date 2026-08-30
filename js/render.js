@@ -299,8 +299,6 @@ function render() {
       }
     } else if (o.type === 'pkdie') {
       drawPkDie(o, px, py, now);
-    } else if (o.type === 'pkstone') {
-      drawPkStone(o, px, py, now);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {

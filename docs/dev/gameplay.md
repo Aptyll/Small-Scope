@@ -1229,8 +1229,9 @@ are the two gold sinks (a Keep's card craft is a third, gated behind building on
 
 Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js](../../js/structures.js)):
 
-- `state.wheel` (`{kind:'build'|'manage'|'rack', tx, ty, seg, ax, ay}`) is the open wheel — `'rack'`
-  is the practice armory, opened by holding **E** at the rack and resolved on its release
+- `state.wheel` (`{kind:'build'|'manage'|'rack'|'pkdie', tx, ty, seg, ax, ay}`) is the open wheel —
+  `'rack'` is the practice armory and `'pkdie'` the parkour roll die, both opened by holding **E**
+  beside them and resolved on its release
   ([world.md](world.md#the-practice-arena)); ESC/M/settings/death
   close it, a left-click cancels it, and the game **keeps running** — opening the
   wheel mid-night is deliberate pressure. `wheelLayout()` is shared by `resolveWheel()` and

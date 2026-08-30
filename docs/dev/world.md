@@ -189,10 +189,12 @@ bit-identical on every visit and no seed can reshape it.
 
 **The ice parkour** runs through the forest collar around the field: a narrow carved-ice loop
 (`PK_PATH` is the *stock* centreline in world tiles, carved by `pkCarve` — trees hug
-both sides, and ice being mechanically slippery is the whole game of it). A flag gate on the
-field's west side (two `banner` objects over a cleared walk, `PK_WALK`) leads onto the track,
-where a **checkered start/finish line** is painted flat on the ice (`drawParkourLine`,
-render.js's flat pass). The lap: stepping onto the line-row ice starts the clock (`parkour`, the
+both sides, and ice being mechanically slippery is the whole game of it). A cleared walk
+(`PK_WALK`) leads out of the field's west side to the **checkered start/finish line**: a
+**fixed five-tile strip** (`PK_LINE`) that `pkPlanCarve` force-ices on every carve whatever
+width the roll cut the lane, so the painted band (`drawParkourLine`, render.js's flat pass), the
+lap test and the two `banner` flags capping its ends never stretch, gap or move. The lap:
+stepping onto the line box starts the clock (`parkour`, the
 module state beside `PK_*`), a checkpoint at the current track's farthest-east waypoint keeps a
 lap honest (`parkour.cpTx/cpTy`, a radius test on the ice), and recrossing the
 line records it and rolls straight into the next lap. Leaving the ice for `PK_OFF_T` seconds (or
@@ -210,23 +212,17 @@ world is the race line and a fish emerging into it would be absurd; `crackIce` s
 the track (a hole in the racing line is the player's own doing, and re-entering rebuilds —
 and a reroll unregisters the old track's cracks and holes before the forest regrows).
 
-**The roll station** stands on its own packed-earth pad (`PK_PAD` — the dummy pad's "an
-instrument lives here" language, corners rounded the same way), a pocket carved out of the
-collar off the gate walk's south side one step from the south flag, with a felled snow skirt
-row below it so no pine canopy ever hangs over the stones: a die on a plinth at the pad's head,
-adjacent to the walk so its prompt rises as you pass (`pkdie`, `PK_DIE`) and — once any lap has
-ever been recorded — three pip stones ranked behind it, centred under the die (`pkstone`,
-`PK_STONES`, one/two/three pips in green/amber/red, near-tile-wide slabs that grow taller with
-the count, each pip a fat colour block in a dark socket so count and colour read across the
-pad). Packed earth is never track: `pkPlanCarve` refuses ground 3, so no random loop can
-touch either pad. Both work on the armory rack's proximity-E
-grammar: `pkPadNear` resolves the pad in reach (shared by the `E ROLL` prompt, `drawPkHint` in
-js/ui.js, and the press in js/input.js), and `pkPadPress` rolls a **fresh random track** —
-the die at the armed difficulty, a stone arming *its* difficulty in the same press. The die's
-top face wears the armed count in its colour, the armed stone's pips are lit while the others
-stay dim engraving, and the stones springing up out of the snow (targets' respawn wobble,
-`pkPlaceStones`) *is* the unlock announcement — first lap ever recorded, or at gen for a
-profile with a `bestLap` already. `pkRoll` picks the loop (`pkGenPath`: waypoints on a
+**The roll station is one die and one held wheel**: the die on its plinth stands in a small
+felled nook off the walk's south side, adjacent to the walk so its `E ROLL` cap rises as you
+pass (`pkdie`, `PK_DIE` — `pkDieNear` resolves it, shared by the prompt, `drawPkHint` in
+js/ui.js, and the press in js/input.js). **Holding E beside it opens a four-wedge radial
+wheel** (kind `'pkdie'`, the armory rack's own hold-and-release grammar and the ordinary wheel
+pipeline): ROLL straight up as a little die icon, then the three difficulties clockwise as pip
+plates — one/two/three pips in green/amber/red, the ARMED one wearing a gold frame. Releasing
+on a wedge rolls a **fresh random track** (`pkWheelPick`, through the same `input.cmd` →
+`runCmd` path every wheel uses): ROLL recarves at the armed difficulty, a pip wedge arms *its*
+difficulty and rolls in the same release. The die's top face wears the armed count in its
+colour, so what a plain ROLL will do is readable without opening anything. `pkRoll` picks the loop (`pkGenPath`: waypoints on a
 jittered ellipse per `PK_DIFF` around `PK_CX`/`PK_CY` at `PK_RX`/`PK_RY` — easy few points/wide
 carve, hard many alternating slalom points/narrow carve — pinned to the west gate with lightly
 jittered approach legs so consecutive rolls visibly differ where the roller stands, kept out of
@@ -246,15 +242,16 @@ position on a time-based clock (refresh-rate independent), so the sweep stays vi
 where old and new track share tiles and no event fires. Each event is one ground write plus
 one `repaintGround` (a shudder is neither) —
 a handful per frame, `PK_ANIM_CAP` bounds dt spikes — and the die tumbles for the whole sweep
-while `pkRoll`/`pkPadPress` refuse a re-roll and the `E ROLL` cap hides. `pkTiles` remembers
-the current carve (the gate, walk, line and station never move). **A rolled track flips
+while `pkRoll` refuses a re-roll and the `E ROLL` cap hides. `pkTiles` remembers
+the current carve (the walk, line and station never move), and a shared tile the player broke a
+hole through gets its own re-ice event, since its registration was wiped with the roll. **A rolled track flips
 `parkour.custom`**: BEST/LAST restart and the
 profile is never written from one — random loops are not comparable, so the stored record stays
 what it claims to be, the stock lap. Track rolls draw on the runtime `rng()` stream — post-boot
 calls reshuffle nothing ([determinism](#determinism-and-noise)), and the arena's boot remains
 bit-identical: the stock loop is carved before any roll can happen.
 
-**Ground 3 is packed earth**, the floor of both pads (the dummy's and the roll station's), and exists only inside this arena
+**Ground 3 is packed earth**, the dummy pad's floor, and exists only inside this arena
 (`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,
 straw, snow dust blown over every snowy edge), coloured on both maps, and walked exactly like
 snow — `updatePlayer`'s surface block only special-cases ice and holes, so no movement branch

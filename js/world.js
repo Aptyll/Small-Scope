@@ -50,11 +50,9 @@ const OBJECTS = {
   banner:   { solid: true,  mm: [214, 88, 76],   map: [186, 74, 62] },
   rack:     { solid: true,  mm: [168, 132, 92],  map: [150, 116, 80] },
   // the parkour roll station (practice arena only): the die that rerolls the
-  // track and the three pip stones that pick its difficulty. Inert to E's
-  // work verbs like the rack - the interaction is proximity E (pkPadNear /
-  // pkPadPress, the practice arena banner below).
+  // track. Inert to E's work verbs like the rack - holding E beside it opens
+  // the roll wheel (pkDieNear, the practice arena banner below).
   pkdie:    { solid: true,  mm: [242, 204, 100], map: [206, 160, 70] },
-  pkstone:  { solid: true,  mm: [150, 170, 196], map: [128, 146, 172] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
   // solid to walkers and a work target for RIVAL E swings only - workTarget
@@ -664,10 +662,13 @@ const PK_PATH = [
   [62, 59], [52, 64], [43, 59], [33, 64], [24, 59],              // the bottom slalom
   [15, 63], [9, 57], [7, 49], [8, 42], [8, 37],                  // and home
 ];
-const PK_LINE_Y = 37;  // start/finish: the track ice on this row...
-const PK_LINE_X1 = 11; // ...at tx <= this (the west gate)
+// The start/finish line is a FIXED five-tile checker band: pkPlanCarve
+// force-ices exactly this strip on every carve, whatever width the roll cut
+// the lane, so the line never stretches, never gaps, and the coordinate test
+// that times laps is the same box that is painted. A flag stands at each end.
+const PK_LINE = { x0: 6, x1: 10, y: 37 };
 const PK_OFF_T = 2.5;  // s off the ice before a live run is abandoned
-const PK_GATE = { x: 11.5 * TILE, y: 33.5 * TILE }; // where the BEST/LAST plate hangs, clear above the north flag
+const PK_GATE = { x: 5.5 * TILE, y: 34.5 * TILE }; // where the BEST/LAST plate hangs, over the west line flag
 // the walk out of the field: cleared snow the reroll must never ice or tree
 const PK_WALK = { x0: 10, x1: 18, y0: 36, y1: 37 };
 // one runner, one clock: the live lap (on/t/cp), the abandon timer, and the
@@ -678,22 +679,21 @@ const PK_WALK = { x0: 10, x1: 18, y0: 36, y1: 37 };
 // laps are its own (best/last restart at 0 and never touch the profile -
 // random loops are not comparable, so a persistent record over them would be
 // a lie), and the profile's record stays what it says it is: the stock lap.
-// `diff` is the roll station's armed difficulty, `unlocked` whether the
-// difficulty stones stand (they spring up on the first recorded lap ever -
-// PROFILE.bestLap() > 0 counts), and cpTx/cpTy is THIS track's checkpoint.
+// `diff` is the roll station's armed difficulty (what the wheel's plain ROLL
+// recarves at), and cpTx/cpTy is THIS track's checkpoint.
 const parkour = { on: false, t: 0, cp: false, wasLine: false, offT: 0, last: 0, best: 0,
-  diff: 'easy', custom: false, unlocked: false, cpTx: 69, cpTy: 37 };
+  diff: 'easy', custom: false, cpTx: 69, cpTy: 37 };
 
-// ---- the roll station: random tracks and the difficulty stones -----------
-// A die on a pedestal just inside the gate rerolls the loop on E (the rack's
-// proximity-prompt grammar - pkPadNear / pkPadPress, wired in js/input.js and
-// hinted by drawPkHint, js/ui.js). Beside it, three pip stones - one, two,
-// three pips, taller and hotter with the count - each roll a fresh track AT
-// that difficulty in the same press, and the die's own top face wears the
-// armed count, so the whole state of the system is readable off the stones
-// and the die with no words. The stones stand only once a first lap has ever
-// been recorded (pkPlaceStones); until then the die exists alone and every
-// roll is easy.
+// ---- the roll station: one die, one held wheel ---------------------------
+// A die on a pedestal in a felled nook off the walk rerolls the loop: HOLD E
+// beside it (pkDieNear - the armory rack's own proximity gesture, wired in
+// js/input.js and hinted by drawPkHint, js/ui.js) and a four-wedge radial
+// wheel opens - ROLL, and the three difficulties as pip wedges. The pointer
+// picks, releasing E rolls: ROLL recarves at the armed difficulty, a pip
+// wedge arms ITS difficulty and rolls in the same release (pkWheelPick, the
+// same input.cmd -> runCmd path every wheel uses). The die's top face wears
+// the armed count in its colour, so what E will roll is readable at a
+// glance.
 const PK_DIFFS = ['easy', 'medium', 'hard'];
 // pts = waypoints (more = twistier), jit = radial jitter in tiles (alt flips
 // it in and out on alternating points - a forced slalom), rad = carve
@@ -703,18 +703,11 @@ const PK_DIFF = {
   medium: { pts: 16, jit: 3.2, rad: 1.25, alt: false },
   hard:   { pts: 22, jit: 4.5, rad: 1.0,  alt: true },
 };
-// The station is COMPOSED, not scattered: it stands on its own packed-earth
-// pad (the dummy pad's language - "an instrument lives here"), a pocket
-// carved out of the collar off the walk's south side, one step from the
-// south gate flag. The die is at the pad's head, adjacent to the walk so its
-// prompt rises as you pass; the three stones rank behind it, centred under
-// the die, with a felled skirt row below so no pine canopy ever covers them.
-const PK_PAD = { x0: 12, x1: 18, y0: 38, y1: 41 };    // the station's earth pad
-const PK_DIE = { tx: 15, ty: 38 };                    // the die at the pad's head, on the walk
-const PK_STONES = [[13, 40], [15, 40], [17, 40]];     // the pip stones ranked behind it
+// The die stands in a small felled nook off the walk's south side, adjacent
+// to the walk so its prompt rises as you pass on the way to the track.
+const PK_DIE = { tx: 15, ty: 38 };
 let pkTiles = new Set();   // every tile index the current track's carve iced
 let pkDieObj = null;       // the die object, for the roll animation
-const pkPads = [];         // die + stones, for updatePractice's timers
 // A roll is WATCHED, not blinked: one carving front sweeps once around the
 // collar in the lap's own direction, starting and finishing at the gate. As
 // it passes, the forest closes over the old track (trees spring back with a
@@ -811,30 +804,17 @@ function genPracticeWorld() {
   // ---- the ice parkour: the gate walk, the carved loop, the flags --------
   // the walk out of the field is cleared snow (the approach should not
   // slide); the loop is carved AFTER it so their overlap ends up ice, which
-  // is what puts the start line - the loop ice at PK_LINE_Y - under the gate
+  // is what puts the start line - the forced PK_LINE strip - under the gate
   const fell = (tx, ty) => { objects[idx(tx, ty)] = null; };
   for (let ty = PK_WALK.y0; ty <= PK_WALK.y1; ty++) for (let tx = PK_WALK.x0; tx <= PK_WALK.x1; tx++) { fell(tx, ty); ground[idx(tx, ty)] = 0; }
+  // the die's nook: a small felled pocket off the walk's south side, deep
+  // enough that no pine canopy from the row behind hangs over the die
+  for (let ty = 38; ty <= 40; ty++) for (let tx = 14; tx <= 16; tx++) fell(tx, ty);
   pkCarve(PK_PATH, 1.15);
-  // the gate: a flag either side of the walk where it meets the line
-  fell(11, 35); placeObj(11, 35, 'banner');
-  fell(11, 38); placeObj(11, 38, 'banner');
-  // the roll station's pocket: an earth pad carved off the walk's south side
-  // (corners rounded like the dummy's), plus a felled snow skirt one row
-  // deeper so the pines behind never hang their canopies over the stones
-  for (let ty = PK_PAD.y0; ty <= PK_PAD.y1 + 1; ty++) for (let tx = PK_PAD.x0; tx <= PK_PAD.x1; tx++) {
-    fell(tx, ty);
-    if (ty <= PK_PAD.y1) ground[idx(tx, ty)] = 3;
-  }
-  for (const [px2, py2] of [[PK_PAD.x0, PK_PAD.y0], [PK_PAD.x1, PK_PAD.y0], [PK_PAD.x0, PK_PAD.y1], [PK_PAD.x1, PK_PAD.y1]]) {
-    ground[idx(px2, py2)] = 0;
-  }
-  // the die at the pad's head - the stones only once a first lap has ever
-  // been recorded (a returning profile has, so its stones stand from the
-  // start; a first-timer meets one die and one obvious verb)
+  // the gate: a flag capping each END of the checker line, west and east
+  fell(PK_LINE.x0 - 1, PK_LINE.y); placeObj(PK_LINE.x0 - 1, PK_LINE.y, 'banner');
+  fell(PK_LINE.x1 + 1, PK_LINE.y); placeObj(PK_LINE.x1 + 1, PK_LINE.y, 'banner');
   pkDieObj = placeObj(PK_DIE.tx, PK_DIE.ty, 'pkdie', { rollT: 0 });
-  pkPads.push(pkDieObj);
-  parkour.unlocked = PROFILE.bestLap() > 0;
-  if (parkour.unlocked) pkPlaceStones(false);
   // the record stands across visits: the gate plate opens showing the
   // profile's best lap before this session has run one
   parkour.best = PROFILE.bestLap();
@@ -859,14 +839,20 @@ function pkPlanCarve(path, rad) {
         const tx = Math.round(fx) + dx, ty = Math.round(fy) + dy;
         if (!inWorld(tx, ty) || Math.hypot(tx - fx, ty - fy) > rad) continue;
         const wx = tx >= PK_WALK.x0 && tx <= PK_WALK.x1 && ty >= PK_WALK.y0 && ty <= PK_WALK.y1;
-        if (wx && tx > PK_LINE_X1) continue; // the walk stays snow past the line
+        if (wx && tx > PK_LINE.x1) continue; // the walk stays snow past the line
         if (tx >= PR_X0 && tx < PR_X0 + PR_W && ty >= PR_Y0 && ty < PR_Y0 + PR_H) continue;
-        if (ground[idx(tx, ty)] === 3) continue; // packed earth is never track - both pads refuse the carve
         const o = objects[idx(tx, ty)];
         if (o && o.type !== 'tree' && o.type !== 'deadTree') continue;
         plan.add(idx(tx, ty));
       }
     }
+  }
+  // the line strip is ALWAYS part of the carve, whatever width the roll cut
+  // the lane: exactly PK_LINE.x0..x1 on the line row, so the checker band,
+  // the lap test and the flags capping its ends never move and never gap
+  for (let tx = PK_LINE.x0; tx <= PK_LINE.x1; tx++) {
+    const o = objects[idx(tx, PK_LINE.y)];
+    if (!o || o.type === 'tree' || o.type === 'deadTree') plan.add(idx(tx, PK_LINE.y));
   }
   return plan;
 }
@@ -983,6 +969,10 @@ function pkRoll(diff) {
   }
   const ev = [];
   for (const i of old) if (!pkTiles.has(i)) ev.push({ k: 0, i, a: pkAngKey(i) });
+  // a tile in BOTH tracks normally needs no event - unless the player broke
+  // a hole through it: its registration was just wiped, so the sweep must
+  // re-ice it or the hole would linger unregistered forever
+  for (const i of pkTiles) if (old.has(i) && ground[i] !== 1) ev.push({ k: 1, i, a: pkAngKey(i) });
   for (const i of pkTiles) if (!old.has(i)) {
     const a = pkAngKey(i);
     ev.push({ k: 1, i, a });
@@ -1091,48 +1081,33 @@ function pkAnimStep(dt) {
   }
   if (pkAnim.next >= pkAnim.ev.length && pkAnim.t >= PK_ANIM_T) {
     pkAnim = null;
-    const lx = PK_GATE.x, ly = (PK_LINE_Y + 0.5) * TILE;
+    const lx = (PK_LINE.x0 + PK_LINE.x1 + 1) * TILE / 2, ly = (PK_LINE.y + 0.5) * TILE;
     burst(lx, ly, '#8fd8ff', 10, 55, 0.5, true);
     burst(lx, ly, '#f4f7ff', 8, 50, 0.45, true);
     if (nearPlayer(lx, ly)) SFX.place();
   }
 }
 
-// the three pip stones spring up beside the die - on the spot the moment a
-// first lap ever records (announce: the targets' own respawn wobble and a
-// burst each, so the unlock is an event you see), or quietly at gen for a
-// profile that has lapped before
-function pkPlaceStones(announce) {
-  for (let i = 0; i < 3; i++) {
-    const [tx, ty] = PK_STONES[i];
-    if (objAt(tx, ty)) continue;
-    const s = placeObj(tx, ty, 'pkstone', { pips: i + 1, wob: announce ? 0.45 : 0 });
-    pkPads.push(s);
-    if (announce) burst(tx * TILE + 8, ty * TILE + 2, '#f4f7ff', 6, 40, 0.45, true);
-  }
-  if (announce && nearPlayer(PK_DIE.tx * TILE, PK_DIE.ty * TILE)) SFX.place();
-}
-
-// the station pad the player is standing at - Chebyshev 1, E's own reach,
-// nearest wins - shared by the E press (js/input.js) and the ROLL prompt
-// (drawPkHint, js/ui.js), so they can never disagree
-function pkPadNear(p) {
+// the die the player is standing at - Chebyshev 1 of its tile, E's own
+// reach - shared by the E prompt (drawPkHint, js/ui.js) and the wheel-open
+// press (js/input.js), so they can never disagree
+function pkDieNear(p) {
   const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
-  let hit = null, hd = 1e9;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const o = objAt(ptx + dx, pty + dy);
-    if (!o || (o.type !== 'pkdie' && o.type !== 'pkstone')) continue;
-    const d = Math.hypot(o.tx * TILE + 8 - p.x, o.ty * TILE + 8 - p.y);
-    if (d < hd) { hd = d; hit = o; }
+    if (o && o.type === 'pkdie') return o;
   }
-  return hit;
+  return null;
 }
 
-// one press does everything: the die rolls at the armed difficulty, a stone
-// arms ITS difficulty and rolls in the same motion
-function pkPadPress(o) {
+// a pick released off the die's wheel, through the same input.cmd -> runCmd
+// path every wheel uses: ROLL recarves at the armed difficulty, a pip wedge
+// arms its difficulty and rolls in the same release. PRACTICE-gated like
+// rackEquip, and pkRoll itself refuses a roll while a sweep is out.
+function pkWheelPick(p, c) {
   if (!PRACTICE) return;
-  pkRoll(o.type === 'pkstone' ? PK_DIFFS[o.pips - 1] : parkour.diff);
+  if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
+  pkRoll(c.id === 'roll' ? parkour.diff : c.id);
 }
 
 // The grounds' clock, from updatePlay under PRACTICE only: the dummy mends
@@ -1141,11 +1116,7 @@ function pkPadPress(o) {
 // wobble and the bar refilling are the whole announcement - no words.
 function updatePractice(dt) {
   pkAnimStep(dt); // the roll's carving front, while one is out
-  // the roll station's little clocks: the die's tumble, a fresh stone's wobble
-  for (const o of pkPads) {
-    if (o.rollT > 0) o.rollT = Math.max(0, o.rollT - dt);
-    if (o.wob > 0) o.wob = Math.max(0, o.wob - dt);
-  }
+  if (pkDieObj && pkDieObj.rollT > 0) pkDieObj.rollT = Math.max(0, pkDieObj.rollT - dt); // the die's tumble
   for (const o of practiceDummies) {
     o.hitT += dt;
     if (o.hp < o.maxHp && o.hitT > DUMMY_RESET_T) {
@@ -1191,7 +1162,7 @@ function updatePractice(dt) {
   // the ice for PK_OFF_T (or dying) abandons the run without a time.
   const ptx = Math.floor(player.x / TILE), pty = Math.floor(player.y / TILE);
   const onIce = inWorld(ptx, pty) && ground[idx(ptx, pty)] === 1;
-  const onLine = onIce && pty === PK_LINE_Y && ptx <= PK_LINE_X1;
+  const onLine = onIce && pty === PK_LINE.y && ptx >= PK_LINE.x0 && ptx <= PK_LINE.x1;
   if (player.dead) {
     parkour.on = false;
   } else if (!parkour.on) {
@@ -1207,9 +1178,6 @@ function updatePractice(dt) {
       // only the STOCK track writes the profile - a rolled track's laps are
       // its own session event, not comparable across rolls
       if (record) { parkour.best = parkour.t; if (!parkour.custom) PROFILE.setBestLap(parkour.t); }
-      // the first lap ever completed unlocks the difficulty stones, on the
-      // spot and announced - the system introduces itself one piece at a time
-      if (!parkour.unlocked) { parkour.unlocked = true; pkPlaceStones(true); }
       burst(player.x, player.y - 10, '#ffd95c', 12, 60, 0.55, true);
       burst(player.x, player.y - 10, '#f4f7ff', 8, 45, 0.45, true);
       if (record) SFX.dawnChime(); else SFX.place();

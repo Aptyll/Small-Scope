@@ -29,6 +29,8 @@ function wheelOptions() {
   // the practice rack offers every tool in the game, in table (tier) order -
   // the arena is the one place trying an unearned weapon costs nothing
   if (w.kind === 'rack') return Object.keys(TOOLS).map((id) => ({ id }));
+  // the parkour die: ROLL straight up, then the three difficulties clockwise
+  if (w.kind === 'pkdie') return [{ id: 'roll' }, { id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
   const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
   // so a type's extra option lands between them instead of displacing either
@@ -78,7 +80,7 @@ function resolveWheel() {
   const L = wheelLayout();
   if (L.seg < 0) return; // released in the hub = cancel
   player.input.cmd = {
-    kind: w.kind === 'build' ? 'build' : w.kind === 'rack' ? 'rack' : L.opts[L.seg].id,
+    kind: w.kind === 'build' ? 'build' : w.kind === 'rack' ? 'rack' : w.kind === 'pkdie' ? 'pkdie' : L.opts[L.seg].id,
     tx: w.tx, ty: w.ty, id: L.opts[L.seg].id,
   };
 }
@@ -89,6 +91,7 @@ function runCmd(p, c) {
   if (c.kind === 'skill') { buySkill(p, c.i); return; }
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
   if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
+  if (c.kind === 'pkdie') { pkWheelPick(p, c); return; } // the parkour roll die (js/world.js)
   const o = structOf(objAt(c.tx, c.ty));
   if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
@@ -209,19 +212,17 @@ function drawRackHint(ox, oy) {
   drawKeyPrompt(Math.round(hx - ox - totalW / 2), Math.round(rk.ty * TILE - oy - 24), verb, !!keys['e']);
 }
 
-// The parkour roll station's prompt, the rack's own proximity grammar: an
-// E ROLL cap over whichever pad is in reach (pkPadNear, js/world.js - the
-// same resolver the press uses). Die and stones share the one verb because
-// every press does the one thing: a fresh track. Which difficulty is the
-// stone's shape's business, not a word's.
+// The parkour die's prompt, the rack's own proximity grammar: an E ROLL cap
+// over the die while it is in reach (pkDieNear, js/world.js - the same
+// resolver the wheel-open press uses). Holding E opens the roll wheel, which
+// hides every hint including this one.
 function drawPkHint(ox, oy) {
   if (pkAnim) return; // mid-sweep the station is busy - the tumbling die says so
-  const pk = pkPadNear(player);
+  const pk = pkDieNear(player);
   if (!pk) return;
   const verb = 'ROLL';
   const totalW = 9 + 3 + pixelTextWidth(verb);
-  const lift = pk.type === 'pkstone' ? 18 + pk.pips * 4 : 28;
-  drawKeyPrompt(Math.round((pk.tx + 0.5) * TILE - ox - totalW / 2), Math.round(pk.ty * TILE - oy - lift), verb, !!keys['e']);
+  drawKeyPrompt(Math.round((pk.tx + 0.5) * TILE - ox - totalW / 2), Math.round(pk.ty * TILE - oy - 28), verb, !!keys['e']);
 }
 
 // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour
@@ -349,6 +350,31 @@ function renderWheel(now) {
       // a tool's own strip icon: the family silhouette in its tier's metal
       const T = TOOLS[opt.id];
       ctx.drawImage(SPRITES['toolArt_' + T.art + '_' + T.tier], Math.round(ix - 6), Math.round(iy - 6));
+    } else if (w.kind === 'pkdie') {
+      const rix = Math.round(ix), riy = Math.round(iy);
+      if (opt.id === 'roll') {
+        // the die itself: a white cube, four scattered pips = "any roll"
+        ctx.fillStyle = '#241a12'; ctx.fillRect(rix - 6, riy - 6, 12, 12);
+        ctx.fillStyle = '#e8e4d8'; ctx.fillRect(rix - 5, riy - 5, 10, 10);
+        ctx.fillStyle = '#f8f6ee'; ctx.fillRect(rix - 5, riy - 5, 10, 1); ctx.fillRect(rix - 5, riy - 5, 1, 10);
+        ctx.fillStyle = '#1c2130';
+        ctx.fillRect(rix - 4, riy - 4, 2, 2); ctx.fillRect(rix + 2, riy - 4, 2, 2);
+        ctx.fillRect(rix - 4, riy + 2, 2, 2); ctx.fillRect(rix + 2, riy + 2, 2, 2);
+      } else {
+        // a difficulty wedge: its pip count on a slate plate, in its colour -
+        // the roll station's own die-face language. The ARMED one wears a
+        // gold frame: that is what a plain ROLL would recarve at.
+        const di = PK_DIFFS.indexOf(opt.id);
+        ctx.fillStyle = '#241a12'; ctx.fillRect(rix - 6, riy - 6, 12, 12);
+        ctx.fillStyle = '#39424f'; ctx.fillRect(rix - 5, riy - 5, 10, 10);
+        ctx.fillStyle = PK_PIP_COL[di];
+        for (const [ax2, ay2] of PK_PIP_AT[di]) ctx.fillRect(rix - 4 + ax2, riy - 4 + ay2, 2, 2);
+        if (parkour.diff === opt.id) {
+          ctx.fillStyle = '#ffd95c';
+          ctx.fillRect(rix - 7, riy - 7, 14, 1); ctx.fillRect(rix - 7, riy + 6, 14, 1);
+          ctx.fillRect(rix - 7, riy - 7, 1, 14); ctx.fillRect(rix + 6, riy - 7, 1, 14);
+        }
+      }
     } else {
       const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'CARD';
       drawPixelTextOutline(ctx, label,
@@ -372,6 +398,9 @@ function renderWheel(now) {
     } else if (w.kind === 'rack') {
       label = TOOLS[opt.id].name;
       color = TOOL_TIERS[TOOLS[opt.id].tier].rim; // the name in its tier's metal
+    } else if (w.kind === 'pkdie') {
+      if (opt.id === 'roll') { label = 'ROLL : ' + parkour.diff.toUpperCase(); color = '#ffd95c'; }
+      else { label = opt.id.toUpperCase(); color = PK_PIP_COL[PK_DIFFS.indexOf(opt.id)]; }
     } else if (opt.id === 'upgrade') {
       if (!o || o.tier >= STRUCTS[o.type].tiers.length - 1) { label = 'MAX TIER'; color = '#9fb6d8'; }
       else {
