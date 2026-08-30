@@ -473,18 +473,26 @@ function drawParkour(ex, ey, now) {
 }
 
 // ---- the roll station's pixels -------------------------------------------
-// One colour per difficulty, hotter with the count - the die's face and the
-// roll wheel's pip wedges (renderWheel, js/ui.js) both wear it, and it is
-// the only place the scale is said: green, amber, red, no words.
+// One colour per difficulty, hotter with the count: green, amber, red, no
+// words. PK_DIE_COL is the DIE's body in that colour (lite/body/dark for the
+// cube's lighting) - the standing die wears the current track's set, and the
+// roll wheel's wedges (renderWheel, js/ui.js) are the same three cubes, so
+// picking a wedge visibly becomes the die. PK_PIP_COL colours the wheel's
+// hovered labels.
 const PK_PIP_COL = ['#7ddb7a', '#ffd95c', '#d0453a'];
+const PK_DIE_COL = [
+  { lite: '#aeeea9', body: '#7ddb7a', dark: '#4f9c55' },  // easy: green die
+  { lite: '#ffe9a0', body: '#ffd95c', dark: '#c89a3c' },  // medium: amber die
+  { lite: '#e8776a', body: '#d0453a', dark: '#8f2a24' },  // hard: red die
+];
 const PK_PIP_AT = [[[3, 3]], [[1, 1], [5, 5]], [[1, 5], [3, 3], [5, 1]]]; // die-face pip layouts, on an 8x8 face
 
-// The die on its pedestal: a bone-white cube on a slate plinth with a gilt
-// trim (the chest's gold - "this is worth walking to"). Its top face wears
-// the ARMED difficulty's pips in that difficulty's colour, so the die itself
-// is the readout of what E will roll; while rollT runs it tumbles - jitters
-// on its plinth scrambling the face - which is the whole "the world just
-// rerolled" announcement at the spot the press happened.
+// The die on its pedestal: a cube on a slate plinth with a gilt trim (the
+// chest's gold - "this is worth walking to"), its whole BODY dyed the
+// current track's difficulty colour with the matching pip count on its face
+// - the die is the readout of what the track is. While rollT runs it
+// tumbles - jitters on its plinth scrambling the face - which is the whole
+// "the world just rerolled" announcement at the spot the press happened.
 function drawPkDie(o, px, py, now) {
   ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(px + 2, py + 14, 12, 2);
   // the plinth
@@ -497,14 +505,15 @@ function drawPkDie(o, px, py, now) {
   const jx = rolling ? Math.round(Math.sin(now * 41) * 1.5) : 0;
   const jy = rolling ? Math.round(Math.cos(now * 33)) : 0;
   const dx = px + 3 + jx, dy = py - 1 + jy;
+  const di = Math.max(0, PK_DIFFS.indexOf(parkour.diff));
+  const C = PK_DIE_COL[di];
   ctx.fillStyle = '#241a12'; ctx.fillRect(dx - 1, dy - 1, 12, 12);
-  ctx.fillStyle = '#e8e4d8'; ctx.fillRect(dx, dy, 10, 10);
-  ctx.fillStyle = '#f8f6ee'; ctx.fillRect(dx, dy, 10, 1); ctx.fillRect(dx, dy, 1, 10);
-  ctx.fillStyle = '#c8c2b0'; ctx.fillRect(dx + 9, dy + 1, 1, 9); ctx.fillRect(dx + 1, dy + 9, 9, 1);
-  // the face: the armed difficulty's pips - scrambled while tumbling
-  const di = PK_DIFFS.indexOf(parkour.diff);
-  const n = rolling ? ((now * 15) | 0) % 3 : (di < 0 ? 0 : di);
-  ctx.fillStyle = PK_PIP_COL[n];
+  ctx.fillStyle = C.body; ctx.fillRect(dx, dy, 10, 10);
+  ctx.fillStyle = C.lite; ctx.fillRect(dx, dy, 10, 1); ctx.fillRect(dx, dy, 1, 10);
+  ctx.fillStyle = C.dark; ctx.fillRect(dx + 9, dy + 1, 1, 9); ctx.fillRect(dx + 1, dy + 9, 9, 1);
+  // the face: the difficulty's pip count in dark, scrambled while tumbling
+  const n = rolling ? ((now * 15) | 0) % 3 : di;
+  ctx.fillStyle = '#1c2130';
   for (const [ax2, ay2] of PK_PIP_AT[n]) ctx.fillRect(dx + 1 + ax2, dy + 1 + ay2, 2, 2);
 }
 

@@ -29,8 +29,9 @@ function wheelOptions() {
   // the practice rack offers every tool in the game, in table (tier) order -
   // the arena is the one place trying an unearned weapon costs nothing
   if (w.kind === 'rack') return Object.keys(TOOLS).map((id) => ({ id }));
-  // the parkour die: ROLL straight up, then the three difficulties clockwise
-  if (w.kind === 'pkdie') return [{ id: 'roll' }, { id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
+  // the parkour die: the three difficulties, easy straight up - picking one
+  // IS the roll, so there is no separate roll wedge
+  if (w.kind === 'pkdie') return [{ id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
   const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
   // so a type's extra option lands between them instead of displacing either
@@ -351,29 +352,21 @@ function renderWheel(now) {
       const T = TOOLS[opt.id];
       ctx.drawImage(SPRITES['toolArt_' + T.art + '_' + T.tier], Math.round(ix - 6), Math.round(iy - 6));
     } else if (w.kind === 'pkdie') {
+      // a difficulty wedge is that difficulty's DIE: the same coloured cube
+      // the station's die becomes when this wedge is picked, pip count on its
+      // face. The current track's one wears a gold frame.
       const rix = Math.round(ix), riy = Math.round(iy);
-      if (opt.id === 'roll') {
-        // the die itself: a white cube, four scattered pips = "any roll"
-        ctx.fillStyle = '#241a12'; ctx.fillRect(rix - 6, riy - 6, 12, 12);
-        ctx.fillStyle = '#e8e4d8'; ctx.fillRect(rix - 5, riy - 5, 10, 10);
-        ctx.fillStyle = '#f8f6ee'; ctx.fillRect(rix - 5, riy - 5, 10, 1); ctx.fillRect(rix - 5, riy - 5, 1, 10);
-        ctx.fillStyle = '#1c2130';
-        ctx.fillRect(rix - 4, riy - 4, 2, 2); ctx.fillRect(rix + 2, riy - 4, 2, 2);
-        ctx.fillRect(rix - 4, riy + 2, 2, 2); ctx.fillRect(rix + 2, riy + 2, 2, 2);
-      } else {
-        // a difficulty wedge: its pip count on a slate plate, in its colour -
-        // the roll station's own die-face language. The ARMED one wears a
-        // gold frame: that is what a plain ROLL would recarve at.
-        const di = PK_DIFFS.indexOf(opt.id);
-        ctx.fillStyle = '#241a12'; ctx.fillRect(rix - 6, riy - 6, 12, 12);
-        ctx.fillStyle = '#39424f'; ctx.fillRect(rix - 5, riy - 5, 10, 10);
-        ctx.fillStyle = PK_PIP_COL[di];
-        for (const [ax2, ay2] of PK_PIP_AT[di]) ctx.fillRect(rix - 4 + ax2, riy - 4 + ay2, 2, 2);
-        if (parkour.diff === opt.id) {
-          ctx.fillStyle = '#ffd95c';
-          ctx.fillRect(rix - 7, riy - 7, 14, 1); ctx.fillRect(rix - 7, riy + 6, 14, 1);
-          ctx.fillRect(rix - 7, riy - 7, 1, 14); ctx.fillRect(rix + 6, riy - 7, 1, 14);
-        }
+      const di = PK_DIFFS.indexOf(opt.id), C = PK_DIE_COL[di];
+      ctx.fillStyle = '#241a12'; ctx.fillRect(rix - 6, riy - 6, 12, 12);
+      ctx.fillStyle = C.body; ctx.fillRect(rix - 5, riy - 5, 10, 10);
+      ctx.fillStyle = C.lite; ctx.fillRect(rix - 5, riy - 5, 10, 1); ctx.fillRect(rix - 5, riy - 5, 1, 10);
+      ctx.fillStyle = C.dark; ctx.fillRect(rix + 4, riy - 4, 1, 9); ctx.fillRect(rix - 4, riy + 4, 9, 1);
+      ctx.fillStyle = '#1c2130';
+      for (const [ax2, ay2] of PK_PIP_AT[di]) ctx.fillRect(rix - 4 + ax2, riy - 4 + ay2, 2, 2);
+      if (parkour.diff === opt.id) {
+        ctx.fillStyle = '#ffd95c';
+        ctx.fillRect(rix - 7, riy - 7, 14, 1); ctx.fillRect(rix - 7, riy + 6, 14, 1);
+        ctx.fillRect(rix - 7, riy - 7, 1, 14); ctx.fillRect(rix + 6, riy - 7, 1, 14);
       }
     } else {
       const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'CARD';
@@ -399,8 +392,8 @@ function renderWheel(now) {
       label = TOOLS[opt.id].name;
       color = TOOL_TIERS[TOOLS[opt.id].tier].rim; // the name in its tier's metal
     } else if (w.kind === 'pkdie') {
-      if (opt.id === 'roll') { label = 'ROLL : ' + parkour.diff.toUpperCase(); color = '#ffd95c'; }
-      else { label = opt.id.toUpperCase(); color = PK_PIP_COL[PK_DIFFS.indexOf(opt.id)]; }
+      label = 'ROLL ' + opt.id.toUpperCase();
+      color = PK_PIP_COL[PK_DIFFS.indexOf(opt.id)];
     } else if (opt.id === 'upgrade') {
       if (!o || o.tier >= STRUCTS[o.type].tiers.length - 1) { label = 'MAX TIER'; color = '#9fb6d8'; }
       else {

@@ -215,14 +215,14 @@ and a reroll unregisters the old track's cracks and holes before the forest regr
 **The roll station is one die and one held wheel**: the die on its plinth stands in a small
 felled nook off the walk's south side, adjacent to the walk so its `E ROLL` cap rises as you
 pass (`pkdie`, `PK_DIE` — `pkDieNear` resolves it, shared by the prompt, `drawPkHint` in
-js/ui.js, and the press in js/input.js). **Holding E beside it opens a four-wedge radial
+js/ui.js, and the press in js/input.js). **Holding E beside it opens a three-wedge radial
 wheel** (kind `'pkdie'`, the armory rack's own hold-and-release grammar and the ordinary wheel
-pipeline): ROLL straight up as a little die icon, then the three difficulties clockwise as pip
-plates — one/two/three pips in green/amber/red, the ARMED one wearing a gold frame. Releasing
-on a wedge rolls a **fresh random track** (`pkWheelPick`, through the same `input.cmd` →
-`runCmd` path every wheel uses): ROLL recarves at the armed difficulty, a pip wedge arms *its*
-difficulty and rolls in the same release. The die's top face wears the armed count in its
-colour, so what a plain ROLL will do is readable without opening anything. `pkRoll` picks the loop (`pkGenPath`: waypoints on a
+pipeline): one wedge per difficulty, each drawn as **that difficulty's coloured die** — a
+green, amber or red cube with its pip count (`PK_DIE_COL`, draw-world.js), the current track's
+one wearing a gold frame. Releasing on a wedge IS the roll (`pkWheelPick`, through the same
+`input.cmd` → `runCmd` path every wheel uses): it carves a **fresh random track** at that
+difficulty, and the standing die's whole body recolours to the picked cube, so the die always
+says what the current track is without opening anything. `pkRoll` picks the loop (`pkGenPath`: waypoints on a
 jittered ellipse per `PK_DIFF` around `PK_CX`/`PK_CY` at `PK_RX`/`PK_RY` — easy few points/wide
 carve, hard many alternating slalom points/narrow carve — pinned to the west gate with lightly
 jittered approach legs so consecutive rolls visibly differ where the roller stands, kept out of

@@ -679,21 +679,20 @@ const PK_WALK = { x0: 10, x1: 18, y0: 36, y1: 37 };
 // laps are its own (best/last restart at 0 and never touch the profile -
 // random loops are not comparable, so a persistent record over them would be
 // a lie), and the profile's record stays what it says it is: the stock lap.
-// `diff` is the roll station's armed difficulty (what the wheel's plain ROLL
-// recarves at), and cpTx/cpTy is THIS track's checkpoint.
+// `diff` is the current track's difficulty - the die wears it as its body
+// colour - and cpTx/cpTy is THIS track's checkpoint.
 const parkour = { on: false, t: 0, cp: false, wasLine: false, offT: 0, last: 0, best: 0,
   diff: 'easy', custom: false, cpTx: 69, cpTy: 37 };
 
 // ---- the roll station: one die, one held wheel ---------------------------
 // A die on a pedestal in a felled nook off the walk rerolls the loop: HOLD E
 // beside it (pkDieNear - the armory rack's own proximity gesture, wired in
-// js/input.js and hinted by drawPkHint, js/ui.js) and a four-wedge radial
-// wheel opens - ROLL, and the three difficulties as pip wedges. The pointer
-// picks, releasing E rolls: ROLL recarves at the armed difficulty, a pip
-// wedge arms ITS difficulty and rolls in the same release (pkWheelPick, the
-// same input.cmd -> runCmd path every wheel uses). The die's top face wears
-// the armed count in its colour, so what E will roll is readable at a
-// glance.
+// js/input.js and hinted by drawPkHint, js/ui.js) and a three-wedge radial
+// wheel opens - one wedge per difficulty, each drawn as that difficulty's
+// coloured die. Releasing on a wedge IS the roll: it carves a fresh track at
+// that difficulty (pkWheelPick, the same input.cmd -> runCmd path every
+// wheel uses), and the station's die recolours to match (PK_DIE_COL,
+// draw-world.js), so the standing die always says what the current track is.
 const PK_DIFFS = ['easy', 'medium', 'hard'];
 // pts = waypoints (more = twistier), jit = radial jitter in tiles (alt flips
 // it in and out on alternating points - a forced slalom), rad = carve
@@ -1101,13 +1100,13 @@ function pkDieNear(p) {
 }
 
 // a pick released off the die's wheel, through the same input.cmd -> runCmd
-// path every wheel uses: ROLL recarves at the armed difficulty, a pip wedge
-// arms its difficulty and rolls in the same release. PRACTICE-gated like
+// path every wheel uses: the wedge IS the roll - picking a difficulty carves
+// a fresh track at it, and the die recolours to match. PRACTICE-gated like
 // rackEquip, and pkRoll itself refuses a roll while a sweep is out.
 function pkWheelPick(p, c) {
-  if (!PRACTICE) return;
+  if (!PRACTICE || !PK_DIFF[c.id]) return;
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
-  pkRoll(c.id === 'roll' ? parkour.diff : c.id);
+  pkRoll(c.id);
 }
 
 // The grounds' clock, from updatePlay under PRACTICE only: the dummy mends
