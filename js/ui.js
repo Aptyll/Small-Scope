@@ -220,7 +220,7 @@ function drawPkHint(ox, oy) {
   if (!pk) return;
   const verb = 'ROLL';
   const totalW = 9 + 3 + pixelTextWidth(verb);
-  const lift = pk.type === 'pkstone' ? 24 + pk.pips * 3 : 28;
+  const lift = pk.type === 'pkstone' ? 18 + pk.pips * 4 : 28;
   drawKeyPrompt(Math.round((pk.tx + 0.5) * TILE - ox - totalW / 2), Math.round(pk.ty * TILE - oy - lift), verb, !!keys['e']);
 }
 

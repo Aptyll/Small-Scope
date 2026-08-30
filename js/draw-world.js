@@ -477,7 +477,7 @@ function drawParkour(ex, ey, now) {
 // said: green, amber, red, no words. The dim set is an unarmed stone's
 // engraving - readable as the same mark, clearly not the live one.
 const PK_PIP_COL = ['#7ddb7a', '#ffd95c', '#d0453a'];
-const PK_PIP_DIM = ['#3a6b44', '#7a682e', '#6b2f2a'];
+const PK_PIP_DIM = ['#4e8f5a', '#a08a3a', '#96423a'];
 const PK_PIP_AT = [[[3, 3]], [[1, 1], [5, 5]], [[1, 5], [3, 3], [5, 1]]]; // die-face pip layouts, on an 8x8 face
 
 // The die on its pedestal: a bone-white cube on a slate plinth with a gilt
@@ -510,26 +510,38 @@ function drawPkDie(o, px, py, now) {
 }
 
 // One difficulty stone: a standing slate slab, taller with its count, its
-// pips stacked up the face. The ARMED stone's pips are lit in the scale's
-// colour with a glint at the crown; the others carry the same marks as dim
-// engraving. A fresh stone bounces in on the targets' own respawn wobble
-// (o.wob), because springing up out of the snow IS the unlock announcement.
+// pips stacked down the face. Built to read ACROSS the pad, not just up
+// close: the slab is nearly a full tile wide, and each pip is a fat colour
+// block sunk in a dark socket, so the count and the colour survive distance
+// and snow-glare alike. The ARMED stone is the bright one - lighter body, a
+// crown band in its colour, hot cores in its pips - while the others carry
+// the same marks as dim engraving. A fresh stone bounces in on the targets'
+// own respawn wobble (o.wob): springing up IS the unlock announcement.
 function drawPkStone(o, px, py, now) {
   const wobS = o.wob > 0 ? 1 + Math.sin(o.wob * 22) * 0.2 * (o.wob / 0.45) : 1;
-  const h = Math.max(3, Math.round((9 + o.pips * 3) * wobS));
-  const top = py + 13 - h;
+  const h = Math.max(4, Math.round((14 + o.pips * 4) * wobS));
+  const foot = py + 14, top = foot - h;
   const lit = PK_DIFFS[o.pips - 1] === parkour.diff;
-  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(px + 3, py + 13, 10, 2);
-  ctx.fillStyle = '#241a12'; ctx.fillRect(px + 3, top - 1, 10, h + 2);
-  ctx.fillStyle = lit ? '#4e586c' : '#454e60'; ctx.fillRect(px + 4, top, 8, h);
-  ctx.fillStyle = lit ? '#68758c' : '#5c6880'; ctx.fillRect(px + 4, top, 1, h); ctx.fillRect(px + 4, top, 8, 1);
-  // rounded crown: knock the top corners back to outline
-  ctx.fillStyle = '#241a12'; ctx.fillRect(px + 4, top, 1, 1); ctx.fillRect(px + 11, top, 1, 1);
-  ctx.fillStyle = '#f4f7ff'; ctx.fillRect(px + 4, py + 12, 3, 1); ctx.fillRect(px + 10, py + 13, 2, 1); // snow at the foot
-  // the pips, stacked down the face
-  ctx.fillStyle = (lit ? PK_PIP_COL : PK_PIP_DIM)[o.pips - 1];
-  for (let i = 0; i < o.pips; i++) ctx.fillRect(px + 7, top + 3 + i * 4, 2, 2);
-  if (lit) { ctx.fillStyle = '#f4f7ff'; ctx.fillRect(px + 6, top + 1, 1, 1); } // the crown glint
+  ctx.fillStyle = 'rgba(40,60,100,0.28)'; ctx.fillRect(px + 2, foot, 13, 2);
+  ctx.fillStyle = '#241a12'; ctx.fillRect(px + 1, top - 1, 14, h + 2);
+  ctx.fillStyle = lit ? '#4e586c' : '#454e60'; ctx.fillRect(px + 2, top, 12, h);
+  ctx.fillStyle = lit ? '#68758c' : '#5c6880';
+  ctx.fillRect(px + 2, top, 1, h); ctx.fillRect(px + 2, top, 12, 1); // top-left light
+  ctx.fillStyle = '#39424f'; ctx.fillRect(px + 13, top + 1, 1, h - 1); // right shade
+  // rounded crown: knock the corners back to outline, two steps
+  ctx.fillStyle = '#241a12';
+  ctx.fillRect(px + 2, top, 2, 1); ctx.fillRect(px + 12, top, 2, 1);
+  ctx.fillRect(px + 2, top + 1, 1, 1); ctx.fillRect(px + 13, top + 1, 1, 1);
+  // the pips: the count and the colour are the whole message, so each gets a
+  // third of the face
+  const col = (lit ? PK_PIP_COL : PK_PIP_DIM)[o.pips - 1];
+  for (let i = 0; i < o.pips; i++) {
+    const yy = top + 4 + i * 6;
+    ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 5, yy - 1, 6, 5); // the socket
+    ctx.fillStyle = col; ctx.fillRect(px + 6, yy, 4, 3);
+    if (lit) { ctx.fillStyle = '#fff3c4'; ctx.fillRect(px + 7, yy + 1, 2, 1); } // hot core
+  }
+  if (lit) { ctx.fillStyle = col; ctx.fillRect(px + 6, top + 1, 4, 1); } // the crown wears the armed colour
 }
 
 // One practice target, whatever its habit: rails or hatch first, then the

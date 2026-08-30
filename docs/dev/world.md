@@ -210,9 +210,16 @@ world is the race line and a fish emerging into it would be absurd; `crackIce` s
 the track (a hole in the racing line is the player's own doing, and re-entering rebuilds —
 and a reroll unregisters the old track's cracks and holes before the forest regrows).
 
-**The roll station** stands just inside the gate: a die on a plinth (`pkdie`, `PK_DIE`) and —
-once any lap has ever been recorded — three pip stones (`pkstone`, `PK_STONES`, one/two/three
-pips in green/amber/red, taller with the count). Both work on the armory rack's proximity-E
+**The roll station** stands on its own packed-earth pad (`PK_PAD` — the dummy pad's "an
+instrument lives here" language, corners rounded the same way), a pocket carved out of the
+collar off the gate walk's south side one step from the south flag, with a felled snow skirt
+row below it so no pine canopy ever hangs over the stones: a die on a plinth at the pad's head,
+adjacent to the walk so its prompt rises as you pass (`pkdie`, `PK_DIE`) and — once any lap has
+ever been recorded — three pip stones ranked behind it, centred under the die (`pkstone`,
+`PK_STONES`, one/two/three pips in green/amber/red, near-tile-wide slabs that grow taller with
+the count, each pip a fat colour block in a dark socket so count and colour read across the
+pad). Packed earth is never track: `pkPlanCarve` refuses ground 3, so no random loop can
+touch either pad. Both work on the armory rack's proximity-E
 grammar: `pkPadNear` resolves the pad in reach (shared by the `E ROLL` prompt, `drawPkHint` in
 js/ui.js, and the press in js/input.js), and `pkPadPress` rolls a **fresh random track** —
 the die at the armed difficulty, a stone arming *its* difficulty in the same press. The die's
@@ -241,7 +248,7 @@ what it claims to be, the stock lap. Track rolls draw on the runtime `rng()` str
 calls reshuffle nothing ([determinism](#determinism-and-noise)), and the arena's boot remains
 bit-identical: the stock loop is carved before any roll can happen.
 
-**Ground 3 is packed earth**, the pad's floor, and exists only inside this arena
+**Ground 3 is packed earth**, the floor of both pads (the dummy's and the roll station's), and exists only inside this arena
 (`genWorld()` never writes it): painted by `paintGroundTile`'s earth branch (ruts, gravel,
 straw, snow dust blown over every snowy edge), coloured on both maps, and walked exactly like
 snow — `updatePlayer`'s surface block only special-cases ice and holes, so no movement branch

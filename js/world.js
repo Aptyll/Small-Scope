@@ -703,8 +703,15 @@ const PK_DIFF = {
   medium: { pts: 16, jit: 3.2, rad: 1.25, alt: false },
   hard:   { pts: 22, jit: 4.5, rad: 1.0,  alt: true },
 };
-const PK_DIE = { tx: 23, ty: 38 };                    // the die, beside the gate walk
-const PK_STONES = [[21, 41], [23, 41], [25, 41]];     // the pip stones, a row below it
+// The station is COMPOSED, not scattered: it stands on its own packed-earth
+// pad (the dummy pad's language - "an instrument lives here"), a pocket
+// carved out of the collar off the walk's south side, one step from the
+// south gate flag. The die is at the pad's head, adjacent to the walk so its
+// prompt rises as you pass; the three stones rank behind it, centred under
+// the die, with a felled skirt row below so no pine canopy ever covers them.
+const PK_PAD = { x0: 12, x1: 18, y0: 38, y1: 41 };    // the station's earth pad
+const PK_DIE = { tx: 15, ty: 38 };                    // the die at the pad's head, on the walk
+const PK_STONES = [[13, 40], [15, 40], [17, 40]];     // the pip stones ranked behind it
 let pkTiles = new Set();   // every tile index the current track's carve iced
 let pkDieObj = null;       // the die object, for the roll animation
 const pkPads = [];         // die + stones, for updatePractice's timers
@@ -806,9 +813,19 @@ function genPracticeWorld() {
   // the gate: a flag either side of the walk where it meets the line
   fell(11, 35); placeObj(11, 35, 'banner');
   fell(11, 38); placeObj(11, 38, 'banner');
-  // the roll station: the die beside the walk - the stones only once a first
-  // lap has ever been recorded (a returning profile has, so its stones stand
-  // from the start; a first-timer meets one die and one obvious verb)
+  // the roll station's pocket: an earth pad carved off the walk's south side
+  // (corners rounded like the dummy's), plus a felled snow skirt one row
+  // deeper so the pines behind never hang their canopies over the stones
+  for (let ty = PK_PAD.y0; ty <= PK_PAD.y1 + 1; ty++) for (let tx = PK_PAD.x0; tx <= PK_PAD.x1; tx++) {
+    fell(tx, ty);
+    if (ty <= PK_PAD.y1) ground[idx(tx, ty)] = 3;
+  }
+  for (const [px2, py2] of [[PK_PAD.x0, PK_PAD.y0], [PK_PAD.x1, PK_PAD.y0], [PK_PAD.x0, PK_PAD.y1], [PK_PAD.x1, PK_PAD.y1]]) {
+    ground[idx(px2, py2)] = 0;
+  }
+  // the die at the pad's head - the stones only once a first lap has ever
+  // been recorded (a returning profile has, so its stones stand from the
+  // start; a first-timer meets one die and one obvious verb)
   pkDieObj = placeObj(PK_DIE.tx, PK_DIE.ty, 'pkdie', { rollT: 0 });
   pkPads.push(pkDieObj);
   parkour.unlocked = PROFILE.bestLap() > 0;
@@ -839,6 +856,7 @@ function pkPlanCarve(path, rad) {
         const wx = tx >= PK_WALK.x0 && tx <= PK_WALK.x1 && ty >= PK_WALK.y0 && ty <= PK_WALK.y1;
         if (wx && tx > PK_LINE_X1) continue; // the walk stays snow past the line
         if (tx >= PR_X0 && tx < PR_X0 + PR_W && ty >= PR_Y0 && ty < PR_Y0 + PR_H) continue;
+        if (ground[idx(tx, ty)] === 3) continue; // packed earth is never track - both pads refuse the carve
         const o = objects[idx(tx, ty)];
         if (o && o.type !== 'tree' && o.type !== 'deadTree') continue;
         plan.add(idx(tx, ty));
