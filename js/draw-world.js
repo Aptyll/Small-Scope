@@ -648,7 +648,8 @@ function drawPTarget(t, ex, ey, now) {
   else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
   // the stuck arrow, standing in the face for the beat before the shatter:
   // the shared body out of the impact point on the bearing it flew in on -
-  // head and collar driven into the straw, shaft and team feathers proud
+  // driven in past half its length, so only a stub of shaft and the team
+  // feathers stand proud of the face
   if (t.stuck > 0 && rise > 0.5) {
     const f = ptFace(t);
     const ix = Math.round(f.x - ex) + Math.round(t.stickX);
@@ -656,7 +657,7 @@ function drawPTarget(t, ex, ey, now) {
     const tm = TEAMS[t.stickTeam || 0];
     ARROW_PX.length = 0;
     arrowBodyPx(ARROW_PX, ix, iy, Math.cos(t.stickA), Math.sin(t.stickA),
-      8, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
+      16, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
     paintArrowPx(ARROW_PX);
   }
 }
