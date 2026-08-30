@@ -58,6 +58,12 @@ window.addEventListener('keydown', (e) => {
         // plus the three difficulties - on the rack wheel's own grammar
         const pk = pkDieNear(player);
         if (pk) { SFX.unlock(); state.wheel = { kind: 'pkdie', tx: pk.tx, ty: pk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
+        else {
+          // the range bell: a plain press through the cmd path, no wheel to
+          // hold - E beside it rings the archery round on (or off, mid-round)
+          const bl = agBellNear(player);
+          if (bl) { SFX.unlock(); player.input.cmd = { kind: 'agbell', tx: bl.tx, ty: bl.ty }; }
+        }
       }
     }
   }

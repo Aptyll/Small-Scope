@@ -85,8 +85,9 @@ control must read as what it does by its shape and its hover state alone, and if
 yourself writing a hint sentence, build the affordance instead. Text is for names, numbers,
 headlines (a death, a landmark) and five deliberate carve-outs: **keybind indicators** (`'ESC
 BACK'`, a "1" in a slot's corner), the **settings, PLAYER and gear pop-up panels**' labelled rows, the
-**practice instruments** (the dummy meter's LAST HIT / DPS / TOTAL and the parkour's lap clock
-and BEST / LAST plate — a training instrument's whole job is comparing numbers), **first-run
+**practice instruments** (the dummy meter, the parkour's lap clock and the archery round's
+readouts, with their BEST / LAST plates — a training instrument's whole job is comparing
+numbers), **first-run
 onboarding** (the two `showMsg` teaching lines), and the **hover tooltip** (bottom-left,
 `tipAt`/`drawTooltip`, ui.js) — which earns it because comparing a tool's rate of fire against a
 bit's weight is comparing *numbers*, and no shape does that. It is a carve-out, not a licence: the

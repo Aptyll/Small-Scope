@@ -53,6 +53,10 @@ const OBJECTS = {
   // track. Inert to E's work verbs like the rack - holding E beside it opens
   // the roll wheel (pkDieNear, the practice arena banner below).
   pkdie:    { solid: true,  mm: [242, 204, 100], map: [206, 160, 70] },
+  // the archery range's bell (practice arena only): E beside it rings the
+  // timed round on and off. Inert to E's work verbs like the die - the press
+  // resolves through agBellNear (the practice arena banner below).
+  agbell:   { solid: true,  mm: [216, 158, 74],  map: [186, 132, 60] },
   stump:    { solid: false, mm: [188, 200, 218], map: [172, 138, 92] },
   // a roosting team eagle's hitbox tiles (placed by eagleCrash, js/boot.js):
   // solid to walkers and a work target for RIVAL E swings only - workTarget
@@ -529,11 +533,13 @@ function landmarkAt(x, y) {
 // to pure combat. The practice world itself is SMALL - WORLD is 76 under
 // PRACTICE (js/core.js) - so the forest is a collar, not a wilderness. In the
 // middle of the field: one dummy on a small packed-earth pad, spawn just
-// south of it, the bow rack beside the spawn. The archery targets stand in
-// the OPEN, spread along the field's edges near the trees - statics at three
-// heights, pop-ups, and two sliders on rails - nothing fenced, shoot them
-// from anywhere, roll straight past them. No wildlife, no chests, no pond,
-// no harvest: the world drops nothing and asks nothing.
+// south of it, the bow rack beside the spawn, the range BELL a step west of
+// the spawn. The archery targets all ride one TWO-RAIL TRACK around the
+// field's perimeter - stills, movers and pop-ups on trolleys, movers hopping
+// lanes around anything in their way - shoot them from anywhere, roll
+// straight past them; ringing the bell runs the timed, scored round over the
+// same track. No wildlife, no chests, no pond, no harvest: the world drops
+// nothing and asks nothing.
 //
 // Around the field, through the forest collar, runs the ICE PARKOUR: a
 // narrow carved-ice loop (PK_PATH) entered through a flag gate on the west
@@ -573,37 +579,64 @@ const DUMMY_RESET_T = 2.5;   // s unhit before a dummy mends itself back to full
 const DUMMY_METER_LINGER = 2.5;
 const practiceDummies = [];  // every dummy standing, for updatePractice's mend clock
 
-// ---- the archery targets -------------------------------------------------
-// Link's-Crossbow-Training-style red ring targets, at different heights and
-// with different habits. They are ENTITIES in `ptargets`, not tile objects -
-// a slider crosses tiles every frame and nothing about a raised face should
-// block a walker - so only arrows meet them: the PRACTICE branch of the
-// arrow loop (js/sim.js) tests every live face against PT_HIT_R. A hit
-// SHATTERS the face off its post (hitPTarget below - flat feedback, no
-// score) and PT_RESPAWN seconds later a fresh one springs back with a
-// wobble. drawPTarget (js/draw-world.js) owns every pixel: the face sprite,
-// the three post heights, the pop-up hatch and the slide rails.
-//   kind  'static' | 'pop' | 'slide'
-//   x, y  the base point on the ground (post foot / hatch / track position)
-//   alt   px from the base to the face's centre - the "height" arrows aim at
-//   up    0..1, how far a pop-up has risen (static kinds sit at 1)
-//   t     the behaviour clock; phase offsets stop the pop-ups syncing
-//   x0/x1/spd/dir   a slider's track and speed
-//   broken          >0: seconds until the face respawns (post stands bare)
-//   wob             respawn wobble timer, a scale bounce in the draw
-const PT_HIT_R = 11;         // px around the face centre an arrow scores on
-const PT_RESPAWN = 2.6;      // s a broken face stays gone
-const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the pop cycle
-const PT_ALTS = [18, 24, 30]; // the three post heights: stake, post, mast
+// ---- the archery track ---------------------------------------------------
+// Link's-Crossbow-Training-style targets, all riding ONE piece of furniture:
+// a two-rail TRACK around the field's whole perimeter (AG_RECT, one tile in
+// from the rim so the treeline never covers a face; drawAgTrack,
+// js/draw-world.js). Every target is a trolley on a rail - ENTITIES in
+// `ptargets`, never tile objects (a mover crosses tiles every frame and a
+// raised face should not block a walker) - so only arrows meet them: the
+// PRACTICE branch of the arrow loop (js/sim.js) tests every live face disc
+// (ptFace/ptLive/ptHitR). The track has TWO LANES (outer 0, inner 1,
+// AG_LANE_GAP px apart): a mover about to run into anything parked - or
+// rolling slower - on its rail hops to the free lane and keeps going (the
+// hop eases over laneU, a visible little lane change, never a teleport).
+//   kind   'still' | 'move' | 'pop'
+//   s      distance along the track's perimeter, in px (agPos -> world x/y)
+//   lane   the rail it rides (laneU eases toward it); dir/spd a mover's roll
+//   size   0 small | 1 large - scales the face and its hit disc (ptHitR)
+//   up     0..1 a pop-up's rise out of its trolley (still/move sit at 1)
+//   pop    a pop-up's own cycle {hide,rise,hold,sink}; t the behaviour clock
+//   stock  the free-practice roster: broken faces respawn where they stood
+//          (a round's targets are one-shot - hit means gone and scored)
+const PT_HIT_R = 11;         // px around a LARGE face's centre an arrow scores on
+const PT_RESPAWN = 2.6;      // s a broken stock face stays gone
+const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the stock pop cycle
+const AG_SPD = [26, 46, 70]; // a mover's roll: slow / medium / fast, px/s
+const AG_SIZE = [0.625, 1];  // small / large, as a scale on the 32px face
+const AG_LANE_GAP = 7;       // px between the outer and inner rail
+const AG_POST = 8;           // px of post between trolley and face bottom
+const AG_RECT = {            // the outer rail, one tile in from the field's rim
+  x0: (PR_X0 + 1) * TILE, y0: (PR_Y0 + 1) * TILE,
+  x1: (PR_X0 + PR_W - 1) * TILE, y1: (PR_Y0 + PR_H - 1) * TILE,
+};
+const AG_LEN = 2 * ((AG_RECT.x1 - AG_RECT.x0) + (AG_RECT.y1 - AG_RECT.y0));
 const ptargets = [];
 
-function addPTarget(kind, tx, ty, opts) {
+// where a trolley at track distance s stands, laneU easing it in toward the
+// inner rail - clockwise from the NW corner, the one parametrisation the
+// update, the arrow test and the rails' pixels all hang off
+function agPos(s, laneU) {
+  const w = AG_RECT.x1 - AG_RECT.x0, h = AG_RECT.y1 - AG_RECT.y0;
+  const inset = laneU * AG_LANE_GAP;
+  s = ((s % AG_LEN) + AG_LEN) % AG_LEN;
+  if (s < w) return { x: AG_RECT.x0 + s, y: AG_RECT.y0 + inset };
+  if (s < w + h) return { x: AG_RECT.x1 - inset, y: AG_RECT.y0 + (s - w) };
+  if (s < w * 2 + h) return { x: AG_RECT.x1 - (s - w - h), y: AG_RECT.y1 - inset };
+  return { x: AG_RECT.x0 + inset, y: AG_RECT.y1 - (s - w * 2 - h) };
+}
+
+function addPTarget(kind, s, opts) {
   const t = Object.assign({
-    kind, x: (tx + 0.5) * TILE, y: (ty + 1) * TILE - 3,
-    alt: PT_ALTS[0], up: 1, t: 0,
-    x0: 0, x1: 0, spd: 0, dir: 1,
-    broken: 0, wob: 0,
+    kind, s: ((s % AG_LEN) + AG_LEN) % AG_LEN,
+    lane: 0, laneU: 0, dir: 1, spd: 0, size: 1,
+    up: 1, t: 0, pop: null, broken: 0, wob: 0, swapT: 0,
+    stock: false, gone: false, x: 0, y: 0,
   }, opts || {});
+  if (t.kind === 'pop') { t.up = 0; if (!t.pop) t.pop = PT_POP; }
+  t.laneU = t.lane;
+  const p0 = agPos(t.s, t.laneU);
+  t.x = p0.x; t.y = p0.y;
   ptargets.push(t);
   return t;
 }
@@ -611,25 +644,217 @@ function addPTarget(kind, tx, ty, opts) {
 // where a face's centre is right now, in world px - the one geometry the
 // update, the arrow test and the draw all share, so they can never disagree
 function ptFace(t) {
-  // a pop-up's face flips up out of its hatch: the centre rides the rise,
-  // bottom edge pinned at the hatch mouth (exactly how drawPTarget anchors it)
-  if (t.kind === 'pop') return { x: t.x, y: t.y - 4 - 16 * t.up };
-  return { x: t.x, y: t.y - t.alt };
+  const fh = 32 * AG_SIZE[t.size];
+  // a pop-up's face flips up out of its trolley: bottom edge pinned at the
+  // mouth, so the centre rides the rise (exactly how drawPTarget anchors it)
+  if (t.kind === 'pop') return { x: t.x, y: t.y - 4 - fh * t.up / 2 };
+  return { x: t.x, y: t.y - AG_POST - fh / 2 };
 }
+// the face's hit disc, scaled with its size
+function ptHitR(t) { return PT_HIT_R * AG_SIZE[t.size]; }
 // can an arrow score on it this frame
-function ptLive(t) { return t.broken <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
+function ptLive(t) { return !t.gone && t.broken <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
 
-// one arrow into the face: the whole flat-feedback payoff - the face bursts
-// into painted chips, straw and splinters, and the post stands bare until
-// the respawn springs a new one on
+// one arrow into the face: chips, straw and splinters either way - then a
+// STOCK target's post stands bare until the respawn springs a new face on,
+// while a ROUND target is spent for good and banks its points: small, fast
+// and pop-up all pay extra, so the shot that was harder to make is worth more
 function hitPTarget(t, hx, hy) {
-  t.broken = PT_RESPAWN;
-  t.wob = 0;
   const f = ptFace(t);
-  burst(f.x, f.y, '#d0453a', 10, 60, 0.5, true);   // painted chips
-  burst(f.x, f.y, '#efe6d0', 8, 55, 0.5, true);    // straw backing
-  burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);   // splinters
+  const sc = AG_SIZE[t.size];
+  burst(f.x, f.y, '#d0453a', Math.round(10 * sc), 60, 0.5, true);   // painted chips
+  burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
+  burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
+  if (t.stock) { t.broken = PT_RESPAWN; t.wob = 0; }
+  else {
+    t.gone = true;  // updatePractice sweeps it out of the array
+    if (agame.phase === 'play') {
+      const pts = 10 + (t.size === 0 ? 10 : 0) + (t.kind === 'pop' ? 10 : 0) +
+        (t.spd >= AG_SPD[2] ? 10 : t.spd >= AG_SPD[1] ? 5 : 0);
+      agame.score += pts;
+      agame.hits++;
+      addFloater(f.x, f.y - 6, '+' + pts, '#ffd95c');
+    }
+  }
   if (nearPlayer(f.x, f.y)) { SFX.hit(); SFX.break_(); }
+}
+
+// ---- the archery round: one bell -----------------------------------------
+// The BELL beside the spawn starts the round (kind 'agbell' through the same
+// input.cmd -> runCmd path every order takes - agBellNear resolves who is
+// beside it, shared by the E RING cap, drawBellHint in js/ui.js, and the
+// press in js/input.js). Ringing it clears the range for shooting: the stock
+// roster bursts away, the dummy and the rack SINK UNDER THE SNOW (their
+// objects leave the grid at full depth, so nothing blocks a shot or a
+// runner), a 3-2-1 countdown lands, and for AG_T seconds random targets pour
+// onto the track - habit, lane, size and speed all rolled fresh (agSpawn) -
+// each worth points on hitPTarget's harder-shot-pays-more rule. Time out (or
+// ring again) and the round ends: the score stands as LAST, a strictly
+// higher one writes BEST through PROFILE.setBestRange - the range's own
+// all-time record beside the parkour's lap - the furniture rises back out of
+// the snow and the stock roster springs back on. The readouts (the
+// countdown, the top-centre TIME/SCORE/HITS plate, the bell's BEST/LAST
+// frost plate) live in drawAgameUI / drawAgame, js/draw-world.js.
+const AG_T = 45;         // s a round runs
+const AG_COUNT_T = 3;    // the countdown, one tick per second
+const AG_SINK_T = 0.9;   // s the dummy and rack take to sink / rise
+const AG_END_T = 2.4;    // s the final score stands before the field resets
+const AG_MAX = 7;        // most round targets on the track at once
+const AG_SPAWN_T = 1.5;  // s between top-up spawns while under AG_MAX
+const AG_BELL = { tx: PR_X0 + 18, ty: PR_Y0 + 17 }; // the bell, one step west of the spawn
+// phase: off | sink | count | play | end. `best` is the profile's record,
+// seeded at gen and written on a strictly higher score; last/lastHits are
+// this visit's. `tick` edges the countdown SFX, dustT paces the sink dust.
+const agame = { phase: 'off', t: 0, score: 0, hits: 0, last: 0, lastHits: 0,
+  best: 0, record: false, spawnT: 0, tick: 0, dustT: 0 };
+let agBellObj = null;    // the bell object, for its ring animation
+let agFurniture = [];    // the dummy + rack objects the round sinks away
+
+// how far apart two track distances are, the short way round the ring
+function agDist(a, b) {
+  const d = Math.abs(a - b) % AG_LEN;
+  return Math.min(d, AG_LEN - d);
+}
+// anything parked or rolling on this lane within r of s - what a spawn
+// point and a lane hop's landing zone both check
+function agBlocked(lane, s, r, skip) {
+  for (const t of ptargets) {
+    if (t === skip || t.gone || t.lane !== lane) continue;
+    if (agDist(t.s, s) < r) return true;
+  }
+  return false;
+}
+
+// how deep the furniture is right now: 0 standing, 1 under the snow - the
+// dummy and rack draw branches (js/render.js) crop and drop their sprites by
+// it, so the whole sink is one number and no second animation state
+function agSinkU() {
+  if (agame.phase === 'sink') return Math.min(1, agame.t / AG_SINK_T);
+  if (agame.phase === 'end') return Math.max(0, 1 - agame.t / AG_SINK_T);
+  return agame.phase === 'off' ? 0 : 1;
+}
+
+// the bell the player is standing at - Chebyshev 1, E's own reach - shared
+// by the E RING prompt (drawBellHint, js/ui.js) and the press (js/input.js)
+function agBellNear(p) {
+  const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    const o = objAt(ptx + dx, pty + dy);
+    if (o && o.type === 'agbell') return o;
+  }
+  return null;
+}
+
+// the E press at the bell, through runCmd: off -> the round winds up (the
+// stock roster leaves with the furniture); mid-countdown or mid-round ->
+// rung off early, the score standing as it is. The sink and rise phases
+// ignore the press - the field is mid-ceremony.
+function agRing(p, c) {
+  if (!PRACTICE) return;
+  if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
+  if (agame.phase === 'sink' || agame.phase === 'end') return;
+  if (agBellObj) agBellObj.ring = 0.9;
+  SFX.dawnChime();
+  if (agame.phase === 'off') {
+    agame.phase = 'sink'; agame.t = 0; agame.dustT = 0;
+    agame.score = 0; agame.hits = 0;
+    for (const t of ptargets) { const f = ptFace(t); burst(f.x, f.y, '#f4f7ff', 5, 40, 0.4, true); }
+    ptargets.length = 0;
+  } else {
+    agEndRound(); // count or play: rung off
+  }
+}
+
+// the round closes: bank LAST (and BEST through the profile on a strictly
+// higher score), sweep the unshot targets away, put the furniture back on
+// the grid and let the rise play out - agUpdate flips to 'off' and restocks
+// the free-practice roster once the final score has stood AG_END_T
+function agEndRound() {
+  agame.last = agame.score; agame.lastHits = agame.hits;
+  agame.record = agame.score > 0 && agame.score > agame.best;
+  if (agame.record) { agame.best = agame.score; PROFILE.setBestRange(agame.score); }
+  agame.phase = 'end'; agame.t = 0; agame.dustT = 0;
+  for (const t of ptargets) { const f = ptFace(t); burst(f.x, f.y, '#f4f7ff', 5, 40, 0.4, true); }
+  ptargets.length = 0;
+  for (const o of agFurniture) objects[idx(o.tx, o.ty)] = o;
+  if (agame.record) SFX.levelUp(); else SFX.place();
+}
+
+// one random target onto the track: habit, lane, size, speed and clock all
+// rolled fresh (runtime rng() reshuffles nothing - world.md), the spawn
+// point retried away from anything already parked there, and a wobble-in
+// with a poof so a face never just blinks into being
+function agSpawn() {
+  const r = rng();
+  const kind = r < 0.3 ? 'still' : r < 0.75 ? 'move' : 'pop';
+  const lane = rng() < 0.5 ? 0 : 1;
+  let s = rng() * AG_LEN;
+  for (let i = 0; i < 8 && agBlocked(lane, s, 26); i++) s = rng() * AG_LEN;
+  const t = addPTarget(kind, s, {
+    lane, size: rng() < 0.4 ? 0 : 1,
+    dir: rng() < 0.5 ? 1 : -1,
+    spd: kind === 'move' ? AG_SPD[(rng() * 3) | 0] : 0,
+    pop: kind === 'pop' ? { hide: rand(0.7, 1.8), rise: 0.22, hold: rand(1.1, 2.2), sink: 0.22 } : null,
+  });
+  t.wob = 0.45;
+  burst(t.x, t.y - 8, '#f4f7ff', 6, 40, 0.45, true);
+}
+
+// the free-practice roster: the fixed mix that stands between rounds -
+// stills of both sizes, one slow and one fast mover, pop-ups on offset
+// clocks - every one respawning where it stood when shot (stock: true)
+function agStock(quiet) {
+  ptargets.length = 0;
+  const w = AG_RECT.x1 - AG_RECT.x0, h = AG_RECT.y1 - AG_RECT.y0;
+  addPTarget('still', w * 0.5, { stock: true });                                   // top centre
+  addPTarget('still', w + h * 0.5, { stock: true, size: 0, lane: 1 });             // east, small, inner rail
+  addPTarget('still', w * 2 + h + h * 0.75, { stock: true });                      // west, above the gate walk
+  addPTarget('move', w * 0.2, { stock: true, spd: AG_SPD[0], dir: 1 });            // the slow patroller
+  addPTarget('move', w + h + w * 0.5, { stock: true, spd: AG_SPD[2], dir: -1, size: 0, lane: 1 }); // the fast small one
+  addPTarget('pop', w * 0.15, { stock: true, t: 0 });
+  addPTarget('pop', w + h * 0.8, { stock: true, t: 1.4, size: 0 });
+  addPTarget('pop', w + h + w * 0.7, { stock: true, t: 2.7 });
+  if (!quiet) for (const t of ptargets) burst(t.x, t.y - 8, '#f4f7ff', 5, 38, 0.4, true);
+}
+
+// the round's clock, from updatePractice: the sink hands the furniture off
+// the grid, the countdown ticks, the play window spawns and times out, and
+// the end phase lets the score stand while the furniture rises back
+function agUpdate(dt) {
+  if (agBellObj && agBellObj.ring > 0) agBellObj.ring = Math.max(0, agBellObj.ring - dt);
+  const G = agame;
+  if (G.phase === 'off') return;
+  G.t += dt;
+  // snow dusting off the sinking / rising furniture, only while it moves
+  if ((G.phase === 'sink' || (G.phase === 'end' && G.t < AG_SINK_T)) && (G.dustT -= dt) <= 0) {
+    G.dustT = 0.07;
+    for (const o of agFurniture) {
+      burst(o.tx * TILE + 8 + rand(-5, 5), (o.ty + 1) * TILE - 1, rng() < 0.7 ? '#f4f7ff' : '#c4d4ea', 2, 30, 0.4, true);
+    }
+  }
+  if (G.phase === 'sink') {
+    if (G.t >= AG_SINK_T) {
+      // under the snow the furniture leaves the grid entirely: nothing left
+      // to block a shot, a runner, or raise a prompt - agEndRound puts the
+      // exact objects back (a tool is an instance; so is a dummy's ledger)
+      for (const o of agFurniture) objects[idx(o.tx, o.ty)] = null;
+      G.phase = 'count'; G.t = 0; G.tick = AG_COUNT_T + 1;
+    }
+  } else if (G.phase === 'count') {
+    const left = Math.ceil(AG_COUNT_T - G.t);
+    if (left !== G.tick) { G.tick = left; SFX.nock(); }
+    if (G.t >= AG_COUNT_T) {
+      G.phase = 'play'; G.t = 0; G.spawnT = AG_SPAWN_T;
+      for (let i = 0; i < 4; i++) agSpawn();
+      SFX.place();
+    }
+  } else if (G.phase === 'play') {
+    G.spawnT -= dt;
+    if (G.spawnT <= 0 && ptargets.length < AG_MAX) { agSpawn(); G.spawnT = AG_SPAWN_T; }
+    if (G.t >= AG_T) agEndRound();
+  } else if (G.phase === 'end') {
+    if (G.t >= AG_END_T) { G.phase = 'off'; agStock(false); }
+  }
 }
 
 // ---- the ice parkour -----------------------------------------------------
@@ -759,15 +984,13 @@ function rackNear(p) {
 
 function genPracticeWorld() {
   const ax = PR_X0, ay = PR_Y0;
-  // solid forest everywhere, then the field carved out of it - the rim
-  // tiles keep a scatter of trees so the treeline reads ragged, not stamped
+  // solid forest everywhere, then the field carved out of it - the whole
+  // field stays open (rim included): the target track runs the perimeter,
+  // one tile in, and a face must never stand behind a pine
   for (let ty = 0; ty < WORLD; ty++) {
     for (let tx = 0; tx < WORLD; tx++) {
       const inX = tx >= ax && tx < ax + PR_W, inY = ty >= ay && ty < ay + PR_H;
-      if (inX && inY) {
-        const rim = tx === ax || tx === ax + PR_W - 1 || ty === ay || ty === ay + PR_H - 1;
-        if (!rim || hash2(tx * 3 + 7, ty * 5 + 1) > 0.4) continue;
-      }
+      if (inX && inY) continue;
       placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
@@ -787,19 +1010,13 @@ function genPracticeWorld() {
   // centre on a tile boundary, so the pair sits at (20,15)-(21,15) and `dx`
   // nudges the drawn sprite (and its brackets and prompt) 8px left onto the
   // dummy's centre line - the tiles stay honest, the picture stays square
-  put(20, 15, 'rack', { lead: true, dx: -8 }); put(21, 15, 'rack', {});
-  // ---- the targets: in the open, spread along the treeline ---------------
-  // two sliders patrol the north edge, statics of all three heights hold
-  // the middles, pop-ups work the corners - shoot any of them from anywhere
-  addPTarget('slide', ax + 3, ay + 2, { alt: PT_ALTS[0], x0: (ax + 3) * TILE, x1: (ax + 13) * TILE, spd: 26 });
-  addPTarget('slide', ax + 26, ay + 2, { alt: PT_ALTS[2], x0: (ax + 26) * TILE, x1: (ax + 36) * TILE, spd: 44 });
-  addPTarget('static', ax + 19, ay + 2, { alt: PT_ALTS[1] });
-  addPTarget('static', ax + 2, ay + 13, { alt: PT_ALTS[0] });
-  addPTarget('static', ax + 37, ay + 9, { alt: PT_ALTS[2] });
-  addPTarget('pop', ax + 2, ay + 7, { alt: PT_ALTS[0], up: 0, t: 0.0 });
-  addPTarget('pop', ax + 37, ay + 16, { alt: PT_ALTS[0], up: 0, t: 1.1 });
-  addPTarget('pop', ax + 14, ay + 20, { alt: PT_ALTS[1], up: 0, t: 2.2 });
-  addPTarget('pop', ax + 25, ay + 20, { alt: PT_ALTS[0], up: 0, t: 3.3 });
+  const rk1 = put(20, 15, 'rack', { lead: true, dx: -8 }), rk2 = put(21, 15, 'rack', {});
+  // the archery round sinks exactly these under the snow and raises them back
+  agFurniture = [d, rk1, rk2].filter(Boolean);
+  // ---- the range bell, one step west of the spawn ------------------------
+  agBellObj = put(18, 17, 'agbell', { ring: 0 });
+  // ---- the targets: the free-practice roster, out on the perimeter track -
+  agStock(true);
   // ---- the ice parkour: the gate walk, the carved loop, the flags --------
   // the walk out of the field is cleared snow (the approach should not
   // slide); the loop is carved AFTER it so their overlap ends up ice, which
@@ -814,9 +1031,10 @@ function genPracticeWorld() {
   fell(PK_LINE.x0 - 1, PK_LINE.y); placeObj(PK_LINE.x0 - 1, PK_LINE.y, 'banner');
   fell(PK_LINE.x1 + 1, PK_LINE.y); placeObj(PK_LINE.x1 + 1, PK_LINE.y, 'banner');
   pkDieObj = placeObj(PK_DIE.tx, PK_DIE.ty, 'pkdie', { rollT: 0 });
-  // the record stands across visits: the gate plate opens showing the
-  // profile's best lap before this session has run one
+  // the records stand across visits: the gate plate opens showing the
+  // profile's best lap, the bell plate its best round score
   parkour.best = PROFILE.bestLap();
+  agame.best = PROFILE.bestRange();
 }
 
 // Plan one loop's carve: walk the centreline and collect every tile within
@@ -1115,6 +1333,7 @@ function pkWheelPick(p, c) {
 // wobble and the bar refilling are the whole announcement - no words.
 function updatePractice(dt) {
   pkAnimStep(dt); // the roll's carving front, while one is out
+  agUpdate(dt);   // the archery round's clock, sink, countdown and spawner
   if (pkDieObj && pkDieObj.rollT > 0) pkDieObj.rollT = Math.max(0, pkDieObj.rollT - dt); // the die's tumble
   for (const o of practiceDummies) {
     o.hitT += dt;
@@ -1130,6 +1349,7 @@ function updatePractice(dt) {
   for (const t of ptargets) {
     t.t += dt;
     if (t.wob > 0) t.wob = Math.max(0, t.wob - dt);
+    if (t.swapT > 0) t.swapT -= dt;
     if (t.broken > 0) {
       t.broken -= dt;
       if (t.broken <= 0) { // a fresh face springs onto the bare post
@@ -1142,18 +1362,39 @@ function updatePractice(dt) {
     }
     if (t.kind === 'pop') {
       // the cycle: hidden - rise - hold - sink, on the target's own clock
-      const C = PT_POP, total = C.hide + C.rise + C.hold + C.sink;
+      const C = t.pop || PT_POP, total = C.hide + C.rise + C.hold + C.sink;
       const u = t.t % total;
       if (u < C.hide) t.up = 0;
       else if (u < C.hide + C.rise) t.up = (u - C.hide) / C.rise;
       else if (u < C.hide + C.rise + C.hold) t.up = 1;
       else t.up = 1 - (u - C.hide - C.rise - C.hold) / C.sink;
-    } else if (t.kind === 'slide') {
-      t.x += t.spd * t.dir * dt;
-      if (t.x > t.x1) { t.x = t.x1; t.dir = -1; }
-      if (t.x < t.x0) { t.x = t.x0; t.dir = 1; }
     }
+    if (t.spd > 0) {
+      t.s = (t.s + t.spd * t.dir * dt + AG_LEN) % AG_LEN;
+      // a mover about to run into anything parked - or rolling slower - on
+      // its rail hops to the other lane and keeps going. Never mid-hop
+      // (swapT), and one at a time in array order, which is what lets two
+      // head-on movers resolve: the first hops, the second finds its rail clear.
+      if (t.swapT <= 0) {
+        const ahead = 10 + t.spd * 0.4;
+        let block = false;
+        for (const o of ptargets) {
+          if (o === t || o.gone || o.lane !== t.lane) continue;
+          const dd = ((((o.s - t.s) * t.dir) % AG_LEN) + AG_LEN) % AG_LEN;
+          if (dd <= 0 || dd >= ahead) continue;
+          if (o.spd > 0 && o.dir === t.dir && o.spd >= t.spd) continue; // pulling away
+          block = true; break;
+        }
+        if (block && !agBlocked(1 - t.lane, t.s, 20, t)) { t.lane = 1 - t.lane; t.swapT = 0.9; }
+      }
+    }
+    // ease onto the lane it wants, then stand where the track says
+    t.laneU += Math.max(-dt / 0.22, Math.min(dt / 0.22, t.lane - t.laneU));
+    const tp = agPos(t.s, t.laneU);
+    t.x = tp.x; t.y = tp.y;
   }
+  // a round target that has been shot is spent for good
+  for (let i = ptargets.length - 1; i >= 0; i--) if (ptargets[i].gone) ptargets.splice(i, 1);
   // ---- the parkour clock -------------------------------------------------
   // plain coordinate tests against the carved ice: stepping onto the line
   // starts a lap, the far checkpoint keeps it honest, recrossing the line

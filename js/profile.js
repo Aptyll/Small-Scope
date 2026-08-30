@@ -40,7 +40,8 @@
       named: false,    // has that prompt been answered at all (SKIP counts)
       dropped: false,  // has this profile ever jumped off the eagle - gates the first-flight countdown
       practice: false, // has the PRACTICE TOOL plank been knocked open (3 knocks; stays open)
-      bestLap: 0,      // the ice parkour's all-time best lap in seconds (0 = never lapped) - the one thing practice writes
+      bestLap: 0,      // the ice parkour's all-time best lap in seconds (0 = never lapped)
+      bestRange: 0,    // the archery range's all-time best round score (0 = never played) - these two are all practice writes
       // wins = matches the local slot was standing for at the win
       // (endMatch('won')); days = days begun (takeoff + each dawn still in).
       // A save written as games/bestDay is a different pair and is not copied.
@@ -121,6 +122,7 @@
         profile.dropped = !!s.dropped;
         profile.practice = !!s.practice;
         if (typeof s.bestLap === 'number' && isFinite(s.bestLap) && s.bestLap > 0) profile.bestLap = s.bestLap;
+        if (typeof s.bestRange === 'number' && isFinite(s.bestRange) && s.bestRange > 0) profile.bestRange = Math.floor(s.bestRange);
         if (s.stats && typeof s.stats === 'object') {
           // only the live keys. games/bestDay from PATCH 1.82 are not wins/days
           // (matches started vs matches won; highest day vs days begun), so an
@@ -195,17 +197,29 @@
     // profile - the plank is a live menu item from then on.
     practiceOpen() { return !!profile.practice; },
     markPractice() { if (!profile.practice) { profile.practice = true; saveNow(); } },
-    // the ice parkour's all-time best lap - the ONE thing the arena itself
-    // writes back (updatePractice, js/world.js). Stored at the plate's own
-    // 0.1 s precision so the number shown IS the number kept; only a strictly
-    // better (lower) time writes, and a lap record is a moment, not a
-    // trickle, so it saves through immediately.
+    // the ice parkour's all-time best lap - one of the two things the arena
+    // itself writes back (updatePractice, js/world.js). Stored at the plate's
+    // own 0.1 s precision so the number shown IS the number kept; only a
+    // strictly better (lower) time writes, and a lap record is a moment, not
+    // a trickle, so it saves through immediately.
     bestLap() { return profile.bestLap; },
     setBestLap(t) {
       if (!(t > 0)) return false;
       const r = Math.round(t * 10) / 10;
       if (profile.bestLap && r >= profile.bestLap) return false;
       profile.bestLap = r;
+      saveNow();
+      return true;
+    },
+    // the archery range's all-time best round score - the lap record's twin
+    // (agEndRound, js/world.js). Whole points; only a strictly higher score
+    // writes, and a record is a moment, so it saves through immediately.
+    bestRange() { return profile.bestRange; },
+    setBestRange(n) {
+      if (!(n > 0)) return false;
+      const r = Math.floor(n);
+      if (r <= profile.bestRange) return false;
+      profile.bestRange = r;
       saveNow();
       return true;
     },

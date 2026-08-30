@@ -517,57 +517,215 @@ function drawPkDie(o, px, py, now) {
   for (const [ax2, ay2] of PK_PIP_AT[n]) ctx.fillRect(dx + 1 + ax2, dy + 1 + ay2, 2, 2);
 }
 
-// One practice target, whatever its habit: rails or hatch first, then the
-// post, then the face (or the bare splintered post while broken).
-// ptFace() (js/world.js) is the same geometry the arrow test reads, so what
-// you see is exactly what a shot can hit.
-function drawPTarget(t, ex, ey, now) {
-  const bx = Math.round(t.x - ex), by = Math.round(t.y - ey);
-  // the slider's rails, laid along its whole track
-  if (t.kind === 'slide') {
-    const rx0 = Math.round(t.x0 - ex) - 6, rx1 = Math.round(t.x1 - ex) + 6;
-    ctx.fillStyle = '#241a12'; ctx.fillRect(rx0, by - 1, rx1 - rx0, 1); ctx.fillRect(rx0, by + 2, rx1 - rx0, 1);
-    ctx.fillStyle = '#5c4226'; ctx.fillRect(rx0, by, rx1 - rx0, 1);
+// ---- the archery track's pixels ------------------------------------------
+// The two-rail target track around the field's perimeter (AG_RECT,
+// js/world.js), drawn flat in the ground pass (render.js) under everything
+// that walks: ties spanning both rails like a narrow-gauge railway, then the
+// outer and inner rail, snow dusted along the wood by position hash. The
+// trolleys riding it are the targets themselves (drawPTarget below).
+function drawAgTrack(ox, oy) {
+  const R = AG_RECT, g = AG_LANE_GAP;
+  const x0 = Math.round(R.x0 - ox), x1 = Math.round(R.x1 - ox);
+  const y0 = Math.round(R.y0 - oy), y1 = Math.round(R.y1 - oy);
+  if (x0 > WV_W || y0 > WV_H || x1 < 0 || y1 < 0) return;
+  // the ties first, under both rails
+  ctx.fillStyle = '#6e4f2f';
+  for (let x = x0 + 6; x <= x1 - 6; x += 14) {
+    if (x < -2 || x > WV_W + 2) continue;
+    if (y0 > -9 && y0 < WV_H + 2) ctx.fillRect(x, y0 - 1, 2, g + 3);
+    if (y1 > -2 && y1 < WV_H + 9) ctx.fillRect(x, y1 - g - 1, 2, g + 3);
+  }
+  for (let y = y0 + 6; y <= y1 - 6; y += 14) {
+    if (y < -2 || y > WV_H + 2) continue;
+    if (x0 > -9 && x0 < WV_W + 2) ctx.fillRect(x0 - 1, y, g + 3, 2);
+    if (x1 > -2 && x1 < WV_W + 9) ctx.fillRect(x1 - g - 1, y, g + 3, 2);
+  }
+  // the two rails: outer on AG_RECT, inner AG_LANE_GAP inside it
+  for (const n of [0, g]) {
+    const rx0 = x0 + n, rx1 = x1 - n, ry0 = y0 + n, ry1 = y1 - n;
+    ctx.fillStyle = '#241a12';
+    ctx.fillRect(rx0, ry0 + 1, rx1 - rx0 + 1, 1); ctx.fillRect(rx0, ry1 + 1, rx1 - rx0 + 1, 1);
+    ctx.fillRect(rx0 + 1, ry0, 1, ry1 - ry0); ctx.fillRect(rx1 + 1, ry0, 1, ry1 - ry0 + 2);
     ctx.fillStyle = '#8a6142';
-    for (let x = rx0; x < rx1; x += 8) ctx.fillRect(x, by - 2, 2, 5); // sleepers
-    // the trolley the post rides on
-    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 5, by - 3, 10, 4);
-    ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 4, by - 2, 8, 2);
-    ctx.fillStyle = '#3c4250'; ctx.fillRect(bx - 4, by + 1, 2, 2); ctx.fillRect(bx + 2, by + 1, 2, 2);
+    ctx.fillRect(rx0, ry0, rx1 - rx0 + 1, 1); ctx.fillRect(rx0, ry1, rx1 - rx0 + 1, 1);
+    ctx.fillRect(rx0, ry0, 1, ry1 - ry0); ctx.fillRect(rx1, ry0, 1, ry1 - ry0 + 1);
   }
-  // the pop-up's hatch box, mouth toward the firing line
+  // snow settled on the wood, keyed to world position so it never crawls
+  ctx.fillStyle = '#f4f7ff';
+  for (let wx = Math.round(R.x0); wx <= R.x1; wx += 5) {
+    if (hash2(wx, 71) > 0.7) ctx.fillRect(wx - ox, y0, 1, 1);
+    if (hash2(wx, 73) > 0.7) ctx.fillRect(wx - ox, y1, 1, 1);
+  }
+  for (let wy = Math.round(R.y0); wy <= R.y1; wy += 5) {
+    if (hash2(75, wy) > 0.7) ctx.fillRect(x0, wy - oy, 1, 1);
+    if (hash2(77, wy) > 0.7) ctx.fillRect(x1, wy - oy, 1, 1);
+  }
+}
+
+// One target, whatever its habit: every target is a trolley riding the
+// perimeter track now - trolley first, then its post (or the hatch mouth a
+// pop-up flips out of), then the face, scaled by its size, squashed while a
+// pop-up is mid-rise, bounced just after a spawn or respawn. ptFace()
+// (js/world.js) is the same geometry the arrow test reads, so what you see
+// is exactly what a shot can hit.
+function drawPTarget(t, ex, ey, now) {
+  if (t.gone) return; // shot this very frame; the sweep collects it next tick
+  const bx = Math.round(t.x - ex), by = Math.round(t.y - ey);
+  // the trolley on its rail
+  ctx.fillStyle = 'rgba(40,60,100,0.28)'; ctx.fillRect(bx - 4, by + 2, 9, 2);
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 5, by - 3, 10, 5);
+  ctx.fillStyle = '#6b4a30'; ctx.fillRect(bx - 4, by - 2, 8, 3);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 4, by - 2, 8, 1);
+  ctx.fillStyle = '#3c4250'; ctx.fillRect(bx - 4, by + 1, 2, 2); ctx.fillRect(bx + 2, by + 1, 2, 2); // the wheels
   if (t.kind === 'pop') {
-    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 8, by - 5, 16, 7);
-    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 7, by - 4, 14, 5);
-    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 7, by - 4, 14, 1);
-    ctx.fillStyle = '#1c1208'; ctx.fillRect(bx - 6, by - 3, 12, 2); // the slot it rises from
-    ctx.fillStyle = '#f4f7ff';
-    for (let x = -7; x < 7; x += 2) if (hash2(x + 20, t.y) > 0.55) ctx.fillRect(bx + x, by - 5, 1, 1);
-  }
-  // the post (statics and sliders; a pop-up's face rides its own slide)
-  if (t.kind === 'static' || t.kind === 'slide') {
-    ctx.fillStyle = 'rgba(40,60,100,0.28)'; ctx.fillRect(bx - 4, by + 1, 9, 2);
-    const ph = t.alt - 6; // the face covers the top of it
-    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 2, by - ph, 5, ph + 1);
-    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 1, by - ph + 1, 3, ph);
-    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 1, by - ph + 1, 1, ph);
+    // the mouth the face flips up out of
+    ctx.fillStyle = '#1c1208'; ctx.fillRect(bx - 4, by - 3, 8, 2);
+  } else {
+    // the post (the face covers its top)
+    const ph = AG_POST + 3;
+    ctx.fillStyle = '#241a12'; ctx.fillRect(bx - 2, by - ph, 5, ph - 2);
+    ctx.fillStyle = '#5c4226'; ctx.fillRect(bx - 1, by - ph + 1, 3, ph - 3);
+    ctx.fillStyle = '#8a6142'; ctx.fillRect(bx - 1, by - ph + 1, 1, ph - 3);
     if (t.broken > 0) { // the bare post, splintered where the face was shot off
       ctx.fillStyle = '#a3794f';
       ctx.fillRect(bx - 2, by - ph - 2, 1, 2); ctx.fillRect(bx + 1, by - ph - 3, 1, 3); ctx.fillRect(bx, by - ph - 1, 1, 1);
     }
   }
   if (t.broken > 0) return;
-  // the face itself, off the shared geometry - squashed while a pop-up is
-  // mid-rise (it flips up out of the hatch), bounced just after a respawn
-  const f = ptFace(t);
+  // the face itself, off the shared geometry and scaled by its size
+  const sc = AG_SIZE[t.size];
   const rise = t.kind === 'pop' ? Math.max(0, Math.min(1, t.up)) : 1;
   if (rise <= 0.02) return;
   const wobS = t.wob > 0 ? 1 + Math.sin(t.wob * 22) * 0.14 * (t.wob / 0.45) : 1;
-  const w = Math.round(TARGET_SPR.width * wobS);
-  const h = Math.max(1, Math.round(TARGET_SPR.height * rise * wobS));
-  const fx = Math.round(f.x - ex), fy = Math.round(f.y - ey);
-  if (t.kind === 'pop') ctx.drawImage(TARGET_SPR, fx - (w >> 1), Math.round(t.y - ey) - 4 - h, w, h);
-  else ctx.drawImage(TARGET_SPR, fx - (w >> 1), fy - (h >> 1), w, h);
+  const w = Math.round(TARGET_SPR.width * sc * wobS);
+  const h = Math.max(1, Math.round(TARGET_SPR.height * sc * rise * wobS));
+  if (t.kind === 'pop') ctx.drawImage(TARGET_SPR, bx - (w >> 1), by - 4 - h, w, h);
+  else {
+    const f = ptFace(t);
+    ctx.drawImage(TARGET_SPR, bx - (w >> 1), Math.round(f.y - ey) - (h >> 1), w, h);
+  }
+}
+
+// ---- the range bell's pixels ---------------------------------------------
+// The bell that runs the archery round: a bronze bell hung in a two-post
+// frame beside the spawn, rope off the clapper. While o.ring runs (the press
+// just landed, js/world.js) the bell swings on its yoke - the whole "the
+// round heard you" announcement at the spot the press happened.
+function drawAgBell(o, px, py, now) {
+  ctx.fillStyle = 'rgba(40,60,100,0.25)'; ctx.fillRect(px + 2, py + 14, 12, 2);
+  // the frame: two posts into a crossbar, snow on top
+  ctx.fillStyle = '#241a12';
+  ctx.fillRect(px, py - 8, 3, 24); ctx.fillRect(px + 13, py - 8, 3, 24);
+  ctx.fillRect(px - 1, py - 11, 18, 4);
+  ctx.fillStyle = '#5c4226';
+  ctx.fillRect(px + 1, py - 7, 1, 22); ctx.fillRect(px + 14, py - 7, 1, 22);
+  ctx.fillRect(px, py - 10, 16, 2);
+  ctx.fillStyle = '#8a6142'; ctx.fillRect(px, py - 10, 16, 1);
+  ctx.fillStyle = '#f4f7ff';
+  ctx.fillRect(px - 1, py - 12, 6, 1); ctx.fillRect(px + 9, py - 12, 7, 1);
+  // the bell on its yoke, swinging while the ring runs down
+  const sw = o.ring > 0 ? Math.round(Math.sin(now * 21) * 2.5 * o.ring) : 0;
+  const bxx = px + 5 + sw;
+  ctx.fillStyle = '#241a12'; ctx.fillRect(px + 7, py - 8, 2, 2); // the hanger
+  ctx.fillStyle = '#1c1208'; ctx.fillRect(bxx - 1, py - 7, 8, 8);
+  ctx.fillStyle = '#c89a3c'; ctx.fillRect(bxx, py - 6, 6, 6);
+  ctx.fillStyle = '#ffe9a0'; ctx.fillRect(bxx + 1, py - 6, 1, 5);
+  ctx.fillStyle = '#8a6a28'; ctx.fillRect(bxx + 4, py - 5, 1, 5);
+  ctx.fillStyle = '#1c1208'; ctx.fillRect(bxx - 2, py - 1, 10, 2);   // the lip
+  ctx.fillStyle = '#c89a3c'; ctx.fillRect(bxx - 1, py - 1, 8, 1);
+  ctx.fillStyle = '#241a12'; ctx.fillRect(bxx + 2 + (sw >> 1), py + 1, 2, 2); // the clapper
+}
+
+// The range's standing readout: BEST / LAST round score on a frost plate
+// over the bell - the parkour gate plate's instrument language, the same
+// recorded labelled-row carve-out (CLAUDE.md). Hidden mid-round, when the
+// live top-centre plate (drawAgameUI) carries the numbers instead.
+function drawAgame(ex, ey, now) {
+  if (!agame.best && !agame.last) return;
+  if (agame.phase !== 'off' && agame.phase !== 'end') return;
+  // high enough that the E RING cap (drawBellHint, -30) never rides into it
+  const x0 = Math.round((AG_BELL.tx + 0.5) * TILE - ex), y0 = Math.round(AG_BELL.ty * TILE - ey - 38);
+  if (x0 < -40 || y0 < -30 || x0 > WV_W + 40 || y0 > WV_H + 30) return;
+  const rows = [
+    ['BEST', agame.best ? String(agame.best) : '-', '#ffd95c'],
+    ['LAST', agame.last ? String(agame.last) : '-', '#f4f7ff'],
+  ];
+  const W = 46, H = 18;
+  const x = x0 - (W >> 1), y = y0 - H;
+  ctx.fillStyle = 'rgba(12,18,42,0.85)';
+  ctx.fillRect(x - 1, y - 1, W + 2, H + 2);
+  ctx.fillStyle = '#3a4470';
+  ctx.fillRect(x, y, W, 1); ctx.fillRect(x, y + H - 1, W, 1);
+  ctx.fillRect(x, y, 1, H); ctx.fillRect(x + W - 1, y, 1, H);
+  for (let i = 0; i < 2; i++) {
+    const ry = y + 3 + i * 7;
+    drawPixelTextShadow(ctx, rows[i][0], x + 3, ry, '#9fb6d8', 'rgba(8,12,28,0.9)');
+    const v = rows[i][1];
+    drawPixelTextShadow(ctx, v, x + W - 3 - pixelTextWidth(v), ry, rows[i][2], 'rgba(8,12,28,0.9)');
+  }
+}
+
+// The round's live layer, drawn in UI space (render.js, after renderUI): the
+// 3-2-1 countdown in the eagle drop's own big-number language, GO as the
+// window opens, the TIME / SCORE / HITS plate top-centre while the clock
+// runs (a practice instrument's whole job is comparing numbers - the same
+// carve-out the dummy meter claims), and the final score standing large
+// while the field resets - gold when it is a new record.
+function drawAgameUI(now) {
+  if (window.DBG.hideUI) return;
+  const G = agame;
+  if (G.phase === 'off' || G.phase === 'sink') return;
+  const cxm = Math.round(VIEW_W / 2);
+  if (G.phase === 'count') {
+    const left = AG_COUNT_T - G.t;
+    const s = String(Math.max(1, Math.ceil(left)));
+    const frac = left - Math.floor(left); // each second lands with a fade
+    ctx.globalAlpha = 0.45 + 0.55 * frac;
+    drawPixelTextOutline(ctx, s, Math.round(cxm - pixelTextWidth(s, 4) / 2),
+      Math.round(VIEW_H * 0.3), '#ffd95c', '#0f1632', 4);
+    ctx.globalAlpha = 1;
+    return;
+  }
+  if (G.phase === 'play') {
+    if (G.t < 0.6) { // GO flashes as the window opens
+      ctx.globalAlpha = Math.min(1, (0.6 - G.t) / 0.25);
+      drawPixelTextOutline(ctx, 'GO', Math.round(cxm - pixelTextWidth('GO', 4) / 2),
+        Math.round(VIEW_H * 0.3), '#7ddb7a', '#0f1632', 4);
+      ctx.globalAlpha = 1;
+    }
+    const left = Math.max(0, AG_T - G.t);
+    const rows = [
+      ['TIME',  left.toFixed(1),  left < 5.05 ? '#ff6a5a' : '#ffd95c'],
+      ['SCORE', String(G.score),  '#f4f7ff'],
+      ['HITS',  String(G.hits),   '#e0c890'],
+    ];
+    const W = 62, H = 25;
+    const x = cxm - (W >> 1), y = 8;
+    ctx.fillStyle = 'rgba(12,18,42,0.85)';
+    ctx.fillRect(x - 1, y - 1, W + 2, H + 2);
+    ctx.fillStyle = '#3a4470';
+    ctx.fillRect(x, y, W, 1); ctx.fillRect(x, y + H - 1, W, 1);
+    ctx.fillRect(x, y, 1, H); ctx.fillRect(x + W - 1, y, 1, H);
+    for (let i = 0; i < 3; i++) {
+      const ry = y + 3 + i * 7;
+      drawPixelTextShadow(ctx, rows[i][0], x + 3, ry, '#9fb6d8', 'rgba(8,12,28,0.9)');
+      const v = rows[i][1];
+      drawPixelTextShadow(ctx, v, x + W - 3 - pixelTextWidth(v), ry, rows[i][2], 'rgba(8,12,28,0.9)');
+    }
+    return;
+  }
+  // 'end': the final score stands while the furniture rises back
+  const col = G.record ? '#ffd95c' : '#f4f7ff';
+  const s = String(G.last);
+  drawPixelTextOutline(ctx, 'SCORE', Math.round(cxm - pixelTextWidth('SCORE') / 2),
+    Math.round(VIEW_H * 0.28), '#9fb6d8', '#0f1632');
+  if (G.record) ctx.globalAlpha = 0.75 + 0.25 * Math.sin(now * 7);
+  drawPixelTextOutline(ctx, s, Math.round(cxm - pixelTextWidth(s, 3) / 2),
+    Math.round(VIEW_H * 0.28) + 9, col, '#0f1632', 3);
+  ctx.globalAlpha = 1;
+  const hs = G.lastHits + ' HITS';
+  drawPixelTextOutline(ctx, hs, Math.round(cxm - pixelTextWidth(hs) / 2),
+    Math.round(VIEW_H * 0.28) + 28, '#e0c890', '#0f1632');
 }
 
 // A flag: dark pole with a gilt finial, and a big red cloth streaming off it

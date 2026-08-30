@@ -896,7 +896,12 @@ window.DBG = {
   // the spawn tile, the shared hit paths, the archery targets, the parkour
   // clock and the ESC slab's exit plank
   PRACTICE, practiceDummies, PR_SPAWN, hitDummy, leavePlankRect,
-  ptargets, ptFace, ptLive, hitPTarget, parkour,
+  ptargets, ptFace, ptLive, ptHitR, hitPTarget, parkour,
+  // the archery round: the live state, the bell's resolver, ring it by hand
+  // (warp beside AG_BELL first - the reach check is real), spawn one random
+  // target, and the track parametrisation for staging shots
+  agame, agBellNear, agSpawn, agStock, agPos, AG_LEN, AG_BELL,
+  agRing: (p) => agRing(p || player, { tx: AG_BELL.tx, ty: AG_BELL.ty }),
   // the parkour roll station: roll a track by hand, resolve the die E would
   // open the wheel on, and watch the sweep (pkAnim rebinds, so a getter;
   // pkAnimStep lets a driver fast-forward the front)

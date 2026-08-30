@@ -93,6 +93,7 @@ function runCmd(p, c) {
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
   if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
   if (c.kind === 'pkdie') { pkWheelPick(p, c); return; } // the parkour roll die (js/world.js)
+  if (c.kind === 'agbell') { agRing(p, c); return; } // the archery range's bell (js/world.js)
   const o = structOf(objAt(c.tx, c.ty));
   if (!o || !STRUCTS[o.type] || o.building || !ownsStruct(o, p)) return;
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
@@ -150,7 +151,7 @@ function drawWorkHint(ox, oy) {
   if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
   if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
   const t = workTarget(player);
-  if (!t || !t.near) { drawRackHint(ox, oy); drawPkHint(ox, oy); return; } // no work target: the armory or the roll station may still be in reach
+  if (!t || !t.near) { drawRackHint(ox, oy); drawPkHint(ox, oy); drawBellHint(ox, oy); return; } // no work target: the armory, the roll station or the range bell may still be in reach
   const st = t.o && structOf(t.o);
   const isStruct = !!(st && STRUCTS[st.type]);
   const d = t.o && OBJECTS[t.o.type];
@@ -224,6 +225,19 @@ function drawPkHint(ox, oy) {
   const verb = 'ROLL';
   const totalW = 9 + 3 + pixelTextWidth(verb);
   drawKeyPrompt(Math.round((pk.tx + 0.5) * TILE - ox - totalW / 2), Math.round(pk.ty * TILE - oy - 28), verb, !!keys['e']);
+}
+
+// The range bell's prompt, the die's own proximity grammar: an E RING cap
+// over the bell while it is in reach (agBellNear, js/world.js - the same
+// resolver the press uses). It stays up mid-round - ringing again ends the
+// round - and hides only through the sink and rise, when the press is dead.
+function drawBellHint(ox, oy) {
+  if (agame.phase === 'sink' || agame.phase === 'end') return;
+  const bl = agBellNear(player);
+  if (!bl) return;
+  const verb = 'RING';
+  const totalW = 9 + 3 + pixelTextWidth(verb);
+  drawKeyPrompt(Math.round((bl.tx + 0.5) * TILE - ox - totalW / 2), Math.round(bl.ty * TILE - oy - 30), verb, !!keys['e']);
 }
 
 // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour

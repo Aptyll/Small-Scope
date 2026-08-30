@@ -256,11 +256,12 @@ function updatePlay(dt) {
         dead = true;
       }
       // ...and the archery targets: the shot meets the FACE, wherever its
-      // habit has carried it - ptFace is the same geometry the draw uses
+      // habit has carried it - ptFace is the same geometry the draw uses,
+      // and the hit disc scales with the target's size (ptHitR)
       if (!dead) for (const t of ptargets) {
         if (!ptLive(t)) continue;
         const f = ptFace(t);
-        if (Math.hypot(f.x - a.x, f.y - a.y) < PT_HIT_R) {
+        if (Math.hypot(f.x - a.x, f.y - a.y) < ptHitR(t)) {
           hitPTarget(t, a.x, a.y);
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;

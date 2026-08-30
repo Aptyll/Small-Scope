@@ -115,8 +115,9 @@ function render() {
     }
   }
 
-  // the parkour's start/finish line, painted flat on the carved ice
-  if (PRACTICE) drawParkourLine(ox, oy);
+  // the archery track's rails, flat under everything that walks, then the
+  // parkour's start/finish line, painted flat on the carved ice
+  if (PRACTICE) { drawAgTrack(ox, oy); drawParkourLine(ox, oy); }
 
   // footprints + slide trails
   for (const f of footprints) {
@@ -277,7 +278,17 @@ function render() {
     } else if (o.type === 'dummy') {
       // the practice target: skids on its tile, everything else drawn up off
       // it like a tree. The readout bar only appears once it is hurt, and
-      // updatePractice mending it is what takes the bar away again.
+      // updatePractice mending it is what takes the bar away again. While
+      // the archery round's sink runs (agSinkU, js/world.js) the sprite
+      // drops and the snow line crops it - the bottom is already under the
+      // field - and at full depth the object leaves the grid entirely.
+      const su = PRACTICE ? agSinkU() : 0;
+      if (su > 0) {
+        const vis = Math.round(DUMMY_SPR.height * (1 - su));
+        if (vis > 0) ctx.drawImage(DUMMY_SPR, 0, 0, DUMMY_SPR.width, vis,
+          px + sh + ((TILE - DUMMY_SPR.width) >> 1), py + TILE - vis, DUMMY_SPR.width, vis);
+        continue;
+      }
       const dx = px + sh + ((TILE - DUMMY_SPR.width) >> 1);
       const dy = py + TILE - DUMMY_SPR.height;
       drawSpriteFlash(DUMMY_SPR, dx, dy, o.flash);
@@ -293,12 +304,22 @@ function render() {
         // `dx` nudges the picture off the tile grid (the practice rack sits
         // half a tile left of its pair, square under the dummy's axis)
         const rx = px + sh + (o.dx || 0);
+        // mid-sink for the archery round: dropped and cropped like the dummy
+        const su = PRACTICE ? agSinkU() : 0;
+        if (su > 0) {
+          const vis = Math.round(RACK_SPR.height * (1 - su));
+          if (vis > 0) ctx.drawImage(RACK_SPR, 0, 0, RACK_SPR.width, vis,
+            rx + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE + 1 - vis, RACK_SPR.width, vis);
+          continue;
+        }
         ctx.fillStyle = 'rgba(40,60,100,0.25)';
         ctx.fillRect(rx + 2, py + TILE - 2, TILE * 2 - 4, 2);
         drawSpriteFlash(RACK_SPR, rx + ((TILE * 2 - RACK_SPR.width) >> 1), py + TILE - RACK_SPR.height + 1, o.flash);
       }
     } else if (o.type === 'pkdie') {
       drawPkDie(o, px, py, now);
+    } else if (o.type === 'agbell') {
+      drawAgBell(o, px + sh, py, now);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {
@@ -371,8 +392,9 @@ function render() {
   drawWorkHint(ox, oy);
   drawFishHint(ex, ey, now);
   // the parkour's two readouts: the lap clock over the runner, BEST / LAST
-  // on the frost plate at the gate (drawParkour, js/draw-world.js)
-  if (PRACTICE) drawParkour(ex, ey, now);
+  // on the frost plate at the gate (drawParkour, js/draw-world.js) - and the
+  // archery range's own BEST / LAST plate over the bell (drawAgame)
+  if (PRACTICE) { drawParkour(ex, ey, now); drawAgame(ex, ey, now); }
 
   // construction AND card-crafting progress bars - same bar, same "over the
   // roof" placement for a big building; a craft in flight (a finished Keep,
@@ -521,6 +543,9 @@ function render() {
   // window, so this cannot come after the feed (see the tooltips banner, ui.js)
   tipResolve();
   renderUI(now);
+  // the archery round's live layer: countdown, GO, the TIME/SCORE/HITS
+  // plate, the final score (drawAgameUI, js/draw-world.js)
+  if (PRACTICE && state.mode === 'play') drawAgameUI(now);
   if (state.mode === 'drop') renderDropUI(now);
   // the flag order riding the pointer (its target tile is bracketed back in
   // the world pass); only up while the middle button is held

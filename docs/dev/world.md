@@ -180,10 +180,10 @@ the pointer picks, and **releasing E takes** — the right-click wheel's hold-an
 moved onto the key (a real work target in reach keeps E's day job, the same rule that decides
 which prompt shows). The pick lands in `rackEquip` (`PRACTICE`-gated, the practice banner),
 replacing the selected slot with a fresh instance of the picked tool, a plain arrow seated so
-it fires the moment it is taken — and the
-**targets standing in the open along the field's edges** near the trees — statics on posts of
-all three heights, pop-ups working the corners, two sliders patrolling the north edge. No
-fences, no wildlife, no chests, no pond, no harvest, and nothing spawns or restocks. `PRACTICE`
+it fires the moment it is taken — the **archery targets riding a two-rail track around the
+field's whole perimeter** (below), and the **range bell** one step west of the spawn that runs
+the timed archery round over that track. No fences, no wildlife, no chests, no pond, no
+harvest, and nothing spawns or restocks outside a round. `PRACTICE`
 (js/core.js) pins `SEED` to `PRACTICE_SEED` *above* the `?seed` parse, so the field is
 bit-identical on every visit and no seed can reshape it.
 
@@ -258,24 +258,48 @@ snow — `updatePlayer`'s surface block only special-cases ice and holes, so no 
 was needed — but it refuses prone (`tryProne` wants ground 0; there is no snow to dig into) and
 leaves no footprints.
 
-**The archery targets** (Link's-Crossbow-Training-style) are ENTITIES in `ptargets`, never tile
-objects — a slider crosses tiles every frame, and a raised face should not block a walker — so
-only arrows meet them: the PRACTICE branch of the arrow loop (js/sim.js) tests every live face
-disc (`ptFace`/`ptLive`/`PT_HIT_R`). Three habits share one record: `static` on posts of three
-heights (`PT_ALTS`), `pop` rising out of hatch boxes on offset clocks (`PT_POP`), and `slide`
-patrolling rails between `x0..x1` (`ptFace` is the one geometry the update, the arrow test and
-the draw all read). A hit is flat feedback — `hitPTarget` shatters the face into painted chips,
-straw and splinters, the post stands bare and splintered, and `PT_RESPAWN` seconds later a
-fresh face springs back with a wobble. `drawPTarget` (js/draw-world.js) owns every pixel,
-`TARGET_SPR` is the 32×32 face — baked per-pixel (true circles, hash-dithered band edges,
-top-left light) rather than from a grid.
+**The archery targets** (Link's-Crossbow-Training-style) all ride one piece of furniture: a
+**two-rail track around the field's whole perimeter** (`AG_RECT`, one tile in from the rim so
+the treeline never covers a face; rails drawn flat by `drawAgTrack`). Every target is a trolley
+on a rail — ENTITIES in `ptargets`, never tile objects (a mover crosses tiles every frame, and
+a raised face should not block a walker) — so only arrows meet them: the PRACTICE branch of the
+arrow loop (js/sim.js) tests every live face disc (`ptFace`/`ptLive`/`ptHitR` — the hit disc
+scales with the target's `size`, small or large, `AG_SIZE`). A target lives at track distance
+`s` (`agPos` maps it to world x/y) on one of **two lanes** (`AG_LANE_GAP` px apart), with three
+habits: `still`, `move` (rolling `dir × spd` along the rail, `AG_SPD` slow/medium/fast) and
+`pop` (flipping up out of its trolley on its own `{hide, rise, hold, sink}` clock). **A mover
+about to run into anything parked — or rolling slower — on its rail hops to the free lane and
+keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occupied stretch),
+which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`: chips, straw and
+splinters either way, then a **stock** target (the free-practice roster, `agStock`) stands bare
+`PT_RESPAWN` seconds and springs a fresh face, while a round target is spent for good and banks
+its points. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is the 32×32 face —
+baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a grid.
+
+**The archery round** hangs off the **bell** (`agbell`, `AG_BELL`) beside the spawn: standing
+within E's reach (`agBellNear`) raises an `E RING` cap (`drawBellHint`, ui.js), and the press
+lands in `agRing` through the same `input.cmd` → `runCmd` path every order takes. Ringing it
+runs the show (`agame.phase`, ticked by `agUpdate` from `updatePractice`): the stock roster
+bursts away and **the dummy and the rack sink under the snow** (`agSinkU` crops their sprites
+in render.js; at full depth their objects leave the grid entirely, so nothing blocks a shot,
+and `agEndRound` puts the same instances back), a **3-2-1 countdown** lands in the eagle drop's
+big-number language, and for `AG_T` seconds **random targets pour onto the track** — habit,
+lane, size and speed all rolled fresh per spawn (`agSpawn`, runtime `rng()`, reshuffles
+nothing) — each worth points on the harder-shot-pays-more rule (base 10; small, pop-up and
+fast/medium pay more; the floater at the face says what it paid). A TIME / SCORE / HITS plate
+rides top-centre (`drawAgameUI` — a practice instrument, the dummy meter's carve-out), timing
+out (or ringing again) ends the round with the final score standing large, and BEST / LAST hang
+on a frost plate over the bell (`drawAgame`). **BEST is the profile's all-time record**
+(`PROFILE.bestRange()`/`setBestRange` — whole points, only a strictly higher score writes), the
+lap record's twin and the second of the only two things practice ever writes.
 
 Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local slot is
 the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
 forest), `die()` becomes `practiceRevive()` (full pool, spawn tile `PR_SPAWN`, a beat of
 grace), `checkLastStanding()` never fires, and the profile is never written — `gainGold` skips
-`PROFILE.addGold` and the pinned clock means `addDay` can never fire — with one deliberate
-exception: a record parkour lap (`PROFILE.setBestLap`, above). The way out is the ESC
+`PROFILE.addGold` and the pinned clock means `addDay` can never fire — with two deliberate
+exceptions: a record parkour lap (`PROFILE.setBestLap`) and a record archery round
+(`PROFILE.setBestRange`, both above). The way out is the ESC
 slab's LEAVE PRACTICE plank ([settings](gameplay.md#settings)).
 
 The **dummy** is an `OBJECTS` entry (`solid`, any tool, verb HIT) with one solid tile and a
@@ -285,8 +309,8 @@ tests the dummy across its base tile and the two above it, so torso and head sho
 the roll's tackle. It never breaks: the pool floors at zero, the overhead bar appears only
 while it is hurt, and `updatePractice` (called from `updatePlay` under `PRACTICE`) mends it
 back to `DUMMY_HP` after `DUMMY_RESET_T` seconds unhit, with a shimmer for the announcement.
-`updatePractice` is also the grounds' clock: it ticks every target's habit and respawn, and
-times the parkour laps.
+`updatePractice` is also the grounds' clock: it ticks every target's habit, rail roll and
+respawn, runs the archery round (`agUpdate`), and times the parkour laps.
 
 Over the dummy's head hangs its **damage meter** — LAST HIT / DPS / TOTAL for the combo in
 progress, a recorded labelled-row carve-out from show-don't-label (CLAUDE.md, shared with the
