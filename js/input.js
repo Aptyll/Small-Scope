@@ -59,10 +59,13 @@ window.addEventListener('keydown', (e) => {
         const pk = pkDieNear(player);
         if (pk) { SFX.unlock(); state.wheel = { kind: 'pkdie', tx: pk.tx, ty: pk.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
         else {
-          // the range bell: a plain press through the cmd path, no wheel to
-          // hold - E beside it rings the archery round on (or off, mid-round)
+          // the range bell: holding E beside it opens the difficulty wheel -
+          // easy, medium, hard - and releasing on a wedge rings the round in
+          // at that difficulty (the roll die's own grammar). Only while the
+          // range is idle: mid-round the bell is under the snow with the
+          // rest of the furniture, and the sink and rise are mid-ceremony.
           const bl = agBellNear(player);
-          if (bl) { SFX.unlock(); player.input.cmd = { kind: 'agbell', tx: bl.tx, ty: bl.ty }; }
+          if (bl && agame.phase === 'off') { SFX.unlock(); state.wheel = { kind: 'agbell', tx: bl.tx, ty: bl.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
         }
       }
     }
@@ -91,10 +94,11 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => {
   keys[e.key.toLowerCase()] = false;
-  // letting go of E with an E-held wheel up (armory or roll die) takes what
-  // the pointer is on (or cancels from the hub), exactly as releasing the
-  // right button does
-  if (e.key.toLowerCase() === 'e' && state.wheel && (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie')) {
+  // letting go of E with an E-held wheel up (armory, roll die or range
+  // bell) takes what the pointer is on (or cancels from the hub), exactly
+  // as releasing the right button does
+  if (e.key.toLowerCase() === 'e' && state.wheel &&
+      (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie' || state.wheel.kind === 'agbell')) {
     resolveWheel();
     state.wheel = null;
   }
@@ -109,9 +113,10 @@ window.addEventListener('blur', () => {
   state.flagAim = false;
   state.dragPend = null;
   if (state.drag) dragReturn();
-  // an E-held wheel (armory or roll die) is a held gesture too: its keyup is
-  // lost with the focus, so it closes (choosing nothing) instead of sticking open
-  if (state.wheel && (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie')) state.wheel = null;
+  // an E-held wheel (armory, roll die or range bell) is a held gesture too:
+  // its keyup is lost with the focus, so it closes (choosing nothing)
+  // instead of sticking open
+  if (state.wheel && (state.wheel.kind === 'rack' || state.wheel.kind === 'pkdie' || state.wheel.kind === 'agbell')) state.wheel = null;
 });
 
 canvas.addEventListener('mousemove', (e) => {

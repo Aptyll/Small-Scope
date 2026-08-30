@@ -603,7 +603,7 @@ const practiceDummies = [];  // every dummy standing, for updatePractice's mend 
 const PT_HIT_R = 11;         // px around a LARGE face's centre an arrow scores on
 const PT_RESPAWN = 2.6;      // s a broken stock face stays gone
 const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the stock pop cycle
-const AG_SPD = [26, 46, 70]; // a mover's roll: slow / medium / fast, px/s
+const AG_SPD = [26, 46, 70]; // the stock roster's mover speeds (a round rolls its difficulty's own table, AG_DIFF)
 const AG_SIZE = [0.625, 1];  // small / large, as a scale on the 32px face
 const AG_LANE_GAP = 7;       // px between the outer and inner rail
 const AG_POST = 8;           // px of post between trolley and face bottom
@@ -630,7 +630,7 @@ function agPos(s, laneU) {
 function addPTarget(kind, s, opts) {
   const t = Object.assign({
     kind, s: ((s % AG_LEN) + AG_LEN) % AG_LEN,
-    lane: 0, laneU: 0, dir: 1, spd: 0, size: 1,
+    lane: 0, laneU: 0, dir: 1, spd: 0, spdClass: 0, size: 1,
     up: 1, t: 0, pop: null, broken: 0, wob: 0, swapT: 0,
     stock: false, gone: false, x: 0, y: 0,
   }, opts || {});
@@ -670,8 +670,10 @@ function hitPTarget(t, hx, hy) {
   else {
     t.gone = true;  // updatePractice sweeps it out of the array
     if (agame.phase === 'play') {
+      // speed pays by CLASS (slow/medium/fast), not raw px/s - the classes
+      // mean the same thing on every difficulty's speed table
       const pts = 10 + (t.size === 0 ? 10 : 0) + (t.kind === 'pop' ? 10 : 0) +
-        (t.spd >= AG_SPD[2] ? 10 : t.spd >= AG_SPD[1] ? 5 : 0);
+        (t.spd > 0 ? [0, 5, 10][t.spdClass] || 0 : 0);
       agame.score += pts;
       agame.hits++;
       addFloater(f.x, f.y - 6, '+' + pts, '#ffd95c');
@@ -681,33 +683,48 @@ function hitPTarget(t, hx, hy) {
 }
 
 // ---- the archery round: one bell -----------------------------------------
-// The BELL west of the dummy starts the round (kind 'agbell' through the same
-// input.cmd -> runCmd path every order takes - agBellNear resolves who is
-// beside it, shared by the E RING cap, drawBellHint in js/ui.js, and the
-// press in js/input.js). Ringing it clears the range for shooting: the stock
-// roster bursts away, the dummy and the rack SINK UNDER THE SNOW (their
-// objects leave the grid at full depth, so nothing blocks a shot or a
-// runner), a 3-2-1 countdown lands, and for AG_T seconds random targets pour
-// onto the track - habit, lane, size and speed all rolled fresh (agSpawn) -
-// each worth points on hitPTarget's harder-shot-pays-more rule. Time out (or
-// ring again) and the round ends: the score stands as LAST, a strictly
-// higher one writes BEST through PROFILE.setBestRange - the range's own
-// all-time record beside the parkour's lap - the furniture rises back out of
-// the snow and the stock roster springs back on. The readouts (the
-// countdown, the top-centre TIME/SCORE/HITS plate, the bell's BEST/LAST
-// frost plate) live in drawAgameUI / drawAgame, js/draw-world.js.
+// The BELL west of the dummy starts the round on the die's own grammar:
+// HOLDING E beside it (agBellNear - shared by the E RING cap, drawBellHint
+// in js/ui.js, and the press in js/input.js) opens a three-wedge radial
+// wheel (kind 'agbell', the ordinary wheel pipeline) - one wedge per
+// difficulty, each drawn as the TARGET FACE the round pours out, smaller as
+// the pick gets harder, the armed one wearing a gold frame. Releasing on a
+// wedge IS the ring (agRing, through the same input.cmd -> runCmd path every
+// order takes): the stock roster bursts away, the dummy, the rack AND THE
+// BELL ITSELF sink under the snow (their objects leave the grid at full
+// depth, so nothing blocks a shot or a runner - which is also why a running
+// round cannot be rung off: the timer alone ends it), a 3-2-1 countdown
+// lands, and for AG_T seconds random targets pour onto the track from the
+// picked difficulty's spawn table (AG_DIFF: mover speeds, small/pop odds,
+// crowd cap and refill pace) - each worth points on hitPTarget's
+// harder-shot-pays-more rule. Time out and the round ends: the score stands
+// as LAST, a strictly higher one writes BEST through PROFILE.setBestRange -
+// the range's own all-time record beside the parkour's lap - the furniture
+// rises back out of the snow and the stock roster springs back on. The bell
+// never wears the difficulty (no recolour - the wheel's gold frame is the
+// readout); the readouts (the countdown, the top-centre TIME/SCORE/HITS
+// plate, the bell's BEST/LAST frost plate) live in drawAgameUI / drawAgame,
+// js/draw-world.js.
 const AG_T = 45;         // s a round runs
 const AG_COUNT_T = 3;    // the countdown, one tick per second
-const AG_SINK_T = 0.9;   // s the dummy and rack take to sink / rise
+const AG_SINK_T = 0.9;   // s the dummy, rack and bell take to sink / rise
 const AG_END_T = 2.4;    // s the final score stands before the field resets
-const AG_MAX = 7;        // most round targets on the track at once
-const AG_SPAWN_T = 1.5;  // s between top-up spawns while under AG_MAX
 const AG_BELL = { tx: PR_X0 + 15, ty: PR_Y0 + 12 }; // the bell, west of the pad on the dummy's own row
-// phase: off | sink | count | play | end. `best` is the profile's record,
-// seeded at gen and written on a strictly higher score; last/lastHits are
-// this visit's. `tick` edges the countdown SFX, dustT paces the sink dust.
+// one spawn table per difficulty, picked off the bell's wheel: spd = the
+// three mover speeds (scored by class, not raw px/s), small/still/pop the
+// mix odds (move takes the rest), max/spawnT the crowd and its refill pace
+const AG_DIFF = {
+  easy:   { spd: [20, 34, 50], small: 0.22, still: 0.42, pop: 0.22, max: 6, spawnT: 1.8 },
+  medium: { spd: [26, 46, 70], small: 0.40, still: 0.30, pop: 0.25, max: 7, spawnT: 1.5 },
+  hard:   { spd: [34, 60, 90], small: 0.58, still: 0.16, pop: 0.32, max: 9, spawnT: 1.1 },
+};
+// phase: off | sink | count | play | end. `diff` is the armed difficulty
+// (the wheel's gold frame; the bell itself never wears it). `best` is the
+// profile's record, seeded at gen and written on a strictly higher score;
+// last/lastHits are this visit's. `tick` edges the countdown SFX, dustT
+// paces the sink dust.
 const agame = { phase: 'off', t: 0, score: 0, hits: 0, last: 0, lastHits: 0,
-  best: 0, record: false, spawnT: 0, tick: 0, dustT: 0 };
+  best: 0, record: false, diff: 'medium', spawnT: 0, tick: 0, dustT: 0 };
 let agBellObj = null;    // the bell object, for its ring animation
 let agFurniture = [];    // the dummy + rack objects the round sinks away
 
@@ -746,24 +763,21 @@ function agBellNear(p) {
   return null;
 }
 
-// the E press at the bell, through runCmd: off -> the round winds up (the
-// stock roster leaves with the furniture); mid-countdown or mid-round ->
-// rung off early, the score standing as it is. The sink and rise phases
-// ignore the press - the field is mid-ceremony.
+// a difficulty released off the bell's wheel, through runCmd: the wedge IS
+// the ring (the roll die's own grammar) - it arms that difficulty and winds
+// the round up, the stock roster leaving with the furniture. Only an idle
+// range answers: mid-round the bell is under the snow, and the sink and
+// rise phases are mid-ceremony. PRACTICE-gated like pkWheelPick.
 function agRing(p, c) {
-  if (!PRACTICE) return;
+  if (!PRACTICE || agame.phase !== 'off' || !AG_DIFF[c.id]) return;
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
-  if (agame.phase === 'sink' || agame.phase === 'end') return;
+  agame.diff = c.id;
   if (agBellObj) agBellObj.ring = 0.9;
   SFX.dawnChime();
-  if (agame.phase === 'off') {
-    agame.phase = 'sink'; agame.t = 0; agame.dustT = 0;
-    agame.score = 0; agame.hits = 0;
-    for (const t of ptargets) { const f = ptFace(t); burst(f.x, f.y, '#f4f7ff', 5, 40, 0.4, true); }
-    ptargets.length = 0;
-  } else {
-    agEndRound(); // count or play: rung off
-  }
+  agame.phase = 'sink'; agame.t = 0; agame.dustT = 0;
+  agame.score = 0; agame.hits = 0;
+  for (const t of ptargets) { const f = ptFace(t); burst(f.x, f.y, '#f4f7ff', 5, 40, 0.4, true); }
+  ptargets.length = 0;
 }
 
 // the round closes: bank LAST (and BEST through the profile on a strictly
@@ -781,20 +795,24 @@ function agEndRound() {
   if (agame.record) SFX.levelUp(); else SFX.place();
 }
 
-// one random target onto the track: habit, lane, size, speed and clock all
-// rolled fresh (runtime rng() reshuffles nothing - world.md), the spawn
-// point retried away from anything already parked there, and a wobble-in
-// with a poof so a face never just blinks into being
+// one random target onto the track, from the armed difficulty's spawn table
+// (AG_DIFF): habit, lane, size, speed and clock all rolled fresh (runtime
+// rng() reshuffles nothing - world.md), the spawn point retried away from
+// anything already parked there, and a wobble-in with a poof so a face
+// never just blinks into being
 function agSpawn() {
+  const S = AG_DIFF[agame.diff] || AG_DIFF.medium;
   const r = rng();
-  const kind = r < 0.3 ? 'still' : r < 0.75 ? 'move' : 'pop';
+  const kind = r < S.still ? 'still' : r < 1 - S.pop ? 'move' : 'pop';
   const lane = rng() < 0.5 ? 0 : 1;
   let s = rng() * AG_LEN;
   for (let i = 0; i < 8 && agBlocked(lane, s, 26); i++) s = rng() * AG_LEN;
+  const sc = (rng() * 3) | 0; // the mover speed class - what the score reads
   const t = addPTarget(kind, s, {
-    lane, size: rng() < 0.4 ? 0 : 1,
+    lane, size: rng() < S.small ? 0 : 1,
     dir: rng() < 0.5 ? 1 : -1,
-    spd: kind === 'move' ? AG_SPD[(rng() * 3) | 0] : 0,
+    spd: kind === 'move' ? S.spd[sc] : 0,
+    spdClass: kind === 'move' ? sc : 0,
     pop: kind === 'pop' ? { hide: rand(0.7, 1.8), rise: 0.22, hold: rand(1.1, 2.2), sink: 0.22 } : null,
   });
   t.wob = 0.45;
@@ -811,7 +829,7 @@ function agStock(quiet) {
   addPTarget('still', w + h * 0.5, { stock: true, size: 0, lane: 1 });             // east, small, inner rail
   addPTarget('still', w * 2 + h + h * 0.75, { stock: true });                      // west, above the gate walk
   addPTarget('move', w * 0.2, { stock: true, spd: AG_SPD[0], dir: 1 });            // the slow patroller
-  addPTarget('move', w + h + w * 0.5, { stock: true, spd: AG_SPD[2], dir: -1, size: 0, lane: 1 }); // the fast small one
+  addPTarget('move', w + h + w * 0.5, { stock: true, spd: AG_SPD[2], spdClass: 2, dir: -1, size: 0, lane: 1 }); // the fast small one
   addPTarget('pop', w * 0.15, { stock: true, t: 0 });
   addPTarget('pop', w + h * 0.8, { stock: true, t: 1.4, size: 0 });
   addPTarget('pop', w + h + w * 0.7, { stock: true, t: 2.7 });
@@ -845,13 +863,14 @@ function agUpdate(dt) {
     const left = Math.ceil(AG_COUNT_T - G.t);
     if (left !== G.tick) { G.tick = left; SFX.nock(); }
     if (G.t >= AG_COUNT_T) {
-      G.phase = 'play'; G.t = 0; G.spawnT = AG_SPAWN_T;
+      G.phase = 'play'; G.t = 0; G.spawnT = (AG_DIFF[G.diff] || AG_DIFF.medium).spawnT;
       for (let i = 0; i < 4; i++) agSpawn();
       SFX.place();
     }
   } else if (G.phase === 'play') {
+    const S = AG_DIFF[G.diff] || AG_DIFF.medium;
     G.spawnT -= dt;
-    if (G.spawnT <= 0 && ptargets.length < AG_MAX) { agSpawn(); G.spawnT = AG_SPAWN_T; }
+    if (G.spawnT <= 0 && ptargets.length < S.max) { agSpawn(); G.spawnT = S.spawnT; }
     if (G.t >= AG_T) agEndRound();
   } else if (G.phase === 'end') {
     if (G.t >= AG_END_T) { G.phase = 'off'; agStock(false); }
@@ -1014,10 +1033,12 @@ function genPracticeWorld() {
   // (and its brackets and prompt) 8px left, landing its visual centre
   // exactly opposite the bell's - the tiles stay honest, the picture mirrors
   const rk1 = put(25, 12, 'rack', { lead: true, dx: -8 }), rk2 = put(26, 12, 'rack', {});
-  // the archery round sinks exactly these under the snow and raises them back
-  agFurniture = [d, rk1, rk2].filter(Boolean);
   // ---- the range bell, the rack's western mirror -------------------------
   agBellObj = put(15, 12, 'agbell', { ring: 0 });
+  // the archery round sinks exactly these under the snow - the bell
+  // included, which is why a running round cannot be rung off - and
+  // agEndRound raises the same instances back
+  agFurniture = [d, rk1, rk2, agBellObj].filter(Boolean);
   // ---- the targets: the free-practice roster, out on the perimeter track -
   agStock(true);
   // ---- the ice parkour: the gate walk, the carved loop, the flags --------

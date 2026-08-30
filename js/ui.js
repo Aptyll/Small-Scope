@@ -29,9 +29,10 @@ function wheelOptions() {
   // the practice rack offers every tool in the game, in table (tier) order -
   // the arena is the one place trying an unearned weapon costs nothing
   if (w.kind === 'rack') return Object.keys(TOOLS).map((id) => ({ id }));
-  // the parkour die: the three difficulties, easy straight up - picking one
-  // IS the roll, so there is no separate roll wedge
-  if (w.kind === 'pkdie') return [{ id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
+  // the parkour die and the range bell: the three difficulties, easy
+  // straight up - picking one IS the roll (or the ring), so neither carries
+  // a separate go wedge
+  if (w.kind === 'pkdie' || w.kind === 'agbell') return [{ id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
   const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
   // so a type's extra option lands between them instead of displacing either
@@ -81,7 +82,7 @@ function resolveWheel() {
   const L = wheelLayout();
   if (L.seg < 0) return; // released in the hub = cancel
   player.input.cmd = {
-    kind: w.kind === 'build' ? 'build' : w.kind === 'rack' ? 'rack' : w.kind === 'pkdie' ? 'pkdie' : L.opts[L.seg].id,
+    kind: w.kind === 'build' ? 'build' : w.kind === 'rack' ? 'rack' : w.kind === 'pkdie' ? 'pkdie' : w.kind === 'agbell' ? 'agbell' : L.opts[L.seg].id,
     tx: w.tx, ty: w.ty, id: L.opts[L.seg].id,
   };
 }
@@ -229,10 +230,11 @@ function drawPkHint(ox, oy) {
 
 // The range bell's prompt, the die's own proximity grammar: an E RING cap
 // over the bell while it is in reach (agBellNear, js/world.js - the same
-// resolver the press uses). It stays up mid-round - ringing again ends the
-// round - and hides only through the sink and rise, when the press is dead.
+// resolver the wheel-open press uses). Holding E opens the difficulty
+// wheel, which hides every hint including this one. Only while the range
+// is idle - mid-round the bell is under the snow.
 function drawBellHint(ox, oy) {
-  if (agame.phase === 'sink' || agame.phase === 'end') return;
+  if (agame.phase !== 'off') return;
   const bl = agBellNear(player);
   if (!bl) return;
   const verb = 'RING';
@@ -382,6 +384,19 @@ function renderWheel(now) {
         ctx.fillRect(rix - 7, riy - 7, 14, 1); ctx.fillRect(rix - 7, riy + 6, 14, 1);
         ctx.fillRect(rix - 7, riy - 7, 1, 14); ctx.fillRect(rix + 6, riy - 7, 1, 14);
       }
+    } else if (w.kind === 'agbell') {
+      // a difficulty wedge is the round it rings in: the TARGET FACE the
+      // spawner pours out, drawn smaller as the pick gets harder. The armed
+      // difficulty wears the gold frame - the bell itself never changes.
+      const rix = Math.round(ix), riy = Math.round(iy);
+      const di = PK_DIFFS.indexOf(opt.id);
+      const fw = [14, 11, 8][di];
+      ctx.drawImage(TARGET_SPR, rix - (fw >> 1), riy - (fw >> 1), fw, fw);
+      if (agame.diff === opt.id) {
+        ctx.fillStyle = '#ffd95c';
+        ctx.fillRect(rix - 9, riy - 9, 18, 1); ctx.fillRect(rix - 9, riy + 8, 18, 1);
+        ctx.fillRect(rix - 9, riy - 9, 1, 18); ctx.fillRect(rix + 8, riy - 9, 1, 18);
+      }
     } else {
       const label = opt.id === 'upgrade' ? 'UP' : opt.id === 'demolish' ? 'DEL' : 'CARD';
       drawPixelTextOutline(ctx, label,
@@ -407,6 +422,9 @@ function renderWheel(now) {
       color = TOOL_TIERS[TOOLS[opt.id].tier].rim; // the name in its tier's metal
     } else if (w.kind === 'pkdie') {
       label = 'ROLL ' + opt.id.toUpperCase();
+      color = PK_PIP_COL[PK_DIFFS.indexOf(opt.id)];
+    } else if (w.kind === 'agbell') {
+      label = 'RING ' + opt.id.toUpperCase();
       color = PK_PIP_COL[PK_DIFFS.indexOf(opt.id)];
     } else if (opt.id === 'upgrade') {
       if (!o || o.tier >= STRUCTS[o.type].tiers.length - 1) { label = 'MAX TIER'; color = '#9fb6d8'; }

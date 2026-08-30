@@ -278,18 +278,25 @@ its points. `drawPTarget` (js/draw-world.js) owns every pixel, `TARGET_SPR` is t
 baked per-pixel (true circles, hash-dithered band edges, top-left light) rather than from a grid.
 
 **The archery round** hangs off the **bell** (`agbell`, `AG_BELL`) west of the dummy: standing
-within E's reach (`agBellNear`) raises an `E RING` cap (`drawBellHint`, ui.js), and the press
-lands in `agRing` through the same `input.cmd` → `runCmd` path every order takes. Ringing it
-runs the show (`agame.phase`, ticked by `agUpdate` from `updatePractice`): the stock roster
-bursts away and **the dummy and the rack sink under the snow** (`agSinkU` crops their sprites
-in render.js; at full depth their objects leave the grid entirely, so nothing blocks a shot,
-and `agEndRound` puts the same instances back), a **3-2-1 countdown** lands in the eagle drop's
-big-number language, and for `AG_T` seconds **random targets pour onto the track** — habit,
-lane, size and speed all rolled fresh per spawn (`agSpawn`, runtime `rng()`, reshuffles
-nothing) — each worth points on the harder-shot-pays-more rule (base 10; small, pop-up and
-fast/medium pay more; the floater at the face says what it paid). A TIME / SCORE / HITS plate
+within E's reach (`agBellNear`) raises an `E RING` cap (`drawBellHint`, ui.js), and **holding E
+opens a three-wedge radial wheel** (kind `'agbell'`, the roll die's own hold-and-release
+grammar and the ordinary wheel pipeline) — one wedge per difficulty, each drawn as **the target
+face the round pours out, smaller as the pick gets harder**, the armed one wearing a gold frame
+(the bell itself never wears the difficulty — no recolour, the wheel's frame is the readout).
+Releasing on a wedge IS the ring (`agRing`, through the same `input.cmd` → `runCmd` path every
+order takes) and runs the show (`agame.phase`, ticked by `agUpdate` from `updatePractice`): the
+stock roster bursts away and **the dummy, the rack and the bell itself sink under the snow**
+(`agSinkU` crops their sprites in render.js; at full depth their objects leave the grid
+entirely, so nothing blocks a shot — which is also why a running round cannot be rung off, and
+`agEndRound` puts the same instances back), a **3-2-1 countdown** lands in the eagle drop's
+big-number language, and for `AG_T` seconds **random targets pour onto the track from the
+picked difficulty's spawn table** (`AG_DIFF`: the three mover speeds, the small/still/pop odds,
+the crowd cap and its refill pace — easy is slow, large and sparse, hard fast, small and
+crowded) — each worth points on the harder-shot-pays-more rule (base 10; small, pop-up and
+fast/medium pay more, speed scored by **class** so the bonus means the same thing on every
+difficulty's table; the floater at the face says what it paid). A TIME / SCORE / HITS plate
 rides top-centre (`drawAgameUI` — a practice instrument, the dummy meter's carve-out), timing
-out (or ringing again) ends the round with the final score standing large, and BEST / LAST hang
+out ends the round with the final score standing large, and BEST / LAST hang
 on a frost plate over the bell (`drawAgame`). **BEST is the profile's all-time record**
 (`PROFILE.bestRange()`/`setBestRange` — whole points, only a strictly higher score writes), the
 lap record's twin and the second of the only two things practice ever writes.

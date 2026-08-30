@@ -319,7 +319,18 @@ function render() {
     } else if (o.type === 'pkdie') {
       drawPkDie(o, px, py, now);
     } else if (o.type === 'agbell') {
-      drawAgBell(o, px + sh, py, now);
+      // mid-sink for the archery round, like the dummy and rack: the bell is
+      // drawn procedurally, so it slides down and a clip at its ground line
+      // crops what is already under the field
+      const su = PRACTICE ? agSinkU() : 0;
+      if (su > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(px - 2, py + TILE - 29, 21, 29);
+        ctx.clip();
+        drawAgBell(o, px + sh, py + Math.round(su * 29), now);
+        ctx.restore();
+      } else drawAgBell(o, px + sh, py, now);
     } else if (o.type === 'bush') {
       drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {
