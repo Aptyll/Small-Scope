@@ -383,7 +383,7 @@ function makeInput() {
                          // browser tab, and preventDefault cannot stop it
     eatBerry: false, eatFish: false, // edge-triggered
     ability: -1,         // edge-triggered: cast the class ability on this key (1-4), js/abilities.js
-    cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i}
+    cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i} or {kind:'ability', i}
   };
 }
 
@@ -465,6 +465,7 @@ class Player {
     // rooted by a trap, slowed under a net or a crater, revealed by the
     // falcon, shielded, mid-rush, or five seconds of juggernaut
     this.abCd = [0, 0, 0, 0];
+    this.abLv = [1, 1, 1, 1];                      // ability levels, 1..AB_LV_MAX - gold buys, fresh every match (js/abilities.js)
     this.castAb = -1; this.castT = 0;
     // Every state ANY unit can be under - stun, root (a snare's jaws), slow
     // and its net drape, the falcon's mark, and fire - is written and cleared

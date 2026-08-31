@@ -91,6 +91,8 @@ function resolveWheel() {
 function runCmd(p, c) {
   if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
   if (c.kind === 'skill') { buySkill(p, c.i); return; }
+  if (c.kind === 'ability') { buyAbilityLv(p, c.i); return; } // an ability level, gear's twin
+
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
   if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
   if (c.kind === 'pkdie') { pkWheelPick(p, c); return; } // the parkour roll die (js/world.js)
@@ -1172,15 +1174,13 @@ function drawBag(now) {
 // The quiver count and dodge pips the old rail carried are gone: the reticle,
 // the overhead bar and the pack's ability row already say both.
 //
-// A tool cell says four things without a word on it. The PLATE behind the icon
-// is the tool's tier colour, the same colour it wears in every other well it
-// ever sits in. The SELECTED slot is the one with the lit rim, lifted a pixel
-// off the plate. Along the top inner edge, one pip per bit cell in that tool,
-// inked in each bit's own colour: a filled pip is a bit, a hollow one is a
-// free cell, the bright one is what the next press will fire, and a red one is
-// a bit this tool is not strong enough to throw. And the cooldown between
-// shots wipes top-down over the whole well, so the tool's rate of fire is the
-// shape of the wipe rather than a number anywhere.
+// A tool cell says three things without a word on it. The PLATE behind the
+// icon is the tool's tier colour, the same colour it wears in every other
+// well it ever sits in. The SELECTED slot is the one with the lit rim, lifted
+// a pixel off the plate. And the cooldown between shots wipes top-down over
+// the whole well, so the tool's rate of fire is the shape of the wipe rather
+// than a number anywhere. What is loaded stays out of the resting well - the
+// hover-raised bit column is where the build is read and edited.
 //
 // The upgrade half of this strip - the four skill wells and the plus that
 // spends a skill point on one - moved into the backpack, under the gear row
@@ -1224,6 +1224,14 @@ function stripCellRect(j) {
 function toolCellRect(i) { return stripCellRect(i); }
 // ability i's well: keys 1-4, in order to the weapon's right
 function abCellRect(i) { return stripCellRect(1 + i); }
+// the upgrade badge in an ability well's top-right corner - shared by the
+// pixels and the press so they cannot disagree. It only exists while the
+// level is affordable (drawClassAbCell), so a press outside those moments
+// falls through to the cast.
+function abBuyRect(i) {
+  const r = abCellRect(i);
+  return { x: r.x + r.w - 11, y: r.y + 1, w: 10, h: 10 };
+}
 // { kind:'slot', i } | { kind:'ab', i } | { kind:'frame' } | null. Shared by
 // the click handler, the cursor and the strip's own hover so they cannot
 // disagree.
@@ -1425,7 +1433,16 @@ function hudPress(mx, my) {
   }
   const sh = stripHit(mx, my);
   if (sh) {
-    if (sh.kind === 'ab') player.input.ability = sh.i; // click-to-cast: the well IS the key
+    if (sh.kind === 'ab') {
+      // the gold plus buys the next ability level; anywhere else on the well
+      // is the cast, so the well IS the key except on the badge's own pixels
+      const br = abBuyRect(sh.i), c = abLvCost(player, sh.i);
+      if (c && player.inv.gold >= c.gold &&
+          mx >= br.x && mx < br.x + br.w && my >= br.y && my < br.y + br.h) {
+        SFX.unlock();
+        player.input.cmd = { kind: 'ability', i: sh.i };
+      } else player.input.ability = sh.i; // click-to-cast
+    }
     else if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
     else if (sh.kind === 'slot') state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my, empty: true };
     return true;
@@ -1770,15 +1787,6 @@ function drawToolCell(i, now, hov) {
       ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + 1 + ((r.h - im.height * 2) >> 1),
         im.width * 2, im.height * 2);
     }
-    // one pip per bit cell along the top inner edge, in each bit's own colour
-    const bits = cell.bits, up = peekBit(cell);
-    const T = TOOLS[toolIdOf(cell.type)];
-    for (let k = 0; k < bits.length; k++) {
-      const id = bits[k], b = id && BITS[id];
-      const over = b && b.proj && b.weight > T.tensile;
-      ctx.fillStyle = !b ? '#2c3560' : over ? '#c2465a' : k === up ? '#ffffff' : b.col;
-      ctx.fillRect(r.x + 3 + k * 3, y + 2, 2, 2);
-    }
     // the wipe IS the rate of fire: a slow tool covers its well for longer
     if (p.nockT > 0 && sel) {
       const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolRof(p, cell))) * (r.h - 2));
@@ -1796,8 +1804,12 @@ function drawToolCell(i, now, hov) {
 // cools by, so one grammar reads everywhere), the rim goes white while the
 // body performs the cast, an ACTIVE ability (the shield up, the fury running)
 // pulses the rim in its own colour and drains a bar of it along the bottom
-// edge, and the well pops white the frame a cooldown comes home. The digit in
-// the corner is the key (the keybind-indicator carve-out).
+// edge, and the well pops white the frame a cooldown comes home. The big
+// digit bottom-left is the key (the keybind-indicator carve-out). Along the
+// top inner edge, gear's buy pips count the ability's levels; while the next
+// one is affordable the rim pulses gold and a plus badge sits top-right
+// (abBuyRect - the pack ability row's ask, priced in gold instead of points),
+// and pressing the badge buys where pressing anywhere else casts.
 let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
 function drawClassAbCell(i, now, on) {
   const p = player, ab = CLASS_AB[p.cls][i];
@@ -1807,10 +1819,14 @@ function drawClassAbCell(i, now, on) {
   abCdSeen[i] = cd;
   const casting = p.castT > 0 && p.castAb === i;
   const act = ab.activeF ? ab.activeF(p) : 0;
+  const cost = abLvCost(p, i);
+  const buy = cost && p.inv.gold >= cost.gold;
   const rim = casting ? '#f4f7ff'
     : act > 0 ? (Math.sin(now * 9) > 0 ? ab.acol : '#35426e')
     : now < abReadyFlash[i] ? '#f4f7ff'
-    : on ? '#8fa0c8' : cd > 0 ? '#232c52' : '#35426e';
+    : on ? '#8fa0c8'
+    : buy ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
+    : cd > 0 ? '#232c52' : '#35426e';
   ctx.fillStyle = rim;
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = BAG_WELL;
@@ -1820,10 +1836,15 @@ function drawClassAbCell(i, now, on) {
   // wipe waits until the state ends (the shield resets its cooldown on the
   // drop anyway, so a wipe under a raised shield would be a lie)
   if (cd > 0 && act <= 0) {
-    const cov = Math.max(1, Math.round(cd / ab.cd * (r.h - 2)));
+    const cov = Math.max(1, Math.round(Math.min(1, cd / abCdOf(p, i)) * (r.h - 2)));
     ctx.fillStyle = AB_COVER;
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, cov);
     if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, r.y + cov, r.w - 2, 1); }
+  }
+  // the level, as gear's buy pips along the top inner edge
+  for (let k = 0; k < AB_LV_MAX - 1; k++) {
+    ctx.fillStyle = k < p.abLv[i] - 1 ? '#f2cc6a' : '#2c3560';
+    ctx.fillRect(r.x + 3 + k * 4, r.y + 2, 3, 2);
   }
   if (act > 0) {
     ctx.fillStyle = '#0f1632';
@@ -1837,9 +1858,16 @@ function drawClassAbCell(i, now, on) {
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     ctx.globalAlpha = 1;
   }
+  if (buy) { // the ask: a plus badge on the pixels the press spends
+    const br = abBuyRect(i);
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(br.x + 1, br.y + 1, br.w - 2, br.h - 2);
+    ctx.fillStyle = '#f2cc6a';
+    ctx.fillRect(br.x + 4, br.y + 2, 2, 6); ctx.fillRect(br.x + 2, br.y + 4, 6, 2);
+  }
   const key = String(i + 1);
-  drawPixelTextOutline(ctx, key, r.x + r.w - 3 - pixelTextWidth(key), r.y + 3,
-    cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632');
+  drawPixelTextOutline(ctx, key, r.x + 3, r.y + r.h - 13,
+    cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632', 2);
 }
 function drawHudStrip(now) {
   const R = hudStripRect();
@@ -2131,9 +2159,17 @@ function tipClassAb(i, cls) {
   const ab = CLASS_AB[c][i];
   const d = { title: ab.name, tcol: '#f4f7ff', kind: CLASSES[c].name + ' ABILITY',
     rows: [], notes: [], icon: classAbIcon(c, i), plate: BAG_WELL, rim: '#35426e' };
-  d.rows.push(['COOLDOWN', tipSec(ab.cd), '#f4f7ff']);
+  // in play the cooldown is the LIVE one, level cuts and all; on class select
+  // there is no slot to have levelled anything yet, so it is the base
+  d.rows.push(['COOLDOWN', tipSec(cls == null ? abCdOf(player, i) : ab.cd), '#f4f7ff']);
   d.rows.push(['CAST', tipSec(ab.cast), '#f4f7ff']);
-  if (cls == null && player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
+  if (cls == null) {
+    d.rows.push(['LEVEL', player.abLv[i] + '/' + AB_LV_MAX, '#f4f7ff']);
+    const cost = abLvCost(player, i);
+    if (cost) d.rows.push(['NEXT LEVEL', cost.gold + ' GOLD',
+      player.inv.gold >= cost.gold ? '#f2cc6a' : '#e0637a']);
+    if (player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
+  }
   for (const s of ab.blurb.split('. ')) d.notes.push([s.replace(/\.$/, ''), TIP_DIM]);
   if (cls == null) d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
   return d;

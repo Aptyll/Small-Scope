@@ -170,6 +170,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | the two kits' four actives each: name, cooldown, cast, and the whole effect | `CLASS_AB` (each row's `use(p)`) | `class abilities` |
 | tuning for every ability (trap arm/root, net slow, mark time, volley ring, shield arc, rush slam, crater, juggernaut) | `TRAP_*`, `NET_*`, `FALCON_*`/`MARK_T`, `VOLLEY_*`, `SHIELD_*`, `RUSH_*`, `STOMP_*`/`CRATER_*`, `JUG_*` | `class abilities` (its head) |
+| ability levels: gear's gold ladder on the four keys, and the level-cut cooldown every setter reads | `AB_LV_MAX`/`AB_LV_COSTS`/`AB_LV_CD`, `abLvCost`, `buyAbilityLv`, `abCdOf` (state: `p.abLv`, player.js) | `class abilities` › `levelling` (bought via `runCmd`, ui.js; bots: `updateAI`'s spend step, ai.js) |
 | a keypress becoming a cast, and the per-slot tick that lands it | `tryAbility`, `updateAbilities` | `class abilities` › `casting` |
 | every movement cap an ability may touch, folded once | `abilityMoveMul` | `class abilities` › `casting` (read by `updatePlayer`, sim.js) |
 | what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
@@ -244,7 +245,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what the pointer is on, said in words, bottom left | `tipAt`, `tipResolve`, `tipNow`, `tipLift`, `tipSize`, `drawTooltip`, `TIP_*` | `tooltips` (resolved once per frame in `render`, render.js; the feed steps up by `tipLift`, panels.js) |
 | the per-kind descriptions that panel is built from | `tipBase`, `tipTool`, `tipBit`, `tipStack`, `tipCell`, `tipGear`, `tipAbility`, `tipClassAb`, `tipTech`, `AB_NAMES`/`AB_BLURB`, `TIP_PATH` | `tooltips` |
 | the four gear cells of that row and their hit test | `gearRects`, `gearHit`, `drawGearCells` | `UI` › `the four gear cells` |
-| the hud strip (bottom-centre): the segmented plum xp bar over five wells - the weapon first, the four ability wells following | `AB_CELL`/`AB_SEGS`/`hudStripRect`/`stripCellRect`/`toolCellRect`/`abCellRect`/`stripHit`/`drawToolCell`/`drawClassAbCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
+| the hud strip (bottom-centre): the segmented plum xp bar over five wells - the weapon first, the four ability wells (level pips, buy badge, 2x key digit) following | `AB_CELL`/`AB_SEGS`/`hudStripRect`/`stripCellRect`/`toolCellRect`/`abCellRect`/`abBuyRect`/`stripHit`/`drawToolCell`/`drawClassAbCell`/`drawXpBar`/`drawHudStrip` | `UI` › `hud strip` |
 | the weapon well's "it does not fit in here" red, the backpack's twin | `toolFlash`, `toolDenied` (aged in `updateFx`, sim.js, beside `bagFlash`) | `UI` › `hud strip` (its head, above `hudStripRect`) |
 | the bit column hovering the weapon well raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
 | the plate a tier is stated on, wherever an item sits, and the shine on the top one | `tierPlate`, `tierShine`, `drawItemIcon` | `UI` › `hud strip` (the tiers themselves: `TOOL_TIERS`, tools.js) |

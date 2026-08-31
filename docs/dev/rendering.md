@@ -309,7 +309,7 @@ One panel, bottom left, saying what the pointer is on — and the fourth deliber
 show-don't-label, recorded as such in [CLAUDE.md](../../CLAUDE.md#ui-rule-show-dont-label). What
 earns it: a tool's rate of fire against a bit's weight is a **comparison of numbers**, and no shape
 compares numbers. It is a carve-out and not a licence — every well still has to read at a glance
-with the panel shut, which is what the tier plates, the bit pips and the cooldown wipes are for.
+with the panel shut, which is what the tier plates, the bit column's pips and the cooldown wipes are for.
 
 It is bottom **left** because that is the corner the pointer is furthest from while it hovers the
 backpack, the weapon strip or a tech node, so the panel never sits under the hand reading it.
@@ -372,16 +372,16 @@ empty track, so progress through a level is countable either way. The plate swal
 nothing fires through it. There is no rail: the quiver count and dodge pips it once carried are
 said by the reticle, the overhead bar and the pack's ability row.
 
-The tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
+The tool well (`drawToolCell`) says three things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
 tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
 highlight across the top tier's plate); the 12px tool art is drawn doubled, so the lead
 weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
 weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
-tell. Along the top inner edge sits one **pip per bit cell** in that bit's own colour: filled is a
-bit, hollow is a free cell, the bright one is what the next press fires, and red is a bit this
-tool is not strong enough to throw. And the **cooldown wipe** covers the whole well for exactly
-`toolRof`, so the rate of fire is the shape of the wipe rather than a number.
+tell. And the **cooldown wipe** covers the whole well for exactly
+`toolRof`, so the rate of fire is the shape of the wipe rather than a number. What is loaded
+stays out of the resting well — the hover-raised bit column is where the build is read and
+edited.
 
 A fifth thing, and the only one that is an *event*: the well takes a **red band all the way round
 it and the pack's own 1px shake** for `toolFlash` seconds when a bit has nowhere to go in the
@@ -391,15 +391,20 @@ the one that is full is the one that answers.
 
 An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB[p.cls][i]`: its
 detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
-top-down cover is its cooldown, and the key digit sits in the corner (the keybind-indicator
-carve-out). On top of that it tells the ability's moments: the rim goes **white while the body
+top-down cover is its cooldown (against the level-cut `abCdOf`, not the table base), and the key
+digit sits big at 2× in the bottom-left corner (the keybind-indicator carve-out). Along the top
+inner edge, gear's **buy pips** count the ability's levels
+([gameplay.md](gameplay.md#class-abilities-keys-1-4)); while the next level is affordable the rim
+pulses gold and a **plus badge** sits top-right (`abBuyRect` — shared by the pixels and the
+press) — pressing the badge buys the level, pressing anywhere else casts. On top of that it
+tells the ability's moments: the rim goes **white while the body
 performs the cast**, a **running** ability (the shield up, the fury out) pulses the rim in its own
 colour (`acol` in its table row) and drains a bar of it along the bottom edge — the wipe waits
 while that state runs, because the shield resets its cooldown on the drop and a wipe under a
 raised shield would be a lie (`activeF` in the table row is the readout) — and the well **pops
 white** the frame a cooldown comes home. A click on the well sets `input.ability` exactly as the
-key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — cooldown and
-cast numbers, the blurb, nothing the well itself already shows better).
+key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — the live
+cooldown, level and next-level price, the blurb, nothing the well itself already shows better).
 
 The **upgrade** half of this strip — the four ability wells and the plus that spends a skill point
 — moved into the backpack, under the gear row: both rows are "buy the next level of this", one

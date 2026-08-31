@@ -10,6 +10,14 @@
 
 // ---- tuning --------------------------------------------------------------
 const AB_KEYS = 4;          // keys 1-4
+// ability levels: gear's ladder pointed at the four keys. The class kit is
+// level 1; three buys with gold raise a key to AB_LV_MAX, and each level past
+// 1 shaves AB_LV_CD off that ability's cooldown - one lever, universally
+// meaningful (more traps out, the wall up more often), read back through
+// abCdOf so every cooldown-setting site scales alike.
+const AB_LV_MAX = 4;
+const AB_LV_COSTS = [10, 20, 35]; // gold to reach ability level 2 / 3 / 4
+const AB_LV_CD = 0.12;
 // hunter
 const TRAP_RANGE = 44;      // px from the feet a trap can be set
 const TRAP_ARM = 1.0;       // s before a fresh trap bites
@@ -114,6 +122,23 @@ const nets = [];     // {x, y, nx, ny, d, owner, team, spin}
 const volleys = [];  // {x, y, owner, team, t}
 const volleyFx = []; // falling shafts, visual only: {x, y, delay, t}
 
+// ---- levelling -----------------------------------------------------------
+// the gear trio, verbatim: a cost or null at the cap, the one entry point a
+// buyer reaches through runCmd (HUD badge click and bots alike), and the
+// effective number the sim reads instead of the table's base
+function abLvCost(p, i) { return p.abLv[i] >= AB_LV_MAX ? null : { gold: AB_LV_COSTS[p.abLv[i] - 1] }; }
+function abCdOf(p, i) { return CLASS_AB[p.cls][i].cd * (1 - AB_LV_CD * (p.abLv[i] - 1)); }
+function buyAbilityLv(p, i) {
+  const cost = abLvCost(p, i);
+  if (!cost || !canAfford(cost, p)) { if (p === player) SFX.deny(); return; }
+  pay(cost, p);
+  p.abLv[i]++;
+  addFloater(p.x, p.y - 18, CLASS_AB[p.cls][i].name + ' ' + p.abLv[i], GEAR_MATS[p.abLv[i] - 1]);
+  burst(p.x, p.y - 8, GEAR_MATS[p.abLv[i] - 1], 8, 40, 0.45);
+  if (p === player) SFX.levelUp();
+  else if (nearPlayer(p.x, p.y)) SFX.pickup();
+}
+
 // ---- casting -------------------------------------------------------------
 // The press. Refused flat while the body is otherwise occupied; the shield's
 // own key is the one toggle - pressing it again lowers the shield early.
@@ -202,7 +227,7 @@ function updateAbilities(p, dt) {
       const i = p.castAb;
       p.castAb = -1;
       p.castT = 0;
-      p.abCd[i] = CLASS_AB[p.cls][i].cd;
+      p.abCd[i] = abCdOf(p, i);
       CLASS_AB[p.cls][i].use(p);
     }
   }
@@ -296,7 +321,7 @@ function abShieldDown(p, early) {
   if (p.shieldT <= 0 && !early) return;
   p.shieldT = 0;
   const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'shield');
-  if (i >= 0) p.abCd[i] = CLASS_AB[p.cls][i].cd;
+  if (i >= 0) p.abCd[i] = abCdOf(p, i);
   if (nearPlayer(p.x, p.y)) SFX.pickup();
 }
 // an incoming shot dies on a raised shield when it flies INTO the front arc

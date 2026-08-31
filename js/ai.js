@@ -276,6 +276,16 @@ function updateAI(p, dt) {
     }
     if (gi >= 0 && p.inv.gold >= gc + 15) inp.cmd = { kind: 'gear', piece: gi };
   }
+  // ...then ability levels, the same cheapest-first ladder with the same
+  // building float kept back (buyAbilityLv re-validates like buyGear does)
+  if (!inp.cmd) {
+    let bi = -1, bc = 1e9;
+    for (let i = 0; i < AB_KEYS; i++) {
+      const c = abLvCost(p, i);
+      if (c && c.gold < bc) { bc = c.gold; bi = i; }
+    }
+    if (bi >= 0 && p.inv.gold >= bc + 15) inp.cmd = { kind: 'ability', i: bi };
+  }
   // a team with no living or rising Keep is one bad fight from permanent
   // elimination with no way back - a bot saves for and builds one before
   // anything else it would otherwise spend on

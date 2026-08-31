@@ -948,6 +948,10 @@ window.DBG = {
   CLASS_AB, abTraps: traps, abCraters: craters, abFalcons: falcons, abNets: nets, abVolleys: volleys,
   tryAbility: (i, p) => tryAbility(p || player, i),
   setAbilityCd: (i, t, p) => { (p || player).abCd[i] = t; },
+  // ability levels: gear's ladder on the four keys (js/abilities.js)
+  AB_LV_MAX, abLvCost: (i, p) => abLvCost(p || player, i),
+  abCdOf: (i, p) => abCdOf(p || player, i),
+  buyAbilityLv: (i, p) => buyAbilityLv(p || player, i), abBuyRect,
   // the arsenal tree: the graph, the page's own geometry, and the pool a
   // match drops from - which is the whole arsenal, the same for every profile.
   // `wipeTech` forgets what this profile has HELD (the blue pips), which is

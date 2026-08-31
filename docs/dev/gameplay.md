@@ -348,6 +348,18 @@ through exactly the key a human presses; `updateAbilities(p, dt)` runs the coold
 cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)` (called from
 `updatePlay`) steps what they leave in the world.
 
+**Abilities level like gear.** Each key starts at level 1 and is bought to `AB_LV_MAX` (4) with
+gold — `AB_LV_COSTS` [10, 20, 35], gear's own ladder — and each level past 1 shaves `AB_LV_CD`
+(12%) off that ability's cooldown, the one lever that means something on all eight keys. The trio
+mirrors gear exactly: `abLvCost(p, i)` (null at the cap), `buyAbilityLv(p, i)` (the single entry
+point, reached through `input.cmd {kind:'ability', i}` → `runCmd` by HUD badge click and bots
+alike), and `abCdOf(p, i)` — which every cooldown-setting site reads instead of the table's base
+`cd` (the cast landing, and the shield's comes-down reset). `p.abLv` resets with the match like
+`p.gearLv`. The strip's wells carry the readout: gear-style buy pips along the top edge, a gold
+pulsing rim and a plus badge (`abBuyRect`) while the next level is affordable — the badge press
+buys, any other press casts. Bots buy cheapest-first after gear with the same 15-gold building
+float (`updateAI`'s spend step). The cd column in the tables below is the level-1 base.
+
 **Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the
 tables below say "rival" because that is who you are usually casting at, not because anything else
