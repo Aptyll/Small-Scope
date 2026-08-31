@@ -1356,14 +1356,14 @@ function abBuyRect(i) {
   return { x: r.x + ((r.w - AB_BUY) >> 1), y: r.y - AB_BUY - 6, w: AB_BUY, h: AB_BUY + 3 };
 }
 // which ability's plate the pointer is on, or -1. A plate only EXISTS while
-// its level is affordable, so the hit test is also the appears-then-goes
-// gate - shared by the press, the cursor, the tooltip and the pixels.
+// a skill point is waiting and the key has room (abLvCanBuy), so the hit
+// test is also the appears-then-goes gate - shared by the press, the
+// cursor, the tooltip and the pixels.
 function abBuyHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
   for (let i = 0; i < AB_N; i++) {
-    const c = abLvCost(player, i);
-    if (!c || player.inv.gold < c.gold) continue;
+    if (!abLvCanBuy(player, i)) continue;
     const r = abBuyRect(i);
     if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return i;
   }
@@ -1999,12 +1999,12 @@ function drawClassAbCell(i, now, on) {
     cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632', 2);
 }
 // The floating buy plate over ability i - gear's bobbing chevron made a real
-// button. Drawn only while the level is affordable (the same gate abBuyHit
-// answers with), bobbing over open screen; hover lights it and shows the
-// price, coin + number, gear's own hover read.
+// button, spending a SKILL POINT (never gold). Drawn only while a point is
+// in hand and the key has room (the same abLvCanBuy gate abBuyHit answers
+// with), bobbing over open screen; hover lights it, and the tooltip carries
+// the numbers.
 function drawAbBuyPlate(i, now, hot) {
-  const c = abLvCost(player, i);
-  if (!c || player.inv.gold < c.gold) return;
+  if (!abLvCanBuy(player, i)) return;
   const r = abBuyRect(i);
   const y = r.y + 2 + Math.round(Math.sin(now * 6)); // the bob stays inside the fixed hit rect
   ctx.fillStyle = 'rgba(4,6,18,0.55)';
@@ -2015,13 +2015,6 @@ function drawAbBuyPlate(i, now, hot) {
   ctx.fillRect(r.x + 1, y + 1, AB_BUY - 2, AB_BUY - 2);
   ctx.fillStyle = hot ? '#f4f7ff' : '#f2cc6a';
   ctx.fillRect(r.x + 6, y + 3, 2, 8); ctx.fillRect(r.x + 3, y + 6, 8, 2);
-  if (hot) { // the price rides above the plate, never under the hand
-    const txt = String(c.gold);
-    const tw = 10 + pixelTextWidth(txt);
-    const tx0 = Math.max(2, Math.min(r.x + (AB_BUY >> 1) - (tw >> 1), VIEW_W - 2 - tw));
-    ctx.drawImage(SPRITES.itemGold, tx0, y - 12);
-    drawPixelTextOutline(ctx, txt, tx0 + 10, y - 10, '#f5c542', '#0f1632');
-  }
 }
 function drawHudStrip(now) {
   const R = hudStripRect();
@@ -2321,9 +2314,8 @@ function tipClassAb(i, cls) {
   d.rows.push(['CAST', tipSec(ab.cast), '#f4f7ff']);
   if (cls == null) {
     d.rows.push(['LEVEL', player.abLv[i] + '/' + AB_LV_MAX, '#f4f7ff']);
-    const cost = abLvCost(player, i);
-    if (cost) d.rows.push(['NEXT LEVEL', cost.gold + ' GOLD',
-      player.inv.gold >= cost.gold ? '#f2cc6a' : '#e0637a']);
+    if (player.abLv[i] < AB_LV_MAX) d.rows.push(['NEXT LEVEL', '1 SKILL PT',
+      player.skillPts > 0 ? '#f2cc6a' : '#e0637a']);
     if (player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
   }
   for (const s of ab.blurb.split('. ')) d.notes.push([s.replace(/\.$/, ''), TIP_DIM]);

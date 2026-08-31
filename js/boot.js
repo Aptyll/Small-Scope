@@ -949,7 +949,7 @@ window.DBG = {
   tryAbility: (i, p) => tryAbility(p || player, i),
   setAbilityCd: (i, t, p) => { (p || player).abCd[i] = t; },
   // ability levels: gear's ladder on the four keys (js/abilities.js)
-  AB_LV_MAX, abLvCost: (i, p) => abLvCost(p || player, i),
+  AB_LV_MAX, abLvCanBuy: (i, p) => abLvCanBuy(p || player, i),
   abCdOf: (i, p) => abCdOf(p || player, i),
   buyAbilityLv: (i, p) => buyAbilityLv(p || player, i), abBuyRect, abBuyHit,
   // the arsenal tree: the graph, the page's own geometry, and the pool a

@@ -130,14 +130,18 @@ Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (
 damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
 plays `SFX.levelUp()` for the local slot.
 
-Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1). The four
-hud abilities — loose, dodge, ambush, fletch — take ranks 0–`AB_RANK_MAX` (3) on `p.skill`. Rank 0
-is the baseline everything already does; `buySkill(p, i)` spends a point, bumps that rank, and
-`refreshKit` folds `AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`,
-`fletch`). The ability row inside the backpack is where they are spent — a pulsing rim and a plus
-badge on any cell a point can land on, gone once it cannot, and the pack's own column counting
-what is unspent; bots dump a free point onto the lowest rank at the top of `updateAI`. Twelve
-points by level 12 fill all four abilities to rank 3 exactly.
+Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1), and a
+point has **two places to go**: a rank on the four hud kit skills, or a level on the four class
+abilities ([gameplay.md](gameplay.md#class-abilities-keys-1-4)). The kit skills — loose, dodge,
+ambush, fletch — take ranks 0–`AB_RANK_MAX` (3) on `p.skill`; rank 0 is the baseline everything
+already does; `buySkill(p, i)` spends a point, bumps that rank, and `refreshKit` folds
+`AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`, `fletch`). The
+ability row inside the backpack is where kit ranks are bought — a pulsing rim and a plus badge
+on any cell a point can land on, gone once it cannot, and the pack's own column counting what is
+unspent — while ability levels are bought on the strip's floating plates. Twelve points by level
+12 face 24 slots, so a capped build fills exactly half of everything: the choice is the build.
+Bots split each free point in `updateAI`'s rung 0 — whichever pool is further behind,
+lowest-first, ties to the ability.
 
 The level shows as a 7-tall badge in `drawPlayer`, flush against the left edge of the overhead
 bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every

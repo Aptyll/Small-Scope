@@ -398,11 +398,12 @@ detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the 
 top-down cover is its cooldown (against the level-cut `abCdOf`, not the table base), and the key
 digit sits big at 2× in the bottom-left corner (the keybind-indicator carve-out). Along the top
 inner edge, fat gear-style **buy pips** on dark seats count the ability's levels
-([gameplay.md](gameplay.md#class-abilities-keys-1-4)). The ASK lives off the well: while the
-next level is affordable a **floating buy plate** bobs in the open screen above the well
-(`abBuyRect`, a fixed hit rect the drawn bob stays inside; `abBuyHit` gates it on
-affordability, so the plate's existence IS the appears-then-goes ask; `drawAbBuyPlate` draws it
-— a gold-rimmed plus, lighting and pricing itself on hover). Pressing the plate buys the level,
+([gameplay.md](gameplay.md#class-abilities-keys-1-4)). The ASK lives off the well: while a
+skill point is unspent and the key has room a **floating buy plate** bobs in the open screen
+above the well
+(`abBuyRect`, a fixed hit rect the drawn bob stays inside; `abBuyHit` gates it on `abLvCanBuy`,
+so the plate's existence IS the appears-then-goes ask; `drawAbBuyPlate` draws it
+— a gold-rimmed plus, lighting on hover, the tooltip carrying the numbers). Pressing the plate buys the level,
 pressing the well casts — two surfaces, so neither can steal the other's click, and the well's
 rim carries combat states only. On top of that it
 tells the ability's moments: the rim goes **white while the body

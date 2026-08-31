@@ -348,20 +348,23 @@ through exactly the key a human presses; `updateAbilities(p, dt)` runs the coold
 cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)` (called from
 `updatePlay`) steps what they leave in the world.
 
-**Abilities level like gear.** Each key starts at level 1 and is bought to `AB_LV_MAX` (4) with
-gold — `AB_LV_COSTS` [10, 20, 35], gear's own ladder — and each level past 1 shaves `AB_LV_CD`
-(12%) off that ability's cooldown, the one lever that means something on all eight keys. The trio
-mirrors gear exactly: `abLvCost(p, i)` (null at the cap), `buyAbilityLv(p, i)` (the single entry
-point, reached through `input.cmd {kind:'ability', i}` → `runCmd` by HUD badge click and bots
-alike), and `abCdOf(p, i)` — which every cooldown-setting site reads instead of the table's base
-`cd` (the cast landing, and the shield's comes-down reset). `p.abLv` resets with the match like
-`p.gearLv`. The wells carry the progress — fat gear-style buy pips along the top edge — and the
-ASK floats clear of them: an affordable level grows a bobbing gold plus plate in the open screen
-above its well (`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron
-made a real button. The plate press buys, any press on the well casts, so the two can never
-steal each other's click; hover lights the plate and shows the price. Bots buy cheapest-first
-after gear with the same 15-gold building float (`updateAI`'s spend step). The cd column in the
-tables below is the level-1 base.
+**Abilities level on skill points, never gold.** Each key starts at level 1; each level past 1
+costs **one skill point** — the same pool the pack's kit-skill row spends, one point per
+[hero level](multiplayer.md#hero-levels) — and shaves `AB_LV_CD` (12%) off that ability's
+cooldown, the one lever that means something on all eight keys. The 12 points a capped hero
+earns face **24 slots** (4 kit ranks ×3 + 4 ability levels ×3), so a build chooses its half.
+The trio mirrors `buySkill`: `abLvCanBuy(p, i)` (a point in hand, room on the key),
+`buyAbilityLv(p, i)` (the single entry point, reached through `input.cmd {kind:'ability', i}` →
+`runCmd` by HUD plate click and bots alike), and `abCdOf(p, i)` — which every cooldown-setting
+site reads instead of the table's base `cd` (the cast landing, and the shield's comes-down
+reset). `p.abLv` resets with the match like `p.gearLv`. The wells carry the progress — fat
+gear-style buy pips along the top edge — and the ASK floats clear of them: while a point is
+unspent each un-maxed key grows a bobbing gold plus plate in the open screen above its well
+(`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron made a real
+button. The plate press buys, any press on the well casts, so the two can never steal each
+other's click; hover lights the plate and the tooltip carries the numbers. Bots split each free
+point between the two pools in `updateAI`'s rung 0 — whichever pool is further behind,
+lowest-first, ties to the ability. The cd column in the tables below is the level-1 base.
 
 **Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the

@@ -106,12 +106,17 @@ function updateAI(p, dt) {
   if (ai.buildT > 0) ai.buildT -= dt;
   if (ai.hideCd > 0) ai.hideCd -= dt;
 
-  // 0. spend a free skill point before the ladder - it costs nothing and
-  //    waiting on it is leaving a rank on the table. Lowest rank first.
+  // 0. spend a free skill point before the ladder - waiting on it is leaving
+  //    growth on the table. The point faces two pools now (the kit skills and
+  //    the class-ability levels, both lowest-first); it feeds whichever pool
+  //    is further behind, and a tie goes to the ability - the flashier half.
   if (p.skillPts > 0 && !inp.cmd) {
-    let best = -1, br = AB_RANK_MAX;
-    for (let i = 0; i < AB_SKILL.length; i++) if (p.skill[i] < br) { br = p.skill[i]; best = i; }
-    if (best >= 0) inp.cmd = { kind: 'skill', i: best };
+    let bs = -1, br = AB_RANK_MAX;
+    for (let i = 0; i < AB_SKILL.length; i++) if (p.skill[i] < br) { br = p.skill[i]; bs = i; }
+    let ba = -1, bl = AB_LV_MAX - 1;
+    for (let i = 0; i < AB_KEYS; i++) if (p.abLv[i] - 1 < bl) { bl = p.abLv[i] - 1; ba = i; }
+    if (ba >= 0 && (bs < 0 || bl <= br)) inp.cmd = { kind: 'ability', i: ba };
+    else if (bs >= 0) inp.cmd = { kind: 'skill', i: bs };
   }
 
   // 1. food, exactly as a human eats it (Q / F) - but a meal is a 1.5 s
@@ -275,16 +280,6 @@ function updateAI(p, dt) {
       if (c && c.gold < gc) { gc = c.gold; gi = i; }
     }
     if (gi >= 0 && p.inv.gold >= gc + 15) inp.cmd = { kind: 'gear', piece: gi };
-  }
-  // ...then ability levels, the same cheapest-first ladder with the same
-  // building float kept back (buyAbilityLv re-validates like buyGear does)
-  if (!inp.cmd) {
-    let bi = -1, bc = 1e9;
-    for (let i = 0; i < AB_KEYS; i++) {
-      const c = abLvCost(p, i);
-      if (c && c.gold < bc) { bc = c.gold; bi = i; }
-    }
-    if (bi >= 0 && p.inv.gold >= bc + 15) inp.cmd = { kind: 'ability', i: bi };
   }
   // a team with no living or rising Keep is one bad fight from permanent
   // elimination with no way back - a bot saves for and builds one before

@@ -170,7 +170,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | the two kits' four actives each: name, cooldown, cast, and the whole effect | `CLASS_AB` (each row's `use(p)`) | `class abilities` |
 | tuning for every ability (trap arm/root, net slow, mark time, volley ring, shield arc, rush slam, crater, juggernaut) | `TRAP_*`, `NET_*`, `FALCON_*`/`MARK_T`, `VOLLEY_*`, `SHIELD_*`, `RUSH_*`, `STOMP_*`/`CRATER_*`, `JUG_*` | `class abilities` (its head) |
-| ability levels: gear's gold ladder on the four keys, and the level-cut cooldown every setter reads | `AB_LV_MAX`/`AB_LV_COSTS`/`AB_LV_CD`, `abLvCost`, `buyAbilityLv`, `abCdOf` (state: `p.abLv`, player.js) | `class abilities` › `levelling` (bought via `runCmd`, ui.js; bots: `updateAI`'s spend step, ai.js) |
+| ability levels: a skill point per level on the four keys, and the level-cut cooldown every setter reads | `AB_LV_MAX`/`AB_LV_CD`, `abLvCanBuy`, `buyAbilityLv`, `abCdOf` (state: `p.abLv`, player.js) | `class abilities` › `levelling` (bought via `runCmd`, ui.js; bots: `updateAI`'s rung 0, ai.js) |
 | a keypress becoming a cast, and the per-slot tick that lands it | `tryAbility`, `updateAbilities` | `class abilities` › `casting` |
 | every movement cap an ability may touch, folded once | `abilityMoveMul` | `class abilities` › `casting` (read by `updatePlayer`, sim.js) |
 | what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
