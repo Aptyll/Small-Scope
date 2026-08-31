@@ -704,7 +704,7 @@ function drawSliderById(id, y, off) {
   else if (id === 'music') drawSliderRow(y, settings.musicVol, String(Math.round(settings.musicVol * 100)), off);
   else if (id === 'sfx') drawSliderRow(y, settings.sfxVol, String(Math.round(settings.sfxVol * 100)), off);
   else if (id === 'map') drawSliderRow(y, (settings.mmR - 16) / 18, 'R' + settings.mmR);
-  else if (id === 'hud') drawSliderRow(y, ((settings.hudScale || 1) - 0.75) / 0.75, String(Math.round((settings.hudScale || 1) * 100)));
+  else if (id === 'hud') drawSliderRow(y, ((settings.hudScale || 0.8) - 0.75) / 0.75, String(Math.round((settings.hudScale || 0.8) * 100)));
 }
 
 // one toggle row's state, by row id

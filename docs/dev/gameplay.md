@@ -1612,7 +1612,7 @@ and the five video toggles `vidClouds`/`vidRays`/`vidStars`/`vidSnow`/`vidVig`) 
 saved any. A pre-profile save under the old `localStorage['softfall.settings']` key is folded in
 once by `PROFILE.load()` and the key removed; see
 [architecture.md](architecture.md#profilejs). `applyMinimapSize()` must be called after changing `mmR` —
-it recomputes `MM_R`/`MM_CX`/`MM_CY`. `hudScale` (the HUD SIZE slider, 0.75–1.5) needs no apply
+it recomputes `MM_R`/`MM_CX`/`MM_CY`. `hudScale` (the HUD SIZE slider, 0.75–1.5, default **0.8**) needs no apply
 call: the hud strip reads it live every frame
 ([rendering.md](rendering.md#the-hud-strip)). The **backpack**'s open/closed state is `state.bagOpen`,
 not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;

@@ -153,7 +153,7 @@ const state = {
 // volume is the master dial; musicVol and sfxVol sit under it (SFX.setVolume /
 // setMusicVolume / setSfxVolume). A save written before the split simply has
 // neither key and keeps the defaults - no version bump needed.
-const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, hudScale: 1, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0,
+const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, hudScale: 0.8, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0,
   // the VIDEO page's dressing toggles, all cosmetic-only passes a weak GPU
   // can shed (the ESC panel's QUALITY row presets them; panels.js)
   vidClouds: true, vidRays: true, vidStars: true, vidSnow: true, vidVig: true };

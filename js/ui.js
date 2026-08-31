@@ -1309,7 +1309,7 @@ function hudStripRect() {
 // widget scaled about its bottom-centre anchor; stripMouse maps the pointer
 // back through that anchor, so every hit test below converts first and the
 // rects themselves never move.
-function hudSc() { return settings.hudScale || 1; }
+function hudSc() { return settings.hudScale || 0.8; }
 function stripMouse(mx, my) {
   const s = hudSc();
   if (s === 1) return { x: mx, y: my };

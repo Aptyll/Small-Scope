@@ -444,7 +444,7 @@ button can never disagree with Q or F. Hover raises the bag cell's own food desc
 (`tipStack`).
 
 The whole widget — plate, wells, buy plates and the risen bit column — draws at the **HUD SIZE**
-the ESC panel's GAME slider holds (`settings.hudScale`, 0.75×–1.5×). All geometry stays in 1×
+the ESC panel's GAME slider holds (`settings.hudScale`, 0.75×–1.5×, default 0.8×). All geometry stays in 1×
 strip space: at 1× everything draws straight to the frame, and at any other size `drawHudScaled`
 bakes the widget into `hudScaleCv` and blits it scaled about the strip's bottom-centre anchor
 with smoothing off, so the art scales nearest-neighbour instead of every fillRect going soft.
