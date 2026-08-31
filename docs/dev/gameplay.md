@@ -566,10 +566,13 @@ with no bearing at all (`drawMote`) — and everything else is **the one arrow b
 head, a 2 px collar in the bit's own `col` (the bit is readable from the collar; the shaft never
 recolours), a single-gold shaft, and swept swallow-tail feathers in `TEAMS[a.team].mark` edged
 with the team's `coatD` — so whose shot it is reads from the tail. `arrowBodyPx`
-(js/draw-world.js) rasterises it at the live bearing with **spine-offset rounding** (spine rounded
-per column, sideways offset per row with sign-symmetric rounding) so the two vanes land on
-mirrored pixels at every angle — per-pixel `Math.round` breaks its .5 ties upward and fattens one
-vane on any diagonal. `paintArrowPx` dilates every pixel into `ARROW_RIM` first (a plus-shaped
+(js/draw-world.js) rasterises it at the live bearing by **DDA** — the spine advances exactly one
+pixel along the flight's dominant axis per step (a diagonal shaft is a clean 8-connected
+staircase, never a lumpy one with doubled cells), body columns are sampled onto that chain with
+structural pixels winning collisions (`ARROW_BODY` is priority-sorted at parse), and each vane
+row sits one exact pixel further out along the perpendicular's dominant axis, so rows never
+collapse together and the two vanes stay mirrored at every angle. At the four cardinals this
+degenerates to plain rounding, so straight shots kept their exact pre-2.28 pixels. `paintArrowPx` dilates every pixel into `ARROW_RIM` first (a plus-shaped
 1 px dark edge) so the shaft reads over snow. The body is built into the `ARROW_PX` scratch
 array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` px behind
 it, which is why the view cull uses the widened ±36 bound. The spent shaft, the arrow standing in

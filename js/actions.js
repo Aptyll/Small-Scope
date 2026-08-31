@@ -61,10 +61,20 @@ const ARROW_MAP = [
 ];
 const ARROW_LEN = 29;     // i of the tail pixel: trail motes lay off behind this
 const ARROW_INK = { W: '#ffffff', F: '#9aa3b8', G: '#d09549' }; // T/D per team, B per bit
-const ARROW_BODY = [];    // flat [i, j, key] triples parsed from the map once
-for (let r = 0; r < ARROW_MAP.length; r++)
-  for (let i = 0; i < ARROW_MAP[r].length; i++)
-    if (ARROW_MAP[r][i] !== '.') ARROW_BODY.push(i, r - 4, ARROW_MAP[r][i]);
+const ARROW_BODY = [];    // flat [i, j, key] triples parsed from the map once,
+// fill first and structure last: arrowBodyPx paints in this order, so when a
+// diagonal bearing lands two body pixels on one cell (the DDA chain has fewer
+// cells than the body has columns) the tip/head/collar/edge wins over plain
+// shaft or feather fill instead of vanishing under it.
+{
+  const pri = { G: 0, T: 1, D: 2, F: 3, B: 4, W: 5 };
+  const px = [];
+  for (let r = 0; r < ARROW_MAP.length; r++)
+    for (let i = 0; i < ARROW_MAP[r].length; i++)
+      if (ARROW_MAP[r][i] !== '.') px.push([i, r - 4, ARROW_MAP[r][i]]);
+  px.sort((a, b) => pri[a[2]] - pri[b[2]]);
+  for (const p of px) ARROW_BODY.push(p[0], p[1], p[2]);
+}
 const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of the player's tile
 const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
 

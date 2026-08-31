@@ -828,21 +828,36 @@ function drawBanner(o, px, py, now) {
 // i0..i1 the stretch of the body to draw (a buried head is skipped by raising
 // i0), cT/cD the team feather and its dark edge, cB the bit collar, cG an
 // optional shaft override (0 = the master's gold).
-// SPINE-OFFSET ROUNDING, not per-pixel rounding: the spine is rounded once
-// per column and the sideways offset once per row with sign-symmetric
-// rounding, so the two vanes land on mirrored pixels at every bearing -
-// Math.round alone breaks its .5 ties upward and visibly fattens one vane
-// on any diagonal shot.
+// DDA RASTERISATION, not per-pixel rounding: the spine advances exactly one
+// pixel along the flight's dominant axis per step, so a diagonal shaft is a
+// clean 8-connected staircase - no doubled cells, no gaps (rounding each
+// column independently crammed 16 columns into ~11 cells at 45 deg and
+// doubled four of them) - and each body column is sampled onto that chain
+// (on a collision the structural pixel wins, because ARROW_BODY is
+// priority-sorted at parse). The vane rows get the same treatment along the
+// perpendicular, one exact pixel per row on ITS dominant axis, so no two
+// rows ever collapse onto each other (plain rounding folded rows 1 and 2
+// onto the same diagonal offset) and the two vanes stay mirrored at every
+// bearing. At the four cardinals all of this degenerates to plain rounding,
+// so straight shots are pixel-identical to the old spine-offset draw.
 function arrowBodyPx(out, hx, hy, nx, ny, i0, i1, cT, cD, cB, cG) {
-  const qx = -ny, qy = nx;
+  const ax = nx < 0 ? -nx : nx, ay = ny < 0 ? -ny : ny, domX = ax >= ay;
+  const maxA = domX ? ax : ay;
+  const sx = nx < 0 ? -1 : 1, sy = ny < 0 ? -1 : 1;
+  const X0 = Math.round(hx), Y0 = Math.round(hy);
+  const qxs = -ny < 0 ? -1 : 1, qys = nx < 0 ? -1 : 1; // signs of the perpendicular (-ny, nx)
   for (let k = 0; k < ARROW_BODY.length; k += 3) {
     const i = ARROW_BODY[k];
     if (i < i0 || i > i1) continue;
     const j = ARROW_BODY[k + 1], key = ARROW_BODY[k + 2];
-    const ox = qx * j, oy = qy * j;
-    out.push(
-      Math.round(hx - nx * i) + (ox < 0 ? -Math.round(-ox) : Math.round(ox)),
-      Math.round(hy - ny * i) + (oy < 0 ? -Math.round(-oy) : Math.round(oy)),
+    const s = Math.round(i * maxA);
+    let px, py, ox, oy;
+    if (domX) { px = X0 - sx * s; py = Math.round(hy - ny * (s / ax)); }
+    else      { py = Y0 - sy * s; px = Math.round(hx - nx * (s / ay)); }
+    const aj = j < 0 ? -j : j, js = j < 0 ? -1 : 1;
+    if (domX) { oy = js * qys * aj; ox = js * qxs * Math.round(aj * ay / ax); }
+    else      { ox = js * qxs * aj; oy = js * qys * Math.round(aj * ax / ay); }
+    out.push(px + ox, py + oy,
       key === 'T' ? cT : key === 'D' ? cD : key === 'B' ? cB :
       key === 'G' ? (cG || ARROW_INK.G) : ARROW_INK[key]);
   }
