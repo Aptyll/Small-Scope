@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.43'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.44'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.44', 'THE README NOW OPENS WITH A LOOPING CLIP OF THE PRACTICE TOOL BREAKING OPEN ONTO THE TRAINING FIELD, AND THE GALLERY IS A VERTICAL STRIP OF 16:9 SHOTS.'],
   ['2.43', 'THE HUD NOW DEFAULTS TO SIZE 80 FOR NEW PLAYERS - A SAVED SLIDER STILL WINS.'],
   ['2.42', 'THE HUD STRIP CARRIES TWO MEAL BUTTONS ON ITS RIGHT END - CLICK OR Q/F TO EAT - AND THE SETTINGS PANEL GAINED A HUD SIZE SLIDER THAT SCALES THE STRIP.'],
   ['2.41', 'THE GOLD HOVER OUTLINE NOW MARKS EVERY WORK TARGET - ROCKS, BERRY BUSHES, CHESTS AND DEAD TREES LIGHT UP UNDER THE CURSOR LIKE THE PINES DO.'],

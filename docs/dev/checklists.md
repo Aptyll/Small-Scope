@@ -363,15 +363,17 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 
 ## Known drift
 
-- [README.md](../../README.md) is a storefront page (hero + mechanic shots in `docs/media/`), not a
-  tech guide. It carries the one-line "double-click `index.html`" and links into
-  [game.md](game.md) / [architecture.md](architecture.md); the controls list and the code layout
-  stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
-- **Every shot in `docs/media/` predates the free-for-all** — they are solo-survival captures from
-  the original storefront, so there is no image of a team colour, a Keep, a worker bot, a fish net
-  or a landmark. The README copy was rewritten in `PATCH 1.54` to describe the current game *around
-  what those seven shots actually show*, which is why the wildlife cells carry the economy and the
-  newer pillars sit in text below the table. New captures would let the table carry them instead.
+- [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + mechanic shots in
+  `docs/media/`), not a tech guide. It carries the one-line "double-click `index.html`" and links
+  into [game.md](game.md) / [architecture.md](architecture.md); the controls list and the code
+  layout stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
+- **The six gallery stills in `docs/media/` predate the free-for-all** — they are solo-survival
+  captures from the original storefront, resized to 1920×1080 16:9, so there is still no still of a
+  team colour, a Keep, a worker bot, a fish net or a landmark. `practice-tool.webp` is current: the
+  title menu knocking PRACTICE TOOL open onto the training field. The README copy was rewritten in
+  `PATCH 1.54` to describe the current game *around what those stills actually show*, which is why
+  the wildlife cells carry the economy and the newer pillars sit in text below the table. New
+  stills would let the table carry them instead.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
 - A tree's `variant` (rolled by `randi(0, 1)` in `genWorld`) picks no art any more: there is one
