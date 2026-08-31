@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.39'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.40'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.40', 'THE TREE UNDER YOUR CURSOR NOW WEARS A PULSING GOLD OUTLINE, SO THE ONE YOU ARE CHOPPING NEVER BLENDS INTO THE FADED POCKET AROUND YOU.'],
   ['2.39', 'THE TREE FADE IS A REAL VISIBILITY POCKET NOW - EVERY PINE WITHIN TWO TILES SOFTENS, THE ADJACENT RING FADES HARD, AND YOUR HERO WEARS A BLACK OUTLINE WHILE IN THE TREES.'],
   ['2.38', 'TREES IN FRONT OF YOUR HERO NOW FADE A LITTLE AS YOU WALK UNDER THEIR CANOPY, SO THE TREELINE NEVER HIDES YOU - THE TREE YOU ARE CHOPPING STAYS SOLID.'],
   ['2.37', 'THE BACKPACK IS A SIMPLE TEN-SLOT INVENTORY NOW - THE OLD SKILL ROW IS GONE, AND EVERY SKILL POINT GOES STRAIGHT INTO THE FOUR ABILITIES ON THE STRIP.'],

@@ -308,6 +308,25 @@ function render() {
       // surrounding the viewed hero take the occluder fade (consts above
       // render()); the globalAlpha flip only ever touches those few, so the
       // thousand-pine atlas batch stays whole.
+      const fi = treeFrame(d.tx, d.ty);
+      if (fadeP && o === fadeWkO) {
+        // the hero's own work target: full ink under a pulsing gold rim (the
+        // buy plates' two golds), so the tree the cursor is on is its OWN
+        // state - not a faded pine quietly borrowing the normal look, which
+        // read as the tree blending away the moment the cursor left it. The
+        // frame tints on the scratch canvas and stamps the eight neighbours,
+        // the hero silhouette's rim grammar in the affordance ink.
+        const fw = SPRITES.treeAtlas.fw, fh = SPRITES.treeAtlas.fh;
+        sctx.clearRect(0, 0, 64, 64);
+        sctx.globalCompositeOperation = 'source-over';
+        sctx.drawImage(SPRITES.treeAtlas, fi * fw, 0, fw, fh, 0, 0, fw, fh);
+        sctx.globalCompositeOperation = 'source-in';
+        sctx.fillStyle = Math.sin(now * 6) > 0 ? '#f2cc6a' : '#c9a227';
+        sctx.fillRect(0, 0, 64, 64);
+        for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
+          if (rx || ry) ctx.drawImage(scratch, 0, 0, fw, fh, px - 5 + sh + rx, py - 21 + ry, fw, fh);
+        }
+      }
       let fa = 1;
       if (fadeP && o !== fadeWkO) {
         const dist = Math.hypot(d.tx * TILE + 8 - fadeP.x, d.ty * TILE + 8 - fadeP.y);
@@ -318,7 +337,7 @@ function render() {
         }
       }
       if (fa < 1) ctx.globalAlpha = fa;
-      drawFrameFlash(SPRITES.treeAtlas, treeFrame(d.tx, d.ty), px - 5 + sh, py - 21, o.flash);
+      drawFrameFlash(SPRITES.treeAtlas, fi, px - 5 + sh, py - 21, o.flash);
       if (fa < 1) ctx.globalAlpha = 1;
     } else if (o.type === 'deadTree') {
       drawSpriteFlash(SPRITES.deadTree[o.variant], px + sh, py - 8, o.flash);
