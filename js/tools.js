@@ -33,9 +33,9 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // enough to throw (a bit heavier than the tool's tensile is dead weight and is
 // skipped), `path` is how it flies, `solid` whether a wall stops it, `ff`
 // whether it will hurt your own side, and life/speed/dmg are the baselines the
-// tool, the champion kit, the hero level and any modifier bits scale.
-// `stick` is whether the spent shot lands as a shaft anyone can pull back out
-// - the quiver economy, which every projectile bit spends one of.
+// tool, the champion kit, the hero level and any modifier bits scale. Every
+// projectile bit spends one arrow from the quiver, and a spent shot is gone -
+// fletching is the only way ammo comes back.
 // UNITS: `life` is seconds and `speed` px/s, because that is what the sim runs
 // in and what every hit test downstream reads. A tool's `rof` is the one
 // number counted in game STEPS, since it is a cadence rather than a physical
@@ -58,39 +58,39 @@ const TIER_SHINE = 2; // the tier whose plate animates
 const BITS = {
   // -- projectiles ---------------------------------------------------------
   arrow: {
-    name: 'ARROW', blurb: 'THE PLAIN SHAFT. COMES BACK.', tier: 0, proj: true,
+    name: 'ARROW', blurb: 'THE PLAIN SHAFT. LIGHT AND TRUE.', tier: 0, proj: true,
     weight: 2, path: 'line', solid: true, ff: false,
-    life: 0.85, speed: 320, dmg: 8, stick: true, col: '#e8dcb4',
+    life: 0.85, speed: 320, dmg: 8, col: '#e8dcb4',
   },
   barb: {
     name: 'BARBED SHOT', blurb: 'WEAVES. HITS HARDER.', tier: 0, proj: true,
     weight: 5, path: 'zig', solid: true, ff: false,
-    life: 1, speed: 250, dmg: 12, stick: true, col: '#cfd8e8',
+    life: 1, speed: 250, dmg: 12, col: '#cfd8e8',
   },
   hook: {
     name: 'HOOKSHOT', blurb: 'FLIES OUT AND COMES BACK.', tier: 0, proj: true,
     weight: 3, path: 'boomer', solid: false, ff: false,
-    life: 1.5, speed: 260, dmg: 7, stick: false, col: '#9fc4dd',
+    life: 1.5, speed: 260, dmg: 7, col: '#9fc4dd',
   },
   care: {
     name: 'CARE ARROW', blurb: 'FAST, PASSES WALLS, LIGHTS THE SNOW.', tier: 1, proj: true,
     weight: 4, path: 'line', solid: false, ff: false,
-    life: 0.7, speed: 430, dmg: 13, stick: false, col: '#ffe6a8', lit: 34,
+    life: 0.7, speed: 430, dmg: 13, col: '#ffe6a8', lit: 34,
   },
   wisp: {
     name: 'WISP', blurb: 'CIRCLES YOU, LIGHTING THE DARK.', tier: 1, proj: true,
     weight: 3, path: 'orbit', solid: false, ff: false,
-    life: 3, speed: 250, dmg: 6, stick: false, col: '#8fd8ff', lit: 40,
+    life: 3, speed: 250, dmg: 6, col: '#8fd8ff', lit: 40,
   },
   log: {
     name: 'THROWING LOG', blurb: 'SLOW, ARCS DOWN, FLATTENS ANYONE.', tier: 1, proj: true,
     weight: 8, path: 'lob', solid: true, ff: true,
-    life: 2.2, speed: 155, dmg: 34, stick: false, col: '#a3794f',
+    life: 2.2, speed: 155, dmg: 34, col: '#a3794f',
   },
   lance: {
     name: 'ICE LANCE', blurb: 'HEAVY, FLAT AND VERY FAST.', tier: 2, proj: true,
     weight: 7, path: 'line', solid: true, ff: false,
-    life: 1.1, speed: 380, dmg: 26, stick: false, col: '#bfe6ff',
+    life: 1.1, speed: 380, dmg: 26, col: '#bfe6ff',
   },
   // -- modifiers -----------------------------------------------------------
   speedup: {
@@ -305,9 +305,9 @@ function bitPut(cell, i, id) {
 
 // ---- what a tool fires ---------------------------------------------------
 // One press = one activation of the selected tool. A projectile bit spends an
-// arrow from the quiver (the pillar holds: shots are finite, and a bit that
-// leaves a shaft is one you can walk over and get back), the tool's rate of
-// fire sets the gap to the next press, and DUPLICATE is the one modifier that
+// arrow from the quiver (shots are finite, and fletching is the only refill),
+// the tool's rate of fire sets the gap to the next press, and DUPLICATE is
+// the one modifier that
 // changes how many bits an activation consumes rather than what they do.
 function fireTool(p) {
   // the cover is read before anything below can break it - the ambush shot is
@@ -374,7 +374,7 @@ function emitBit(p, b, id, m, amb, seq) {
       // what makes this a bit rather than the old arrow: how it flies, what
       // stops it, who it is allowed to hurt, and what it leaves behind
       bit: id, path: b.path, solid: b.solid !== false, ff: !!b.ff,
-      stick: !!b.stick, lit, col: b.col,
+      lit, col: b.col,
       // what it does when it lands: the damage type, the fire it leaves in
       // the body, and the ring it sets alight where it ends
       type: m.type, burn: m.burn, burnDps: m.burnDps, cinder: m.cinder,

@@ -929,10 +929,9 @@ window.DBG = {
   flagResolve: (tx, ty, p) => flagResolve(p || player, tx, ty),
   flagTarget, // what the held press is aiming at right now (null = nothing drawn)
   get flag() { return player.flag; },
-  // the quiver: the shafts lying in the world, the ceiling, and a way to set
-  // a slot's ammo / cycle without playing to it. hudStripRect is the xp bar +
-  // weapon/ability strip, bottom-centre.
-  shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, stripHit,
+  // the quiver: the ceiling and the fletch clock, and the hud strip - the xp
+  // bar + weapon/ability strip, bottom-centre.
+  QUIVER_MAX, QUIVER_REGEN, hudStripRect, stripHit,
   // Tools and bits: the two tables, the tier palette, an instance maker, the
   // firing pipeline and the loot roll - so a driver can stage a build without
   // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells

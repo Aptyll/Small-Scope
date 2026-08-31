@@ -203,7 +203,7 @@ branch (the roost tiles are `eagle` objects, a rival-only work target — `workT
 treeline while every camera pans to watch (`state.eagleCine`, the driven-off ceremony), and
 `EAGLE_CINE_T` later `eagleFleeResolve` takes the whole owning side out of the match (see
 [Death is final](gameplay.md#death-is-final) and the eagle-drop section in
-[rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly shafts pass over it; a friendly
+[rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly arrows pass over it; a friendly
 swing is refused. It is not helpless either: a rival lingering in `GUST_R` makes it rear
 (wings spread for `GUST_WIND_T` — the telegraph) and **gust**, throwing every rival in
 `GUST_BLAST_R` into a `GUST_STUN` tumble with no damage — the trigger resolves through
@@ -295,9 +295,7 @@ one), fish spears (`spearFish`, keyed by fish index — a full bag refuses the c
 contest is even entered), drop pickups (keyed by drop index — every player standing on a drop
 claims it *if they have room for it*, and the magnet pulls it toward the nearest such player,
 so a full bag hands the pickup on rather than sitting on it — a dropped card is a neutral pickup
-the same way, first-come whichever team gets there), and spent-arrow
-pickups (keyed by `shafts` index — a shaft is neutral like a drop, so anyone short of a full quiver
-can pull one out, whoever shot it; see [the quiver](gameplay.md#the-quiver)).
+the same way, first-come whichever team gets there).
 
 ## AI slots
 
@@ -328,9 +326,7 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    this rung walks somewhere, and a bot crawling to a berry bush at 20 px/s has stopped playing.
 6. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
-7. **loot** — walk onto a drop within 72 px (drops are neutral and first-come). A bot at or below
-   half a quiver counts spent [shafts](gameplay.md#the-quiver) in the same scan, so the arrows a
-   firefight leaves lying around get picked back up.
+7. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
 8. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
    plus a 15-gold float. Then: with no living or rising team [Keep](gameplay.md#base-building), a
    bot saves for and builds one before anything else (`needKeep` short-circuits the rest of this

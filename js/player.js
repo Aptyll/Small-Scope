@@ -51,7 +51,7 @@ const DODGE_CD = 3.5;     // seconds to refill one charge
 
 // The two bow numbers a class kit is expressed against - CLASSES below
 // reads both at load time, which is why they sit here and the rest of the
-// bow (the quiver, the shafts, the trail) is in js/actions.js.
+// bow (the quiver, the fletching, the trail) is in js/actions.js.
 const BOW_CHARGE = 0.9;   // seconds to a full draw
 const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
@@ -547,7 +547,6 @@ const structures = []; // every stump-built tiered building (walls included)
 const robots = []; // spawner-owned worker bots
 const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
 const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
-const shafts = []; // spent arrows stuck in the snow, free for anyone: {x,y,nx,ny,team,t}
 const ARROW_PX = []; // scratch x,y,colour triples for one rasterised arrow body (render only)
 const drops = [];
 const particles = []; // {x,y,vx,vy,life,color,size,grav} + optional `alpha` fade ceiling
@@ -678,14 +677,7 @@ function die(p, src, cause) {
   p.downedTeam = killer ? killer.team : p.team;
   p.downedCause = cause;
   spillInventory(p, killer);
-  // the quiver spills where the body fell, same as the wallet: whatever was
-  // still in it sticks in the snow for whoever cleans up the fight
-  const left = p.quiver; p.quiver = 0;
-  for (let i = 0; i < left; i++) {
-    const a = rng() * Math.PI * 2, r = rand(4, 14);
-    stickArrow({ x: p.x + Math.cos(a) * r, y: p.y - 2 + Math.sin(a) * r, team: p.team },
-      Math.cos(a), Math.sin(a));
-  }
+  p.quiver = 0; // arrows die with the archer - nothing to spill, nothing to loot
   if (killer) {
     killer.kills++;
     // BLOODLUST/VAMPIRE: a flat heal on a confirmed kill, the one card

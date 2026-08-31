@@ -2095,7 +2095,6 @@ function tipBit(id, cell) {
     // the flags, only when they are true: an absent line is the default, and
     // four rows of NO would drown the three that matter
     if (b.solid === false) d.notes.push(['PASSES THROUGH WALLS', '#8fd8ff']);
-    if (b.stick) d.notes.push(['STICKS IN THE SNOW TO REUSE', '#e8dcb4']);
     if (b.ff) d.notes.push(['HITS YOUR OWN TEAM TOO', '#e0637a']);
     if (b.lit) d.notes.push(['LIGHTS THE GROUND IT PASSES', '#ffd95c']);
   } else {

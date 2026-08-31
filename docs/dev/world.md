@@ -281,14 +281,12 @@ every break snaps a quick shock ring out from the hit, sized to the face it came
 and a milestone run (every fifth consecutive hit) flares at the face. **A mover
 about to run into anything parked — or rolling slower — on its rail hops to the free lane and
 keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occupied stretch),
-which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`, and **the arrow
-sticks in the face first**: the mechanical hit — points, popup, the run — lands on impact (the
-round clock can never eat a landed shot), the face recoils around the standing shaft (drawn out
-of the impact point along the bearing it flew in on), and `AG_STICK_T` later `agShatter` breaks
-it — chips, straw, splinters and the shock ring — after which a **stock** target (the
-free-practice roster, `agStock`) stands bare `PT_RESPAWN` seconds and springs a fresh face,
-while a round target is spent for good. A face carrying a stuck arrow is not live (`ptLive`),
-so one shaft resolves at a time. **Every arrow into a face also extends a consecutive-hit run** (`agStreak`),
+which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`, and **the face
+explodes on contact**: points, popup, the run and the shatter (`agShatter` — chips, straw,
+splinters and the shock ring) all land the same frame, so the feedback is instant and the round
+clock can never eat a landed shot. After the break a **stock** target (the free-practice roster,
+`agStock`) stands bare `PT_RESPAWN` seconds and springs a fresh face, while a round target is
+spent for good. **Every arrow into a face also extends a consecutive-hit run** (`agStreak`),
 minigame or not: the hit popup carries it from the second hit on (`X3` alone in free practice —
 white, gold from five, hot orange from ten — appended to the points during a round), any
 practice arrow that ends without striking a face breaks it (the arrow loop, js/sim.js — the

@@ -148,7 +148,7 @@ one: it is a wallet number with no ceiling. See
 pack and weapon, and the loot pools all pick it up
 with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` key — reuse one of
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
-**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`stick`/`col` and an
+**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`col` and an
 8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
 envelope in `toolMods` — and, because cells fold in whatever order they sit in, that `mod` must
 write order-independent values (a max or a set, never a multiply of what is already there), or two

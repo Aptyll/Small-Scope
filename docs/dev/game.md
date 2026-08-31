@@ -49,9 +49,9 @@ a find is a find because of what it *is*, never because of what you have ground 
 [The tech tree](gameplay.md#the-tech-tree).
 
 **Arrows are finite whatever is firing them.** Every projectile bit spends one from the same small
-quiver, and the plain shafts stick in the snow where they land for **anyone** to pick up — so a
-firefight leaves ammunition on the ground for whoever is still standing, and the exotic bits that
-leave nothing behind cost more than their damage says. [The quiver](gameplay.md#the-quiver).
+quiver, a spent shot is gone for good, and fletching is the only refill — so ammunition is a
+rhythm, not a resource to scavenge, and every archer runs at the same throttle.
+[The quiver](gameplay.md#the-quiver).
 
 **Momentum is the movement.** Ice is mechanically slippery, dodges chain, and **a roll is a hit** —
 the dodge is an attack, which is why a player mid-roll passes through small units instead of

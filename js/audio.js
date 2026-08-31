@@ -484,8 +484,6 @@
     nock() { tone(880, 0.03, 'square', 0.035); tone(1240, 0.03, 'square', 0.025, 0, 0.03); },
     // pressing the bow with an empty quiver: a slack string and nothing behind it
     dryFire() { noise(0.05, 0.07, 260); tone(120, 0.09, 'triangle', 0.06, -40); },
-    // pulling a spent shaft back out of the snow
-    shaftPull() { noise(0.05, 0.1, 1400); tone(520, 0.06, 'triangle', 0.05, 240); },
     // going to ground: a body dropping into deep snow, all low crunch and no pitch
     bury() { noise(0.22, 0.2, 380); tone(96, 0.16, 'triangle', 0.06, -26); },
     // the cover finishes settling. Barely there on purpose - it is the sound of

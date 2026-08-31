@@ -595,7 +595,6 @@ const practiceDummies = [];  // every dummy standing, for updatePractice's mend 
 //          (a round's targets are one-shot - hit means gone and scored)
 const PT_HIT_R = 11;         // px around a LARGE face's centre an arrow scores on
 const PT_RESPAWN = 2.6;      // s a broken stock face stays gone
-const AG_STICK_T = 0.25;     // s a landed arrow stands in the face before the shatter
 const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the stock pop cycle
 const AG_SPD = [26, 46, 70]; // the stock roster's mover speeds (a round rolls its difficulty's own table, AG_DIFF)
 const AG_SIZE = [0.625, 1];  // small / large, as a scale on the 32px face
@@ -640,11 +639,6 @@ function addPTarget(kind, s, opts) {
     // hopping arms the lane-swap landing puff, warned/prevUp edge a pop-up's
     // pre-rise rattle fleck and its lock-up bounce once per cycle
     dustD: 0, hopping: false, warned: -1, prevUp: 0,
-    // the stuck arrow: stuck counts down to the shatter, stickX/Y is the
-    // impact point relative to the face centre (it rides a mover), stickA
-    // the shaft's flight bearing (the tail stands out the way it came),
-    // stickTeam whose feathers it wears
-    stuck: 0, stickX: 0, stickY: 0, stickA: 0, stickTeam: 0,
   }, opts || {});
   if (t.kind === 'pop') { t.up = 0; if (!t.pop) t.pop = PT_POP; }
   t.laneU = t.lane;
@@ -665,28 +659,17 @@ function ptFace(t) {
 }
 // the face's hit disc, scaled with its size
 function ptHitR(t) { return PT_HIT_R * AG_SIZE[t.size]; }
-// can an arrow score on it this frame (one shaft at a time: a face already
-// carrying a stuck arrow is spoken for until its shatter resolves)
-function ptLive(t) { return !t.gone && t.broken <= 0 && t.stuck <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
+// can an arrow score on it this frame
+function ptLive(t) { return !t.gone && t.broken <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
 
-// one arrow into the face: the shaft STICKS first. The mechanical hit lands
-// on impact - points, popup and the run owe nothing to the show, so the
-// round clock can never eat a landed shot - the face recoils around the
-// shaft, and AG_STICK_T later the shatter follows (agShatter, from
-// updatePractice's stuck countdown): then a STOCK target's mast stands bare
-// until the respawn springs a fresh face, while a ROUND target is spent for
-// good. Points: small, fast and pop-up all pay extra, so the shot that was
-// harder to make is worth more.
-function hitPTarget(t, hx, hy, a) {
+// one arrow into the face and it EXPLODES, that frame - points, popup, the
+// run and the shatter all land on impact, so the feedback is instant and the
+// round clock can never eat a landed shot. Then a STOCK target's mast stands
+// bare until the respawn springs a fresh face, while a ROUND target is spent
+// for good. Points: small, fast and pop-up all pay extra, so the shot that
+// was harder to make is worth more.
+function hitPTarget(t) {
   const f = ptFace(t);
-  t.stuck = AG_STICK_T;
-  const rr = ptHitR(t) * 0.6; // the shaft plants inside the rings, never the rim
-  t.stickX = Math.max(-rr, Math.min(rr, hx - f.x));
-  t.stickY = Math.max(-rr, Math.min(rr, hy - f.y));
-  t.stickA = a ? Math.atan2(a.vy, a.vx) : Math.PI / 2;
-  t.stickTeam = a ? a.team : 0;
-  t.wob = 0.35; // the impact recoil
-  burst(hx, hy, '#efe6d0', 3, 35, 0.35, true); // straw off the punch
   agStreak++;
   // a milestone run flares at the face: gold at every fifth in a row, hot
   // orange from ten - the popup says the number, this says the moment
@@ -708,12 +691,12 @@ function hitPTarget(t, hx, hy, a) {
     addFloater(f.x, f.y - 6, 'X' + agStreak,
       agStreak >= 10 ? '#ff9440' : agStreak >= 5 ? '#ffd95c' : '#f4f7ff');
   }
-  if (nearPlayer(f.x, f.y)) SFX.hit();
+  agShatter(t); // the break IS the hit feedback - no beat between them
 }
 
-// the shatter itself, a beat after the arrow landed: chips, straw,
-// splinters and the shock ring, and the face is gone - back on a respawn
-// clock if it was stock, for good if it was a round target
+// the shatter: chips, straw, splinters and the shock ring, and the face is
+// gone - back on a respawn clock if it was stock, for good if it was a
+// round target
 function agShatter(t) {
   const f = ptFace(t);
   const sc = AG_SIZE[t.size];
@@ -721,7 +704,6 @@ function agShatter(t) {
   burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
   burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
   agRings.push({ x: f.x, y: f.y, t: 0, max: ptHitR(t) + 5 });       // the shock ring
-  t.stuck = 0;
   if (t.stock) { t.broken = PT_RESPAWN; t.wob = 0; }
   else t.gone = true;  // updatePractice sweeps it out of the array
   if (nearPlayer(f.x, f.y)) SFX.break_();
@@ -778,7 +760,7 @@ let agFurniture = [];    // the dummy + rack + bell objects the round sinks away
 // on - hotter-coloured as the run grows - and a fresh round starts it over.
 let agStreak = 0;
 // the hit-ring flash: every face break snaps one quick shock ring out from
-// the hit, sized to the face it came off (hitPTarget pushes, updatePractice
+// the hit, sized to the face it came off (agShatter pushes, updatePractice
 // ages, drawAgRings in js/draw-world.js draws)
 const AG_RING_T = 0.22;  // s a ring lives
 const agRings = [];      // { x, y, t, max }
@@ -1423,11 +1405,6 @@ function updatePractice(dt) {
     t.t += dt;
     if (t.wob > 0) t.wob = Math.max(0, t.wob - dt);
     if (t.swapT > 0) t.swapT -= dt;
-    // a stuck arrow's beat runs out: the face shatters around it
-    if (t.stuck > 0) {
-      t.stuck -= dt;
-      if (t.stuck <= 0) agShatter(t);
-    }
     if (t.broken > 0) {
       t.broken -= dt;
       if (t.broken <= 0) { // a fresh face springs onto the bare post

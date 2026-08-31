@@ -1,6 +1,6 @@
 'use strict';
 // What a player does: click/E/space resolved - the swing tools and what they
-// harvest, the quiver and its spent shafts, the roll as a hit, prone, and one
+// harvest, the quiver and its fletching, the roll as a hit, prone, and one
 // blow against anything built, each with its own tuning above it. What the
 // LEFT button fires is a tool on one of the four slots: js/tools.js.
 // ------------------------------------------------------------ actions
@@ -24,18 +24,10 @@ const SWING_BOW = 0, SWING_AXE = 1, SWING_PICK = 2;
 const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
 // The quiver: arrows are a resource, not an infinite stream. A shot spends one
 // and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
-// sets its own rhythm); an empty quiver fletches one back every QUIVER_REGEN,
-// and every arrow that ends its flight sticks in the snow to be pulled out
-// again. Fletching alone is the floor - retrieval is how a good shot stays armed.
+// sets its own rhythm); a spent arrow is simply gone, and fletching hands one
+// back every QUIVER_REGEN - the one clock the whole ammo economy runs on.
 const QUIVER_MAX = 6;     // arrows carried
 const QUIVER_REGEN = 2.4; // seconds to fletch one arrow back (only ticks below max)
-const SHAFT_LIFE = 30;    // seconds a spent arrow stays stuck in the snow
-const SHAFT_R = 10;       // px: walk this close to pull one out
-const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
-const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
-const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
-const SHAFT_BURY = 6;     // body pixels 0..this-1 (head, collar, some shaft) are under the snow
-const SHAFT_MID = 10;     // stickArrow stores the shaft at this body pixel - the visible middle
 const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
 const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
 const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
@@ -359,32 +351,14 @@ function risePlayer(p) {
 }
 
 // ---- the quiver ---------------------------------------------------------
-// Three ways an arrow moves: out of the quiver when a shot is loosed, into
-// the snow where that shot ended (stickArrow), and back into a quiver when
-// anyone walks over it. Fletching is the slow floor under all of it, so a
-// player who never retrieves anything is throttled rather than disarmed.
+// Two ways an arrow moves: out of the quiver when a shot is loosed, and back
+// in by fletching - a spent shot is gone for good, so the regen clock is the
+// whole ammo economy and every archer runs at the same throttle.
 function gainArrow(p, n) {
   if (p.quiver >= QUIVER_MAX) return false;
   p.quiver = Math.min(QUIVER_MAX, p.quiver + (n || 1));
   p.quiverFlash = 0.35;
   return true;
-}
-// a spent arrow, left where its flight ended. Open water swallows it; a
-// solid tile keeps it on the near side so it never sits inside a wall.
-function stickArrow(a, nx, ny) {
-  // stored at the middle of the VISIBLE body (head and collar sink in the
-  // snow), so the pickup circle, the hover chevron and the drawn shaft all
-  // share one centre instead of measuring to a buried point
-  const x = a.x - nx * SHAFT_MID, y = a.y - ny * SHAFT_MID;
-  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  if (!inWorld(tx, ty)) return;
-  if (ground[idx(tx, ty)] === 2) { // straight into the water: gone
-    burst(x, y, '#9fc4dd', 4, 30, 0.35, true);
-    if (nearPlayer(x, y)) SFX.splash();
-    return;
-  }
-  shafts.push({ x, y, nx, ny, team: a.team, t: 0 });
-  while (shafts.length > SHAFT_MAX) shafts.shift();
 }
 // pressing a tool that cannot answer - an empty quiver, an empty slot, or a
 // tool with no bit light enough to throw: the tell, rate-limited to the press.

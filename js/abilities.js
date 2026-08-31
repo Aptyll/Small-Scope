@@ -40,7 +40,6 @@ const VOLLEY_RANGE = 150;   // px from the feet the circle can be called
 const VOLLEY_R = 26;        // px radius of the strike
 const VOLLEY_T = 0.8;       // s of telegraph before the arrows land
 const VOLLEY_DMG = 14;
-const VOLLEY_SHAFTS = 3;    // plain shafts the rain leaves for anyone
 // warrior
 const SHIELD_T = 2.2;       // s the shield can be held up
 const SHIELD_ARC = 0.35;    // cos-margin of the front arc that blocks
@@ -541,12 +540,6 @@ function updateAbilityWorld(dt) {
       hurtUnit(q, VOLLEY_DMG, (q.x - v.x) / d * 0.3, 0.4, by, { kb: 30 });
     }
     if (PRACTICE) abHitDummies(v.x, v.y, VOLLEY_R, VOLLEY_DMG);
-    // the pillar holds even for a called strike: some of the rain sticks in
-    // the snow as plain shafts, free for anyone who walks in after it
-    for (let k = 0; k < VOLLEY_SHAFTS; k++) {
-      const a = rng() * Math.PI * 2, r = rand(4, VOLLEY_R - 6);
-      stickArrow({ x: v.x + Math.cos(a) * r, y: v.y + Math.sin(a) * r, team: v.team }, 0, 0.9);
-    }
     burst(v.x, v.y, '#eef4fb', 12, 55, 0.5, true);
     if (nearPlayer(v.x, v.y)) SFX.hit();
     volleys.splice(i, 1);
@@ -563,7 +556,7 @@ function updateAbilityWorld(dt) {
 }
 
 // ---- drawing: the world layer --------------------------------------------
-// Flat things on the snow, drawn after the shafts and before the entities:
+// Flat things on the snow, drawn before the drops and the entities:
 // a trap is as plainly visible as a shaft is, to BOTH sides - the game is
 // readable first, sneaky second.
 function drawAbilityGround(ex, ey, now) {

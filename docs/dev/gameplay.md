@@ -163,8 +163,8 @@ One entry in the `BITS` table, and there are two kinds of them, told apart by `p
 
 A **projectile bit** is one shot: `weight` (what the tool has to be strong enough to throw),
 `path` (how it flies), `solid` (whether a wall stops it), `ff` (whether it will hurt your own
-side), `life`/`speed`/`dmg` as baselines, and `stick` — whether the spent shot lands as a shaft
-anyone can pull back out. Optional `lit` is a light radius it carries in flight.
+side), and `life`/`speed`/`dmg` as baselines. Optional `lit` is a light radius it carries in
+flight. A spent shot is simply gone — nothing lands to be picked back up.
 
 A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
 **every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
@@ -210,7 +210,7 @@ A tool holding only modifiers fires nothing, the same as one holding only bits t
 (`pwScale`), the class kit's `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`), the hero level and then
 the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
 about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
-`stick`, `type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old fields.
+`type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old fields.
 
 `toolReady(p)` is the second half of the old quiver gate: an empty slot and a tool with no bit
 light enough to throw are both as dry as an empty quiver, and `updatePlayer` refuses the draw on
@@ -230,11 +230,10 @@ carries no `path` and falls straight through.
 | `boomer` | out on the bearing slowing to nothing, then hauled back to whoever threw it; the flight ends when it gets home |
 | `orbit` | a ring of `ORBIT_R` around the shooter, eased out over the first 0.25 s and swept at its own speed |
 
-Four per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
+Three per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
 test (that is the whole of "never hits ground"), `a.ff` lifts the team check on players and worker
-bots (never on the shooter, at any weight), `a.stick` decides whether the spent shot leaves a
-shaft, and `a.cinder` lights a ring around wherever the shot ended. A burning shot trails fire
-instead of team colour and bursts embers where it lands.
+bots (never on the shooter, at any weight), and `a.cinder` lights a ring around wherever the shot
+ended. A burning shot trails fire instead of team colour and bursts embers where it lands.
 
 **Three hit tests, one blow.** The branches differ only in what they test against — a raised tower
 shield and a 7 px body for a slot, `robotHit` for a chassis, `animalHit` for a body that may be up
@@ -391,7 +390,7 @@ HUNTER — bow, traps, distance control:
 | 1 | **SNARE TRAP** | 10 s | sets an iron jaw at the aim (≤ `TRAP_RANGE`, tile-snapped, visible to everyone). Arms in 1 s — the jaws visibly spread — then the first rival on it takes 8 and is **rooted** (`p.rootT`, 1.2 s: no walk, no roll, no slide; tools still work). `TRAP_MAX` 2 per owner, a third springs the oldest |
 | 2 | **NET SHOT** | 11 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
 | 3 | **FALCON SWEEP** | 18 s | the bird flies the aim line (`falcons`, 340 px): every rival under it is **marked** (`p.markT`, 4 s) — `seenAt()` returns full range for a marked body (its one legal bypass) and both maps keep showing them |
-| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then 14 damage in `VOLLEY_R`, and `VOLLEY_SHAFTS` plain shafts stick for **anyone** — the ammo pillar holds even for a called strike |
+| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then 14 damage in `VOLLEY_R` |
 
 WARRIOR — close pressure, blocking, momentum:
 
@@ -511,8 +510,8 @@ array, and are updated in `updatePlay()`: they die on solid tiles (unless the bi
 them), on a **rival player** (tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker
 bot** (`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or
 at the end of the bit's life. They never hit structures — a building is broken by hand with E, not
-shot. A shot from a bit with `stick` **leaves a shaft behind wherever it ends** (`stickArrow`) —
-see [The quiver](#the-quiver).
+shot. However a shot ends, it is **gone** — nothing lands in the snow to be retrieved — see
+[The quiver](#the-quiver).
 
 `p.fireArmed` is what makes the draw survive a tool that isn't ready. It is set on the press edge,
 cleared on release and at every point that cancels a draw (`tryWork`, falling in a hole, an
@@ -528,25 +527,14 @@ Arrows are a resource, and they are the ammunition for **every** projectile bit,
 plain one — which is what keeps an exotic loadout honest. `p.quiver` starts at `QUIVER_MAX` (6);
 `fireTool` spends one per projectile bit fired (so DUPLICATE costs two) and sets
 `p.nockT = toolRof(p, cell)` — the tool's own `rof`, scaled by the same `kit.nock` factors QUICKDRAW
-and the loose ranks always moved — and no draw can begin while that runs. Below the ceiling,
+and the loose ranks always moved — and no draw can begin while that runs. A spent shot is **gone**
+— nothing lands in the snow, nothing is retrieved, and dying spills no ammo. Below the ceiling,
 `p.fletchT` accumulates and hands back one arrow every `kit.fletch` (starts at `QUIVER_REGEN`
-2.4 s, shortened by fletch ranks) through `gainArrow` — the floor that keeps a player who never
-picks anything up throttled rather than disarmed. Bow-fishing is the one press that costs nothing:
+2.4 s, shortened by fletch ranks) through `gainArrow` — the one clock the whole ammo economy runs
+on, so every archer is throttled the same way. Bow-fishing is the one press that costs nothing:
 it never leaves the tool, so it takes the cycle but not the arrow.
 
-Only a bit with `stick` comes back: the plain ARROW and the BARBED SHOT do, and a thrown log or a
-conjured wisp plainly does not, which is a real cost on the heavy bits over and above their
-weight. Spent shots land in **`shafts`** (`{x, y, nx, ny, team, t}`), one per sticking shot that
-ends its flight, however it ends — miss, wall, body, or expiry. `stickArrow` places it 3 px back along the flight
-(so it is never inside the tile that stopped it), drops it entirely if the tile is open water, and
-trims the oldest past `SHAFT_MAX` (90). A shaft lives `SHAFT_LIFE` (30 s), is inert for
-`SHAFT_ARM` (0.3 s), and is then **neutral**: any player inside `SHAFT_R` (10 px) whose quiver
-isn't full claims it through `contest('shaft:' + i, …)`, exactly like a drop — so shooting at
-someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s loot step counts
-shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
-quiver as shafts around the body, the same way `spillInventory` spills the bag.
-
-Three indicators carry it, and none of them is a word (the hud strip itself carries no quiver or
+Two indicators carry it, and neither is a word (the hud strip itself carries no quiver or
 dodge counter — its weapon well only reddens its rim when the selected tool cannot answer, the
 old dry-bow tell):
 
@@ -557,15 +545,9 @@ old dry-bow tell):
   fraction, 1 = ready) and `dry` (empty quiver), whatever the pointer is over. While the renock
   runs, four gold corner marks fall inward and land on the ring; an empty quiver drops the centre
   pixel and greys the ticks — the crosshair goes hollow.
-- **The shafts themselves** (`drawShafts`, in the flat pass just before drops). The shared arrow
-  body from `SHAFT_BURY` back — head and bit collar under the snow — lying on the bearing it flew
-  in on, centred on the stored point (`stickArrow` pulls it back `SHAFT_MID` px so the pickup
-  circle and the drawing agree). Inside `SHAFT_NEAR` (34 px) of a local player with room for it,
-  the whole thing turns gold — this HUD's "you can take this" colour — and grows a bobbing
-  arrowhead. It blinks over its last 1.6 s so nobody walks toward one that is about to go.
 
-Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot),
-`SFX.dryFire()` on an empty press, `SFX.shaftPull()` on a retrieval.
+Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot) and
+`SFX.dryFire()` on an empty press.
 
 A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodies of their own —
 a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
@@ -584,9 +566,8 @@ degenerates to plain rounding, so straight shots kept their exact pre-2.28 pixel
 1 px dark edge) so the shaft reads over snow. The body is built into the `ARROW_PX` scratch
 array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` (15) px
 behind it, which is why the view cull uses the widened ±22 bound. The whole body is 16 long by
-7 deep — one 16×16 sprite cell, the scale everything else in the world is drawn at. The spent
-shaft, the arrow standing in a target face and the volley's rain all draw stretches of this same
-body.
+7 deep — one 16×16 sprite cell, the scale everything else in the world is drawn at. The volley's
+rain draws stretches of this same body.
 
 Behind it, each shot lays a **trail of team-coloured motes** into `particles` (fire instead, if a
 FLAME modifier is riding it — the burn is the more urgent fact about that shot than whose it is),
@@ -1815,10 +1796,9 @@ why the dev server ([app/server.js](../../app/server.js)) answers Range requests
 `<audio>` element treats a multi-MB mp3 as an unbounded stream (`duration` `Infinity`) and cannot
 seek in it.
 
-The bow's rhythm has three of its own: `SFX.nock()` (a dry wooden tick when the renock clears —
-deliberately near-silent, since it fires after every shot), `SFX.dryFire()` (a slack string on an
-empty quiver) and `SFX.shaftPull()` (retrieving a spent arrow). See
-[the quiver](#the-quiver).
+The bow's rhythm has two of its own: `SFX.nock()` (a dry wooden tick when the renock clears —
+deliberately near-silent, since it fires after every shot) and `SFX.dryFire()` (a slack string on
+an empty quiver). See [the quiver](#the-quiver).
 
 [Prone](#prone-under-the-snow) has four: `SFX.bury()` (a body dropping into deep snow — low crunch,
 no pitch), `SFX.hidden()` (the cover finishing, barely there on purpose: it is the sound of *not*

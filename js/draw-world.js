@@ -608,20 +608,6 @@ function drawPTarget(t, ex, ey, now) {
   const h = Math.max(1, Math.round(spr.height * rise * wobS));
   if (t.kind === 'pop') ctx.drawImage(spr, bx - (w >> 1) + rx, by - 5 - h, w, h);
   else ctx.drawImage(spr, bx - (w >> 1), Math.round(ptFace(t).y - ey) - hop - (h >> 1), w, h);
-  // the stuck arrow, standing in the face for the beat before the shatter:
-  // the shared body out of the impact point on the bearing it flew in on -
-  // driven in past half its length, so only a stub of shaft and the team
-  // feathers stand proud of the face
-  if (t.stuck > 0 && rise > 0.5) {
-    const f = ptFace(t);
-    const ix = Math.round(f.x - ex) + Math.round(t.stickX);
-    const iy = Math.round(f.y - ey) - hop + Math.round(t.stickY);
-    const tm = TEAMS[t.stickTeam || 0];
-    ARROW_PX.length = 0;
-    arrowBodyPx(ARROW_PX, ix, iy, Math.cos(t.stickA), Math.sin(t.stickA),
-      8, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
-    paintArrowPx(ARROW_PX);
-  }
 }
 
 // The hit-ring flash: one quick shock ring snapping out from every face
@@ -821,10 +807,9 @@ function drawBanner(o, px, py, now) {
 }
 
 // ---- the arrow body, shared -----------------------------------------------
-// One silhouette for every shaft in the game: the flying arrow (render.js),
-// the spent shaft below, the arrow standing in a target face (drawPTarget)
-// and the volley's rain (abilities.js) all rasterise ARROW_BODY (js/actions.js)
-// through this pair. hx/hy is the tip's exact (unrounded) screen position,
+// One silhouette for every shaft in the game: the flying arrow (render.js)
+// and the volley's rain (abilities.js) both rasterise ARROW_BODY
+// (js/actions.js) through this pair. hx/hy is the tip's exact (unrounded) screen position,
 // i0..i1 the stretch of the body to draw (a buried head is skipped by raising
 // i0), cT/cD the team feather and its dark edge, cB the bit collar, cG an
 // optional shaft override (0 = the master's gold).
@@ -877,51 +862,6 @@ function paintArrowPx(px) {
   }
 }
 
-// Spent arrows in the snow, drawn flat under everything that walks: the shared
-// body from SHAFT_BURY back - head and bit collar under the snow - lying on
-// the bearing it came in on, centred on s.x/s.y (stickArrow pulls the stored
-// point back to the visible middle, so the pickup circle and the drawing agree).
-// Inside SHAFT_NEAR of a local player who has room for it, the whole thing
-// goes gold and grows a bobbing arrowhead: that, and nothing written down, is
-// how "walk over it to take it back" gets taught. It blinks over its last
-// second and a half so nobody plans a route to one that is about to go.
-function drawShafts(ex, ey, now) {
-  const want = state.mode === 'play' && !player.dead && !inAir(player) && player.quiver < QUIVER_MAX;
-  for (const s of shafts) {
-    const sx = Math.round(s.x - ex), sy = Math.round(s.y - ey);
-    if (sx < -18 || sy < -18 || sx > WV_W + 18 || sy > WV_H + 18) continue;
-    const left = SHAFT_LIFE - s.t;
-    if (left < 1.6 && ((now * 7) | 0) % 2) continue;
-    const fade = Math.min(1, left / 4);
-    const near = want && Math.hypot(s.x - player.x, s.y - player.y) < SHAFT_NEAR;
-    ctx.globalAlpha = fade;
-    ctx.fillStyle = 'rgba(120,140,175,0.32)';
-    ctx.fillRect(sx - 4, sy + 2, 9, 1);
-    // in range the whole thing goes gold - the colour this HUD already uses for
-    // "you can take this" (the gear row's buy chevron, every hover). White was
-    // tried and vanished into the snow.
-    ARROW_PX.length = 0;
-    arrowBodyPx(ARROW_PX, s.x - ex + s.nx * SHAFT_MID, s.y - ey + s.ny * SHAFT_MID,
-      s.nx, s.ny, SHAFT_BURY, ARROW_LEN,
-      near ? '#fff3c4' : TEAMS[s.team].mark,
-      near ? '#ffd95c' : TEAMS[s.team].coatD,
-      ARROW_INK.G, near ? '#ffd95c' : 0);
-    paintArrowPx(ARROW_PX);
-    if (near) {
-      // a small arrowhead bobbing over it - the same wedge a flying arrow wears
-      const by = sy - 11 - Math.round(Math.abs(Math.sin(now * 4)) * 2);
-      for (let r = 0; r < 3; r++) {
-        const w = r * 2 + 1;
-        ctx.fillStyle = '#0a0e23';
-        ctx.fillRect(sx - r + 1, by + r + 1, w, 1);
-        ctx.fillStyle = '#ffd95c';
-        ctx.fillRect(sx - r, by + r, w, 1);
-      }
-    }
-    ctx.globalAlpha = 1;
-  }
-  ctx.globalAlpha = 1;
-}
 
 // small overhead bar shared by every living unit; color shifts as hp drains
 function drawHealthBar(cxp, topY, hp, maxHp, w) {

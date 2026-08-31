@@ -239,18 +239,11 @@ function updateAI(p, dt) {
   inp.fire = false;
 
   // 7. loot on the ground is neutral and first-come: pick up what is close.
-  //    A bot short of arrows counts spent shafts as loot too, so the fields a
-  //    firefight leaves behind get picked clean instead of lying there.
   let loot = null, ld = 72;
   for (const d of drops) {
     if (d.t < 0.35) continue;
     const dd = Math.hypot(d.x - p.x, d.y - p.y);
     if (dd < ld) { ld = dd; loot = d; }
-  }
-  if (p.quiver <= QUIVER_MAX / 2) for (const s of shafts) {
-    if (s.t < SHAFT_ARM) continue;
-    const dd = Math.hypot(s.x - p.x, s.y - p.y);
-    if (dd < ld) { ld = dd; loot = s; }
   }
   if (loot && ai.lootT < 4) {
     ai.lootT += dt; aimAt(loot.x, loot.y);

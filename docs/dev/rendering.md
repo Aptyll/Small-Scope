@@ -143,7 +143,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 everything that walks) → footprints (walking prints,
 slide grooves, skate scratches and belly-crawl furrows all share the one `footprints` array,
 branching on `f.k`) → flat objects
-(stumps, and **fish nets** via `drawNet`) → spent arrows (`drawShafts`) → item drops → **y-sorted
+(stumps, and **fish nets** via `drawNet`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered

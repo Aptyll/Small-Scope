@@ -232,9 +232,8 @@ function render() {
   }
 
   // what the abilities left flat on the snow - craters, set traps, volley
-  // warnings - then spent arrows, then drops (all under entities)
+  // warnings - then drops (all under entities)
   drawAbilityGround(ex, ey, now);
-  drawShafts(ex, ey, now);
   for (const d of drops) {
     const spr = SPRITES[ITEMS[d.type] ? ITEMS[d.type].icon : 'itemGold'];
     const h = spr.width >> 1; // a tool's icon is 12x12, everything else 8x8
@@ -896,10 +895,9 @@ function drawHitboxes(ox, oy, ex, ey) {
   // that point that is tested against every circle above
   for (const a of arrows) hbDot(a.x - ex, a.y - ey, HB_SHOT);
 
-  // walk-over and click targets. A drop is claimed from its own centre, a
-  // shaft from 2px below its own - both are what the sim measures to.
+  // walk-over and click targets, claimed from their own centres - what the
+  // sim measures to
   for (const d of drops) hbRing(d.x - ex, d.y - ey, 7, HB_PICK);
-  for (const s of shafts) hbRing(s.x - ex, s.y + 2 - ey, SHAFT_R, HB_PICK);
   for (const f of fish) hbRing(f.x - ex, f.y - ey, 7, HB_PICK); // hoverFish
 }
 

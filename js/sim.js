@@ -239,7 +239,7 @@ function updatePlay(dt) {
       // ARE the hit test, so anywhere a walker collides, an arrow damages -
       // a radius around the bird's centre missed the block's corners. Tested
       // BEFORE tile solidity, which would eat the shot; a friendly arrow
-      // falls through to it and sticks (shafts pass to no one for free).
+      // falls through to it and dies on the tile like any other miss.
       const atx = Math.floor(a.x / TILE), aty = Math.floor(a.y / TILE);
       if (inWorld(atx, aty)) {
         const o = objects[idx(atx, aty)];
@@ -272,7 +272,7 @@ function updatePlay(dt) {
         if (!ptLive(t)) continue;
         const f = ptFace(t);
         if (Math.hypot(f.x - a.x, f.y - a.y) < ptHitR(t)) {
-          hitPTarget(t, a.x, a.y, a); // the arrow hands over its bearing: it sticks in the face
+          hitPTarget(t); // the face explodes on contact
           a.ptHit = true; // this shot keeps the consecutive-hit run alive
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
@@ -362,11 +362,8 @@ function updatePlay(dt) {
       // range's consecutive-hit run (agStreak, js/world.js) - minigame or not
       if (PRACTICE && !a.ptHit) agStreak = 0;
       // A shot that ends - a miss, a wall, a body, or the end of its life -
-      // leaves a shaft where it stopped IF the bit that fired it is one that
-      // comes back (BITS[...].stick, the plain arrow and the barb). That is
-      // what keeps "arrows come back" true while a thrown log or a conjured
-      // wisp plainly does not. Turret bolts carry no bit and leave nothing.
-      if (!a.kind && a.stick) stickArrow(a, nx, ny);
+      // just vanishes: the quiver refills by fletching alone, so nothing is
+      // ever lying in the snow to walk back over.
       arrows.splice(i, 1);
     }
   }
@@ -395,27 +392,6 @@ function updatePlay(dt) {
 
   // everyone has stepped: push overlapping units apart (players, animals, robots)
   separateUnits();
-
-  // spent arrows in the snow. Neutral like drops - the fletching says whose
-  // shot it was, but anyone short of a full quiver can pull it out, so losing
-  // a firefight on someone else's ground also means shooting them their ammo.
-  for (let i = shafts.length - 1; i >= 0; i--) {
-    const s = shafts[i];
-    s.t += dt;
-    if (s.t > SHAFT_LIFE) { shafts.splice(i, 1); continue; }
-    if (s.t < SHAFT_ARM) continue;
-    for (const p of players) {
-      if (!p.active || p.dead || inAir(p) || p.quiver >= QUIVER_MAX) continue;
-      if (Math.hypot(s.x - p.x, s.y - p.y + 2) >= SHAFT_R) continue;
-      contest('shaft:' + i, p, () => {
-        const j = shafts.indexOf(s);
-        if (j < 0 || !gainArrow(p, 1)) return; // someone else got there, or the quiver filled
-        shafts.splice(j, 1);
-        burst(s.x, s.y, TEAMS[s.team].mark, 4, 30, 0.3, true);
-        if (p === player) SFX.shaftPull();
-      });
-    }
-  }
 
   // drops
   for (let i = drops.length - 1; i >= 0; i--) {
