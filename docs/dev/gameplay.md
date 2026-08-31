@@ -349,11 +349,11 @@ cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)`
 `updatePlay`) steps what they leave in the world.
 
 **Abilities level on skill points, never gold.** Each key starts at level 1; each level past 1
-costs **one skill point** — the same pool the pack's kit-skill row spends, one point per
+costs **one skill point** — the only thing a point buys, one per
 [hero level](multiplayer.md#hero-levels) — and shaves `AB_LV_CD` (12%) off that ability's
 cooldown, the one lever that means something on all eight keys. The 12 points a capped hero
-earns face **24 slots** (4 kit ranks ×3 + 4 ability levels ×3), so a build chooses its half.
-The trio mirrors `buySkill`: `abLvCanBuy(p, i)` (a point in hand, room on the key),
+earns max the four keys' 12 levels exactly.
+The trio: `abLvCanBuy(p, i)` (a point in hand, room on the key),
 `buyAbilityLv(p, i)` (the single entry point, reached through `input.cmd {kind:'ability', i}` →
 `runCmd` by HUD plate click and bots alike), and `abCdOf(p, i)` — which every cooldown-setting
 site reads instead of the table's base `cd` (the cast landing, and the shield's comes-down
@@ -362,9 +362,9 @@ gear-style buy pips along the top edge — and the ASK floats clear of them: whi
 unspent each un-maxed key grows a bobbing gold plus plate in the open screen above its well
 (`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron made a real
 button. The plate press buys, any press on the well casts, so the two can never steal each
-other's click; hover lights the plate and the tooltip carries the numbers. Bots split each free
-point between the two pools in `updateAI`'s rung 0 — whichever pool is further behind,
-lowest-first, ties to the ability. The cd column in the tables below is the level-1 base.
+other's click; hover lights the plate and the tooltip carries the numbers. Bots spend each free
+point in `updateAI`'s rung 0, lowest ability level first. The cd column in the tables below is
+the level-1 base.
 
 **Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the
@@ -546,14 +546,10 @@ someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s l
 shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
 quiver as shafts around the body, the same way `spillInventory` spills the bag.
 
-Four indicators carry it, and none of them is a word (the hud strip itself carries no quiver or
+Three indicators carry it, and none of them is a word (the hud strip itself carries no quiver or
 dodge counter — its weapon well only reddens its rim when the selected tool cannot answer, the
 old dry-bow tell):
 
-- **The ability row in the backpack** (`drawAbilityRow`) keeps the numeric readout: the
-  renock, dodge and fletch cooldowns still wipe their wells top-down, rank is three pips along the
-  bottom edge, and an ability a skill point can land on wears a pulsing gold rim and a plus badge
-  in its corner — gone the moment one cannot. The pack's own column counts the unspent points.
 - **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
   *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
   geometry either way, so it never jumps.
@@ -1020,8 +1016,8 @@ cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than e
 ## Inventory and the backpack
 
 Everything a slot carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
-or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 25**
-(`BAG_CAP`, five rows of `BAG_COLS`); a second bag is a bigger `bagCap` and a longer array,
+or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 10**
+(`BAG_CAP`, two rows of `BAG_COLS` — a simple inventory); a second bag is a bigger `bagCap` and a longer array,
 nothing else. The table:
 
 | Item | Icon | Stack | Used by |

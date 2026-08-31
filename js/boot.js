@@ -932,16 +932,14 @@ window.DBG = {
   // the quiver: the shafts lying in the world, the ceiling, and a way to set
   // a slot's ammo / cycle without playing to it. hudStripRect is the xp bar +
   // weapon/ability strip, bottom-centre.
-  shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, stripHit, buySkill,
-  AB_RANK_MAX,
+  shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, stripHit,
   // Tools and bits: the two tables, the tier palette, an instance maker, the
   // firing pipeline and the loot roll - so a driver can stage a build without
   // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells
-  // the pointer tests against, and `bagAbRect` is the ability row that moved
-  // into the pack. bitEditSlot is whether the hover-raised column is up (-1 = down).
+  // the pointer tests against. bitEditSlot is whether the hover-raised column is up (-1 = down).
   TOOL_TIERS, TOOL_SLOTS, makeTool, toolType, bitType, toolMods,
   toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
-  toolCellRect, bitColRect, bitColHit, bagAbRect, bitEditSlot, tierPlate,
+  toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
   // the class abilities: the table, a keypress by hand, and the entity lists
   // an ability leaves in the world - so a driver can stage a trap or a mark
   // without walking a bot into one
@@ -1003,7 +1001,6 @@ window.DBG = {
   findPath, walkable, navTo, showPaths: false,
   // hero levels: pay a slot gold (and XP) the way a pickup would
   gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
-  buySkill: (i, p) => buySkill(p || player, i),
   // gear: the table, a slot's effective kit, and buy/pick without the HUD
   GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearHit, charLayout, charHit, BAG_CELL,
   gearCost: (i, p) => gearCost(p || player, i),

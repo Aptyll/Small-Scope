@@ -107,16 +107,11 @@ function updateAI(p, dt) {
   if (ai.hideCd > 0) ai.hideCd -= dt;
 
   // 0. spend a free skill point before the ladder - waiting on it is leaving
-  //    growth on the table. The point faces two pools now (the kit skills and
-  //    the class-ability levels, both lowest-first); it feeds whichever pool
-  //    is further behind, and a tie goes to the ability - the flashier half.
+  //    growth on the table. Lowest ability level first, so the kit rises evenly.
   if (p.skillPts > 0 && !inp.cmd) {
-    let bs = -1, br = AB_RANK_MAX;
-    for (let i = 0; i < AB_SKILL.length; i++) if (p.skill[i] < br) { br = p.skill[i]; bs = i; }
     let ba = -1, bl = AB_LV_MAX - 1;
     for (let i = 0; i < AB_KEYS; i++) if (p.abLv[i] - 1 < bl) { bl = p.abLv[i] - 1; ba = i; }
-    if (ba >= 0 && (bs < 0 || bl <= br)) inp.cmd = { kind: 'ability', i: ba };
-    else if (bs >= 0) inp.cmd = { kind: 'skill', i: bs };
+    if (ba >= 0) inp.cmd = { kind: 'ability', i: ba };
   }
 
   // 1. food, exactly as a human eats it (Q / F) - but a meal is a 1.5 s

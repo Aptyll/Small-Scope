@@ -160,11 +160,11 @@ const CARD_RARITIES = ['white', 'green', 'blue', 'purple', 'gold'];
 function cardKey(rarity) { return 'card' + rarity[0].toUpperCase() + rarity.slice(1); }
 const CARD_TYPE_RARITY = {}; // 'cardWhite' -> 'white', the inverse of cardKey
 for (const r of CARD_RARITIES) CARD_TYPE_RARITY[cardKey(r)] = r;
-// The one bag everyone starts with; a second one raises p.bagCap. Five rows of
-// BAG_COLS: two for what you eat and draft, three more because tools and their
-// bits are collected, sorted and swapped between slots, and a build that lives
-// in the bag needs somewhere to be laid out.
-const BAG_CAP = 25;
+// The one bag everyone starts with; a second one raises p.bagCap. Two rows of
+// BAG_COLS - a simple inventory: room for the meals, a card or two, and the
+// spare tool or bits a fight turns up, with every cell earned by choosing
+// what to keep.
+const BAG_CAP = 10;
 function bagCount(p, type) {
   let n = 0;
   for (const s of p.bag) if (s && s.type === type) n += s.n;
@@ -231,16 +231,6 @@ function bagTake(p, type, n) {
 const GEAR_SLOTS = ['HELMET', 'CHEST', 'LEGS', 'BOOTS'];
 const GEAR_COSTS = [10, 20, 35]; // gold to reach piece level 2 / 3 / 4
 const GEAR_LV_MAX = 4;
-// four hud abilities (loose, dodge, ambush, fletch), ranks 0..AB_RANK_MAX.
-// Rank 0 is the baseline every slot starts with; a skill point from each
-// hero level buys the next rank. The sim reads the result through kitOf.
-const AB_RANK_MAX = 3;
-const AB_SKILL = [
-  { mod: (k, L) => { k.nock *= 1 - 0.12 * L; } },
-  { mod: (k, L) => { k.dodgeCd *= 1 - 0.12 * L; } },
-  { mod: (k, L) => { k.ambushMul += 0.25 * L; k.bury *= 1 - 0.12 * L; } },
-  { mod: (k, L) => { k.fletch *= 1 - 0.15 * L; } },
-];
 const GEAR_MATS = ['#8a6a4a', '#9aa3ad', '#9fc4dd', '#f2cc6a']; // leather/iron/steel/gold, by piece level
 const GEAR = [
   [ // helmet: how you kill
@@ -335,7 +325,6 @@ function baseKit(cls) {
 function refreshKit(p) {
   const k = baseKit(p.cls);
   for (let i = 0; i < GEAR.length; i++) GEAR[i][p.gear[i]].mod(k, p.gearLv[i]);
-  for (let i = 0; i < AB_SKILL.length; i++) AB_SKILL[i].mod(k, p.skill[i]);
   for (const c of p.cards) CARDS[c.rarity][c.id].mod(k);
   p.kit = k;
   p.maxHp = levelMaxHp(p);
@@ -358,17 +347,6 @@ function buyGear(p, i) {
   if (p === player) SFX.levelUp();
   else if (nearPlayer(p.x, p.y)) SFX.pickup();
 }
-function abCanBuy(p, i) { return p.skillPts > 0 && p.skill[i] < AB_RANK_MAX; }
-// one rank on ability i, reached through runCmd so HUD click and bots share it
-function buySkill(p, i) {
-  if (!abCanBuy(p, i)) { if (p === player) SFX.deny(); return; }
-  p.skillPts--;
-  p.skill[i]++;
-  refreshKit(p);
-  if (p === player) SFX.levelUp();
-  else if (nearPlayer(p.x, p.y)) SFX.pickup();
-}
-
 // one frame of intent - the whole interface between a controller and the sim
 function makeInput() {
   return {
@@ -383,7 +361,7 @@ function makeInput() {
                          // browser tab, and preventDefault cannot stop it
     eatBerry: false, eatFish: false, // edge-triggered
     ability: -1,         // edge-triggered: cast the class ability on this key (1-4), js/abilities.js
-    cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'skill', i} or {kind:'ability', i}
+    cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'ability', i}
   };
 }
 
@@ -402,8 +380,7 @@ class Player {
     this.cls = 0;                       // CLASSES index; the select screen sets the local one
     this.gear = [0, 0, 0, 0];           // chosen GEAR variant per slot (helmet/chest/legs/boots)
     this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
-    this.skill = [0, 0, 0, 0];          // ranks on the four hud abilities, 0..AB_RANK_MAX
-    this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one
+    this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one - spent on ability levels (buyAbilityLv, js/abilities.js)
     this.cards = [];                    // picked roguelike cards, {rarity,id} - like gear, survives a respawn
     // the one order marker this slot commands its workers with (middle click,
     // see the `worker flags` banner in js/robots.js): null, or { tx, ty, job, unit }. NOT

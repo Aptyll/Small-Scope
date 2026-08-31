@@ -301,7 +301,7 @@ keeps it flush on every size.
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
 | bottom centre | the segmented plum xp bar over the weapon and ability wells, flush to the bottom; hovering the weapon well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
-| bottom right | the pack button alone when shut; the backpack frame (ability row, grid, gold strip) rising off it when open | `drawBag` |
+| bottom right | the pack button alone when shut; the backpack frame (ten-cell grid, gold strip) rising off it when open | `drawBag` |
 | centre, on G | the character panel: the live body, the stat ledger, the four gear pieces | `drawCharPanel` |
 
 ### The hover tooltip
@@ -336,7 +336,7 @@ short tooltip is a short panel.
 The builders, one per kind: `tipTool` (rate of fire, bit slots, max weight, then the loaded bits in
 **firing order** with `>` on the one up next), `tipBit` (damage, weight, speed, lifespan, flight —
 then only the flags that are *true*, because four rows of NO would drown the three that matter),
-`tipStack` (food, cards), `tipGear`, `tipAbility` (the pack's skill row), `tipClassAb` (a strip
+`tipStack` (food, cards), `tipGear`, `tipClassAb` (a strip
 ability well in play, or class select's stage wells with `cls` passed — the in-play cooldown
 and cast-hint rows only appear in play), and `tipTech`, which strips the "what is loaded in it"
 half and ends on whether this profile has ever held one.
@@ -374,7 +374,7 @@ the fill and sits faint on the empty track, so progress through a level is count
 It sits at the *bottom* so the strip's top edge stays open screen for the ability wells'
 **floating buy plates** (below). The plate swallows clicks so nothing fires through it. There is
 no rail: the quiver count and dodge pips it once carried are said by the reticle, the overhead
-bar and the pack's ability row.
+bar.
 
 The tool well (`drawToolCell`) says three things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
@@ -415,9 +415,8 @@ white** the frame a cooldown comes home. A click on the well sets `input.ability
 key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — the live
 cooldown, level and next-level price, the blurb, nothing the well itself already shows better).
 
-The **upgrade** half of this strip — the four ability wells and the plus that spends a skill point
-— moved into the backpack: rank in skill points is bought there, level in gold on the strip's own
-wells. See the ability row below.
+The strip's **upgrade** half is entirely the floating buy plates above these wells — a skill
+point is spent nowhere else, and nothing else on the strip is ever bought.
 
 ### The bit column
 
@@ -445,13 +444,9 @@ Open (B, or clicking the button), the **frame rises off the button's top edge**
 (`bagFrameRect()`, pinned bottom-right over the button so the toggle never moves under the
 pointer that just used it), and top to bottom it is:
 
-1. an **ability row** (`bagAbRect`) — the unspent skill points in the first column, then LOOSE /
-   DODGE / AMBUSH / FLETCH. Rank is pips along the bottom of the well, the renock / dodge /
-   fletch cooldowns still wipe it top-down, and an ability a point can land on wears a pulsing
-   gold rim and a plus badge in its corner — gone the moment one cannot;
-2. the **inventory grid** (`BAG_CAP` 25 — five rows of five) on the same columns and `BAG_GAP`;
-3. a single 1 px rule, the only line inside the widget;
-4. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim — berries
+1. the **inventory grid** (`BAG_CAP` 10 — two rows of five) — a simple inventory, nothing else;
+2. a single 1 px rule, the only line inside the widget;
+3. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim — berries
    and fish from the left, each an icon and a count wearing the shared food-clock wipe, then the
    gold hard against the right edge with its coin ahead of it, inked `#f5c542`. The strip lives
    **inside the open pack**: your purse is read by opening the bag, not off a bar that sits on

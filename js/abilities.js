@@ -11,13 +11,12 @@
 // ---- tuning --------------------------------------------------------------
 const AB_KEYS = 4;          // keys 1-4
 // ability levels: the hero's own growth, never the purse's. The class kit is
-// level 1; each level past 1 costs ONE SKILL POINT - the same pool the
-// pack's kit-skill row spends, one point per hero level, so the 12 points a
-// capped hero earns face 24 slots (4 kit ranks x3 + 4 ability levels x3) and
-// a build chooses its half. Each level shaves AB_LV_CD off that ability's
-// cooldown - one lever, universally meaningful (more traps out, the wall up
-// more often), read back through abCdOf so every cooldown-setting site
-// scales alike.
+// level 1; each level past 1 costs ONE SKILL POINT - the only thing a point
+// buys, one per hero level, so the 12 points a capped hero earns max the
+// four keys' 12 levels exactly. Each level shaves AB_LV_CD off that
+// ability's cooldown - one lever, universally meaningful (more traps out,
+// the wall up more often), read back through abCdOf so every
+// cooldown-setting site scales alike.
 const AB_LV_MAX = 4;
 const AB_LV_CD = 0.12;
 // hunter
@@ -125,9 +124,9 @@ const volleys = [];  // {x, y, owner, team, t}
 const volleyFx = []; // falling shafts, visual only: {x, y, delay, t}
 
 // ---- levelling -----------------------------------------------------------
-// buySkill's twin: can-buy or not (a point in hand, room on the key), the
-// one entry point a buyer reaches through runCmd (HUD plate click and bots
-// alike), and the effective number the sim reads instead of the table's base
+// can-buy or not (a point in hand, room on the key), the one entry point a
+// buyer reaches through runCmd (HUD plate click and bots alike), and the
+// effective number the sim reads instead of the table's base
 function abLvCanBuy(p, i) { return p.skillPts > 0 && p.abLv[i] < AB_LV_MAX; }
 function abCdOf(p, i) { return CLASS_AB[p.cls][i].cd * (1 - AB_LV_CD * (p.abLv[i] - 1)); }
 function buyAbilityLv(p, i) {

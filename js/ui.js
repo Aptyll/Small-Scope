@@ -90,8 +90,7 @@ function resolveWheel() {
 // run a queued build/manage/gear order for any player
 function runCmd(p, c) {
   if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
-  if (c.kind === 'skill') { buySkill(p, c.i); return; }
-  if (c.kind === 'ability') { buyAbilityLv(p, c.i); return; } // an ability level, gear's twin
+  if (c.kind === 'ability') { buyAbilityLv(p, c.i); return; } // an ability level: a skill point, from anywhere
 
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
   if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
@@ -683,13 +682,13 @@ function drawAliveIcon(x, y, color, outline) {
 // Shut, the pack is ONE BUTTON flush in the corner - a 26px plate wearing the
 // 20px pack icon (BAG_ICON below) and nothing else: no frame, no strip, no
 // numbers. Open (B, or clicking it), the frame rises off the button's top
-// edge: the ABILITY row (the four hud skills and the unspent points), the
-// inventory GRID, then a STRIP flush along the frame's bottom carrying every
-// NUMBER the widget has - berries and fish from the left, gold hard against
-// the right edge. The strip lives INSIDE the open pack: your purse is read
-// by opening the bag (or off the buy prices going gold), not off a bar that
-// sits on the screen all match. Gear is not here at all any more - the
-// character panel (G, below) is where the pieces live.
+// edge: a SIMPLE INVENTORY - the ten-cell GRID, then a STRIP flush along the
+// frame's bottom carrying every NUMBER the widget has - berries and fish
+// from the left, gold hard against the right edge. The strip lives INSIDE
+// the open pack: your purse is read by opening the bag, not off a bar that
+// sits on the screen all match. Nothing else lives here: gear is on the
+// character panel (G, below), and skill points are spent on the strip's own
+// floating plates (the class-ability levels).
 //
 // ONE BACKGROUND, ONE BORDER, ONE INTERNAL LINE. Every part of the frame -
 // behind the cells, behind the grid, behind the gold - is the same opaque
@@ -706,10 +705,10 @@ function drawAliveIcon(x, y, color, outline) {
 // not an overlay. Two things are said in colour rather than in words: the
 // button's rim goes amber when no cell is left free, and button and frame
 // alike redden and shake when something could not be carried (bagDenied).
-const BAG_CELL = 18;   // every cell: a grid slot and an ability plate alike
+const BAG_CELL = 18;   // a grid slot
 const BAG_GAP = 2;     // between neighbouring cells
 const BAG_PAD = 3;     // frame edge to the first cell
-const BAG_COLS = 5;    // the grid is five columns wide
+const BAG_COLS = 5;    // the grid is five columns wide (BAG_CAP 10: two rows)
 const BAG_BTN = 26;    // the closed pack: one big button, flush in the corner
 const BAG_STRIP = 12;  // the gold row, flush to the bottom rim under its rule
 const BAG_W = BAG_PAD * 2 + BAG_COLS * BAG_CELL + (BAG_COLS - 1) * BAG_GAP;
@@ -742,29 +741,16 @@ function bagOpenNow() { return state.bagOpen || bitEditSlot() >= 0; }
 function bagBtnRect() { return { x: VIEW_W - BAG_BTN, y: VIEW_H - BAG_BTN, w: BAG_BTN, h: BAG_BTN }; }
 // the open frame, its bottom edge on the button's top; it grows upward
 function bagFrameRect() {
-  // pad, the ability row, the grid, then the gap, the gold rule, the gold
-  // row and the rim
-  const h = BAG_PAD + BAG_CELL + BAG_GAP + bagGridH() +
-    BAG_GAP + 1 + BAG_STRIP + 1;
+  // pad, the grid, then the gap, the gold rule, the gold row and the rim
+  const h = BAG_PAD + bagGridH() + BAG_GAP + 1 + BAG_STRIP + 1;
   return { x: VIEW_W - BAG_W, y: VIEW_H - BAG_BTN - h, w: BAG_W, h };
 }
-// Cell i of the ABILITY row, the frame's top row: 0 is the unspent skill
-// points, 1-4 are the four hud skills - the things a skill point buys the
-// next rank of.
-function bagAbRect(i) {
-  const f = bagFrameRect();
-  return {
-    x: f.x + BAG_PAD + i * (BAG_CELL + BAG_GAP),
-    y: f.y + BAG_PAD,
-    w: BAG_CELL, h: BAG_CELL,
-  };
-}
-// cell i of the inventory grid, on the row's columns, under the ability row
+// cell i of the inventory grid
 function bagCellRect(i) {
   const f = bagFrameRect();
   return {
     x: f.x + BAG_PAD + (i % BAG_COLS) * (BAG_CELL + BAG_GAP),
-    y: f.y + BAG_PAD + (BAG_CELL + BAG_GAP) + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
+    y: f.y + BAG_PAD + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
     w: BAG_CELL, h: BAG_CELL,
   };
 }
@@ -780,11 +766,10 @@ function overHud(x, y) {
     bitColHit(x, y) >= 0 || overMinimap();
 }
 // What the pointer is on: { kind: 'btn' } (the pack button) | { kind: 'cell',
-// i } (a grid slot) | { kind: 'ab', i } (an ability, or 0 for the skill-point
-// well) | { kind: 'frame' } (anywhere else inside the open frame, swallowed
-// and otherwise inert) | null. Shut, only the button answers - the rest of
-// the corner is world. Shared by the click handler, the cursor and the
-// widget's own hover, so the three can never disagree.
+// i } (a grid slot) | { kind: 'frame' } (anywhere else inside the open
+// frame, swallowed and otherwise inert) | null. Shut, only the button
+// answers - the rest of the corner is world. Shared by the click handler,
+// the cursor and the widget's own hover, so the three can never disagree.
 function bagHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
@@ -793,10 +778,6 @@ function bagHit(mx, my) {
   if (!bagOpenNow()) return null;
   const f = bagFrameRect();
   if (mx < f.x || mx >= f.x + f.w || my < f.y || my >= f.y + f.h) return null;
-  for (let i = 1; i < BAG_COLS; i++) {
-    const r = bagAbRect(i);
-    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return { kind: 'ab', i: i - 1 };
-  }
   for (let i = 0; i < player.bagCap; i++) {
     const r = bagCellRect(i);
     if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return { kind: 'cell', i };
@@ -808,14 +789,6 @@ function bagClick(h) {
   if (!h) return false;
   if (h.kind === 'frame') return true; // the panel eats it; the world never sees it
   if (h.kind === 'btn') { state.bagOpen = !state.bagOpen; SFX.pickup(); return true; }
-  // an ability cell spends a skill point on that ability, exactly the way a
-  // gear cell spends gold on that piece - the two upgrade rows answer the
-  // same click. The skill-point well (i < 0) is a readout and denies.
-  if (h.kind === 'ab') {
-    if (h.i >= 0 && abCanBuy(player, h.i)) player.input.cmd = { kind: 'skill', i: h.i };
-    else SFX.deny();
-    return true;
-  }
   const s = player.bag[h.i];
   if (!s) { SFX.deny(); return true; }
   if (s.type === 'berry') player.input.eatBerry = true;
@@ -1209,7 +1182,6 @@ function drawBag(now) {
     ctx.fillStyle = red ? '#c2465a' : '#2c3a68';
     ctx.fillRect(f.x, f.y, f.w, 1); ctx.fillRect(f.x, f.y + f.h - 1, f.w, 1);
     ctx.fillRect(f.x, f.y, 1, f.h); ctx.fillRect(f.x + f.w - 1, f.y, 1, f.h);
-    drawAbilityRow(now, hov);
     for (let i = 0; i < player.bagCap; i++) {
       const r = bagCellRect(i), s = player.bag[i];
       const on = hov && hov.kind === 'cell' && hov.i === i;
@@ -1304,12 +1276,6 @@ function drawBag(now) {
 // the whole well, so the tool's rate of fire is the shape of the wipe rather
 // than a number anywhere. What is loaded stays out of the resting well - the
 // hover-raised bit column is where the build is read and edited.
-//
-// The upgrade half of this strip - the four skill wells and the plus that
-// spends a skill point on one - moved into the backpack, under the gear row
-// (bagAbRect / drawAbilityRow): both rows are "buy the next level of this",
-// one with gold and one with skill points, so they belong stacked in the same
-// grid rather than split across two corners of the screen.
 //
 // The strip proper is FIVE wells: [ WEAPON ][1][2][3][4] - the weapon leads
 // and the class abilities follow in key order, each wearing its 32px icon
@@ -1586,7 +1552,7 @@ function hudPress(mx, my) {
   const bh = bagHit(mx, my);
   if (bh) {
     if (bh.kind === 'cell' && player.bag[bh.i]) state.dragPend = { src: { k: 'bag', i: bh.i }, x: mx, y: my };
-    else if (bh.kind !== 'cell') return bagClick(bh); // the pack button and the ability row act on the press
+    else if (bh.kind !== 'cell') return bagClick(bh); // the pack button acts on the press
     return true;
   }
   return false;
@@ -1635,116 +1601,9 @@ function hudRelease(mx, my) {
   else sendBitCell(q.src.slot, q.src.i);
   return true;
 }
-// o outline, then materials. f/F (team fletch) and E (ambush eyes) per bake
-const AB_PAL = {
-  o: '#141a2c',
-  W: '#f4f7ff', b: '#cfe0f2', s: '#9fb6d8', S: '#5f6f96',
-  t: '#e8dcb4', d: '#a89263', w: '#a8794a', u: '#6e4a28',
-  h: '#c49a6a', g: '#f2cc6a', G: '#b98a2e', n: '#1a2142',
-};
-const AB_ICONS = [
-  [ // LOOSE: D-bow facing right, string taut, arrow through the grip
-    '....oooooooo....',
-    '...oWWWWWWWWo...',
-    '..oWbo.....oWo..',
-    '.oWbo.......oWo.',
-    'oWbo.........oWo',
-    'oWbo.........oWo',
-    'oWooooooooooooWo',
-    'oWfFtdttttttWWoo',
-    'oWooooooooooooWo',
-    'oWdo.........oWo',
-    'oWdo.........oWo',
-    '.oWdo.......oWo.',
-    '..oWdo.....oWo..',
-    '...oWdddddddo...',
-    '....oooooooo....',
-    '................',
-  ],
-  [ // DODGE: side-view winter boot, fur cuff, buckle, heel and toe
-    '......oooo......',
-    '......oWWWo.....',
-    '......owwuo.....',
-    '......owhwo.....',
-    '......owgwo.....',
-    '......owwuo.....',
-    '......owwwuo....',
-    '.....owwwwuo....',
-    '....owwwwwuo....',
-    '...owwwwwwuo....',
-    '..ouuuuussuo....',
-    '..ou.o...o.o....',
-    '..oooooooooo....',
-    '................',
-    '................',
-    '................',
-  ],
-  [ // AMBUSH: hooded face under a snow cap, two eyes in the slit
-    '................',
-    '....oooooooo....',
-    '...oWWWWWWWWo...',
-    '..oWbWWWWWWbo...',
-    '.oWboooooooWbo..',
-    '.oWo.nnnnnn.oWo.',
-    '.oWo.nEnnEn.oWo.',
-    '.oWo.nnnnnn.oWo.',
-    '.oWooooooooWWo..',
-    '..oWbbbbbbWWo...',
-    '...oWWWWWWWo....',
-    '....oooooooo....',
-    '................',
-    '................',
-    '................',
-    '................',
-  ],
-  [ // FLETCH: a fat quill, one-sided barbs, calamus at the bottom
-    '.........oW.....',
-    '........oWbW....',
-    '.......oWbWb....',
-    '......oWbbbW....',
-    '.....oWbWbWb....',
-    '....oWbbbWbW....',
-    '...oWbWbWbf.....',
-    '..oWbbbWbf......',
-    '.oWbWbWo........',
-    '.oWbbbWo........',
-    '..oWddo.........',
-    '..otso..........',
-    '..otso..........',
-    '..oddo..........',
-    '...oo...........',
-    '................',
-  ],
-];
-const abIconCache = new Map();
-function abIcon(i, gold) {
-  const team = TEAMS[player.team];
-  const key = i + ':' + team.mark + (gold ? ':g' : '');
-  let cv = abIconCache.get(key);
-  if (!cv) {
-    cv = document.createElement('canvas');
-    cv.width = cv.height = 16;
-    const g = cv.getContext('2d');
-    const pal = Object.assign({}, AB_PAL, {
-      f: team.mark, F: team.coatL, E: gold ? '#f2cc6a' : '#f4f7ff',
-    });
-    const rows = AB_ICONS[i];
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r];
-      for (let c = 0; c < row.length; c++) {
-        const col = pal[row[c]];
-        if (!col) continue;
-        g.fillStyle = col;
-        g.fillRect(c, r, 1, 1);
-      }
-    }
-    abIconCache.set(key, cv);
-  }
-  return cv;
-}
-// level-ups and a dodge charge coming back are edges the sim never announces
-// to the HUD, so the strip watches for them itself and pops white
-let abLvSeen = 0, abLvFlash = 0, abChSeen = -1, abChFlash = 0;
+// a level-up is an edge the sim never announces to the HUD, so the xp bar
+// watches for it itself and pops white
+let abLvSeen = 0, abLvFlash = 0;
 function drawXpBar(now, x, y) {
   const p = player;
   if (p.level > abLvSeen && abLvSeen > 0) abLvFlash = now + 0.5;
@@ -1822,72 +1681,6 @@ function drawItemIcon(type, r, y) {
   const im = SPRITES[d.icon];
   if (!im) return;
   ctx.drawImage(im, r.x + ((r.w - im.width) >> 1), y + ((r.h - im.height) >> 1));
-}
-
-// ---- the ability row, in the backpack under the gear -------------------
-// The four hud abilities - LOOSE, DODGE, AMBUSH, FLETCH - and, in the pack's
-// own column, however many skill points are waiting to be spent. Rank is pips
-// along the bottom of the well; a cooldown still wipes the well top-down, so
-// the row is a live readout as well as a shop. An ability a point can land on
-// wears a gold rim and a plus badge in its corner, and stops the moment it
-// cannot - the same "the ask appears, then goes" grammar as the gear row's
-// bobbing chevron one row up.
-function drawAbilityRow(now, hov) {
-  const p = player, kit = kitOf(p);
-  // the pack's column: what is unspent, in gold pips, and nothing when zero
-  const sr = bagAbRect(0);
-  bagCellPlate(sr, p.skillPts > 0 ? '#8a7a3a' : '#2c3560', BAG_WELL, false);
-  if (p.skillPts > 0) {
-    const bob = Math.round(Math.sin(now * 6));
-    ctx.fillStyle = '#0f1632';
-    ctx.fillRect(sr.x + 6, sr.y + 3 + bob, 6, 10); ctx.fillRect(sr.x + 4, sr.y + 5 + bob, 10, 6);
-    ctx.fillStyle = '#f2cc6a';
-    ctx.fillRect(sr.x + 7, sr.y + 4 + bob, 4, 8); ctx.fillRect(sr.x + 5, sr.y + 6 + bob, 8, 4);
-    const t = String(p.skillPts);
-    drawPixelTextOutline(ctx, t, sr.x + sr.w - 2 - pixelTextWidth(t), sr.y + sr.h - 7, '#f2cc6a', '#0f1632');
-  }
-  if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
-  abChSeen = p.dodgeCharges;
-  const clamp01 = (v) => Math.max(0, Math.min(1, v));
-  const amb = ambushReady(p);
-  const nockF = p.nockT > 0 ? clamp01(1 - p.nockT / Math.max(0.01, kit.nock)) : 1;
-  const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
-    : clamp01(1 - p.dodgeRegenT / Math.max(0.01, kit.dodgeCd));
-  const flF = p.quiver >= QUIVER_MAX ? 1 : clamp01(p.fletchT / Math.max(0.01, kit.fletch));
-  const slots = [
-    { frac: nockF, wipe: p.nockT > 0, flash: p.readyFlash > 0 },
-    { frac: chF, wipe: p.dodgeCharges <= 0, flash: now < abChFlash },
-    { frac: 1, wipe: false, flash: false },
-    { frac: flF, wipe: p.quiver < QUIVER_MAX, flash: p.quiverFlash > 0 },
-  ];
-  for (let i = 0; i < AB_N; i++) {
-    const s = slots[i], r = bagAbRect(i + 1);
-    const on = hov && hov.kind === 'ab' && hov.i === i;
-    const buy = abCanBuy(p, i);
-    const rim = s.flash ? '#f4f7ff' : on ? '#8fa0c8'
-      : buy ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
-      : i === 2 && amb ? '#f2cc6a' : '#35426e';
-    const y = bagCellPlate(r, rim, BAG_WELL, false);
-    ctx.drawImage(abIcon(i, i === 2 && amb), r.x + 1, y + 1);
-    if (s.wipe) {
-      const cov = 16 - Math.round(s.frac * 16);
-      if (cov > 0) {
-        ctx.fillStyle = AB_COVER;
-        ctx.fillRect(r.x + 1, y + 1, 16, cov);
-        if (cov < 16) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, y + cov, 16, 1); }
-      }
-    }
-    for (let k = 0; k < AB_RANK_MAX; k++) { // rank, along the bottom edge
-      ctx.fillStyle = k < p.skill[i] ? '#f2cc6a' : '#2c3560';
-      ctx.fillRect(r.x + 3 + k * 4, y + r.h - 3, 3, 1);
-    }
-    if (buy) { // the ask: a plus badge in the corner, gone once it cannot land
-      ctx.fillStyle = '#0f1632';
-      ctx.fillRect(r.x + r.w - 7, y + 1, 6, 6);
-      ctx.fillStyle = '#f2cc6a';
-      ctx.fillRect(r.x + r.w - 5, y + 2, 2, 4); ctx.fillRect(r.x + r.w - 6, y + 3, 4, 2);
-    }
-  }
 }
 
 // ---- drawing the strip, the bit column and the carried item -------------
@@ -2282,24 +2075,6 @@ function tipGear(i) {
   d.notes.push([cost ? 'CLICK TO BUY THE NEXT LEVEL' : 'FULLY UPGRADED', TIP_DIM]);
   return d;
 }
-const AB_NAMES = ['LOOSE', 'DODGE', 'AMBUSH', 'FLETCH'];
-const AB_BLURB = [
-  'THE TOOL CYCLES SOONER BETWEEN SHOTS',
-  'DODGE CHARGES COME BACK FASTER',
-  'AMBUSH HITS HARDER AND BURIES QUICKER',
-  'THE QUIVER REFILLS FASTER',
-];
-function tipAbility(i) {
-  const d = { title: AB_NAMES[i], tcol: '#f4f7ff', kind: 'ABILITY', rows: [], notes: [],
-    icon: abIcon(i, false), plate: BAG_WELL, rim: '#35426e' };
-  d.rows.push(['RANK', player.skill[i] + '/' + AB_RANK_MAX,
-    player.skill[i] >= AB_RANK_MAX ? '#f2cc6a' : '#f4f7ff']);
-  d.rows.push(['SKILL POINTS', String(player.skillPts), player.skillPts > 0 ? '#f2cc6a' : TIP_DIM]);
-  d.notes.push([AB_BLURB[i], TIP_DIM]);
-  d.notes.push([abCanBuy(player, i) ? 'CLICK TO SPEND A POINT'
-    : player.skill[i] >= AB_RANK_MAX ? 'MAXED OUT' : 'NO POINTS TO SPEND', TIP_DIM]);
-  return d;
-}
 // a class ability well - the strip's in play (cls omitted: the local slot's
 // class, live cooldown, the cast hint), or class select's stage (cls given:
 // the previewed class, before it is ever locked, with nothing castable yet)
@@ -2401,7 +2176,6 @@ function tipAt(mx, my) {
         bagUsed(player) >= player.bagCap ? '#e0637a' : '#f4f7ff']],
       notes: [['DRAG ONTO THE SNOW TO THROW AWAY', TIP_DIM]] };
   }
-  if (bh.kind === 'ab') return bh.i >= 0 ? tipAbility(bh.i) : null;
   if (bh.kind === 'cell') {
     const s = player.bag[bh.i];
     const d = tipCell(s, null);

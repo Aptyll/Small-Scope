@@ -72,7 +72,7 @@ ways, each source with its own yield profile, and it pays itself: gold is never 
 ground, every source pays the earner on the spot. Every payout levels you as a side effect.
 [Economy](gameplay.md#economy-one-currency), [Hero levels](multiplayer.md#hero-levels).
 
-**You carry a 25-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you
+**You carry a 10-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you
 *carry* is `p.bag`. Berries and fish are food, never spent; tools and bits are the build being laid
 out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 
