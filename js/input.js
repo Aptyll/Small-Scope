@@ -73,6 +73,9 @@ window.addEventListener('keydown', (e) => {
   // B opens the backpack grid. It is HUD and not an overlay, so unlike M and
   // ESC it neither stops the sim nor swallows anything but its own clicks.
   if (e.key.toLowerCase() === 'b') state.bagOpen = !state.bagOpen;
+  // G raises the character panel - the body, the live stat ledger and the
+  // four gear pieces. HUD like the bag: the sim runs on underneath.
+  if (e.key.toLowerCase() === 'g' && !state.settingsOpen && !state.draft) state.charOpen = !state.charOpen;
   // 1-4 cast the class abilities, left to right exactly as the strip shows
   // them (a click on the well sets the same field - hudPress, js/ui.js).
   // Edge-triggered like the dodge; the sim consumes it (tryAbility,
@@ -87,6 +90,7 @@ window.addEventListener('keydown', (e) => {
     else if (state.wheel) state.wheel = null;
     else if (state.draft) state.draft = null; // closes without picking
     else if (state.mapOpen) state.mapOpen = false;
+    else if (state.charOpen) state.charOpen = false;
     else { state.settingsOpen = !state.settingsOpen; dragSlider = null; state.wheel = null; }
   }
   if (e.key.toLowerCase() === 'n') { settings.muted = SFX.toggleMute(); saveSettings(); }
@@ -180,12 +184,12 @@ canvas.addEventListener('mousedown', (e) => {
   if (state.settingsOpen) { mouse.down = true; settingsMouseDown(); return; }
   if (state.mapOpen) return;
   // The backpack widget, the weapon slots and an open bit column swallow every
-  // press over themselves before the tool ever sees them. Gear is asked first
-  // because gearHit owns those four cells and bagHit does not report them; a
-  // piece that can't sell just denies. Everything else goes through hudPress,
-  // which arms a drag the mouseup below either completes or reads as a click.
-  const gi = gearHit(mouse.x, mouse.y);
-  if (gi >= 0) { SFX.unlock(); player.input.cmd = { kind: 'gear', piece: gi }; return; }
+  // press over themselves before the tool ever sees them. The character panel
+  // is asked first while it is up - a press on a gear well buys, the X
+  // closes, and the slab eats the rest. Everything else goes through
+  // hudPress, which arms a drag the mouseup below either completes or reads
+  // as a click.
+  if (state.charOpen && charClick(charHit(mouse.x, mouse.y))) return;
   if (hudPress(mouse.x, mouse.y)) { SFX.unlock(); return; }
   // pressing on the world while carrying something: the release throws it,
   // and nothing is fired

@@ -1001,8 +1001,8 @@ leave 3 lying in the snow. A drop's `type` is always an `ITEMS` key now: sources
 the card rarities, a caught fish goes straight into the bag (speared, or handed over by a
 [fish net](world.md#fish-nets) you are standing on), and death spills — and a wrecked net's
 contents — carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, berries and fish all read on
-the **strip along the bottom of the backpack frame** (bottom right) — food from the left as icon
-+ count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
+the **strip along the bottom of the open backpack frame** (bottom right, B to open) — food from
+the left as icon + count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
 wallet and bag both —
 see [Death is final](#death-is-final). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
@@ -1060,7 +1060,7 @@ for the same 0.6 s when a bit has nowhere to go in it, so the container that is 
 the one that answers.
 
 The HUD is in the `UI` › `backpack` banner — see
-[the backpack](rendering.md#the-gear-row-and-the-backpack).
+[the backpack](rendering.md#the-backpack).
 
 ## Food: the meal is a channel
 
@@ -1107,9 +1107,9 @@ as the overhead tells do (`alpha: 1 - concealOf(p)`).
   and take it away ([Overhead health bars](rendering.md#overhead-health-bars));
 - crumbs in the meal's own colour fly at the mouth for the whole channel;
 - the shared clock **wipes top-down over the food itself** (`drawFoodClock`, UI › `backpack`) — in
-  the bag cell the click that eats lands on *and* on the bottom strip's counters, which is the only
-  food readout while the pack is shut. Both meals wipe together: that is the point of one clock.
-  The meal being chewed lights its own well white, the way a casting ability well does.
+  the bag cell the click that eats lands on *and* on the open pack's strip counters. Both meals
+  wipe together: that is the point of one clock. The meal being chewed lights its own well white,
+  the way a casting ability well does.
 - the food tooltip carries `HEALS` / `EAT` / `COOLDOWN` / `CARRIED` and a red `READY IN` while the
   clock runs — the same rows `tipClassAb` prints.
 
@@ -1161,27 +1161,18 @@ player instead of only against wolves and turrets), and the three dodge-refill s
 **Buying** goes through `input.cmd = {kind:'gear', piece}` → `runCmd` → `buyGear(p, i)` — the one
 entry point: it re-validates cost, pays, bumps `gearLv`, rebuilds the kit, and heals a BULWARK
 bump on the spot like a hero level. No tile, no reach, no contest — it only touches the buyer's
-own wallet. The human sends it by clicking the **gear row**: four 18 px cells — **cells 1–4 of the
-backpack's top row**, bottom right (`gearRects`/`gearHit`/`drawGearCells`, UI banner), one per
-piece head-to-toe after the pack button. There is no keyboard shortcut for it any more: keys 1-4
-select a weapon slot ([Tools and bits](#tools-and-bits)), and gear is bought where gear is.
-A plate shows **your variant's own icon** in the **material of its level** (leather → iron →
-steel → gold), pips **above** the icon count the buys, an affordable piece grows a bobbing gold
-chevron over the plate, hover lifts the plate and shows the cost (coin + number, nothing else),
-and a maxed piece goes quiet behind a gold rim. The pips sit on top because that is the edge the
-chevron points at — the ask and the progress it asks about read as one column. There is **no
-saving meter**: the 1 px bar that used to creep along under each plate was four bars all filling
-off the same purse, so it said "you have gold" four times and never said which buy mattered; the
-chevron already answers that, on the piece it applies to, only when the answer is yes.
-`gearHit` is shared by the click handler, `cursorInfo` (hand cursor) and the row's hover, so they
-can never disagree, and it is asked **before** `bagHit` everywhere because `bagHit` deliberately
-does not report the four gear cells. The click is swallowed **before** `clickAction` — the
-backpack widget, the hud strip (the weapon well, and an ability well casting on the press) and a
-raised bit column are the left-clickable HUD in play.
-Living in that widget is also what
-keeps the chevrons legible: see
-[the backpack](rendering.md#the-backpack-and-gear-widget) for why the icon row sits on top. Bots buy in `updateAI`'s spend step: cheapest piece first, keeping a 15-gold
-float so they still build.
+own wallet. The human buys on the **character panel** (G): the four pieces sit head-to-toe as
+32 px icon wells (`charLayout`/`charHit`/`drawCharPanel`, UI banner), each named in the material
+of its level (leather → iron → steel → gold) with gear's three buy pips and the next level's
+price on it — an affordable well pulses its rim gold, a click on it buys, and a maxed piece goes
+quiet behind a gold rim
+([the character panel](rendering.md#the-character-panel-g)). There is no keyboard shortcut for
+it: keys 1-4 are the class abilities, and gear is bought where gear is worn. `gearHit` (now a
+read through `charHit`) is still shared by the click handler, `cursorInfo` (hand cursor) and
+`tipAt`, so the three can never disagree. The click is swallowed **before** `clickAction` — the
+panel, the backpack widget, the hud strip (the weapon well, an ability well casting and its buy
+badge) and a raised bit column are the left-clickable HUD in play. Bots buy in `updateAI`'s
+spend step: cheapest piece first, keeping a 15-gold float so they still build.
 
 ## Roguelike cards
 

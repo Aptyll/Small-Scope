@@ -290,10 +290,10 @@ at one map pixel per tile, a build or a cut ice hole arriving half a second late
 
 `renderUI()` owns three corners and one strip, and every one of them is positioned off
 `VIEW_W`/`VIEW_H` (never a literal), so a resize needs nothing from them. **The top left is
-deliberately empty** — the berry/fish counts that used to stack there, and the gold that sat left
-of the minimap, are all on the backpack's bottom strip now, which is why nothing slides in from
-the left during the landing intro any more. The strip and the backpack sit on the view's last
-pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush on every size.
+deliberately empty**, and the berry/fish/gold counts live inside the open backpack rather than on
+any always-on bar — which is why nothing slides in from the left during the landing intro. The
+pack button sits on the view's last pixel — no margin, the 1 px rim is the edge — so a resize
+keeps it flush on every size.
 
 | Where | What | Function |
 | --- | --- | --- |
@@ -301,7 +301,8 @@ pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush o
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
 | bottom centre | the segmented plum xp bar over the weapon and ability wells, flush to the bottom; hovering the weapon well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
-| bottom right | the backpack **and** both upgrade rows: one frame — the gear row, the ability row and the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
+| bottom right | the pack button alone when shut; the backpack frame (ability row, grid, gold strip) rising off it when open | `drawBag` |
+| centre, on G | the character panel: the live body, the stat ledger, the four gear pieces | `drawCharPanel` |
 
 ### The hover tooltip
 
@@ -315,7 +316,8 @@ It is bottom **left** because that is the corner the pointer is furthest from wh
 backpack, the weapon strip or a tech node, so the panel never sits under the hand reading it.
 
 **`tipAt(mx, my)` is the only source**, and it asks the same hit-testers, in the same order, that
-the mousedown handler does — gear, then the bit column, then the weapon strip, then the backpack —
+the mousedown handler does — the character panel's gear wells, then the bit column, then the
+weapon strip, then the backpack —
 so what the panel describes and what a click would do can never be two different things. A live
 drag outranks all of them: whatever is on the cursor describes itself. It answers in two modes
 only, `play` and `title` (the tech tree); every other mode returns null.
@@ -407,9 +409,8 @@ key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` 
 cooldown, level and next-level price, the blurb, nothing the well itself already shows better).
 
 The **upgrade** half of this strip — the four ability wells and the plus that spends a skill point
-— moved into the backpack, under the gear row: both rows are "buy the next level of this", one
-with gold and one with skill points, so they belong stacked in one grid rather than split across
-two corners. See the ability row below.
+— moved into the backpack: rank in skill points is bought there, level in gold on the strip's own
+wells. See the ability row below.
 
 ### The bit column
 
@@ -423,91 +424,86 @@ a modifier, which has no weight, gets a colour bar instead; the tool's own **ten
 the matching row of pips above the top cell. That, and nothing written down, is the whole of
 "bow tensile strength". It is a hold, not a mode: it is on screen exactly as long as the key is.
 
-### The backpack and gear widget
+### The backpack
 
-Everything a slot owns is **one frame in one corner** — the gear row is not a separate widget any
-more, it is the top row of the bag. `bagFrameRect()` is the whole thing, and top to bottom it is:
+Shut, the pack is **one button flush in the corner** — a 26 px plate (`BAG_BTN`, `bagBtnRect()`)
+wearing the 20 px `BAG_ICON` rucksack (a proper leather pack at the strip icons' detail level:
+rolled flap, gold buckle, stitched hem, side pockets — baked once to `bagIconCv`) and nothing
+else. No frame, no strip, no numbers: the corner is world until the pack is opened. The button
+carries every state the old frame carried — hover and open light its rim, amber means no cell is
+free, and it reddens and shakes for `bagFlash` seconds when something could not be carried
+(`bagDenied()`, aged in `updateFx`).
 
-1. a **gear row** of five identical cells — the pack, then helmet / chest / legs / boots;
-2. an **ability row** on the same five columns, only when open — the unspent skill points in the
-   pack's own column, then LOOSE / DODGE / AMBUSH / FLETCH. It is the gear row's twin: both are
-   things you buy the next level of, one with gold and one with skill points, which is why they
-   are stacked and share a grid. Rank is pips along the bottom of the well, the renock / dodge /
+Open (B, or clicking the button), the **frame rises off the button's top edge**
+(`bagFrameRect()`, pinned bottom-right over the button so the toggle never moves under the
+pointer that just used it), and top to bottom it is:
+
+1. an **ability row** (`bagAbRect`) — the unspent skill points in the first column, then LOOSE /
+   DODGE / AMBUSH / FLETCH. Rank is pips along the bottom of the well, the renock / dodge /
    fletch cooldowns still wipe it top-down, and an ability a point can land on wears a pulsing
-   gold rim and a plus badge in its corner — gone the moment one cannot. (The badge sits *in* the
-   corner rather than perching above the cell, because the gear row is directly overhead.)
-3. the **inventory grid** (`BAG_CAP` 25 — five rows of five), only when open, continuing straight
-   down the same columns on the same `BAG_GAP` — no wider seam between them, because they are
-   cells of the same size holding the same kind of thing;
-4. a single 1 px rule, the only line inside the widget;
-5. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim.
+   gold rim and a plus badge in its corner — gone the moment one cannot;
+2. the **inventory grid** (`BAG_CAP` 25 — five rows of five) on the same columns and `BAG_GAP`;
+3. a single 1 px rule, the only line inside the widget;
+4. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim — berries
+   and fish from the left, each an icon and a count wearing the shared food-clock wipe, then the
+   gold hard against the right edge with its coin ahead of it, inked `#f5c542`. The strip lives
+   **inside the open pack**: your purse is read by opening the bag, not off a bar that sits on
+   screen all match.
+
+Gear is not in this widget at all any more — the four pieces live on
+[the character panel](#the-character-panel-g).
 
 Everything that lays the widget out or hit-tests it asks **`bagOpenNow()`**, never
 `state.bagOpen`: a raised bit column forces the pack open (there has to be a grid to drag bits
-from), and the two answers disagreeing by a row would land every click below the gear one cell out.
+from), and the two answers disagreeing by a row would land every click one cell out.
 
 A grid cell holding a tool or a bit wears that item's **tier plate** rather than the default well,
 so a find is read at a glance without a rarity word anywhere; a tool also counts its loaded bits
 as pips along the bottom, in the corner a stack number would have used.
 
-**The row is on top and the grid hangs below it, and that is load-bearing rather than taste.** An
-affordable gear piece bobs a gold chevron *above* its cell and the hover price sits higher still,
-so whatever is over the row has to be empty screen — put the grid up there and every chevron draws
-into it. (The carets start 14 px up rather than 10 so the bottom of their bob clears the frame's
-own lit edge, `BAG_PAD` being only 3.) The frame is pinned by its **bottom-right** to the view edge (`VIEW_W` / `VIEW_H`,
-the 1 px rim is the last pixel) and
-grows upward, so opening the bag lifts the row instead of pushing the gold off the screen.
-
-- **Nothing in it is a different size from anything else.** `BAG_CELL` (18) is a grid slot, a gear
-  plate and the pack button alike, and all three are painted by `bagCellPlate()` — one function,
-  so a button can never drift out of style with a slot. `BAG_PAD` (3) from the frame to the first
-  cell and `BAG_GAP` (2) between neighbours are the only two gaps in the widget; `BAG_W` is 104,
-  and `bagRowRect(i)` and `bagCellRect(i)` share the same column arithmetic, so the five columns
-  line up from the row straight down through the grid.
-- **One background, one border, one internal line.** Every part of the frame — behind the cells,
-  behind the grid, behind the gold — is the same opaque `BAG_BG`, so nothing inside reads as a
-  separate panel stacked on another. The border is a single 1 px rim: no lit inner edge, no rule
-  under the icon row, no wider gap there either. The **one** line that stays is the rule over the
-  gold row, because money is a different *kind* of thing from the slots above it, and that is the
-  only break the widget makes.
+- **One background, one border, one internal line.** Every part of the frame is the same opaque
+  `BAG_BG`; the border is a single 1 px rim; the one line that stays is the rule over the gold
+  row, because money is a different *kind* of thing from the slots above it.
 - **Depth comes from the cells, not from panels.** Three tones say it without a line: a filled
   cell recesses to `BAG_WELL` *below* the frame's ground, an empty one sits *above* it at
   `#171f45`, and the ground itself is between — occupied / free / frame.
-- **The strip is every number the widget has**, League-style: berries and fish from the left, each
-  an icon and a count and nothing else, then the gold hard against the **right** edge with its
-  coin ahead of it, inked `#f5c542` so the one number that is money does not read as a count of
-  something carried. The food totals the *whole bag* across its stacks, so the strip answers "can
-  I heal" without opening the grid, and a meal you have none of takes no room at all — which is
-  why the gold is right-aligned and the food left-aligned: neither moves the other.
-- **The eat keys are not printed on it.** Q and F are looked up in the ESC panel's CONTROLS
-  block, which is what that block is for; a letter beside every count is a caption the strip
-  would carry forever for the two minutes it is useful.
-- **No cast shadow.** The frame is hard against two edges of the screen, where a shadow has
-  nothing to fall on, and the cells already carry the depth — a drop shadow only smeared the
-  outline that reads the whole thing as one box.
+- **The eat keys are not printed on the strip.** Q and F are looked up in the ESC panel's
+  CONTROLS block, which is what that block is for.
 - **An empty cell is the *lighter* one**: it has no icon to show off, and free space is what the
-  grid is being read for, while a full cell goes dark behind its item. A stack draws its icon
-  high in the cell so the count can have the bottom-right corner without its outline eating the
-  cell's rim, and a stack of one prints no number — an empty corner says it.
-- **Two things are said in colour rather than in words**: the pack's rim goes amber when no cell
-  is free, and the whole frame reddens and shakes for `bagFlash` seconds when something could not
-  be carried (`bagDenied()`, aged in `updateFx` on wall time like the rest of the chrome). The
-  weapon well has the same tell in the same red for the other direction ([the hud
-  strip](#the-hud-strip), `toolDenied()`).
+  grid is being read for, while a full cell goes dark behind its item. A stack of one prints no
+  number — an empty corner says it.
 - **A click on a cell uses what is in it** — a berry by eating it, a card by drawing from it, and
   a bit or a tool by [sending it to the weapon](gameplay.md#the-bit-column) — resolved on the
   release so that a press which travels is still a drag.
-- **The frame swallows every click over itself.** `bagHit` reports `btn` (the pack), `cell` (a
-  grid slot) or `frame` (anywhere else inside, inert but eaten), so nothing is ever fired at the
-  world through the panel; `gearHit` owns the four gear cells and is asked *first* by the click
-  handler, `cursorInfo` and the row's own hover, so the three can never disagree. The cursor is a
-  **hand** only over something that does something — the gold strip reads as a plain arrow.
+- **The open frame swallows every click over itself.** `bagHit` reports `btn` (the button), `ab`,
+  `cell` or `frame` (anywhere else inside, inert but eaten); shut, only the button answers.
 - **The grid does not stop the sim.** It is HUD, not an overlay — the same deal the
-  [M map](gameplay.md#the-m-map-does-not-pause) takes, only smaller: nothing dims, nothing is
-  zeroed in `sampleHumanInput`, and the only input it takes is the clicks over its own frame.
+  [M map](gameplay.md#the-m-map-does-not-pause) takes, only smaller.
 
 The model behind the grid is in [gameplay.md](gameplay.md#inventory-and-the-backpack); the gear
 table and what a buy does are in [gameplay.md](gameplay.md#gear).
+
+### The character panel (G)
+
+WoW's C key at this game's size: **G raises one slab in the middle of the screen and the sim runs
+on live around it** — a light dim, no pause, and it swallows only its own clicks (`charHit` /
+`charClick`, asked first by the mousedown while it is up). G again, ESC or the drawn X closes it.
+
+LEFT: the **body as it stands right now** — the class sprite walking in place at 4×, wearing its
+bought gear bands in their level materials (`drawGearMarks`, the same pixels every rival reads on
+you in the world) with the held weapon beside it — under a header naming the sheet (the profile
+name in the team's mark, the class and hero level beside it). Below, the **stat ledger**:
+`GEAR_STATS` read off the **live kit** (`kitOf`), so gear levels, ability ranks and cards are all
+already in the numbers — dotted leaders, label left, value right, the panels' text carve-out.
+
+RIGHT: the **four equipped pieces**, head to toe — each a 32 px icon well (`gearIcon32`) with its
+variant name inked in the piece's level material, gear's three buy pips, and the next level's
+price (coin + number, gold when affordable, slate when not). An affordable well pulses its rim
+gold; a **click on the well buys** through the same `input.cmd {kind:'gear', piece}` path the old
+HUD row used, so the panel and the bots still share one entry point (`buyGear`). A maxed piece
+goes quiet behind a gold rim. Hovering a well raises `tipGear` exactly as the old row did
+(`gearHit` now reads through `charHit`, so the tooltip, the cursor and the click can never
+disagree).
 
 ## Overhead health bars
 

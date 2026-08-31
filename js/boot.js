@@ -985,7 +985,7 @@ window.DBG = {
   get inv() { return player.inv; },
   // the backpack: the item table, the slot array, and add/take/count without
   // walking onto a drop. bagHit is what the pointer tests against.
-  ITEMS, BAG_CAP, bagFrameRect, bagRowRect, bagBtnRect, bagCellRect, bagStripRect, bagHit,
+  ITEMS, BAG_CAP, bagFrameRect, bagBtnRect, bagCellRect, bagStripRect, bagHit,
   get bag() { return player.bag; },
   bagAdd: (type, n, p) => bagAdd(p || player, type, n || 1),
   bagTake: (type, n, p) => bagTake(p || player, type, n || 1),
@@ -1005,7 +1005,7 @@ window.DBG = {
   gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
   buySkill: (i, p) => buySkill(p || player, i),
   // gear: the table, a slot's effective kit, and buy/pick without the HUD
-  GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearRects, gearHit, BAG_CELL,
+  GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearHit, charLayout, charHit, BAG_CELL,
   gearCost: (i, p) => gearCost(p || player, i),
   buyGear: (i, p) => buyGear(p || player, i),
   pickGear: (i, v) => pickGear(i, v), gearLayout, gearScreenHit, beginGear,

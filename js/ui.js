@@ -679,48 +679,38 @@ function drawAliveIcon(x, y, color, outline) {
   stamp(0, 0, color);
 }
 
-// ---- backpack and gear: one widget, bottom-right ------------------------
-// Everything you own in one frame. Top to bottom: a ROW of five identical
-// cells - the pack, then the four gear pieces head to toe - then the
-// inventory GRID when the pack is open, then a STRIP flush along the bottom
-// carrying every NUMBER the widget has - berries and fish from the left, gold
-// hard against the right edge, League-style. Nothing here is a
-// different size from anything else: BAG_CELL is a grid cell, a gear plate
-// and the pack button alike, and BAG_PAD / BAG_GAP are the only two gaps in
-// the whole widget, so the five columns line up from the row straight down
-// through the grid.
+// ---- the backpack: one button, and the frame it opens - bottom-right -----
+// Shut, the pack is ONE BUTTON flush in the corner - a 26px plate wearing the
+// 20px pack icon (BAG_ICON below) and nothing else: no frame, no strip, no
+// numbers. Open (B, or clicking it), the frame rises off the button's top
+// edge: the ABILITY row (the four hud skills and the unspent points), the
+// inventory GRID, then a STRIP flush along the frame's bottom carrying every
+// NUMBER the widget has - berries and fish from the left, gold hard against
+// the right edge. The strip lives INSIDE the open pack: your purse is read
+// by opening the bag (or off the buy prices going gold), not off a bar that
+// sits on the screen all match. Gear is not here at all any more - the
+// character panel (G, below) is where the pieces live.
 //
 // ONE BACKGROUND, ONE BORDER, ONE INTERNAL LINE. Every part of the frame -
 // behind the cells, behind the grid, behind the gold - is the same opaque
-// BAG_BG, so nothing inside reads as a separate panel stacked on another. The
-// border is a single 1px rim: no lit inner edge and no rule under the icon
-// row, which put four stacked lines in a widget only 37px tall shut. The one
-// line that stays is the rule over the gold strip, because money is a
-// different KIND of thing from the slots above it, and that is the only break
-// the widget makes. The row and the grid are one continuous ladder on BAG_GAP
-// - no wider seam between them - since they are both cells of the same size
-// holding the same kind of thing.
+// BAG_BG, so nothing inside reads as a separate panel stacked on another.
+// The one line that stays is the rule over the gold strip, because money is
+// a different KIND of thing from the slots above it, and that is the only
+// break the widget makes. The frame is pinned by its BOTTOM RIGHT over the
+// button and grows upward, so opening never pushes anything off-screen.
 //
-// THE ROW IS ON TOP AND THE GRID HANGS BELOW IT, which is the one piece of
-// this layout that is load-bearing rather than taste: an affordable gear
-// piece bobs a gold chevron ABOVE its cell, and the hover price sits higher
-// still, so whatever is over the row has to be empty screen. Put the grid up
-// there and every chevron draws into it. The frame is pinned by its BOTTOM
-// RIGHT to the view edge and grows upward, so opening the bag lifts the row
-// rather than pushing the gold off the bottom of the screen.
-//
-// Clicking the pack (or B) toggles the grid; clicking a food cell eats from
+// Clicking the button (or B) toggles the grid; clicking a food cell eats from
 // that stack through the same input flags Q/F use, so the sim path is
-// identical; clicking a gear cell (or its number key) buys the next level.
-// The frame swallows every other click over itself so nothing is fired at
-// the world through it. The grid does NOT stop the sim - it is HUD, not an
-// overlay. Two things are said in colour rather than in words: the pack's
-// rim goes amber when no cell is left free, and the whole frame reddens and
-// shakes when something could not be carried (bagDenied, below).
-const BAG_CELL = 18;   // every cell: grid slot, gear plate and pack button alike
+// identical. The frame swallows every other click over itself so nothing is
+// fired at the world through it. The grid does NOT stop the sim - it is HUD,
+// not an overlay. Two things are said in colour rather than in words: the
+// button's rim goes amber when no cell is left free, and button and frame
+// alike redden and shake when something could not be carried (bagDenied).
+const BAG_CELL = 18;   // every cell: a grid slot and an ability plate alike
 const BAG_GAP = 2;     // between neighbouring cells
 const BAG_PAD = 3;     // frame edge to the first cell
-const BAG_COLS = 5;    // and therefore the row is 5 icons: pack + four pieces
+const BAG_COLS = 5;    // the grid is five columns wide
+const BAG_BTN = 26;    // the closed pack: one big button, flush in the corner
 const BAG_STRIP = 12;  // the gold row, flush to the bottom rim under its rule
 const BAG_W = BAG_PAD * 2 + BAG_COLS * BAG_CELL + (BAG_COLS - 1) * BAG_GAP;
 const BAG_BG = '#0d1229';     // the whole frame, gold row included
@@ -747,40 +737,34 @@ function bagGridH() {
 // widget out or hit-tests it asks this, never state.bagOpen, or the two
 // disagree by a row and every click below the gear lands one cell out.
 function bagOpenNow() { return state.bagOpen || bitEditSlot() >= 0; }
-// the whole widget; its bottom-right is the view's last pixel, so the grid
-// opens by growing upward rather than off the screen
+// the pack button, flush in the corner - drawn shut and open alike, so the
+// toggle never moves under the pointer that just used it
+function bagBtnRect() { return { x: VIEW_W - BAG_BTN, y: VIEW_H - BAG_BTN, w: BAG_BTN, h: BAG_BTN }; }
+// the open frame, its bottom edge on the button's top; it grows upward
 function bagFrameRect() {
-  // pad, the gear row, then (open) the ability row and the grid, then the gap,
-  // the gold rule, the gold row and the rim
-  const h = BAG_PAD + BAG_CELL +
-    (bagOpenNow() ? BAG_GAP + BAG_CELL + BAG_GAP + bagGridH() : 0) +
+  // pad, the ability row, the grid, then the gap, the gold rule, the gold
+  // row and the rim
+  const h = BAG_PAD + BAG_CELL + BAG_GAP + bagGridH() +
     BAG_GAP + 1 + BAG_STRIP + 1;
-  return { x: VIEW_W - BAG_W, y: VIEW_H - h, w: BAG_W, h };
+  return { x: VIEW_W - BAG_W, y: VIEW_H - BAG_BTN - h, w: BAG_W, h };
 }
-// cell i of the top row: 0 is the pack, 1-4 are the gear pieces
-function bagRowRect(i) {
-  const f = bagFrameRect();
-  return { x: f.x + BAG_PAD + i * (BAG_CELL + BAG_GAP), y: f.y + BAG_PAD, w: BAG_CELL, h: BAG_CELL };
-}
-function bagBtnRect() { return bagRowRect(0); }
-// Cell i of the ABILITY row, directly under the gear row and on its columns:
-// 0 is the unspent skill points, 1-4 are the four abilities. This row is the
-// gear row's twin - both are things you buy an upgrade of, one with gold and
-// one with skill points - which is why they are stacked and share a grid.
+// Cell i of the ABILITY row, the frame's top row: 0 is the unspent skill
+// points, 1-4 are the four hud skills - the things a skill point buys the
+// next rank of.
 function bagAbRect(i) {
   const f = bagFrameRect();
   return {
     x: f.x + BAG_PAD + i * (BAG_CELL + BAG_GAP),
-    y: f.y + BAG_PAD + BAG_CELL + BAG_GAP,
+    y: f.y + BAG_PAD,
     w: BAG_CELL, h: BAG_CELL,
   };
 }
-// cell i of the inventory grid, on the row's columns, under both upgrade rows
+// cell i of the inventory grid, on the row's columns, under the ability row
 function bagCellRect(i) {
   const f = bagFrameRect();
   return {
     x: f.x + BAG_PAD + (i % BAG_COLS) * (BAG_CELL + BAG_GAP),
-    y: f.y + BAG_PAD + 2 * (BAG_CELL + BAG_GAP) + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
+    y: f.y + BAG_PAD + (BAG_CELL + BAG_GAP) + ((i / BAG_COLS) | 0) * (BAG_CELL + BAG_GAP),
     w: BAG_CELL, h: BAG_CELL,
   };
 }
@@ -792,30 +776,29 @@ function bagStripRect() {
 }
 // the pointer is over HUD that owns its own clicks, not over the world
 function overHud(x, y) {
-  return !!bagHit(x, y) || gearHit(x, y) >= 0 || !!stripHit(x, y) || bitColHit(x, y) >= 0 || overMinimap();
+  return !!bagHit(x, y) || !!charHit(x, y) || !!stripHit(x, y) || bitColHit(x, y) >= 0 || overMinimap();
 }
-// What the pointer is on: { kind: 'btn' } (the pack) | { kind: 'cell', i }
-// (a grid slot) | { kind: 'ab', i } (an ability, or 0 for the skill-point
-// well) | { kind: 'frame' } (anywhere else inside, swallowed and otherwise
-// inert) | null. GEAR cells are NOT reported here - gearHit owns those and
-// every caller asks it first. Shared by the click handler, the cursor and the
+// What the pointer is on: { kind: 'btn' } (the pack button) | { kind: 'cell',
+// i } (a grid slot) | { kind: 'ab', i } (an ability, or 0 for the skill-point
+// well) | { kind: 'frame' } (anywhere else inside the open frame, swallowed
+// and otherwise inert) | null. Shut, only the button answers - the rest of
+// the corner is world. Shared by the click handler, the cursor and the
 // widget's own hover, so the three can never disagree.
 function bagHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
-  const f = bagFrameRect();
-  if (mx < f.x || mx >= f.x + f.w || my < f.y || my >= f.y + f.h) return null;
   const b = bagBtnRect();
   if (mx >= b.x && mx < b.x + b.w && my >= b.y && my < b.y + b.h) return { kind: 'btn' };
-  if (bagOpenNow()) {
-    for (let i = 1; i < BAG_COLS; i++) {
-      const r = bagAbRect(i);
-      if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return { kind: 'ab', i: i - 1 };
-    }
-    for (let i = 0; i < player.bagCap; i++) {
-      const r = bagCellRect(i);
-      if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return { kind: 'cell', i };
-    }
+  if (!bagOpenNow()) return null;
+  const f = bagFrameRect();
+  if (mx < f.x || mx >= f.x + f.w || my < f.y || my >= f.y + f.h) return null;
+  for (let i = 1; i < BAG_COLS; i++) {
+    const r = bagAbRect(i);
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return { kind: 'ab', i: i - 1 };
+  }
+  for (let i = 0; i < player.bagCap; i++) {
+    const r = bagCellRect(i);
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return { kind: 'cell', i };
   }
   return { kind: 'frame' };
 }
@@ -978,66 +961,200 @@ function bagCellPlate(r, rim, inner, lift) {
   return y;
 }
 
-// ---- the four gear cells of that row, head to toe, keys 1-4 -------------
-// Each cell is a piece: its icon wears the material of its level (the
-// sprites' leather -> iron -> steel -> gold), pips ABOVE the icon count the
-// buys, and an affordable piece grows a bobbing gold chevron over the cell -
-// the ask to spend, League-style. Hover lifts the cell and shows the cost; a
-// click or the piece's number key buys through input.cmd (see the input
-// banner). The pips sit on top because that is the edge the chevron points
-// at, so the ask and the progress it is asking about read as one column.
-function gearRects() {
-  const rs = [];
-  for (let i = 0; i < GEAR_SLOTS.length; i++) rs.push(bagRowRect(i + 1));
-  return rs;
-}
-// which gear cell the pointer is on, or -1; shared by the click handler, the
-// cursor and the row's own hover so they can never disagree
-function gearHit(mx, my) {
-  if (state.mode !== 'play' || player.dead || state.paused ||
-      state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
-  const rs = gearRects();
-  for (let i = 0; i < rs.length; i++) {
-    const r = rs[i];
-    if (mx >= r.x && mx < r.x + r.w && my >= r.y - 1 && my < r.y + r.h) return i;
+// ---- the pack icon: a 20px rucksack, baked once --------------------------
+// The button is the whole widget while the pack is shut, so the old 12px
+// item sprite is not enough icon for it: this is a proper leather rucksack -
+// rolled flap with a gold buckle, stitched hem, two side pockets - drawn at
+// the strip icons' detail level and centred on the 26px button plate.
+const BAG_ICON = [
+  '.....oooo...oooo....',
+  '....os..o...o..so...',
+  '....os.oooooo..so...',
+  '...os.owwwwwwo.so...',
+  '...osowhhwwhhwoso...',
+  '..osowwwwwwwwwwoso..',
+  '..osowwwwwwwwwwoso..',
+  '..oootttttttttoooo..',
+  '..owwwwwwggwwwwwwo..',
+  '..owwwwwwgGwwwwwwo..',
+  '.owuowwwwwwwwwwouwo.',
+  '.owuowwwwwwwwwwouwo.',
+  '.owuowwwwwwwwwwouwo.',
+  '.owuowwwwwwwwwwouwo.',
+  '.owwowwttttttwwowwo.',
+  '.owwowwwwwwwwwwowwo.',
+  '..oowwwwwwwwwwwwoo..',
+  '...owwwwwwwwwwwwo...',
+  '...ouuuuuuuuuuuuo...',
+  '....oooooooooooo....',
+];
+const BAG_ICON_PAL = {
+  o: '#141a2c', w: '#a8794a', u: '#6e4a28', h: '#c49a6a',
+  t: '#e8dcb4', g: '#f2cc6a', G: '#b98a2e', s: '#5f6f96',
+};
+const bagIconCv = (() => {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 20;
+  const g = cv.getContext('2d');
+  for (let r = 0; r < BAG_ICON.length; r++) {
+    for (let c = 0; c < BAG_ICON[r].length; c++) {
+      const col = BAG_ICON_PAL[BAG_ICON[r][c]];
+      if (!col) continue;
+      g.fillStyle = col;
+      g.fillRect(c, r, 1, 1);
+    }
   }
-  return -1;
+  return cv;
+})();
+
+// ---- the character panel (G) ---------------------------------------------
+// WoW's C key, at this game's size: one slab, sim running live behind it.
+// LEFT: the body as it stands right now - the class sprite walking in place
+// at 4x wearing its bought gear bands in their level materials
+// (drawGearMarks, the same pixels every rival reads on you in the world) with
+// the held weapon beside it - and under it the STAT LEDGER, GEAR_STATS read
+// off the LIVE kit (kitOf), so gear levels, ability ranks and cards are all
+// in the numbers. RIGHT: the four equipped pieces, each a 32px icon well
+// (gearIcon32) with its variant name, gear's buy pips, and the next level's
+// price; a click on an affordable well buys through the same input.cmd the
+// old HUD row used, so bots and the panel still share one path. The ledger's
+// labelled rows are the panels' text carve-out - comparing numbers is this
+// panel's whole job. G toggles it, ESC or the X closes it; it swallows only
+// its own clicks, so the fight stays live around it.
+const CHAR_LEDW = 118, CHAR_WELL = 36;
+function charLayout() {
+  const rowW = 128;
+  const pw = 8 + CHAR_LEDW + 10 + rowW + 8;
+  const ph = 226;
+  const px = Math.round((VIEW_W - pw) / 2), py = Math.round((VIEW_H - ph) / 2);
+  const gx = px + 8 + CHAR_LEDW + 10;
+  const rows = [];
+  for (let i = 0; i < GEAR_SLOTS.length; i++) {
+    rows.push({ x: gx, y: py + 22 + i * 50, w: rowW, h: CHAR_WELL });
+  }
+  return { panel: { x: px, y: py, w: pw, h: ph }, rows,
+    prev: { x: px + 8, y: py + 22, w: CHAR_LEDW, h: 78 },
+    led: { x: px + 8, y: py + 106, w: CHAR_LEDW },
+    xr: { x: px + pw - 14, y: py + 4, w: 10, h: 10 } };
 }
-function drawGearCells(now, hov) {
-  const rs = gearRects();
-  for (let i = 0; i < rs.length; i++) {
-    const r = rs[i], lv = player.gearLv[i], cost = gearCost(player, i);
+// 'x' | { piece } | 'panel' | null - shared by the click, the cursor and the
+// tooltip so the three cannot disagree
+function charHit(mx, my) {
+  if (!state.charOpen || state.mode !== 'play' || player.dead || state.paused ||
+      state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
+  const L = charLayout();
+  const p = L.panel;
+  if (mx < p.x || mx >= p.x + p.w || my < p.y || my >= p.y + p.h) return null;
+  if (mx >= L.xr.x && mx < L.xr.x + L.xr.w && my >= L.xr.y && my < L.xr.y + L.xr.h) return 'x';
+  for (let i = 0; i < L.rows.length; i++) {
+    const r = L.rows[i];
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return { piece: i };
+  }
+  return 'panel';
+}
+// the piece index under the pointer, or -1 - the shape tipAt and the cursor
+// already read gear through, kept so both keep working unchanged
+function gearHit(mx, my) {
+  const h = charHit(mx, my);
+  return h && h.piece !== undefined ? h.piece : -1;
+}
+// a press inside the panel; returns whether it was swallowed
+function charClick(h) {
+  if (!h) return false;
+  if (h === 'x') { state.charOpen = false; SFX.pickup(); return true; }
+  if (h.piece !== undefined) { SFX.unlock(); player.input.cmd = { kind: 'gear', piece: h.piece }; return true; }
+  return true; // the slab eats it; the world never sees it
+}
+function drawCharPanel(now) {
+  const L = charLayout();
+  const { panel } = L;
+  const gh = mouse.inside ? charHit(mouse.x, mouse.y) : null;
+  // a light dim: the match stays visible and live around the slab
+  ctx.fillStyle = 'rgba(4,6,18,0.38)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  // the slab, in the planks' own chrome
+  ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(panel.x + 3, panel.y + 3, panel.w, panel.h);
+  ctx.fillStyle = '#0a0e23'; chamRect(panel.x, panel.y, panel.w, panel.h);
+  ctx.fillStyle = '#10173a'; chamRect(panel.x + 1, panel.y + 1, panel.w - 2, panel.h - 2);
+  ctx.fillStyle = '#35426e';
+  ctx.fillRect(panel.x + 2, panel.y + 1, panel.w - 4, 1); ctx.fillRect(panel.x + 1, panel.y + 2, 1, panel.h - 4);
+  ctx.fillStyle = '#080c1c';
+  ctx.fillRect(panel.x + 2, panel.y + panel.h - 2, panel.w - 4, 1); ctx.fillRect(panel.x + panel.w - 2, panel.y + 2, 1, panel.h - 4);
+  // the header: whose sheet this is - the name in the team's mark, the class
+  // and hero level beside it in quiet ink
+  const head = player.name;
+  const sub = CLASSES[player.cls].name + ' ' + player.level;
+  drawPixelTextShadow(ctx, head, panel.x + 8, panel.y + 6, TEAMS[player.team].mark, '#0a0e23');
+  drawPixelTextShadow(ctx, sub, panel.x + 8 + pixelTextWidth(head) + 8, panel.y + 6, '#7a8bb8', '#0a0e23');
+  // the body, live: walking in place with its bought bands in their level
+  // materials and the held weapon beside it
+  const pr = L.prev;
+  ctx.fillStyle = '#0a0e23';
+  ctx.fillRect(pr.x, pr.y, pr.w, pr.h);
+  ctx.fillStyle = '#232c52';
+  ctx.fillRect(pr.x, pr.y, pr.w, 1); ctx.fillRect(pr.x, pr.y + pr.h - 1, pr.w, 1);
+  ctx.fillRect(pr.x, pr.y, 1, pr.h); ctx.fillRect(pr.x + pr.w - 1, pr.y, 1, pr.h);
+  const sx = pr.x + 12, sy = pr.y + 7;
+  ctx.fillStyle = 'rgba(4,6,18,0.6)';
+  ctx.beginPath(); ctx.ellipse(sx + 32, pr.y + pr.h - 6, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
+  const spr = SPRITES.champ[player.cls][0].down[1 + (Math.floor(now * 3) % 2)];
+  ctx.drawImage(spr, sx, sy, 64, 64);
+  drawGearMarks(player, sx, sy, 4);
+  const held = heldTool(player);
+  if (held) {
+    const im = SPRITES[ITEMS[held.type].icon];
+    ctx.drawImage(im, pr.x + pr.w - 31, pr.y + pr.h - 33 + Math.round(Math.sin(now * 2.2) * 1.5), 24, 24);
+  }
+  // the ledger: every number the kit carries RIGHT NOW - gear levels, ability
+  // ranks and cards already folded in, because it reads the live kit
+  const k = kitOf(player);
+  for (let i = 0; i < GEAR_STATS.length; i++) {
+    const [label, get, fmt] = GEAR_STATS[i];
+    const y = L.led.y + i * 8;
+    drawPixelTextShadow(ctx, label, L.led.x, y, '#7a8bb8', '#0a0e23');
+    const vTxt = fmt(get(k));
+    drawPixelTextShadow(ctx, vTxt, L.led.x + L.led.w - pixelTextWidth(vTxt), y, '#f4f7ff', '#0a0e23');
+    ctx.fillStyle = '#2c3a68'; // the leader: dots from the label to its number
+    for (let dx = L.led.x + pixelTextWidth(label) + 4; dx < L.led.x + L.led.w - pixelTextWidth(vTxt) - 4; dx += 4) {
+      ctx.fillRect(dx, y + 4, 2, 1);
+    }
+  }
+  // the four equipped pieces: icon well, variant name in the level's
+  // material, gear's buy pips, and the next level's price
+  for (let i = 0; i < L.rows.length; i++) {
+    const r = L.rows[i], lv = player.gearLv[i], cost = gearCost(player, i);
     const afford = cost && player.inv.gold >= cost.gold;
-    // a maxed piece goes quiet behind a gold rim; a hovered one brightens
-    const y = bagCellPlate(r, !cost ? '#8a7a3a' : hov === i ? '#8fa0c8' : '#35426e',
-      BAG_WELL, hov === i);
-    for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // buy pips ABOVE the icon
-      ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
-      ctx.fillRect(r.x + 3 + k * 4, y + 2, 3, 2);
+    const on = gh && gh.piece === i;
+    const y = r.y - (on ? 1 : 0);
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(r.x + 2, r.y + 2, CHAR_WELL, CHAR_WELL);
+    ctx.fillStyle = !cost ? '#c89a3c' : on ? '#8fa0c8'
+      : afford ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227') : '#2c3560';
+    ctx.fillRect(r.x, y, CHAR_WELL, CHAR_WELL);
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(r.x + 1, y + 1, CHAR_WELL - 2, CHAR_WELL - 2);
+    ctx.drawImage(gearIcon32(i, player.gear[i]), r.x + 2, y + 2);
+    const tx0 = r.x + CHAR_WELL + 6;
+    drawPixelTextShadow(ctx, GEAR[i][player.gear[i]].name, tx0, y + 4, GEAR_MATS[lv - 1], '#0a0e23');
+    for (let p2 = 0; p2 < GEAR_LV_MAX - 1; p2++) { // the buys, gear's own pips
+      ctx.fillStyle = p2 < lv - 1 ? '#f2cc6a' : '#2c3560';
+      ctx.fillRect(tx0 + p2 * 5, y + 14, 4, 2);
     }
-    ctx.drawImage(SPRITES.gearIcons[i][player.gear[i]][lv - 1], r.x + 3, y + 5);
-    if (afford) { // the ask: two gold carets bobbing over the cell
-      // clear of the frame: the row is only BAG_PAD below the top rim, so the
-      // lower caret has to start high enough that the bottom of its bob still
-      // lands outside the box rather than on its own lit edge
-      const bob = Math.round(Math.sin(now * 6));
-      const cx = r.x + (r.w >> 1);
-      const px = [[0, 0], [-1, 1], [1, 1], [-2, 2], [2, 2]];
-      for (const [off, col] of [[1, '#0f1632'], [0, '#f5c542']]) {
-        ctx.fillStyle = col;
-        for (const [dx, dy] of px) {
-          ctx.fillRect(cx + dx + off, y - 14 + bob + dy + off, 1, 1);
-          ctx.fillRect(cx + dx + off, y - 10 + bob + dy + off, 1, 1);
-        }
-      }
+    if (cost) { // the price, coin + number, in can/cannot ink
+      ctx.drawImage(SPRITES.itemGold, tx0, y + 22);
+      drawPixelTextShadow(ctx, String(cost.gold), tx0 + 10, y + 24,
+        afford ? '#f5c542' : '#9fb6d8', '#0a0e23');
     }
-    if (hov === i && cost) { // hover: the price, coin + number, nothing else
-      const txt = String(cost.gold);
-      const tw = 10 + pixelTextWidth(txt);
-      const tx0 = Math.max(2, Math.min(r.x + (r.w >> 1) - (tw >> 1), VIEW_W - 2 - tw));
-      ctx.drawImage(SPRITES.itemGold, tx0, y - 26);
-      drawPixelTextOutline(ctx, txt, tx0 + 10, y - 24, afford ? '#f5c542' : '#9fb6d8', '#0f1632');
-    }
+  }
+  // the X: the one way out that is drawn (ESC and G also close)
+  const hot = gh === 'x';
+  ctx.fillStyle = hot ? '#8fa0c8' : '#35426e';
+  ctx.fillRect(L.xr.x, L.xr.y, L.xr.w, L.xr.h);
+  ctx.fillStyle = '#0f1632';
+  ctx.fillRect(L.xr.x + 1, L.xr.y + 1, L.xr.w - 2, L.xr.h - 2);
+  ctx.fillStyle = hot ? '#f4f7ff' : '#8fa8d0';
+  for (let k2 = 0; k2 < 4; k2++) {
+    ctx.fillRect(L.xr.x + 3 + k2, L.xr.y + 3 + k2, 1, 1);
+    ctx.fillRect(L.xr.x + L.xr.w - 4 - k2, L.xr.y + 3 + k2, 1, 1);
   }
 }
 
@@ -1065,31 +1182,32 @@ function drawFoodClock(x, y, w, h, type) {
 function drawBag(now) {
   if (player.dead) return;
   const hov = mouse.inside ? bagHit(mouse.x, mouse.y) : null;
-  const ghov = mouse.inside ? gearHit(mouse.x, mouse.y) : -1;
   const red = bagFlash > 0;
+  const open = bagOpenNow();
   ctx.save();
   // inward only: a ±1 shake on a flush right edge would clip a column of rim
   ctx.translate(red ? (((now * 40) | 0) % 2 ? -1 : 0) : 0, 0);
-  // The frame. No cast shadow: it is hard against two edges of the screen,
-  // where a shadow has nothing to fall on, and the cells already carry the
-  // depth - a drop shadow only smeared the outline that reads it as one box.
-  const f = bagFrameRect();
-  ctx.fillStyle = red ? BAG_BG_RED : BAG_BG; // one opaque ground for the whole widget
-  ctx.fillRect(f.x, f.y, f.w, f.h);
-  ctx.fillStyle = red ? '#c2465a' : '#2c3a68';
-  ctx.fillRect(f.x, f.y, f.w, 1); ctx.fillRect(f.x, f.y + f.h - 1, f.w, 1);
-  ctx.fillRect(f.x, f.y, 1, f.h); ctx.fillRect(f.x + f.w - 1, f.y, 1, f.h);
-  // the pack, first cell of the row: hover lights the rim, open keeps it lit,
-  // and a bag with no free cell wears amber whatever the pointer is doing
+  // The button, shut and open alike: hover lights the rim, open keeps it lit,
+  // a bag with no free cell wears amber whatever the pointer is doing, and a
+  // refusal reddens it - the button is the whole widget while the pack is
+  // shut, so every state the frame used to carry lives on it too.
   const btn = bagBtnRect();
   const onBtn = hov && hov.kind === 'btn';
-  const open = bagOpenNow();
   const full = bagUsed(player) >= player.bagCap;
-  bagCellPlate(btn, onBtn || open ? '#8fa0c8' : full ? '#c9922f' : '#35426e',
-    open ? '#182350' : BAG_WELL, false);
-  ctx.drawImage(SPRITES.itemBag, btn.x + 3, btn.y + 3);
-  drawGearCells(now, ghov);
+  ctx.fillStyle = red ? '#c2465a' : onBtn || open ? '#8fa0c8' : full ? '#c9922f' : '#35426e';
+  ctx.fillRect(btn.x, btn.y, btn.w, btn.h);
+  ctx.fillStyle = red ? BAG_BG_RED : open ? '#182350' : BAG_WELL;
+  ctx.fillRect(btn.x + 1, btn.y + 1, btn.w - 2, btn.h - 2);
+  ctx.drawImage(bagIconCv, btn.x + 3, btn.y + 3);
   if (open) {
+    // The frame, off the button's top edge. No cast shadow: it is hard
+    // against the screen's right edge, and the cells already carry the depth.
+    const f = bagFrameRect();
+    ctx.fillStyle = red ? BAG_BG_RED : BAG_BG; // one opaque ground for the whole widget
+    ctx.fillRect(f.x, f.y, f.w, f.h);
+    ctx.fillStyle = red ? '#c2465a' : '#2c3a68';
+    ctx.fillRect(f.x, f.y, f.w, 1); ctx.fillRect(f.x, f.y + f.h - 1, f.w, 1);
+    ctx.fillRect(f.x, f.y, 1, f.h); ctx.fillRect(f.x + f.w - 1, f.y, 1, f.h);
     drawAbilityRow(now, hov);
     for (let i = 0; i < player.bagCap; i++) {
       const r = bagCellRect(i), s = player.bag[i];
@@ -1128,11 +1246,12 @@ function drawBag(now) {
       }
     }
   }
+  if (!open) { ctx.restore(); return; } // shut: the button is the whole widget
   // The bottom strip: everything that is a NUMBER rather than a slot. It
-  // shares the frame's ground rather than wearing a plate of its own - the
+  // lives INSIDE the open pack - reading your purse is opening the bag - and
+  // shares the frame's ground rather than wearing a plate of its own; the
   // one line in the widget is what marks it off, because a running total is a
-  // different kind of thing from the cells above, and that break is the only
-  // one worth drawing.
+  // different kind of thing from the cells above.
   const st = bagStripRect();
   ctx.fillStyle = red ? '#c2465a' : '#2c3a68';
   ctx.fillRect(st.x, st.y - 1, st.w, 1);
@@ -2245,7 +2364,7 @@ function tipAt(mx, my) {
   const bh = bagHit(mx, my);
   if (!bh) return null;
   if (bh.kind === 'btn') {
-    return { title: 'BACKPACK', tcol: '#f4f7ff', kind: 'B TO OPEN', icon: SPRITES.itemBag,
+    return { title: 'BACKPACK', tcol: '#f4f7ff', kind: 'B TO OPEN', icon: bagIconCv,
       plate: BAG_WELL, rim: '#35426e',
       rows: [['CELLS USED', bagUsed(player) + '/' + player.bagCap,
         bagUsed(player) >= player.bagCap ? '#e0637a' : '#f4f7ff']],
@@ -2365,6 +2484,9 @@ function renderUI(now) {
     ctx.restore();
     if (hudIn >= 1) { drawBitColumn(now); drawDragGhost(now); }
   }
+
+  // the character panel (G): over the HUD, under the toasts and the tooltip
+  if (!out && state.charOpen && !player.dead) drawCharPanel(now);
 
   // arriving at a named place announces it, top centre: the name big, its
   // personality under it. Fades on the plate, so it uses the shadow font.

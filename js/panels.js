@@ -557,16 +557,13 @@ function buildSettingsPanel() {
 
 // The CONTROLS page: the hotkey listing, baked once (it never changes) and
 // blitted into the content window at the page's scroll like any other page.
-// HOLD 1-4 is in the left column because only that one has a 36px key field;
-// it is the one binding in the game with nothing on screen to discover it
-// from, which is exactly what this block is the carve-out for.
 const controlsCv = document.createElement('canvas');
 controlsCv.width = SET_W; controlsCv.height = 84;
 (function bakeControls() {
   const g = controlsCv.getContext('2d');
   const cols = [
-    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['HOLD 1-4', 'BITS'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
-    [['1-4', 'WEAPON'], ['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
+    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['1-4', 'ABILITIES'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
+    [['G', 'CHARACTER'], ['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
   ];
   for (let c = 0; c < 2; c++) {
     let y = 6;

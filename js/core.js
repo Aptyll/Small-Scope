@@ -99,7 +99,8 @@ const state = {
   dayPop: null,  // the dawn headline, top centre: { day, t } - set by each dawn and the landing (js/sim.js), drawn by renderUI
   paused: false,
   mapOpen: false,
-  bagOpen: false,      // the backpack grid (B, or the bag bar): HUD, it does NOT stop the sim
+  bagOpen: false,      // the backpack grid (B, or the pack button): HUD, it does NOT stop the sim
+  charOpen: false,     // the character panel (G): HUD, it does NOT stop the sim either
   // an item riding the pointer between the grid, the four weapon slots and a
   // tool's bit column: { cell, from } - see the drag banner in js/ui.js. The
   // cell is the same object the bag held, so a tool keeps its bits across it.
