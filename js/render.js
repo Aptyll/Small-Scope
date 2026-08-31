@@ -35,6 +35,26 @@ function drawFrameFlash(atlas, fi, x, y, flash) {
   }
 }
 
+// The work-target rim: the hero's hovered workable object (tree, dead tree,
+// rock, berried bush, chest) draws under a 1px pulsing gold outline - the
+// buy plates' two golds on the same beat, so "you can act on this" reads in
+// its standing ink, and the target never blends into the occluder fade's
+// pocket below. The sprite (or atlas frame) tints through the scratch canvas
+// and stamps the eight neighbours, the same rim grammar as the hero
+// silhouette and drawPixelTextOutline. Call it right before drawing the
+// object itself so the rim sits under the body.
+function drawTargetRim(src, sx, sy, w, h, x, y, now) {
+  sctx.clearRect(0, 0, 64, 64);
+  sctx.globalCompositeOperation = 'source-over';
+  sctx.drawImage(src, sx, sy, w, h, 0, 0, w, h);
+  sctx.globalCompositeOperation = 'source-in';
+  sctx.fillStyle = Math.sin(now * 6) > 0 ? '#f2cc6a' : '#c9a227';
+  sctx.fillRect(0, 0, 64, 64);
+  for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
+    if (rx || ry) ctx.drawImage(scratch, 0, 0, w, h, x + rx, y + ry, w, h);
+  }
+}
+
 // Occluder fade: the pines around the viewed hero soften into a visibility
 // pocket, so the hero stays readable while digging into the treeline. Alpha
 // is a pure function of trunk-to-hero distance - nothing is stored per tree,
@@ -309,23 +329,13 @@ function render() {
       // render()); the globalAlpha flip only ever touches those few, so the
       // thousand-pine atlas batch stays whole.
       const fi = treeFrame(d.tx, d.ty);
+      // the hero's own work target: full ink under the gold rim, so the tree
+      // the cursor is on is its OWN state - not a faded pine quietly
+      // borrowing the normal look, which read as the tree blending away the
+      // moment the cursor left it
       if (fadeP && o === fadeWkO) {
-        // the hero's own work target: full ink under a pulsing gold rim (the
-        // buy plates' two golds), so the tree the cursor is on is its OWN
-        // state - not a faded pine quietly borrowing the normal look, which
-        // read as the tree blending away the moment the cursor left it. The
-        // frame tints on the scratch canvas and stamps the eight neighbours,
-        // the hero silhouette's rim grammar in the affordance ink.
         const fw = SPRITES.treeAtlas.fw, fh = SPRITES.treeAtlas.fh;
-        sctx.clearRect(0, 0, 64, 64);
-        sctx.globalCompositeOperation = 'source-over';
-        sctx.drawImage(SPRITES.treeAtlas, fi * fw, 0, fw, fh, 0, 0, fw, fh);
-        sctx.globalCompositeOperation = 'source-in';
-        sctx.fillStyle = Math.sin(now * 6) > 0 ? '#f2cc6a' : '#c9a227';
-        sctx.fillRect(0, 0, 64, 64);
-        for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
-          if (rx || ry) ctx.drawImage(scratch, 0, 0, fw, fh, px - 5 + sh + rx, py - 21 + ry, fw, fh);
-        }
+        drawTargetRim(SPRITES.treeAtlas, fi * fw, 0, fw, fh, px - 5 + sh, py - 21, now);
       }
       let fa = 1;
       if (fadeP && o !== fadeWkO) {
@@ -340,12 +350,17 @@ function render() {
       drawFrameFlash(SPRITES.treeAtlas, fi, px - 5 + sh, py - 21, o.flash);
       if (fa < 1) ctx.globalAlpha = 1;
     } else if (o.type === 'deadTree') {
-      drawSpriteFlash(SPRITES.deadTree[o.variant], px + sh, py - 8, o.flash);
+      const spr = SPRITES.deadTree[o.variant];
+      if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py - 8, now);
+      drawSpriteFlash(spr, px + sh, py - 8, o.flash);
     } else if (o.type === 'den') {
       drawSpriteFlash(SPRITES.den, px + sh, py + 4, o.flash);
     } else if (o.type === 'rock') {
-      drawSpriteFlash(SPRITES.rock[o.variant], px + sh, py + 4, o.flash);
+      const spr = SPRITES.rock[o.variant];
+      if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py + 4, now);
+      drawSpriteFlash(spr, px + sh, py + 4, o.flash);
     } else if (o.type === 'chest') {
+      if (fadeP && o === fadeWkO) drawTargetRim(CHEST_SPR, 0, 0, CHEST_SPR.width, CHEST_SPR.height, px + sh, py + TILE - CHEST_SPR.height, now);
       drawSpriteFlash(CHEST_SPR, px + sh, py + TILE - CHEST_SPR.height, o.flash);
     } else if (o.type === 'dummy') {
       // the practice target: skids on its tile, everything else drawn up off
@@ -404,7 +419,11 @@ function render() {
         ctx.restore();
       } else drawAgBell(o, px + sh, py, now);
     } else if (o.type === 'bush') {
-      drawSpriteFlash(o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty, px + sh, py + 4, o.flash);
+      const spr = o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty;
+      // a bare bush never rims: workTarget's `ready` gate already refuses it,
+      // so the rim only ever lands on berries worth picking
+      if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py + 4, now);
+      drawSpriteFlash(spr, px + sh, py + 4, o.flash);
     } else if (STRUCTS[o.type]) {
       const spr = structSprite(o);
       const sy = py + structH(o.type) * TILE - spr.height; // skirt on the footprint's bottom edge

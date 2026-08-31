@@ -185,10 +185,13 @@ largest performance fact in this file. The pines **surrounding the viewed hero**
 distance (`TREE_FADE_A` floor inside `TREE_FADE_R0` — the adjacent ring, hard-faded so the hero
 reads clearly through it — climbing back to opaque by `TREE_FADE_R1`, the two-tile ring that
 gives the pocket a soft edge; consts above `render()`), so the fade eases with every step without
-storing anything per tree. The tree under the hero's cursor holds full ink **under a pulsing
-gold rim** (the buy plates' two golds, stamped through the scratch canvas like the silhouette
-below) — the work target is its own visible state, not a faded pine quietly borrowing the normal
-look — and a mid-shake chop lifts a faded neighbour back to opaque. While any pine
+storing anything per tree. The hero's **work target** — the hovered tree, dead tree, rock,
+berried bush or chest — draws under a **pulsing gold rim** (`drawTargetRim`: the buy plates' two
+golds, stamped through the scratch canvas like the silhouette below), so the target is its own
+visible state everywhere the cursor lands, not a faded pine quietly borrowing the normal look;
+a bare bush never rims because `workTarget`'s `ready` gate already refuses it. A hovered tree
+also holds full ink against the fade, and a mid-shake chop lifts a faded neighbour back to
+opaque. While any pine
 is inside the ramp the hero also wears a **black 1px silhouette rim** — `treeFadeSil`, the
 nearest pine's position on the same ramp, computed beside the y-sort and stamped by `drawPlayer`
 (the current frame tinted black on the scratch canvas, blitted at the eight neighbours, the same
