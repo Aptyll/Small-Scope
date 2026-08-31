@@ -180,7 +180,13 @@ loop's existing 1-tile top margin and 2-tile bottom margin already cover). Which
 sway frames it wears comes from `treeFrame(tx, ty)` off the [wind field](#the-wind-field), never
 from a clock of its own, and it is blitted out of **one atlas texture** rather than a per-frame
 canvas — see [Drawing a thousand of something](#drawing-a-thousand-of-something), which is the
-largest performance fact in this file. A **dead tree** is still the old 16×24 snag at `py - 8`. Short ground sprites (rock, bush,
+largest performance fact in this file. A pine drawing **in front of the viewed hero** takes the
+**occluder fade**: its alpha is a pure function of trunk-to-hero distance (`TREE_FADE_A` floor
+inside `TREE_FADE_R0`, opaque again past `TREE_FADE_R1`, consts above `render()`), so the fade
+eases with every step without storing anything per tree — trees behind the hero never fade (the
+hero draws over them), the tree under the hero's cursor holds full ink so the one being worked
+stays crisp, and a mid-shake chop lifts a faded neighbour back to opaque. Only that handful of
+pines ever flips `globalAlpha`, so the atlas batch below stays whole. A **dead tree** is still the old 16×24 snag at `py - 8`. Short ground sprites (rock, bush,
 stump, the wolf den's mouth) all draw at `py + 4` to stay clear of that band — drop one lower and
 a tree on the tile below hides it almost completely.
 
