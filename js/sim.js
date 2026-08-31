@@ -54,7 +54,7 @@ function update(dt) {
       // match: its dawns count nothing, like the rest of its stats.
       if (!player.eliminated && !PRACTICE) PROFILE.addDay();
       SFX.dawnChime();
-      showMsg('DAY ' + state.day, 3);
+      state.dayPop = { day: state.day, t: 0 }; // the dawn headline, top centre (renderUI)
       // carved ice holes freeze back over during the night; cracks heal too.
       // A hole with a net on it is the exception - the net is what holds that
       // water open - so it stays in the list and refreezes the dawn after
@@ -151,7 +151,12 @@ function update(dt) {
       const q = easeInOut(1 - state.intro / state.introLen);
       camX = state.introFrom.x + (tx - state.introFrom.x) * q;
       camY = state.introFrom.y + (ty - state.introFrom.y) * q;
-      if (state.intro === 0) showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
+      if (state.intro === 0) {
+        showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
+        // the landing anchors the calendar: DAY 1, the same headline every
+        // dawn after it re-raises (practice is a training room, not a day)
+        if (!PRACTICE) state.dayPop = { day: state.day, t: 0 };
+      }
     } else {
       camX += (tx - camX) * Math.min(1, dt * 7);
       camY += (ty - camY) * Math.min(1, dt * 7);
@@ -175,6 +180,7 @@ function update(dt) {
 
   state.shake = Math.max(0, state.shake - dt * 12);
   state.msgT = Math.max(0, state.msgT - dt);
+  if (state.dayPop && (state.dayPop.t += dt) >= 3.5) state.dayPop = null;
 
   updateFx(dt);
 }

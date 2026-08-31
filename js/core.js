@@ -96,6 +96,7 @@ const state = {
   hints: { stump: false, flag: false, hole: false },
   fishT: FISH_SPAWN_T, // countdown to the next fish swimming in (see updateFish)
   loc: null,     // the named place the local player is standing in: { L, t }
+  dayPop: null,  // the dawn headline, top centre: { day, t } - set by each dawn and the landing (js/sim.js), drawn by renderUI
   paused: false,
   mapOpen: false,
   bagOpen: false,      // the backpack grid (B, or the bag bar): HUD, it does NOT stop the sim

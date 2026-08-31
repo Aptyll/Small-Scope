@@ -376,7 +376,11 @@ in `title` mode the main menu prints the seed instead, next to the reroll die.
 ## Day/night
 
 `DAY_LEN = 110`, `NIGHT_LEN = 55`, so a full `CYCLE` is 165 s. `state.time` runs within the cycle,
-`state.day` increments at wrap. `update()` derives `state.darkness` (0→1) from a hand-written
+`state.day` increments at wrap. Each wrap (and the landing, for DAY 1) raises the **day headline**
+— `state.dayPop`, a ~3.5 s top-centre toast in the arrival toast's grammar (sun icon, `DAY N` at
+2× on a gold-ruled plate; drawn in `renderUI`, ui.js) — because days are the calendar a survival
+strategy is timed against, so a new one headlines rather than riding the bottom message line.
+`update()` derives `state.darkness` (0→1) from a hand-written
 ramp: dusk over the last 12 s of day, full dark, then a 10 s dawn.
 
 Night is visual pressure plus one real edge: a wolf's sight range scales

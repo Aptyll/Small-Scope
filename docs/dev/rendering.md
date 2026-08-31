@@ -714,7 +714,9 @@ so the same glyph reads on parchment, on snow and over forest.
   changes: a dark plate ruled in the spec's `mark`, the glyph, the name at 2× and the `tag` under
   it. It fades in and out, so it uses `drawPixelTextShadow` (see
   [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
-  blotchy).
+  blotchy). The **day headline** (`state.dayPop`, set by each dawn and the landing in sim.js)
+  shares this grammar — sun icon, `DAY N` at 2×, a gold-ruled plate — and steps under the
+  location plate when both are up.
 
 ## The end screens
 

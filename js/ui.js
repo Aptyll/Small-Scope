@@ -2347,6 +2347,30 @@ function renderUI(now) {
     }
   }
 
+  // a new day announces itself, top centre, in the location toast's own
+  // grammar: the profile's sun icon, DAY N big on a gold-ruled plate. It is
+  // the survival calendar a strategy is timed against ("push at day 2", "hole
+  // up for night 1"), so it headlines instead of riding the bottom message
+  // line. Steps under the location plate when both are up.
+  if (state.dayPop) {
+    const t = state.dayPop.t;
+    const a = t < 0.25 ? t / 0.25 : t > 2.8 ? Math.max(0, 1 - (t - 2.8) / 0.7) : 1;
+    if (a > 0) {
+      const txt = 'DAY ' + state.dayPop.day;
+      const tw = pixelTextWidth(txt, 2);
+      const w = tw + 30;
+      const bx = Math.round((VIEW_W - w) / 2), by = state.loc ? 44 : 14;
+      ctx.globalAlpha = a;
+      ctx.fillStyle = 'rgba(12,18,42,0.72)';
+      ctx.fillRect(bx, by, w, 20);
+      ctx.fillStyle = '#f2cc6a';
+      ctx.fillRect(bx, by, w, 1); ctx.fillRect(bx, by + 19, w, 1);
+      stampGrid(NAME_SUN_ICON, NAME_ICON_PAL, bx + 8, by + 6, 1);
+      drawPixelTextShadow(ctx, txt, bx + 22, by + 5, '#f4f7ff', '#0a0e23', 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
   // message
   if (state.msgT > 0 && state.msg) {
     const a = Math.min(1, state.msgT * 2);
