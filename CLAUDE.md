@@ -8,12 +8,12 @@ rules.
 ## Commands
 
 ```
-node tools/serve.js          # static server + screenshot sink on http://localhost:8471
-node tools/bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after changing a clip
+node app/server.js          # static server + screenshot sink on http://localhost:8471
+node app/bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after changing a clip
 ```
 
 **Double-clicking [index.html](index.html) has to work** — nothing may depend on being served. A
-`file://` page cannot `fetch` its own folder, which is why `tools/bake-sfx.js` inlines the sound
+`file://` page cannot `fetch` its own folder, which is why `app/bake-sfx.js` inlines the sound
 effects (its output is committed); an asset loaded any other way is silently dead off the disk.
 No package manager, dependencies, tests or linter: edit a `js/*.js` file and reload.
 
@@ -35,7 +35,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
-| the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
+| the file layout, load order, what each file exposes, `app/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | which banner / function in which js file owns a thing | [docs/dev/code-map.md](docs/dev/code-map.md) |
 
 ## Architecture

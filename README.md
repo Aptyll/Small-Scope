@@ -109,7 +109,7 @@ Double-click `index.html`. That is the whole thing — no install, no build step
 one HTML file and five scripts, and it is meant to stay that way.
 
 ```
-node tools/serve.js
+node app/server.js
 ```
 
 Optional, and only for development: a static server on `http://localhost:8471` with a screenshot

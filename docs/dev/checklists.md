@@ -45,7 +45,7 @@ declare victory. The three affordances:
   every profile, so `DBG.LOOT_POOL` is the same on a fresh install as on a played-in one, and
   reading it back is how you prove what a match may drop. `DBG.wipeTech()` still forgets which
   kinds this profile has *held*, which is all the page's blue pips are.
-- **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
+- **`POST /shot`** in [app/server.js](../../app/server.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
 
@@ -53,7 +53,7 @@ The server itself needs no configuration: `PORT` overrides the default 8471, `.c
 sets `autoPort` so a second session previews alongside an already-running one, and it sends
 `Cache-Control: no-store`, so a plain refresh always picks up an edit.
 
-**Test off `file://`, not just off the server.** `node tools/serve.js` hides a whole class of bug: the
+**Test off `file://`, not just off the server.** `node app/server.js` hides a whole class of bug: the
 game is played by double-clicking [index.html](../../index.html), where `fetch` and XHR are
 blocked against the page's own folder. Point the driver at the repo's own
 `file:///.../index.html?seed=N` for anything that loads an asset — the sampled sound layer was dead
@@ -78,7 +78,7 @@ there for two rounds while every served check passed.
 - `SFX.music.current` names the track the state machine thinks should be sounding, and
   `SFX.music.el(key)` hands out the live `<audio>` element: seek it to `duration - 0.6` to prove
   the `jump → foxglove → silence` chain in seconds instead of nine minutes. `duration` is only
-  finite because [tools/serve.js](../../tools/serve.js) answers Range requests — a plain 200 makes an element
+  finite because [app/server.js](../../app/server.js) answers Range requests — a plain 200 makes an element
   treat a multi-MB mp3 as an unbounded stream.
 - For the ESC panel, `DBG.settingsRows` gives the open page's row anchors (already scrolled -
   a row's `y` is where it is on screen), the navbar cells and the scroll state;
@@ -301,7 +301,7 @@ remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placeme
 `tryProne` (snow to dig into) and the footprint emitter. Check `fishWater()` too: it names the
 swimmable grounds outright.
 
-**Adding a sound** — drop the file in `audio/sfx/`, **run `node tools/bake-sfx.js`** (this is not
+**Adding a sound** — drop the file in `audio/sfx/`, **run `node app/bake-sfx.js`** (this is not
 optional: without it the clip works when served and is silently dead when `index.html` is opened
 off the disk, which is how the game is actually played), add it to `SAMPLES` in
 [js/audio.js](../../js/audio.js) (a key may list several files; one is picked per shot), and write
@@ -404,7 +404,7 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 - `audio/music/` is now exactly the six files `TRACKS` names — the alternate takes and album art
   that sat beside them (34 MB, nothing loading them) were deleted in `PATCH 1.53`; recover one with
   `git show ee284a0:"audio/music/<name>"` if a cue ever wants it. A track is live only once it is in
-  `TRACKS`. `tools/serve.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
+  `TRACKS`. `app/server.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
   is an mp3.
 - The `tracers` pass is kept working but has no trigger — it went idle with the raiders. The
   **turret is live** (it shoots enemy players and worker bots) but it does not use `tracers`: it
