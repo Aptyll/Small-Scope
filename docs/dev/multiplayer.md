@@ -117,16 +117,16 @@ js/sprites.js is never rewritten) — same
 
 ## Hero levels
 
-League-style: every slot has `p.level` (1–`LEVEL_MAX` = 9) and `p.xp`, which is simply lifetime
+League-style: every slot has `p.level` (1–`LEVEL_MAX` = 12) and `p.xp`, which is simply lifetime
 gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (`awardGold` — the on-the-spot
 payout every source uses — and robot deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
 `levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 10, 25, 45, 70, 100, 135, 175,
-220 — the gap grows by 5 each level, ~220 gold to cap). Spending gold and dying never touch
+220, 270, 325, 385 — the gap grows by 5 each level, ~385 gold to cap). Spending gold and dying never touch
 `xp`; level and xp are set in the constructor, not `reset()`, so they would survive a `reset`.
 
 Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (6) to
 `maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
-(`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 9 is +48 hp / +8
+(`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 12 is +66 hp / +11
 damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
 plays `SFX.levelUp()` for the local slot.
 
@@ -136,12 +136,14 @@ is the baseline everything already does; `buySkill(p, i)` spends a point, bumps 
 `refreshKit` folds `AB_SKILL` into the same kit gear uses (`nock`, `dodgeCd`, `ambushMul`/`bury`,
 `fletch`). The ability row inside the backpack is where they are spent — a pulsing rim and a plus
 badge on any cell a point can land on, gone once it cannot, and the pack's own column counting
-what is unspent; bots dump a free point onto the lowest rank at the top of `updateAI`. Nine points
-by level 9 fill three abilities to rank 3.
+what is unspent; bots dump a free point onto the lowest rank at the top of `updateAI`. Twelve
+points by level 12 fill all four abilities to rank 3 exactly.
 
-The level shows as a 7×7 badge in `drawPlayer`, flush against the left edge of the overhead
+The level shows as a 7-tall badge in `drawPlayer`, flush against the left edge of the overhead
 bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every
-slot in the bars' backing/track colours with the digit in gold. `DBG.gainGold(n, p?)` pays a
+slot in the bars' backing/track colours with the digit in gold — it sizes itself to the number
+and grows left, so a two-digit level overhangs like the stun plate does on the other side.
+`DBG.gainGold(n, p?)` pays a
 slot (default local) the way a pickup would, which is how to stage a level.
 
 ## Teams and colours

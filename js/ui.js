@@ -776,7 +776,8 @@ function bagStripRect() {
 }
 // the pointer is over HUD that owns its own clicks, not over the world
 function overHud(x, y) {
-  return !!bagHit(x, y) || !!charHit(x, y) || !!stripHit(x, y) || bitColHit(x, y) >= 0 || overMinimap();
+  return !!bagHit(x, y) || !!charHit(x, y) || !!stripHit(x, y) || abBuyHit(x, y) >= 0 ||
+    bitColHit(x, y) >= 0 || overMinimap();
 }
 // What the pointer is on: { kind: 'btn' } (the pack button) | { kind: 'cell',
 // i } (a grid slot) | { kind: 'ab', i } (an ability, or 0 for the skill-point
@@ -1285,11 +1286,14 @@ function drawBag(now) {
   ctx.restore();
 }
 
-// ---- hud strip: the weapon and ability wells under the xp bar, bottom-centre
-// One opaque plate. The plum xp bar runs along the top (xp IS lifetime gold),
-// notched into AB_SEGS segments so progress through a level is countable at a
-// glance, then the five wells: the WEAPON first on the left - the tool the
-// button fires - with the four class abilities following in key order 1-4.
+// ---- hud strip: the weapon and ability wells over the xp bar, bottom-centre
+// One opaque plate. Five wells on top: the WEAPON first on the left - the
+// tool the button fires - with the four class abilities following in key
+// order 1-4; under them the plum xp bar (xp IS lifetime gold), notched into
+// AB_SEGS segments so progress through a level is countable at a glance. The
+// bar sits at the BOTTOM so the strip's top edge is open screen: that is
+// where an affordable ability level floats its buy plate (abBuyRect below),
+// and a plate bobbing through the bar was the reason the bar moved.
 // The quiver count and dodge pips the old rail carried are gone: the reticle,
 // the overhead bar and the pack's ability row already say both.
 //
@@ -1313,7 +1317,7 @@ function drawBag(now) {
 const AB_CELL = 34, AB_GAP = 2, AB_N = 4; // AB_CELL: a strip well; AB_N: abilities
 const AB_W = (AB_N + 1) * AB_CELL + AB_N * AB_GAP;
 const AB_PAD = 2, AB_XP = 5, AB_SEGS = 10; // AB_SEGS: xp bar notches
-const AB_H = AB_PAD + AB_XP + AB_PAD + AB_CELL + AB_PAD;
+const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
 const AB_COVER = 'rgba(8,12,30,0.82)';
 // The weapon well's half of the refusal the backpack already has: a bit that
@@ -1330,26 +1334,40 @@ function toolDenied() {
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
-// well j of the five, left to right, under the xp bar
+// well j of the five, left to right, over the xp bar
 function stripCellRect(j) {
   const R = hudStripRect();
-  return {
-    x: R.x + j * (AB_CELL + AB_GAP), y: R.y + AB_PAD + AB_XP + AB_PAD,
-    w: AB_CELL, h: AB_CELL,
-  };
+  return { x: R.x + j * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
 }
 // the ONE weapon well, the strip's left end (i is kept so the drag plumbing
 // stays generic over slots)
 function toolCellRect(i) { return stripCellRect(i); }
 // ability i's well: keys 1-4, in order to the weapon's right
 function abCellRect(i) { return stripCellRect(1 + i); }
-// the upgrade badge in an ability well's top-right corner - shared by the
-// pixels and the press so they cannot disagree. It only exists while the
-// level is affordable (drawClassAbCell), so a press outside those moments
-// falls through to the cast.
+// The floating buy plate: an affordable ability level's ask hovers in the
+// open screen ABOVE the well - gear's old chevron grammar, made a real
+// button. The plate is the buy click and the well below stays purely the
+// cast, so the two can never steal each other's press. The rect is FIXED
+// (the bob is drawn, never hit-tested) and 3px taller than the plate so the
+// bob's whole travel stays inside it.
+const AB_BUY = 14;
 function abBuyRect(i) {
   const r = abCellRect(i);
-  return { x: r.x + r.w - 11, y: r.y + 1, w: 10, h: 10 };
+  return { x: r.x + ((r.w - AB_BUY) >> 1), y: r.y - AB_BUY - 6, w: AB_BUY, h: AB_BUY + 3 };
+}
+// which ability's plate the pointer is on, or -1. A plate only EXISTS while
+// its level is affordable, so the hit test is also the appears-then-goes
+// gate - shared by the press, the cursor, the tooltip and the pixels.
+function abBuyHit(mx, my) {
+  if (state.mode !== 'play' || player.dead || state.paused ||
+      state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
+  for (let i = 0; i < AB_N; i++) {
+    const c = abLvCost(player, i);
+    if (!c || player.inv.gold < c.gold) continue;
+    const r = abBuyRect(i);
+    if (mx >= r.x && mx < r.x + r.w && my >= r.y && my < r.y + r.h) return i;
+  }
+  return -1;
 }
 // { kind:'slot', i } | { kind:'ab', i } | { kind:'frame' } | null. Shared by
 // the click handler, the cursor and the strip's own hover so they cannot
@@ -1550,18 +1568,17 @@ function hudPress(mx, my) {
     if (cell.bits[bc]) state.dragPend = { src: { k: 'bit', slot: bitEditSlot(), i: bc }, x: mx, y: my };
     return true; // the column swallows the press either way
   }
+  // the floating buy plate over an ability well: its own press, clear of the
+  // strip, so buying a level and casting can never steal each other's click
+  const abb = abBuyHit(mx, my);
+  if (abb >= 0) {
+    SFX.unlock();
+    player.input.cmd = { kind: 'ability', i: abb };
+    return true;
+  }
   const sh = stripHit(mx, my);
   if (sh) {
-    if (sh.kind === 'ab') {
-      // the gold plus buys the next ability level; anywhere else on the well
-      // is the cast, so the well IS the key except on the badge's own pixels
-      const br = abBuyRect(sh.i), c = abLvCost(player, sh.i);
-      if (c && player.inv.gold >= c.gold &&
-          mx >= br.x && mx < br.x + br.w && my >= br.y && my < br.y + br.h) {
-        SFX.unlock();
-        player.input.cmd = { kind: 'ability', i: sh.i };
-      } else player.input.ability = sh.i; // click-to-cast
-    }
+    if (sh.kind === 'ab') player.input.ability = sh.i; // click-to-cast: the well IS the key
     else if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
     else if (sh.kind === 'slot') state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my, empty: true };
     return true;
@@ -1925,10 +1942,10 @@ function drawToolCell(i, now, hov) {
 // pulses the rim in its own colour and drains a bar of it along the bottom
 // edge, and the well pops white the frame a cooldown comes home. The big
 // digit bottom-left is the key (the keybind-indicator carve-out). Along the
-// top inner edge, gear's buy pips count the ability's levels; while the next
-// one is affordable the rim pulses gold and a plus badge sits top-right
-// (abBuyRect - the pack ability row's ask, priced in gold instead of points),
-// and pressing the badge buys where pressing anywhere else casts.
+// top inner edge, gear's buy pips - fat ones, this is the strip's main
+// progress readout - count the ability's levels; the ASK lives off the well
+// entirely, on the floating plate above it (drawAbBuyPlate), so the well's
+// rim carries combat states only.
 let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
 function drawClassAbCell(i, now, on) {
   const p = player, ab = CLASS_AB[p.cls][i];
@@ -1938,13 +1955,10 @@ function drawClassAbCell(i, now, on) {
   abCdSeen[i] = cd;
   const casting = p.castT > 0 && p.castAb === i;
   const act = ab.activeF ? ab.activeF(p) : 0;
-  const cost = abLvCost(p, i);
-  const buy = cost && p.inv.gold >= cost.gold;
   const rim = casting ? '#f4f7ff'
     : act > 0 ? (Math.sin(now * 9) > 0 ? ab.acol : '#35426e')
     : now < abReadyFlash[i] ? '#f4f7ff'
     : on ? '#8fa0c8'
-    : buy ? (Math.sin(now * 8) > 0 ? '#f2cc6a' : '#c9a227')
     : cd > 0 ? '#232c52' : '#35426e';
   ctx.fillStyle = rim;
   ctx.fillRect(r.x, r.y, r.w, r.h);
@@ -1960,10 +1974,13 @@ function drawClassAbCell(i, now, on) {
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, cov);
     if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, r.y + cov, r.w - 2, 1); }
   }
-  // the level, as gear's buy pips along the top inner edge
+  // the level, as gear's buy pips along the top inner edge - fat 7x3 blocks
+  // with a dark seat, so the bought count reads from across the screen
   for (let k = 0; k < AB_LV_MAX - 1; k++) {
+    ctx.fillStyle = '#0f1632';
+    ctx.fillRect(r.x + 2 + k * 10, r.y + 2, 9, 5);
     ctx.fillStyle = k < p.abLv[i] - 1 ? '#f2cc6a' : '#2c3560';
-    ctx.fillRect(r.x + 3 + k * 4, r.y + 2, 3, 2);
+    ctx.fillRect(r.x + 3 + k * 10, r.y + 3, 7, 3);
   }
   if (act > 0) {
     ctx.fillStyle = '#0f1632';
@@ -1977,20 +1994,39 @@ function drawClassAbCell(i, now, on) {
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     ctx.globalAlpha = 1;
   }
-  if (buy) { // the ask: a plus badge on the pixels the press spends
-    const br = abBuyRect(i);
-    ctx.fillStyle = '#0f1632';
-    ctx.fillRect(br.x + 1, br.y + 1, br.w - 2, br.h - 2);
-    ctx.fillStyle = '#f2cc6a';
-    ctx.fillRect(br.x + 4, br.y + 2, 2, 6); ctx.fillRect(br.x + 2, br.y + 4, 6, 2);
-  }
   const key = String(i + 1);
   drawPixelTextOutline(ctx, key, r.x + 3, r.y + r.h - 13,
     cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632', 2);
 }
+// The floating buy plate over ability i - gear's bobbing chevron made a real
+// button. Drawn only while the level is affordable (the same gate abBuyHit
+// answers with), bobbing over open screen; hover lights it and shows the
+// price, coin + number, gear's own hover read.
+function drawAbBuyPlate(i, now, hot) {
+  const c = abLvCost(player, i);
+  if (!c || player.inv.gold < c.gold) return;
+  const r = abBuyRect(i);
+  const y = r.y + 2 + Math.round(Math.sin(now * 6)); // the bob stays inside the fixed hit rect
+  ctx.fillStyle = 'rgba(4,6,18,0.55)';
+  ctx.fillRect(r.x + 2, y + 2, AB_BUY, AB_BUY);
+  ctx.fillStyle = hot ? '#f4f7ff' : Math.sin(now * 6) > 0 ? '#f2cc6a' : '#c9a227';
+  ctx.fillRect(r.x, y, AB_BUY, AB_BUY);
+  ctx.fillStyle = '#0f1632';
+  ctx.fillRect(r.x + 1, y + 1, AB_BUY - 2, AB_BUY - 2);
+  ctx.fillStyle = hot ? '#f4f7ff' : '#f2cc6a';
+  ctx.fillRect(r.x + 6, y + 3, 2, 8); ctx.fillRect(r.x + 3, y + 6, 8, 2);
+  if (hot) { // the price rides above the plate, never under the hand
+    const txt = String(c.gold);
+    const tw = 10 + pixelTextWidth(txt);
+    const tx0 = Math.max(2, Math.min(r.x + (AB_BUY >> 1) - (tw >> 1), VIEW_W - 2 - tw));
+    ctx.drawImage(SPRITES.itemGold, tx0, y - 12);
+    drawPixelTextOutline(ctx, txt, tx0 + 10, y - 10, '#f5c542', '#0f1632');
+  }
+}
 function drawHudStrip(now) {
   const R = hudStripRect();
   const hov = mouse.inside ? stripHit(mouse.x, mouse.y) : null;
+  const bhov = mouse.inside ? abBuyHit(mouse.x, mouse.y) : -1;
   // one chamfered plate behind bar and wells - the bag's ground, so the
   // two HUD pieces sit in the same family
   ctx.fillStyle = AB_BG;
@@ -2005,8 +2041,9 @@ function drawHudStrip(now) {
   }
   for (let i = 0; i < AB_N; i++) {
     drawClassAbCell(i, now, hov && hov.kind === 'ab' && hov.i === i);
+    drawAbBuyPlate(i, now, bhov === i);
   }
-  drawXpBar(now, R.x, R.y + AB_PAD);
+  drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD);
 }
 
 // The bit column, rising out of the slot whose key is held. Bottom cell is bit
@@ -2353,6 +2390,8 @@ function tipAt(mx, my) {
     d.notes.push(['THIS TOOL THROWS UP TO WEIGHT ' + T.tensile, '#f2cc6a']);
     return d;
   }
+  const abb = abBuyHit(mx, my);
+  if (abb >= 0) return tipClassAb(abb); // the buy plate describes the ability it upgrades
   const sh = stripHit(mx, my);
   if (sh && sh.kind === 'ab') return tipClassAb(sh.i);
   if (sh && sh.kind === 'slot') {

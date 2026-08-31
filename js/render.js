@@ -902,6 +902,7 @@ function cursorInfo() {
   if (gearHit(mouse.x, mouse.y) >= 0 || (bh && bh.kind !== 'frame')) return { kind: 'hand' };
   if (bh) return { kind: 'arrow' };
   if (bitColHit(mouse.x, mouse.y) >= 0) return { kind: 'hand' };
+  if (abBuyHit(mouse.x, mouse.y) >= 0) return { kind: 'hand' };
   const sh = stripHit(mouse.x, mouse.y);
   if (sh && (sh.kind === 'slot' || sh.kind === 'ab')) return { kind: 'hand' };
   if (sh) return { kind: 'arrow' };

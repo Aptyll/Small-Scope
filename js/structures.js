@@ -421,13 +421,6 @@ function updateStructures(dt) {
           robots.push(b);
           burst(b.x, b.y - 4, '#c3c9d3', 6, 35, 0.4, true);
           burst(b.x, b.y + 2, '#e4e8ee', 5, 30, 0.45, true); // exhaust off the mouth
-          // Your first worker: the one time the flag says it exists. It has
-          // no resting affordance by design (`worker flags`, js/robots.js),
-          // so it needs the same one-shot nudge the first stump gets.
-          if (b.owner === player.id && !state.hints.flag) {
-            state.hints.flag = true;
-            showMsg('HOLD MIDDLE MOUSE TO ORDER YOUR WORKERS', 5);
-          }
         }
       }
       // the shutter: open while a worker is out in the yard or one is rolling

@@ -364,15 +364,17 @@ never point at different nodes.
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom: the **plum xp bar** along the top (lifetime
-gold, left-to-right, no level number — that lives on the overhead badge), then **five 34px
-wells** — `[ WEAPON ][1][2][3][4]`, the weapon leading and the class abilities following in key
-order (`stripCellRect`; `toolCellRect(i)` is well 0, `abCellRect(i)` is well `1 + i`). The bar
-has a dark silhouette and a frost rim so it reads against the plate, and is **notched into
-`AB_SEGS` segments** WoW-fashion — a tick cuts dark plum through the fill and sits faint on the
-empty track, so progress through a level is countable either way. The plate swallows clicks so
-nothing fires through it. There is no rail: the quiver count and dodge pips it once carried are
-said by the reticle, the overhead bar and the pack's ability row.
+`drawHudStrip` is one plate, flush to the bottom: **five 34px wells** —
+`[ WEAPON ][1][2][3][4]`, the weapon leading and the class abilities following in key order
+(`stripCellRect`; `toolCellRect(i)` is well 0, `abCellRect(i)` is well `1 + i`) — over the
+**plum xp bar** along the bottom (lifetime gold, left-to-right, no level number — that lives on
+the overhead badge). The bar has a dark silhouette and a frost rim so it reads against the
+plate, and is **notched into `AB_SEGS` segments** WoW-fashion — a tick cuts dark plum through
+the fill and sits faint on the empty track, so progress through a level is countable either way.
+It sits at the *bottom* so the strip's top edge stays open screen for the ability wells'
+**floating buy plates** (below). The plate swallows clicks so nothing fires through it. There is
+no rail: the quiver count and dodge pips it once carried are said by the reticle, the overhead
+bar and the pack's ability row.
 
 The tool well (`drawToolCell`) says three things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
@@ -395,10 +397,14 @@ An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB
 detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
 top-down cover is its cooldown (against the level-cut `abCdOf`, not the table base), and the key
 digit sits big at 2× in the bottom-left corner (the keybind-indicator carve-out). Along the top
-inner edge, gear's **buy pips** count the ability's levels
-([gameplay.md](gameplay.md#class-abilities-keys-1-4)); while the next level is affordable the rim
-pulses gold and a **plus badge** sits top-right (`abBuyRect` — shared by the pixels and the
-press) — pressing the badge buys the level, pressing anywhere else casts. On top of that it
+inner edge, fat gear-style **buy pips** on dark seats count the ability's levels
+([gameplay.md](gameplay.md#class-abilities-keys-1-4)). The ASK lives off the well: while the
+next level is affordable a **floating buy plate** bobs in the open screen above the well
+(`abBuyRect`, a fixed hit rect the drawn bob stays inside; `abBuyHit` gates it on
+affordability, so the plate's existence IS the appears-then-goes ask; `drawAbBuyPlate` draws it
+— a gold-rimmed plus, lighting and pricing itself on hover). Pressing the plate buys the level,
+pressing the well casts — two surfaces, so neither can steal the other's click, and the well's
+rim carries combat states only. On top of that it
 tells the ability's moments: the rim goes **white while the body
 performs the cast**, a **running** ability (the shield up, the fury out) pulses the rim in its own
 colour (`acol` in its table row) and drains a bar of it along the bottom edge — the wipe waits
@@ -541,7 +547,9 @@ frame — **every** slot, the local one included: the name is the profile's
 your head, so hiding it from you alone would make it the one label in the game you cannot check. The backings are translucent, so each plate paints only its own rows - no overlap.
 
 **The frame is centred on the body, and the bars pay for it (`FRAME_DX`).** Horizontally the frame
-is a 6 px level plate hard against the 16 px bar backing — 22 px — and it is the *frame* that has
+is a 6 px level plate hard against the 16 px bar backing — 22 px at one digit; the plate sizes
+itself to the number and grows *left*, so a two-digit level (the cap is 12) overhangs the way
+the stun plate does on the right — and it is the *frame* that has
 to straddle the sprite, not the bars inside it. So the whole stack is drawn `FRAME_DX` (3 px) right
 of the sprite's own centre: `fx = round(p.x - ex) + FRAME_DX` is the stack's centre column and
 everything in it hangs off that, giving `cx-11 .. cx+10`, exactly centred on the seam a 16×16
@@ -1069,9 +1077,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   into `play` with the player already standing in the world.
 - **Landing intro**: the human's `landPlayer` sets `state.intro = state.introLen = HUD_IN_T` (0.7 s)
   with `introFrom` at the touchdown framing, so `renderUI` slides the HUD in (the left stack from
-  the left, the minimap from the top, the backpack-and-gear widget from the right and the hud strip
+  the left, the minimap from the top, the backpack from the right and the hud strip
   up from the bottom) while the camera settles onto the play framing.
-  The first-run hint message fires when that intro ends.
+  The DAY 1 headline fires when that intro ends.
 
 `DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and
 `layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.

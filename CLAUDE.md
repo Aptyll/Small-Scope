@@ -87,8 +87,7 @@ headlines (a death, a landmark) and five deliberate carve-outs: **keybind indica
 BACK'`, a "1" in a slot's corner), the **settings, PLAYER, gear and character panels**' labelled rows, the
 **practice instruments** (the dummy meter, the parkour's lap clock and the archery round's
 readouts, with their BEST / LAST plates — a training instrument's whole job is comparing
-numbers), **first-run
-onboarding** (the two `showMsg` teaching lines), and the **hover tooltip** (bottom-left,
+numbers), and the **hover tooltip** (bottom-left,
 `tipAt`/`drawTooltip`, ui.js) — which earns it because comparing a tool's rate of fire against a
 bit's weight is comparing *numbers*, and no shape does that. It is a carve-out, not a licence: the
 well still has to read at a glance without it. Anything else that wants words is a design bug.

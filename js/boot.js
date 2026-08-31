@@ -951,7 +951,7 @@ window.DBG = {
   // ability levels: gear's ladder on the four keys (js/abilities.js)
   AB_LV_MAX, abLvCost: (i, p) => abLvCost(p || player, i),
   abCdOf: (i, p) => abCdOf(p || player, i),
-  buyAbilityLv: (i, p) => buyAbilityLv(p || player, i), abBuyRect,
+  buyAbilityLv: (i, p) => buyAbilityLv(p || player, i), abBuyRect, abBuyHit,
   // the arsenal tree: the graph, the page's own geometry, and the pool a
   // match drops from - which is the whole arsenal, the same for every profile.
   // `wipeTech` forgets what this profile has HELD (the blue pips), which is

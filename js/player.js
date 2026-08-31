@@ -36,8 +36,8 @@ const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp,
 // or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
 // the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
 // every arrow, applied on top of the champion kit.
-const LEVEL_MAX = 9;
-const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220];
+const LEVEL_MAX = 12;
+const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220, 270, 325, 385];
 const LVL_HP = 6;
 const LVL_DMG = 1;
 

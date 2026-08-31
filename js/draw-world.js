@@ -1518,17 +1518,20 @@ function drawPlayer(p, ex, ey, now) {
   // the frame straddles the sprite. Everything in the frame hangs off it.
   const fx = Math.round(p.x - ex) + FRAME_DX;
   drawHealthBar(p.x - ex + FRAME_DX, hy - 7, p.hp, p.maxHp, 14);
-  // level badge: a 7x7 square sharing its right frame column with the bar
+  // level badge: a 7-tall plate sharing its right frame column with the bar
   // backing's left edge (one 1px frame everywhere, never a doubled wall), and
   // spanning the health bar and the stamina bar stacked (hy-8 .. hy-2). Same
-  // backing / track colours as the bars.
+  // backing / track colours as the bars. It sizes itself to the number and
+  // grows LEFT, so a two-digit level (the cap is 12) overhangs the way the
+  // stun plate does on the other side rather than squashing the digits.
   {
-    const bx = fx - 14, by = hy - 8;
+    const lt = String(p.level), lw = pixelTextWidth(lt);
+    const bw = lw + 3, bx = fx - 8 - bw, by = hy - 8;
     ctx.fillStyle = 'rgba(12,18,42,0.78)';
-    ctx.fillRect(bx, by, 6, 7); // 6 wide: the 7th column is the bar backing, already painted
+    ctx.fillRect(bx, by, bw, 7); // the column past it is the bar backing, already painted
     ctx.fillStyle = '#3a3448';
-    ctx.fillRect(bx + 1, by + 1, 5, 5);
-    drawPixelText(ctx, String(p.level), bx + 2, by + 1, '#f2cc6a');
+    ctx.fillRect(bx + 1, by + 1, bw - 1, 5);
+    drawPixelText(ctx, lt, bx + 2, by + 1, '#f2cc6a');
   }
   // Every slot carries a name tag in its team colour so a fight stays
   // legible - your own included: the profile name is what the rest of the

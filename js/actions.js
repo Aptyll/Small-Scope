@@ -426,12 +426,6 @@ function crackIce(tx, ty, p) {
     repaintGround(tx, ty);
     if (nearPlayer(px, py)) SFX.splash();
     if (p === player) state.shake = Math.max(state.shake, 2);
-    // the one time a hole says it is also a build site - the same one-shot
-    // nudge the first stump gets, for the same reason
-    if (p === player && !state.hints.hole) {
-      state.hints.hole = true;
-      showMsg('RIGHT CLICK THE HOLE TO SET A FISH NET', 5);
-    }
     burst(px, py, '#3a6080', 10, 50, 0.5, true);
     burst(px, py, '#ddf1f8', 8, 55, 0.5, true);
     // the noise sends nearby fish darting away
@@ -487,10 +481,6 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2.5);
-      if (p === player && !state.hints.stump) {
-        state.hints.stump = true;
-        showMsg('RIGHT CLICK THE STUMP TO BUILD ON IT', 5);
-      }
       awardGold(p, YIELD.treeFall + kitOf(p).harvest, ox, oy - 6); // PACKMULE fattens the fell
       burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
       burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);

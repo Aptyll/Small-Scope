@@ -93,7 +93,6 @@ const state = {
   // clock, started when that view opens rather than when the slot went down
   end: null, defeatT: 0,
   msg: null, msgT: 0,
-  hints: { stump: false, flag: false, hole: false },
   fishT: FISH_SPAWN_T, // countdown to the next fish swimming in (see updateFish)
   loc: null,     // the named place the local player is standing in: { L, t }
   dayPop: null,  // the dawn headline, top centre: { day, t } - set by each dawn and the landing (js/sim.js), drawn by renderUI

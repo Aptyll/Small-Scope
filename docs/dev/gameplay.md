@@ -355,10 +355,13 @@ mirrors gear exactly: `abLvCost(p, i)` (null at the cap), `buyAbilityLv(p, i)` (
 point, reached through `input.cmd {kind:'ability', i}` → `runCmd` by HUD badge click and bots
 alike), and `abCdOf(p, i)` — which every cooldown-setting site reads instead of the table's base
 `cd` (the cast landing, and the shield's comes-down reset). `p.abLv` resets with the match like
-`p.gearLv`. The strip's wells carry the readout: gear-style buy pips along the top edge, a gold
-pulsing rim and a plus badge (`abBuyRect`) while the next level is affordable — the badge press
-buys, any other press casts. Bots buy cheapest-first after gear with the same 15-gold building
-float (`updateAI`'s spend step). The cd column in the tables below is the level-1 base.
+`p.gearLv`. The wells carry the progress — fat gear-style buy pips along the top edge — and the
+ASK floats clear of them: an affordable level grows a bobbing gold plus plate in the open screen
+above its well (`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron
+made a real button. The plate press buys, any press on the well casts, so the two can never
+steal each other's click; hover lights the plate and shows the price. Bots buy cheapest-first
+after gear with the same 15-gold building float (`updateAI`'s spend step). The cd column in the
+tables below is the level-1 base.
 
 **Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the
@@ -1480,9 +1483,9 @@ mark dies falls back to holding the flag's ground.
 - It works **over the chart (M) too**, through `mapTileAt(sx, sy)` — the only way to command a tile
   that is off-screen. At `MAP_S` (192/232 px per tile) one chart pixel is ~1.2 tiles, so a map
   order is ±1 tile: fine for "march on that base", not for picking one tree.
-- Because the flag has **no resting affordance by design**, one `state.hints.flag` message fires
-  the first time a worker rolls out of *your* bay — the same one-shot nudge the first felled tree
-  gives for stumps, and the only place the flag is ever spelled out in words.
+- The flag has **no resting affordance by design**, and no hint text either (the onboarding
+  teaching lines were removed with the rest of the text hints): the ESC panel's CONTROLS block is
+  where the middle-mouse binding is looked up.
 - The order is per-player state, not a world resource, so it does **not** go through `contest()`.
   AI slots never plant one, which is why a bot's bay still gathers exactly as it always did.
 

@@ -151,12 +151,9 @@ function update(dt) {
       const q = easeInOut(1 - state.intro / state.introLen);
       camX = state.introFrom.x + (tx - state.introFrom.x) * q;
       camY = state.introFrom.y + (ty - state.introFrom.y) * q;
-      if (state.intro === 0) {
-        showMsg('EARN GOLD - HOLD E AT A TREE OR ROCK', 6);
-        // the landing anchors the calendar: DAY 1, the same headline every
-        // dawn after it re-raises (practice is a training room, not a day)
-        if (!PRACTICE) state.dayPop = { day: state.day, t: 0 };
-      }
+      // the landing anchors the calendar: DAY 1, the same headline every
+      // dawn after it re-raises (practice is a training room, not a day)
+      if (state.intro === 0 && !PRACTICE) state.dayPop = { day: state.day, t: 0 };
     } else {
       camX += (tx - camX) * Math.min(1, dt * 7);
       camY += (ty - camY) * Math.min(1, dt * 7);

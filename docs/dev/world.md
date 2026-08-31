@@ -414,9 +414,7 @@ plunge through the ice (see [PvP](multiplayer.md#pvp)), and the wolves of a
 that tile (see [Tools and the bow](gameplay.md#tools-and-the-bow)). Hits accumulate in the
 `iceCracks` map (`tile idx → hits`, rendered as bright fracture decals in their own pass);
 `ICE_HOLE_HITS` (2) breaks through — the tile becomes `ground = 2` (open water), joins the
-`holes` list, and is repainted into the ground canvas via `repaintGround()`. Breaking through for
-the first time is the one place the net is spelled out (`state.hints.hole`, the same one-shot
-`showMsg` the first stump gets). Constants live in the `fish` banner of
+`holes` list, and is repainted into the ground canvas via `repaintGround()`. Constants live in the `fish` banner of
 [js/wildlife.js](../../js/wildlife.js) (`ICE_HOLE_HITS`, `HOLE_FALL_DMG`, `HOLE_FALL_T`,
 `FISH_MAX`/`FISH_MIN`, `FISH_CATCH_R`; `FISH_SPAWN_T` alone stays in core.js, and the `NET_*` set
 sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net entry it tunes).

@@ -563,7 +563,7 @@ controlsCv.width = SET_W; controlsCv.height = 84;
   const g = controlsCv.getContext('2d');
   const cols = [
     [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['1-4', 'ABILITIES'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
-    [['G', 'CHARACTER'], ['M', 'WORLD MAP'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
+    [['G', 'CHARACTER'], ['M', 'WORLD MAP'], ['MMB', 'ORDER CREW'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
   ];
   for (let c = 0; c < 2; c++) {
     let y = 6;

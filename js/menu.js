@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.34'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.35'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.35', 'AN AFFORDABLE ABILITY LEVEL NOW FLOATS A GOLD PLUS BUTTON ABOVE ITS WELL - THE XP BAR MOVED BACK UNDER THE WELLS TO MAKE ROOM, THE LEVEL PIPS GOT FAT, HERO LEVELS CAP AT 12, AND THE ONBOARDING HINT LINES ARE GONE.'],
   ['2.34', 'THE CORNER IS CLEAN NOW - THE BACKPACK IS ONE RUCKSACK BUTTON WITH THE GOLD AND FOOD STRIP INSIDE THE OPEN PACK, AND GEAR MOVED TO A CHARACTER SHEET ON G WITH YOUR BODY, YOUR LIVE STATS AND THE FOUR PIECES.'],
   ['2.33', 'ABILITIES LEVEL UP NOW - THREE GOLD BUYS PER KEY CUT ITS COOLDOWN, WITH GEAR-STYLE PIPS AND A PLUS BADGE ON THE WELLS, BIGGER KEY NUMBERS BOTTOM-LEFT, AND THE WEAPON WELL DROPPED ITS BIT PIPS.'],
   ['2.32', 'THE DAY HEADLINE IS BARE TEXT NOW - JUST DAY N, BIG AND OUTLINED AT THE TOP OF THE SCREEN, NO PLATE OR SUN MARK AROUND IT.'],
