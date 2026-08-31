@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.41'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.42'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.42', 'THE HUD STRIP CARRIES TWO MEAL BUTTONS ON ITS RIGHT END - CLICK OR Q/F TO EAT - AND THE SETTINGS PANEL GAINED A HUD SIZE SLIDER THAT SCALES THE STRIP.'],
   ['2.41', 'THE GOLD HOVER OUTLINE NOW MARKS EVERY WORK TARGET - ROCKS, BERRY BUSHES, CHESTS AND DEAD TREES LIGHT UP UNDER THE CURSOR LIKE THE PINES DO.'],
   ['2.40', 'THE TREE UNDER YOUR CURSOR NOW WEARS A PULSING GOLD OUTLINE, SO THE ONE YOU ARE CHOPPING NEVER BLENDS INTO THE FADED POCKET AROUND YOU.'],
   ['2.39', 'THE TREE FADE IS A REAL VISIBILITY POCKET NOW - EVERY PINE WITHIN TWO TILES SOFTENS, THE ADJACENT RING FADES HARD, AND YOUR HERO WEARS A BLACK OUTLINE WHILE IN THE TREES.'],

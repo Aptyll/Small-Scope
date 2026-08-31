@@ -468,6 +468,7 @@ function bakeFrostSlab(g, w, h, title) {
 const SET_TABS = [
   { id: 'game', label: 'GAME', rows: [
     { id: 'map', label: 'MINIMAP SIZE', kind: 'slider' },
+    { id: 'hud', label: 'HUD SIZE', kind: 'slider' },
     { id: 'shake', label: 'SCREEN SHAKE', kind: 'toggle' },
     { id: 'info', label: 'INFO DISPLAY', kind: 'toggle' },
     { id: 'cursor', label: 'CURSOR', kind: 'toggle' },
@@ -590,6 +591,9 @@ function applySliderDrag() {
   } else if (dragSlider === 'map') {
     settings.mmR = Math.round(16 + t * 18);
     applyMinimapSize();
+  } else if (dragSlider === 'hud') {
+    // 0.75x-1.5x in 0.05 steps; the strip reads it live (hudSc, ui.js)
+    settings.hudScale = Math.round((0.75 + t * 0.75) * 20) / 20;
   }
 }
 
@@ -644,7 +648,7 @@ function settingsMouseDown() {
   const hit = settingsHit();
   if (!hit) return;
   if (hit.startsWith('tab:')) { setTab = hit.slice(4); SFX.pickup(); return; }
-  if (hit === 'vol' || hit === 'music' || hit === 'sfx' || hit === 'map') { dragSlider = hit; applySliderDrag(); return; }
+  if (hit === 'vol' || hit === 'music' || hit === 'sfx' || hit === 'map' || hit === 'hud') { dragSlider = hit; applySliderDrag(); return; }
   if (hit === 'leave') { leavePractice(); return; }
   if (hit.startsWith('q:')) Object.assign(settings, VID_PRESETS[hit.slice(2)]);
   else if (hit === 'mute') settings.muted = SFX.toggleMute();
@@ -700,6 +704,7 @@ function drawSliderById(id, y, off) {
   else if (id === 'music') drawSliderRow(y, settings.musicVol, String(Math.round(settings.musicVol * 100)), off);
   else if (id === 'sfx') drawSliderRow(y, settings.sfxVol, String(Math.round(settings.sfxVol * 100)), off);
   else if (id === 'map') drawSliderRow(y, (settings.mmR - 16) / 18, 'R' + settings.mmR);
+  else if (id === 'hud') drawSliderRow(y, ((settings.hudScale || 1) - 0.75) / 0.75, String(Math.round((settings.hudScale || 1) * 100)));
 }
 
 // one toggle row's state, by row id
@@ -742,7 +747,7 @@ function renderSettings(now, opts) {
       const y = r.y - L.scroll;
       if (y < L.clipY0 - 12 || y > L.clipY1 + 4) continue;
       drawPixelText(ctx, r.label, SET_X + 14, y, '#cfe0ff');
-      if (r.kind === 'slider') drawSliderById(r.id, y, r.id === 'map' ? false : off);
+      if (r.kind === 'slider') drawSliderById(r.id, y, r.id === 'vol' || r.id === 'music' || r.id === 'sfx' ? off : false);
       else if (r.kind === 'toggle') drawToggleRow(y, toggleVal(r.id), r.id === 'cursor' ? 'PIXEL' : undefined, r.id === 'cursor' ? 'BROWSER' : undefined);
       else if (r.kind === 'choice') for (const o of r.opts) {
         const col = preset === o.id ? '#ffd95c' : hit === 'q:' + o.id ? '#f4f7ff' : '#7a8bb8';
@@ -766,6 +771,11 @@ function renderSettings(now, opts) {
   // title, so it only ever appears on the in-match ESC slab.
   if (PRACTICE && !slide) drawMenuButton(leavePlankRect(), 'LEAVE PRACTICE', hit === 'leave' ? 1 : 0, now, false, false);
   if (slide) ctx.restore();
+  // live strip preview while the HUD SIZE knob is in hand - the minimap
+  // slider's grammar. Only during the drag, and drawn last: the strip's home
+  // sits under the slab's bottom edge, so it rides over the panel for exactly
+  // as long as the hand is resizing it.
+  if (dragSlider === 'hud' && state.mode === 'play' && !player.dead) drawHudScaled(now, 0, false);
 }
 
 // ------------------------------------------------------------ player profile

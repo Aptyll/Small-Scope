@@ -1239,9 +1239,8 @@ function drawBag(now) {
     const n = bagCount(player, type);
     if (n <= 0) continue;
     ctx.drawImage(SPRITES[ITEMS[type].icon], fx, st.y + 2);
-    // ...wearing the same clock the grid's cells wear. The strip is the ONLY
-    // food readout while the pack is shut, so the wipe has to run here too or
-    // the shared cooldown is invisible for most of a match.
+    // ...wearing the same clock the grid's cells and the hud strip's meal
+    // buttons wear, so the shared cooldown reads the same wherever food does.
     drawFoodClock(fx, st.y + 2, 8, 8, type);
     fx += 9;
     const t = String(n);
@@ -1266,8 +1265,8 @@ function drawBag(now) {
 // bar sits at the BOTTOM so the strip's top edge is open screen: that is
 // where an affordable ability level floats its buy plate (abBuyRect below),
 // and a plate bobbing through the bar was the reason the bar moved.
-// The quiver count and dodge pips the old rail carried are gone: the reticle,
-// the overhead bar and the pack's ability row already say both.
+// The quiver count and dodge pips the old rail carried are gone: the reticle
+// and the overhead bar already say both.
 //
 // A tool cell says three things without a word on it. The PLATE behind the
 // icon is the tool's tier colour, the same colour it wears in every other
@@ -1279,9 +1278,14 @@ function drawBag(now) {
 //
 // The strip proper is FIVE wells: [ WEAPON ][1][2][3][4] - the weapon leads
 // and the class abilities follow in key order, each wearing its 32px icon
-// (classAbIcon, js/abilities.js).
+// (classAbIcon, js/abilities.js). On the right end the two MEAL buttons
+// stack: berry over fish, half-height cells (two of them + the gap = one
+// well, so the column sits flush with the wells), each wearing its item
+// icon, its count and its key letter, and both wiping on the one shared
+// food clock (drawFoodClock) the bag's cells already wear.
 const AB_CELL = 34, AB_GAP = 2, AB_N = 4; // AB_CELL: a strip well; AB_N: abilities
-const AB_W = (AB_N + 1) * AB_CELL + AB_N * AB_GAP;
+const FOOD_CELL = 16; // a meal button; 2 * FOOD_CELL + AB_GAP = AB_CELL
+const AB_W = (AB_N + 1) * AB_CELL + (AB_N + 1) * AB_GAP + FOOD_CELL;
 const AB_PAD = 2, AB_XP = 5, AB_SEGS = 10; // AB_SEGS: xp bar notches
 const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
@@ -1300,6 +1304,17 @@ function toolDenied() {
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
+// The HUD SIZE dial (settings.hudScale, the ESC panel's GAME page). The strip
+// keeps ALL its geometry in this 1x space and drawHudScaled blits the whole
+// widget scaled about its bottom-centre anchor; stripMouse maps the pointer
+// back through that anchor, so every hit test below converts first and the
+// rects themselves never move.
+function hudSc() { return settings.hudScale || 1; }
+function stripMouse(mx, my) {
+  const s = hudSc();
+  if (s === 1) return { x: mx, y: my };
+  return { x: VIEW_W / 2 + (mx - VIEW_W / 2) / s, y: VIEW_H + (my - VIEW_H) / s };
+}
 // well j of the five, left to right, over the xp bar
 function stripCellRect(j) {
   const R = hudStripRect();
@@ -1310,6 +1325,12 @@ function stripCellRect(j) {
 function toolCellRect(i) { return stripCellRect(i); }
 // ability i's well: keys 1-4, in order to the weapon's right
 function abCellRect(i) { return stripCellRect(1 + i); }
+// meal button i (0 the berry over 1 the fish), the strip's right end
+const FOOD_BTNS = [{ type: 'berry', key: 'Q' }, { type: 'fish', key: 'F' }];
+function foodCellRect(i) {
+  const R = hudStripRect();
+  return { x: R.x + AB_W - FOOD_CELL, y: R.y + AB_PAD + i * (FOOD_CELL + AB_GAP), w: FOOD_CELL, h: FOOD_CELL };
+}
 // The floating buy plate: an affordable ability level's ask hovers in the
 // open screen ABOVE the well - gear's old chevron grammar, made a real
 // button. The plate is the buy click and the well below stays purely the
@@ -1328,6 +1349,7 @@ function abBuyRect(i) {
 function abBuyHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
+  ({ x: mx, y: my } = stripMouse(mx, my));
   for (let i = 0; i < AB_N; i++) {
     if (!abLvCanBuy(player, i)) continue;
     const r = abBuyRect(i);
@@ -1335,12 +1357,13 @@ function abBuyHit(mx, my) {
   }
   return -1;
 }
-// { kind:'slot', i } | { kind:'ab', i } | { kind:'frame' } | null. Shared by
-// the click handler, the cursor and the strip's own hover so they cannot
-// disagree.
+// { kind:'slot', i } | { kind:'ab', i } | { kind:'food', i } | { kind:'frame' }
+// | null. Shared by the click handler, the cursor and the strip's own hover
+// so they cannot disagree.
 function stripHit(mx, my) {
   if (state.mode !== 'play' || player.dead || state.paused ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return null;
+  ({ x: mx, y: my } = stripMouse(mx, my));
   const R = hudStripRect();
   if (mx < R.x - 3 || mx >= R.x + R.w + 3 || my < R.y || my >= R.y + R.h) return null;
   for (let i = 0; i < TOOL_SLOTS; i++) {
@@ -1350,6 +1373,10 @@ function stripHit(mx, my) {
   for (let i = 0; i < AB_N; i++) {
     const s = abCellRect(i);
     if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'ab', i };
+  }
+  for (let i = 0; i < FOOD_BTNS.length; i++) {
+    const s = foodCellRect(i);
+    if (mx >= s.x && mx < s.x + s.w && my >= s.y - 1 && my < s.y + s.h) return { kind: 'food', i };
   }
   return { kind: 'frame' };
 }
@@ -1382,6 +1409,7 @@ function bitColRect(s, i) {
 function bitColHit(mx, my) {
   const s = bitEditSlot();
   if (s < 0) return -1;
+  ({ x: mx, y: my } = stripMouse(mx, my));
   const cell = player.tools[s];
   for (let i = 0; i < cell.bits.length; i++) {
     const r = bitColRect(s, i);
@@ -1545,6 +1573,7 @@ function hudPress(mx, my) {
   const sh = stripHit(mx, my);
   if (sh) {
     if (sh.kind === 'ab') player.input.ability = sh.i; // click-to-cast: the well IS the key
+    else if (sh.kind === 'food') player.input[sh.i === 0 ? 'eatBerry' : 'eatFish'] = true; // the button IS the key, refusals and all (startEat)
     else if (sh.kind === 'slot' && player.tools[sh.i]) state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my };
     else if (sh.kind === 'slot') state.dragPend = { src: { k: 'slot', i: sh.i }, x: mx, y: my, empty: true };
     return true;
@@ -1809,6 +1838,32 @@ function drawAbBuyPlate(i, now, hot) {
   ctx.fillStyle = hot ? '#f4f7ff' : '#f2cc6a';
   ctx.fillRect(r.x + 6, y + 3, 2, 8); ctx.fillRect(r.x + 3, y + 6, 8, 2);
 }
+// A meal button: the item icon over BAG_WELL, its count bottom-right and its
+// key letter bottom-left (the keybind-indicator carve-out), the shared food
+// clock wiping over it exactly as it wipes the bag's cells - one grammar for
+// the meal wherever it is read. A meal you have none of keeps its seat but
+// dims, so the column never rearranges; the click sets the same edge-trigger
+// the key does and startEat speaks every refusal.
+function drawFoodCell(i, now, on) {
+  const p = player, type = FOOD_BTNS[i].type;
+  const r = foodCellRect(i);
+  const n = bagCount(p, type);
+  ctx.fillStyle = on ? '#8fa0c8' : n > 0 ? '#35426e' : '#232c52';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = BAG_WELL;
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  if (n <= 0) ctx.globalAlpha = 0.35;
+  // the icon sits high so the bottom row belongs to the key and the count
+  drawItemIcon(type, r, r.y - 3);
+  ctx.globalAlpha = 1;
+  drawFoodClock(r.x + 1, r.y + 1, r.w - 2, r.h - 2, type);
+  if (n > 0) {
+    const t = String(n);
+    drawPixelTextOutline(ctx, t, r.x + r.w - 3 - pixelTextWidth(t), r.y + r.h - 8, '#f4f7ff', '#0f1632');
+  }
+  drawPixelTextOutline(ctx, FOOD_BTNS[i].key, r.x + 2, r.y + r.h - 8,
+    n > 0 && p.foodCd <= 0 ? '#f4f7ff' : '#7a8bb8', '#0f1632');
+}
 function drawHudStrip(now) {
   const R = hudStripRect();
   const hov = mouse.inside ? stripHit(mouse.x, mouse.y) : null;
@@ -1829,7 +1884,50 @@ function drawHudStrip(now) {
     drawClassAbCell(i, now, hov && hov.kind === 'ab' && hov.i === i);
     drawAbBuyPlate(i, now, bhov === i);
   }
+  for (let i = 0; i < FOOD_BTNS.length; i++) {
+    drawFoodCell(i, now, hov && hov.kind === 'food' && hov.i === i);
+  }
   drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD);
+}
+// The strip, its buy plates and the bit column at the HUD SIZE the settings
+// dial holds. At 1x everything draws straight to the frame as it always did;
+// any other size bakes the widget at 1x into hudScaleCv and blits it scaled
+// about the strip's bottom-centre anchor - uictx's smoothing is off, so the
+// art scales nearest-neighbour instead of every fillRect going soft under a
+// fractional transform. The bake's headroom covers the tallest bit column
+// and the buy plates' bob.
+const HUD_BAKE_HEAD = 140;
+const hudScaleCv = document.createElement('canvas');
+const hudScaleCtx = hudScaleCv.getContext('2d');
+function drawHudScaled(now, slideY, withCol) {
+  const s = hudSc();
+  if (s === 1) {
+    ctx.save();
+    ctx.translate(0, slideY);
+    drawHudStrip(now);
+    ctx.restore();
+    if (withCol) drawBitColumn(now);
+    return;
+  }
+  const R = hudStripRect();
+  const bx = R.x - 3, by = R.y - HUD_BAKE_HEAD, bw = R.w + 6, bh = R.h + HUD_BAKE_HEAD;
+  if (hudScaleCv.width !== bw || hudScaleCv.height !== bh) {
+    hudScaleCv.width = bw; hudScaleCv.height = bh;
+    hudScaleCtx.imageSmoothingEnabled = false; // resizing resets ctx state; the tool well's 2x art must stay chunky
+  }
+  const o = ctx;
+  ctx = hudScaleCtx;
+  ctx.clearRect(0, 0, bw, bh);
+  ctx.save();
+  ctx.translate(-bx, -by);
+  drawHudStrip(now);
+  if (withCol) drawBitColumn(now);
+  ctx.restore();
+  ctx = o;
+  ctx.drawImage(hudScaleCv,
+    Math.round(VIEW_W / 2 - (VIEW_W / 2 - bx) * s),
+    Math.round(VIEW_H - (VIEW_H - by) * s) + slideY,
+    Math.round(bw * s), Math.round(bh * s));
 }
 
 // The bit column, rising out of the slot whose key is held. Bottom cell is bit
@@ -2161,6 +2259,12 @@ function tipAt(mx, my) {
   if (abb >= 0) return tipClassAb(abb); // the buy plate describes the ability it upgrades
   const sh = stripHit(mx, my);
   if (sh && sh.kind === 'ab') return tipClassAb(sh.i);
+  // a meal button describes the meal it eats - the bag cell's own food
+  // descriptor, so the two surfaces can never disagree about a berry
+  if (sh && sh.kind === 'food') {
+    const type = FOOD_BTNS[sh.i].type;
+    return tipStack({ type, n: bagCount(player, type) });
+  }
   if (sh && sh.kind === 'slot') {
     const cell = player.tools[sh.i];
     if (cell) return tipSend(tipCell(cell, null), 'STOW IT IN THE PACK');
@@ -2256,9 +2360,10 @@ function renderUI(now) {
   // minimap from the top, the backpack from the right, the hud strip from
   // below.
   // The TOP LEFT is deliberately empty: the berry and fish counts that used
-  // to stack there (and the gold that sat left of the minimap) are all on the
-  // backpack's bottom strip now, which is why nothing slides in from the left
-  // any more. Health lives on the in-world bar.
+  // to stack there (and the gold that sat left of the minimap) live on the
+  // backpack's bottom strip and the hud strip's meal buttons now, which is
+  // why nothing slides in from the left any more. Health lives on the
+  // in-world bar.
   const hudIn = state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
   const slide = 1 - hudIn;
   const out = state.mode === 'dead'; // the local wallet is moot once you are out
@@ -2278,16 +2383,14 @@ function renderUI(now) {
     ctx.restore();
   }
 
-  // hud strip (the xp bar over the weapon and ability wells),
-  // bottom-centre; it rides the intro slide up from below. The bit column
-  // rises out of it and the carried item rides over everything, so both are
-  // drawn after it and outside the slide.
+  // hud strip (the xp bar over the weapon, ability and meal wells),
+  // bottom-centre; it rides the intro slide up from below, at whatever HUD
+  // SIZE the settings dial holds (drawHudScaled). The bit column rises out
+  // of it and scales with it; the carried item rides the pointer over
+  // everything, so it stays outside the scale and the slide.
   if (!out) {
-    ctx.save();
-    ctx.translate(0, Math.round(slide * 40));
-    drawHudStrip(now);
-    ctx.restore();
-    if (hudIn >= 1) { drawBitColumn(now); drawDragGhost(now); }
+    drawHudScaled(now, Math.round(slide * 40), hudIn >= 1);
+    if (hudIn >= 1) drawDragGhost(now);
   }
 
   // the character panel (G): over the HUD, under the toasts and the tooltip

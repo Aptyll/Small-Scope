@@ -383,7 +383,9 @@ never point at different nodes.
 
 `drawHudStrip` is one plate, flush to the bottom: **five 34px wells** —
 `[ WEAPON ][1][2][3][4]`, the weapon leading and the class abilities following in key order
-(`stripCellRect`; `toolCellRect(i)` is well 0, `abCellRect(i)` is well `1 + i`) — over the
+(`stripCellRect`; `toolCellRect(i)` is well 0, `abCellRect(i)` is well `1 + i`) — then, on the
+right end, the two **meal buttons** stacked berry-over-fish (`foodCellRect(i)`, two 16px cells
+whose pair plus the gap equals one well) — all over the
 **plum xp bar** along the bottom (lifetime gold, left-to-right, no level number — that lives on
 the overhead badge). The bar has a dark silhouette and a frost rim so it reads against the
 plate, and is **notched into `AB_SEGS` segments** WoW-fashion — a tick cuts dark plum through
@@ -431,6 +433,25 @@ raised shield would be a lie (`activeF` in the table row is the readout) — and
 white** the frame a cooldown comes home. A click on the well sets `input.ability` exactly as the
 key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — the live
 cooldown, level and next-level price, the blurb, nothing the well itself already shows better).
+
+A **meal button** (`drawFoodCell`) is the same grammar pointed at food: the item icon sits high,
+the count bottom-right, the key letter (Q/F) bottom-left — the keybind-indicator carve-out — and
+the shared food clock (`drawFoodClock`, the very function the bag's cells wear) wipes both
+buttons together and lifts the one being chewed white. A meal you have none of keeps its seat
+but dims to 0.35 with no count, so the column never rearranges; the click sets the same
+`eatBerry`/`eatFish` edge-trigger the key does, so `startEat` speaks every refusal and the
+button can never disagree with Q or F. Hover raises the bag cell's own food descriptor
+(`tipStack`).
+
+The whole widget — plate, wells, buy plates and the risen bit column — draws at the **HUD SIZE**
+the ESC panel's GAME slider holds (`settings.hudScale`, 0.75×–1.5×). All geometry stays in 1×
+strip space: at 1× everything draws straight to the frame, and at any other size `drawHudScaled`
+bakes the widget into `hudScaleCv` and blits it scaled about the strip's bottom-centre anchor
+with smoothing off, so the art scales nearest-neighbour instead of every fillRect going soft.
+Every hit test (`stripHit`, `abBuyHit`, `bitColHit`, `bitEditSlot`) maps the pointer back through
+the same anchor via `stripMouse` first, so a click can never land beside its pixel. While the
+slider's knob is in hand, `renderSettings` draws the strip live over the slab — the minimap
+slider's preview grammar.
 
 The strip's **upgrade** half is entirely the floating buy plates above these wells — a skill
 point is spent nowhere else, and nothing else on the strip is ever bought.
@@ -486,8 +507,9 @@ as pips along the bottom, in the corner a stack number would have used.
 - **Depth comes from the cells, not from panels.** Three tones say it without a line: a filled
   cell recesses to `BAG_WELL` *below* the frame's ground, an empty one sits *above* it at
   `#171f45`, and the ground itself is between — occupied / free / frame.
-- **The eat keys are not printed on the strip.** Q and F are looked up in the ESC panel's
-  CONTROLS block, which is what that block is for.
+- **The eat keys are not printed on the strip.** The pack's gold row is counts only; the key
+  letters live on [the hud strip's meal buttons](#the-hud-strip), the surface whose whole job is
+  the press.
 - **An empty cell is the *lighter* one**: it has no icon to show off, and free space is what the
   grid is being read for, while a full cell goes dark behind its item. A stack of one prints no
   number — an empty corner says it.

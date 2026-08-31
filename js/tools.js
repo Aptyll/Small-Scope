@@ -274,13 +274,14 @@ function bitEditSlot() {
   if (!cell) { bitColHover = false; return -1; }
   if (state.drag && bitIdOf(state.drag.cell.type)) return 0;
   if (!mouse.inside) { bitColHover = false; return -1; }
+  const m = stripMouse(mouse.x, mouse.y); // the strip may draw scaled (HUD SIZE); its rects stay 1x
   const r = toolCellRect(0);
-  let over = mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 &&
-    mouse.y >= r.y - 3 && mouse.y < r.y + r.h + 3;
+  let over = m.x >= r.x - 2 && m.x < r.x + r.w + 2 &&
+    m.y >= r.y - 3 && m.y < r.y + r.h + 3;
   if (!over && bitColHover) {
     const top = bitColRect(0, cell.bits.length - 1);
-    over = mouse.x >= top.x - 8 && mouse.x < top.x + top.w + 8 &&
-      mouse.y >= top.y - 6 && mouse.y < r.y + r.h;
+    over = m.x >= top.x - 8 && m.x < top.x + top.w + 8 &&
+      m.y >= top.y - 6 && m.y < r.y + r.h;
   }
   bitColHover = over;
   return over ? 0 : -1;

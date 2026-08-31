@@ -1022,8 +1022,8 @@ nothing else. The table:
 
 | Item | Icon | Stack | Used by |
 | --- | --- | --- | --- |
-| `berry` | `itemBerry` | 3 | Q, or clicking its cell — eats it (see [Food](#food-the-meal-is-a-channel)) |
-| `fish` | `itemFish` | 2 | F, or clicking its cell — eats it (same) |
+| `berry` | `itemBerry` | 3 | Q, or clicking its cell or the strip's meal button — eats it (see [Food](#food-the-meal-is-a-channel)) |
+| `fish` | `itemFish` | 2 | F, or clicking its cell or its meal button — eats it (same) |
 | `cardWhite`/`cardGreen`/`cardBlue`/`cardPurple`/`cardGold` | `itemCard<Rarity>` | 5 each | clicking its cell — opens the pick-1-of-3 draft (see [Roguelike cards](#roguelike-cards)) instead of eating |
 | `tool:<id>` | `toolArt_<shape>_<tier>` | 1 | dragged onto one of the four weapon slots (see [Tools and bits](#tools-and-bits)) |
 | `bit:<id>` | `bitArt_<id>` | 4 each | dragged into a cell of a tool's bit column |
@@ -1084,7 +1084,8 @@ cooldown starts when its *cast* lands, not when the key is pressed
 and the tempo and **nothing out of the bag**, and can be restarted on the spot.
 
 `eatBerry(p)` / `eatFish(p)` are still the two edge-triggered intents Q and F set (two keys, two
-meals); both are one line into `startEat`. It refuses — with the `SFX.deny()` an ability well
+meals — the hud strip's meal buttons and the bag cells click the same intents); both are one
+line into `startEat`. It refuses — with the `SFX.deny()` an ability well
 speaks — while the clock is up, the body is busy (stunned, falling, rolling, mid-cast, mid-rush,
 airborne), or there is nothing a meal could do (no food, or already at full hp).
 
@@ -1109,9 +1110,11 @@ as the overhead tells do (`alpha: 1 - concealOf(p)`).
   and take it away ([Overhead health bars](rendering.md#overhead-health-bars));
 - crumbs in the meal's own colour fly at the mouth for the whole channel;
 - the shared clock **wipes top-down over the food itself** (`drawFoodClock`, UI › `backpack`) — in
-  the bag cell the click that eats lands on *and* on the open pack's strip counters. Both meals
-  wipe together: that is the point of one clock. The meal being chewed lights its own well white,
-  the way a casting ability well does.
+  the bag cell the click that eats lands on, on the open pack's strip counters *and* on the hud
+  strip's two **meal buttons** (`drawFoodCell`, [rendering.md](rendering.md#the-hud-strip) — icon,
+  count, key letter, and a click that sets the same `eatBerry`/`eatFish` intent the key does).
+  All wipe together: that is the point of one clock. The meal being chewed lights its own well
+  white, the way a casting ability well does.
 - the food tooltip carries `HEALS` / `EAT` / `COOLDOWN` / `CARRIED` and a red `READY IN` while the
   clock runs — the same rows `tipClassAb` prints.
 
@@ -1602,14 +1605,16 @@ your own marker cross it. Consequences worth knowing:
 
 ## Settings
 
-`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`,
+`settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `hudScale`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`,
 and the five video toggles `vidClouds`/`vidRays`/`vidStars`/`vidSnow`/`vidVig`) persists
 **under the player profile** — `saveSettings()` is a call to `PROFILE.putSettings()` and
 `loadSettings()` reads `PROFILE.settings()`, which returns `null` when this profile has never
 saved any. A pre-profile save under the old `localStorage['softfall.settings']` key is folded in
 once by `PROFILE.load()` and the key removed; see
 [architecture.md](architecture.md#profilejs). `applyMinimapSize()` must be called after changing `mmR` —
-it recomputes `MM_R`/`MM_CX`/`MM_CY`. The **backpack**'s open/closed state is `state.bagOpen`,
+it recomputes `MM_R`/`MM_CX`/`MM_CY`. `hudScale` (the HUD SIZE slider, 0.75–1.5) needs no apply
+call: the hud strip reads it live every frame
+([rendering.md](rendering.md#the-hud-strip)). The **backpack**'s open/closed state is `state.bagOpen`,
 not a setting: it is per-match HUD, and `endMatch` closes it. (Old saves may still carry `res`, `fps`, `seed` or `paths` keys from removed settings;
 `Object.assign` in `loadSettings` copies them harmlessly and nothing reads them.)
 
@@ -1617,7 +1622,7 @@ There is no fullscreen control in the ESC menu (players use F11); a `fullscreenc
 still refits the canvas when the browser toggles it.
 
 **The panel is tabbed.** A navbar under the title splits the rows into four pages — GAME
-(minimap size, screen shake, info display, cursor), VIDEO (below), AUDIO (the three sound dials
+(minimap size, hud size, screen shake, info display, cursor), VIDEO (below), AUDIO (the three sound dials
 and the speaker), CONTROLS (the baked hotkey listing) — and each page scrolls independently
 inside the content window (`SET_CONTENT_Y`..`SET_CONTENT_B`, panel-local 36..202) when its rows
 outgrow it, which is what lets the slab hold any number of future settings: 218 is already close
