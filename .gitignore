@@ -102,5 +102,5 @@ dist
 # TernJS port file
 .tern-port
 
-# Headless screenshot sink (tools/serve.js POST /shot)
+# Headless screenshot sink (app/server.js POST /shot)
 shot.png

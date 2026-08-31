@@ -1,29 +1,18 @@
-<h1 align="center">Project: Softfall</h1>
-<p align="center">A cozy survival free-for-all on a winter map</p>
+# Project: Softfall
 
-<p align="center">
-  <img src="docs/media/hero.png" alt="A snowy pine clearing — the survivor, two deer, and a rabbit at the forest edge" width="920">
-</p>
+A cozy survival free-for-all on a winter map
 
-<p align="center">
-  <strong>Six drop in by eagle. Four teams. Last one standing keeps the snow.</strong>
-</p>
+![A snowy pine clearing — the survivor, two deer, and a rabbit at the forest edge](docs/media/hero.png)
 
-<p align="center">
-  <img src="docs/media/practice-tool.webp" alt="Knocking the ice off the Practice Tool plank and stepping onto the training field" width="920">
-</p>
+**Six drop in by eagle. Four teams. Last one standing keeps the snow.**
 
-<p align="center">
-  <img src="docs/media/eagles.webp" alt="Red and blue team eagles flying past each other, then the riders dropping onto the snow" width="920">
-</p>
+![Knocking the ice off the Practice Tool plank and stepping onto the training field](docs/media/practice-tool.webp)
 
-<p align="center">
-  <img src="docs/media/hunt-deer.webp" alt="Drawing a bow and dropping a deer in a snowy clearing" width="920">
-</p>
+![Red and blue team eagles flying past each other, then the riders dropping onto the snow](docs/media/eagles.webp)
 
-<p align="center">
-  <img src="docs/media/robots.webp" alt="Worker bots chopping snow-loaded pines beside their bay" width="920">
-</p>
+![Drawing a bow and dropping a deer in a snowy clearing](docs/media/hunt-deer.webp)
+
+![Worker bots chopping snow-loaded pines beside their bay](docs/media/robots.webp)
 
 <table>
 <tr>
@@ -109,7 +98,7 @@ Double-click `index.html`. That is the whole thing — no install, no build step
 one HTML file and five scripts, and it is meant to stay that way.
 
 ```
-node tools/serve.js
+node app/server.js
 ```
 
 Optional, and only for development: a static server on `http://localhost:8471` with a screenshot

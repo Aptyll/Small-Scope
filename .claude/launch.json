@@ -4,7 +4,7 @@
     {
       "name": "game",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["tools/serve.js"],
+      "runtimeArgs": ["app/server.js"],
       "port": 8471,
       "autoPort": true
     }
