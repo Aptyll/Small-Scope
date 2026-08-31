@@ -7,7 +7,7 @@ const ROOT = path.join(__dirname, '..');
 const PORT = +(process.env.PORT || 8471);
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.png': 'image/png', '.json': 'application/json',
+  '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp', '.json': 'application/json',
   '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.jpg': 'image/jpeg',
 };
 
