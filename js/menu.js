@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.31'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.32'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.32', 'THE DAY HEADLINE IS BARE TEXT NOW - JUST DAY N, BIG AND OUTLINED AT THE TOP OF THE SCREEN, NO PLATE OR SUN MARK AROUND IT.'],
   ['2.31', 'A NEW DAY IS A HEADLINE NOW - DAY N POPS BIG AT THE TOP OF THE SCREEN WITH A SUN MARK AT EVERY DAWN AND AT THE LANDING, INSTEAD OF WHISPERING FROM THE BOTTOM MESSAGE LINE.'],
   ['2.30', 'THE BOTTOM STRIP IS COMPACT NOW - A SEGMENTED PLUM XP BAR RIDES ABOVE THE WELLS, THE WEAPON LEADS WITH THE FOUR ABILITIES AFTER IT, AND THE QUIVER AND DODGE COUNTERS ARE GONE.'],
   ['2.29', 'THE ARROW IS DRAWN AT THE WORLD\'S OWN SCALE NOW - A 16-PIXEL BODY THAT FITS THE SAME CELL AS EVERYTHING ELSE, SAME FLINT HEAD, BIT COLLAR, GOLD SHAFT AND SWALLOW-TAIL FEATHERS.'],

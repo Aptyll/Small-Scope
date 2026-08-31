@@ -715,8 +715,9 @@ so the same glyph reads on parchment, on snow and over forest.
   it. It fades in and out, so it uses `drawPixelTextShadow` (see
   [Text over the world](#text-over-the-world) — an outline stamped under `globalAlpha` goes
   blotchy). The **day headline** (`state.dayPop`, set by each dawn and the landing in sim.js)
-  shares this grammar — sun icon, `DAY N` at 2×, a gold-ruled plate — and steps under the
-  location plate when both are up.
+  shares the spot but not the plate: bare `DAY N` at 2×, nothing else. It wants BOTH the fade and
+  the outline text over the world demands, so the opaque outlined stamp is baked once per day
+  number (`dayPopCv`) and the canvas fades. It steps under the location plate when both are up.
 
 ## The end screens
 
