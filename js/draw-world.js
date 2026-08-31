@@ -1467,6 +1467,26 @@ function drawPlayer(p, ex, ey, now) {
     // js/abilities.js), so an ability visibly happens to the model
     const pose = state.mode !== 'title' ? abilityPose(p) : null;
     const ax = px + (pose ? pose.dx : 0), ay = py + (pose ? pose.dy : 0);
+    // deep in the treeline the viewed hero wears a black 1px rim so the body
+    // pops off the faded canopy - treeFadeSil (render.js) is the occluder
+    // fade's silhouette strength, 0 in the open, so the rim dissolves as the
+    // hero leaves the trees. The current frame tints black on the scratch
+    // canvas and stamps the eight neighbours, the same rim grammar as
+    // drawPixelTextOutline. A lying body keeps its stealth read bare, and a
+    // rotating cast pose skips the stamp rather than wear a stale rim.
+    if (treeFadeSil > 0 && !lying && !(pose && pose.rot) && p === viewPlayer()) {
+      sctx.clearRect(0, 0, 64, 64);
+      sctx.globalCompositeOperation = 'source-over';
+      sctx.drawImage(spr, 0, 0);
+      sctx.globalCompositeOperation = 'source-in';
+      sctx.fillStyle = '#000';
+      sctx.fillRect(0, 0, 64, 64);
+      ctx.globalAlpha = treeFadeSil;
+      for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
+        if (rx || ry) ctx.drawImage(scratch, 0, 0, 16, 16, ax + rx, ay + ry, 16, 16);
+      }
+      ctx.globalAlpha = 1;
+    }
     // held tool: behind the body when facing away, in the hand otherwise. A
     // lying player shows one only while the bow is actually drawn - a carried
     // axe bobbing over a body on its belly reads as a floating axe. A body

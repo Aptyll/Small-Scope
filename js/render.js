@@ -35,17 +35,23 @@ function drawFrameFlash(atlas, fi, x, y, flash) {
   }
 }
 
-// Occluder fade: a pine that draws in FRONT of the viewed hero softens as the
-// hero walks under its canopy, so the sprite stays readable inside the
-// treeline. Alpha is a pure function of trunk-to-hero distance - nothing is
-// stored per tree, so the fade eases in and out with every step by
-// construction. Trees behind the hero never fade (the hero draws over them),
-// and the tree under the hero's own cursor holds full ink so the one being
-// worked stays crisp; a mid-shake chop lifts a faded neighbour back to
-// opaque and o.shake's decay eases it down again.
-const TREE_FADE_A = 0.6; // alpha floor at point-blank
-const TREE_FADE_R0 = 14; // fully faded inside this trunk distance (world px)
-const TREE_FADE_R1 = 34; // back to opaque beyond this
+// Occluder fade: the pines around the viewed hero soften into a visibility
+// pocket, so the hero stays readable while digging into the treeline. Alpha
+// is a pure function of trunk-to-hero distance - nothing is stored per tree,
+// so the fade eases in and out with every step by construction - in two
+// layers: the adjacent ring sits hard on the TREE_FADE_A floor (the hero
+// reads clearly through it), and the two-tile ring climbs back to opaque so
+// the pocket has a soft edge instead of a wall. The tree under the hero's
+// own cursor holds full ink so the one being worked stays crisp; a mid-shake
+// chop lifts a faded neighbour back to opaque and o.shake's decay eases it
+// down again. While any pine is inside the ramp the hero also wears a black
+// 1px silhouette rim (treeFadeSil, stamped by drawPlayer, draw-world.js)
+// whose strength runs on the same distances, so the body pops off the
+// canopy over it and the rim dissolves as the hero steps into the open.
+const TREE_FADE_A = 0.35; // alpha floor on the adjacent ring
+const TREE_FADE_R0 = 24; // fully faded inside this trunk distance (world px)
+const TREE_FADE_R1 = 52; // back to opaque beyond this
+let treeFadeSil = 0; // this frame's silhouette-rim strength, set beside the y-sort
 
 function render() {
   const now = performance.now() / 1000;
@@ -264,11 +270,25 @@ function render() {
   draws.sort((a, b) => a.y - b.y);
 
   // whose view the canopies must not hide (null while dead or airborne - no
-  // sprite on the ground to hide), and the tree its cursor is resting on
+  // sprite on the ground to hide), the tree its cursor is resting on, and the
+  // silhouette-rim strength: the nearest pine's position on the fade ramp, so
+  // the rim is full where the pocket is hard and gone where the forest ends
   let fadeP = viewPlayer();
   if (!fadeP.active || fadeP.dead || inAir(fadeP)) fadeP = null;
   let fadeWkO = null;
-  if (fadeP) { const wk = workTarget(fadeP); if (wk) fadeWkO = wk.o; }
+  treeFadeSil = 0;
+  if (fadeP) {
+    const wk = workTarget(fadeP);
+    if (wk) fadeWkO = wk.o;
+    const ptx = Math.floor(fadeP.x / TILE), pty = Math.floor(fadeP.y / TILE);
+    for (let sy = pty - 2; sy <= pty + 2; sy++) for (let sx = ptx - 2; sx <= ptx + 2; sx++) {
+      const so = inWorld(sx, sy) ? objects[idx(sx, sy)] : null;
+      if (!so || so.type !== 'tree') continue;
+      const sd = Math.hypot(sx * TILE + 8 - fadeP.x, sy * TILE + 8 - fadeP.y);
+      treeFadeSil = Math.max(treeFadeSil,
+        1 - Math.max(0, sd - TREE_FADE_R0) / (TREE_FADE_R1 - TREE_FADE_R0));
+    }
+  }
 
   for (const d of draws) {
     if (d.p) { if (d.ghost) drawGhost(d.p, ex, ey); else drawPlayer(d.p, ex, ey, now); continue; }
@@ -284,12 +304,12 @@ function render() {
       // trunk on the tile's centre line and hangs the canopy over the tile
       // above. Which of the sixteen frames it wears is the WIND's business,
       // not the tree's - see treeFrame() in js/draw-world.js - and it comes
-      // off the one atlas texture, never a per-frame canvas. A handful near
-      // the viewed hero take the occluder fade (consts above render()); the
-      // globalAlpha flip only ever touches those few, so the thousand-pine
-      // atlas batch stays whole.
+      // off the one atlas texture, never a per-frame canvas. The handful
+      // surrounding the viewed hero take the occluder fade (consts above
+      // render()); the globalAlpha flip only ever touches those few, so the
+      // thousand-pine atlas batch stays whole.
       let fa = 1;
-      if (fadeP && d.y > fadeP.y + 8 && o !== fadeWkO) {
+      if (fadeP && o !== fadeWkO) {
         const dist = Math.hypot(d.tx * TILE + 8 - fadeP.x, d.ty * TILE + 8 - fadeP.y);
         if (dist < TREE_FADE_R1) {
           fa = TREE_FADE_A + (1 - TREE_FADE_A) *
