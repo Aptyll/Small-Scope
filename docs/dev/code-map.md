@@ -292,5 +292,6 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | the twin eagle rides, the wing seats, the jump window and its lock, the treeline-safe forced drop, free fall, landing, the flight bar and first-flight countdown, the dotted path, the zoomed-out view | `makeEagleRoute`, `lastOpenU`, `makeEagles`, `seatPos`, `beginDrop`, `dropJump`, `landPlayer`, `updateDrop`, `updateEagle`, `drawDropAir`, `drawEagle`, `renderDropUI` | `eagle drop` |
+| the drop brief: the roost tour a forced landing opens on - the phase machine, the camera's aim, the two headlines | `state.dropBrief`/`dropBriefPend` (core.js), `BRIEF_HOLD`/`BRIEF_GO_MIN`/`BRIEF_MAX_T`, `dropBriefTarget`, `drawDropBrief` (the glide: the camera banner, sim.js; the control zeroing: `sampleHumanInput`, input.js) | `eagle drop` |
 | the dive past the line's end, the tree-shattering impact, and the roosting objective: its wing-gust defense, its preen regen, and the driven-off ceremony that ends the match | `beginDive`, `findCrashPoint`, `eagleCrash`, `eagleBoomFx`, `eagleGust`, `eagleGustFx`, `hurtEagle`, `eagleFlee`, `eagleFleeResolve`, `teamEagleDown` | `eagle drop` |
 | boot order, `DBG`, the rAF loop | `startGame`, `loop`, `window.DBG` | `boot` |

@@ -836,9 +836,8 @@ function buildNamePanel() {
 // and this is the only other place it changes
 function applyProfileName() { player.name = PROFILE.name(); }
 
-function openNamePanel(first) {
+function openNamePanel() {
   const m = state.menu;
-  m.nameFirst = !!first;      // a first launch offers SKIP; an edit offers CANCEL
   m.nameBuf = PROFILE.get().name || '';
   m.nameShake = 0;
   m.nameHover = [0, 0];
@@ -855,11 +854,11 @@ function nameCommit() {
   SFX.unlock();
   closeMenuPanel();
 }
-// ESC, or the right-hand plank. On a first launch this is the SKIP the prompt
-// promises - the default name stands until it is edited - and afterwards it is
-// a plain cancel that leaves the stored name alone.
+// ESC, or the right-hand plank: a plain cancel that leaves the stored name
+// alone. There is no first-launch prompt any more - a fresh profile rolls a
+// random name at load (PROFILE, js/profile.js) and this panel only ever
+// opens from the name tag or the PLAYER planks, when the player wants it.
 function nameDismiss() {
-  if (state.menu.nameFirst) { PROFILE.skipName(); applyProfileName(); }
   SFX.pickup();
   closeMenuPanel();
 }
@@ -971,7 +970,7 @@ function renderNamePanel(now, slide) {
     ok ? m.nameHover[0] : 0, now, ok && pressed && m.nameHover[0] > 0.5);
   ctx.globalAlpha = 1;
   drawMenuButton({ x: r[1].x, y: r[1].y + slide, w: r[1].w, h: r[1].h },
-    m.nameFirst ? 'SKIP' : 'CANCEL', m.nameHover[1], now, pressed && m.nameHover[1] > 0.5);
+    'CANCEL', m.nameHover[1], now, pressed && m.nameHover[1] > 0.5);
 }
 
 // The name bottom-left of the title screen, mirroring the patch tag on the

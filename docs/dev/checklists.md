@@ -36,10 +36,11 @@ declare victory. The three affordances:
   boundary and being three pixels out is invisible without it.
   It draws in every mode, `settings.hitbox` sets it from `DBG` without the keypress, and
   `DBG.showPaths` still forces the routes on by itself.
-- **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the display-name
-  prompt only opens itself while `PROFILE.named()` is false, so a machine that has answered it
-  once will never show it again. `DBG.PROFILE` is the store and `DBG.openNamePanel(first)` opens
-  the panel either way (`true` = the SKIP variant). See
+- **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the fresh profile
+  rolls a random display name at load (there is no first-launch prompt) and its `dropped` flag
+  comes back false, so the next ride runs the scripted first flight and its
+  [drop brief](rendering.md#eagle-drop-mode-drop). `DBG.PROFILE` is the store and
+  `DBG.openNamePanel()` opens the name editor. See
   [architecture.md](architecture.md#profilejs).
 - **The [tech tree](gameplay.md#the-tech-tree) needs no staging** — every kind is unlocked for
   every profile, so `DBG.LOOT_POOL` is the same on a fresh install as on a played-in one, and

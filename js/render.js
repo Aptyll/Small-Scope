@@ -632,6 +632,8 @@ function render() {
   // plate, the final score (drawAgameUI, js/draw-world.js)
   if (PRACTICE && state.mode === 'play') drawAgameUI(now);
   if (state.mode === 'drop') renderDropUI(now);
+  // the drop brief's roost headlines (updateDrop's tour, js/boot.js)
+  if (state.mode === 'play' && state.dropBrief) drawDropBrief();
   // the flag order riding the pointer (its target tile is bracketed back in
   // the world pass); only up while the middle button is held
   if (state.mode === 'play') drawFlagCursor();

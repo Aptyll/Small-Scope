@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.45'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.46'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.46', 'A FORCED DROP NOW LANDS INTO A GUIDED TOUR - THE CAMERA GLIDES TO YOUR ROOSTING EAGLE AND THE RIVAL ONE, STATES HOW THE MATCH IS LOST AND WON, THEN HANDS BACK - AND A FRESH PROFILE GETS A RANDOM NAME INSTEAD OF THE FIRST-LAUNCH PROMPT.'],
   ['2.45', 'SPENT ARROWS ARE GONE THE MOMENT THEY LAND - NO MORE SHAFTS TO PICK BACK UP, FLETCHING IS THE ONLY REFILL - AND A PRACTICE TARGET NOW EXPLODES THE INSTANT AN ARROW TOUCHES IT.'],
   ['2.44', 'THE README NOW PLAYS FOUR LOOPING CLIPS UNDER THE HERO - THE PRACTICE TOOL BREAKING OPEN, THE EAGLE DROP, A DEER HUNT AND WORKERS CHOPPING PINES - AND THE GALLERY IS A VERTICAL STRIP OF 16:9 SHOTS.'],
   ['2.43', 'THE HUD NOW DEFAULTS TO SIZE 80 FOR NEW PLAYERS - A SAVED SLIDER STILL WINS.'],
@@ -374,11 +375,11 @@ function menuClick() {
     if (!menuPanelReady()) return;
     if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
     if (m.panel === 'patch' && overMenuPanel()) { patchPanelClick(mouse.x - SET_X, mouse.y - SET_Y); return; }
-    if (m.panel === 'name') { if (overMenuPanel()) namePanelClick(); else if (!m.nameFirst) nameDismiss(); return; } // the first-launch prompt is modal: it wants an answer, not a stray click
+    if (m.panel === 'name') { if (overMenuPanel()) namePanelClick(); else nameDismiss(); return; } // a stray click outside the panel closes it, like any edit
     if (!overMenuPanel()) closeMenuPanel();
     return;
   }
-  if (overNameTag()) { openNamePanel(false); return; }
+  if (overNameTag()) { openNamePanel(); return; }
   if (overPatchTag()) { openMenuPanel('patch'); return; }
   const h = menuHit();
   if (h < 0) return;
@@ -445,9 +446,8 @@ function updateTitle(dt) {
     const h = menuHit();
     if (h >= 0 && !menuFrozen(h) && h !== m.sel) m.sel = h;
   }
-  // the first launch asks for a name once the title has finished arriving;
-  // PROFILE.named() is what stops it coming back, and SKIP sets it too
-  if (!PROFILE.named() && !m.panel && m.screen === 'menu' && m.t > 1.4 && !state.intro && !state.fade) openNamePanel(true);
+  // (no first-launch name prompt: a fresh profile rolls a random name at load
+  // - PROFILE, js/profile.js - and the panel opens only from the name tag)
   // the name field's refusal rattle, and the PLAYER planks' hover eases
   if (m.nameShake > 0) m.nameShake = Math.max(0, m.nameShake - dt);
   if (m.panel === 'name') {

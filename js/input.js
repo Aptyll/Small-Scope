@@ -81,7 +81,7 @@ window.addEventListener('keydown', (e) => {
   // Edge-triggered like the dodge; the sim consumes it (tryAbility,
   // js/abilities.js). The bit column rises on HOVER over the weapon well.
   if (e.key >= '1' && e.key <= '4' && !e.repeat) { SFX.unlock(); player.input.ability = e.key.charCodeAt(0) - 49; }
-  if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
+  if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft && !state.dropBrief) { state.wheel = null; state.mapOpen = !state.mapOpen; }
   if (e.key.toLowerCase() === 'escape') {
     // a carried item goes back first, then the flag aim: both are gestures
     // half-finished, and Escape is how either is thought better of
@@ -291,9 +291,9 @@ function sampleHumanInput(p) {
     p.fireArmed = false;
     return;
   }
-  // state.eagleCine: the driven-off ceremony has the camera - hands off the
-  // controls until the screens come up, exactly as pause zeroes them
-  if (state.mode !== 'play' || state.paused || state.settingsOpen || state.eagleCine) {
+  // state.eagleCine / state.dropBrief: a ceremony has the camera - hands off
+  // the controls until it hands back, exactly as pause zeroes them
+  if (state.mode !== 'play' || state.paused || state.settingsOpen || state.eagleCine || state.dropBrief) {
     inp.mx = inp.my = 0;
     inp.fire = inp.work = inp.slide = false;
     inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;

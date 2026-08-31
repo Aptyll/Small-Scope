@@ -115,7 +115,8 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.
 - **Not an account.** The player profile is a display name, a few lifetime numbers and a record of
-  which kinds you have held, in the browser, and it is skippable. No passwords, no sign-in, nothing
+  which kinds you have held, in the browser, and it names itself — a fresh profile rolls a random
+  name rather than stopping a new player at a prompt. No passwords, no sign-in, nothing
   to log into. A match reads **nothing** back out of it — everything about a match is decided
   inside that match, and the arsenal is unlocked for everybody alike. See
   [architecture.md](architecture.md#profilejs). If a server ever holds it, it holds the same

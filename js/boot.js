@@ -29,6 +29,15 @@ const DROP_LOCK_T = 4;      // s: the jump only unlocks over the line's last str
 const DROP_EDGE_MARGIN = 3; // tiles of open ground a forced drop keeps clear of the treeline
 const TUT_DROP_T = 8;       // s: a profile's first flight ever jumps itself here (near the tree edge, clear of the mid-route pass)...
 const TUT_COUNT = 5;        // ...counted down over this many seconds ahead of it
+// the DROP BRIEF: any FORCED drop of the local slot (the first flight always -
+// its manual jump is refused, the ride is fully scripted - or a veteran who
+// rode past the window's end) lands into a camera tour before play: glide to
+// your own roost (watching the dive land if it hasn't yet), hold it with the
+// lose condition, glide to the rival roost with the win condition, then back
+// to your boots. A real jump is the opt-out, so a veteran never sees it twice.
+const BRIEF_HOLD = 3;       // s the camera holds on each roost while its line is up
+const BRIEF_GO_MIN = 1;     // s a glide leg lasts at least, however close the target
+const BRIEF_MAX_T = 20;     // s the whole tour may run before it force-ends (safety)
 const EAGLE_R = WORLD / 2 - 40; // route endpoints sit this many tiles from the centre (over the treeline)
 const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
@@ -179,6 +188,12 @@ function dropJump(p, force) {
     if (p === player) SFX.deny();
     return;
   }
+  // the first flight is fully scripted: the countdown jumps for you, and the
+  // door stays shut to a manual leap - the brief that follows is the lesson
+  if (!force && p === player && state.drop.firstFlight) { SFX.deny(); return; }
+  // a forced local drop (the scripted first flight, or riding past the
+  // window's end) lands into the drop brief; a real jump is the opt-out
+  if (force && p === player) state.dropBriefPend = true;
   p.aboard = false;
   p.dropT = FALL_T;
   // the leap starts from the wing seat the rider was sitting on (p.x/p.y are
@@ -233,6 +248,12 @@ function landPlayer(p) {
     state.menu.screenT = 0;
     state.shake = 5;
     SFX.land();
+    // a forced drop lands into the brief: the camera leaves for the roost
+    // tour before the play camera ever takes over (see the consts above)
+    if (state.dropBriefPend) {
+      state.dropBriefPend = false;
+      state.dropBrief = { ph: 'ours-go', t: 0, total: 0 };
+    }
   } else {
     addFloater(p.x, p.y - 20, p.name + ' LANDED', TEAMS[p.team].mark);
   }
@@ -249,6 +270,31 @@ function updateDrop(dt) {
     }
   }
   for (const e of state.drop.eagles) updateEagle(e, dt);
+  // the drop brief: the roost tour a forced landing opened on. The match runs
+  // on underneath - only the local camera and controls are spoken for
+  // (sampleHumanInput zeroes them, the camera branch in js/sim.js follows
+  // dropBriefTarget) - and the landing grace holds until the hand-back, so
+  // nobody dies watching the lesson. Each glide leg ends when the camera has
+  // arrived AND the bird it is looking at is down (a first flight catches the
+  // dive mid-air; a veteran dropped at the window's end finds it landed).
+  const brief = state.dropBrief;
+  if (brief) {
+    if (state.mode !== 'play' || state.eagleCine) state.dropBrief = null; // the ceremony (or a death) outranks the lesson
+    else {
+      brief.t += dt; brief.total += dt;
+      player.invuln = Math.max(player.invuln, 0.4);
+      const tgt = dropBriefTarget();
+      const near = Math.hypot(tgt.x - WV_W / 2 - camX, tgt.y - WV_H / 2 - camY) < 24;
+      const birdDown = (t) => { const e = state.drop.eagles[t]; return e.state !== 'fly' && e.state !== 'dive'; };
+      const step = (ph) => { brief.ph = ph; brief.t = 0; };
+      if (brief.total > BRIEF_MAX_T) state.dropBrief = null;
+      else if (brief.ph === 'ours-go') { if (near && brief.t > BRIEF_GO_MIN && birdDown(player.team)) step('ours'); }
+      else if (brief.ph === 'ours') { if (brief.t > BRIEF_HOLD) step('theirs-go'); }
+      else if (brief.ph === 'theirs-go') { if (near && brief.t > BRIEF_GO_MIN && birdDown(1 - player.team)) step('theirs'); }
+      else if (brief.ph === 'theirs') { if (brief.t > BRIEF_HOLD) step('back'); }
+      else if (near && brief.t > BRIEF_GO_MIN) state.dropBrief = null; // 'back': the boots have the camera again
+    }
+  }
   for (const p of players) {
     if (!p.active) continue;
     if (p.aboard) {
@@ -809,6 +855,48 @@ function renderDropUI(now) {
     drawPixelTextOutline(ctx, tm, VIEW_W - pixelTextWidth(tm, ts) - 6 * ts, VIEW_H - 12 * ts,
       '#9fb6d8', '#0f1632', ts);
   }
+}
+
+// where the drop brief's camera is looking right now: the sim camera
+// (js/sim.js) glides toward this every frame, so a bird still finishing its
+// dive is TRACKED rather than met - the crash lands on screen
+function dropBriefTarget() {
+  const b = state.dropBrief, d = state.drop;
+  if (!b || !d) return { x: player.x, y: player.y };
+  if (b.ph === 'ours-go' || b.ph === 'ours') return d.eagles[player.team];
+  if (b.ph === 'theirs-go' || b.ph === 'theirs') return d.eagles[1 - player.team];
+  return { x: player.x, y: player.y };
+}
+
+// the brief's two headlines, one per roost: the bird on screen is the
+// picture, this says what it MEANS (the headline carve-out - a match has
+// exactly one win condition, and this is the once it is ever written down).
+// Baked opaque and faded as a canvas, the dayPop grammar: an outline stamped
+// under globalAlpha goes blotchy (the CLAUDE.md text rule).
+let briefCv = null, briefCvPh = '';
+function drawDropBrief() {
+  const b = state.dropBrief;
+  if (!b || window.DBG.hideUI) return;
+  if (b.ph !== 'ours' && b.ph !== 'theirs') return;
+  const a = Math.min(1, b.t / 0.25, Math.max(0, (BRIEF_HOLD - b.t) / 0.3));
+  if (a <= 0) return;
+  if (!briefCv || briefCvPh !== b.ph) {
+    const team = b.ph === 'ours' ? player.team : 1 - player.team;
+    const t1 = b.ph === 'ours' ? 'YOUR EAGLE' : 'THEIR EAGLE';
+    const t2 = b.ph === 'ours' ? 'IF IT IS DRIVEN OFF, YOUR TEAM FALLS' : 'DRIVE IT OFF TO WIN';
+    briefCv = document.createElement('canvas');
+    briefCv.width = Math.max(pixelTextWidth(t1, 2), pixelTextWidth(t2)) + 4;
+    briefCv.height = 30;
+    const c2 = briefCv.getContext('2d');
+    drawPixelTextOutline(c2, t1, Math.round((briefCv.width - pixelTextWidth(t1, 2)) / 2), 2,
+      TEAMS[team].mark, '#0f1632', 2);
+    drawPixelTextOutline(c2, t2, Math.round((briefCv.width - pixelTextWidth(t2)) / 2), 20,
+      '#f4f7ff', '#0f1632', 1);
+    briefCvPh = b.ph;
+  }
+  ctx.globalAlpha = a;
+  ctx.drawImage(briefCv, Math.round((VIEW_W - briefCv.width) / 2), Math.round(VIEW_H * 0.72));
+  ctx.globalAlpha = 1;
 }
 
 // ------------------------------------------------------------ boot

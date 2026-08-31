@@ -161,7 +161,8 @@ everything below draws in screen space; see [World zoom](#world-zoom-and-the-two
 `renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
-the flight bar, the first-flight countdown, keybind indicators) → `renderWheel` (radial menu, above the UI) →
+the flight bar, the first-flight countdown, keybind indicators) → `drawDropBrief` (mode `play`,
+only while [the drop brief](#the-drop-brief) holds a roost) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays (the M map also in mode `drop`) → `renderTitle` (the main menu, also during the play intro) → the end-of-match
 overlay (`renderDead`: the death dim and its planks, or `renderVictory` / `renderDefeat` — see
 [The end screens](#the-end-screens)) →
@@ -1050,7 +1051,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   iron rail, gilt thumb, ice nubs) — wheel, Up/Down, the nubs (step) and the track (page) move it.
   PLAYER is `namePanelCv` (the `player profile` banner), opened by clicking the profile name
   bottom-left (`nameTagRect` / `overNameTag`, the mirror of the patch tag, with a quill glyph that
-  gilds beside it) and once by itself on a first launch. It is the one panel that **owns the
+  gilds beside it). **It never opens itself**: a fresh profile rolls a random name at load
+  (`PROFILE`, [architecture.md](architecture.md#profilejs)) instead of being stopped by a prompt,
+  and the quill is the whole affordance for changing it. It is the one panel that **owns the
   keyboard**: the `keydown` handler routes to `nameKey()` before its own shortcuts while it is
   up, so letters are text rather than hotkeys. A character the name may not hold is simply never
   drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
@@ -1058,9 +1061,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   ledger — icon, labelled row (WINS / GOLD EARNED / DAYS PLAYED, a deliberate text carve-out),
   dotted leader, number right-aligned with a thousands comma. WINS is matches the local slot
   was standing for when `endMatch('won')` fired; DAYS PLAYED is days begun (takeoff plus each
-  dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The first-launch variant is modal
-  (an outside click does nothing) and its second plank reads SKIP — the default name — where an
-  edit reads CANCEL.
+  dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The second plank is a
+  plain CANCEL that leaves the stored name alone.
   Any open panel ducks the logo to zero alpha.
 - **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): ONE screen on
   its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
@@ -1144,14 +1146,35 @@ human at `jumpEnd` if they never pressed Space/Enter/E/click (`dropJump` — the
 the seat**, so the leap visibly leaves the wing). A profile that has **never jumped**
 (`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) instead
 auto-drops at `TUT_DROP_T` (8 s, near the tree edge and clear of the mid-route pass) behind a
-`TUT_COUNT` (5 s) `PREPARE TO DROP` countdown — first-run onboarding; any real jump
-(`PROFILE.markDropped`) retires it for good. A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
+`TUT_COUNT` (5 s) `PREPARE TO DROP` countdown — first-run onboarding, and on that flight the
+ride is **fully scripted**: `dropJump` refuses the local slot's manual leap outright, so the
+countdown always does the jumping and the [drop brief](#the-drop-brief) below always follows.
+Any real jump (`PROFILE.markDropped`) retires the countdown for good. A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
 `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the movement axis alive in mode `drop` while zeroing
 everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object
 and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow
 burst. Only the human's landing changes mode: `play` (closing the M map if it was up),
 `applyZoom(0, true)` back to the player's own zoom centred on the landing, `shake`, and the
 landing intro above.
+
+### The drop brief
+
+A **forced** local drop — the scripted first flight always, or a veteran who rode past the
+window's end (`dropJump`'s `force` flag arms `state.dropBriefPend`; a real jump is the opt-out) —
+lands into a camera tour of the two objectives before play begins. `landPlayer` turns the pending
+flag into `state.dropBrief` (`{ ph, t, total }`), and `updateDrop` runs the phases:
+**`ours-go`** glides the camera to your own bird — the sim camera (js/sim.js) follows
+`dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
+is *tracked* and the crash lands on screen — and holds until the bird is down; **`ours`** holds
+`BRIEF_HOLD` (3 s) under a two-line headline (`drawDropBrief`, baked opaque and faded as a canvas,
+the dayPop grammar): `YOUR EAGLE` in your team's colour over `IF IT IS DRIVEN OFF, YOUR TEAM
+FALLS`; **`theirs-go`**/**`theirs`** do the same across the map for the rival roost (`THEIR
+EAGLE` / `DRIVE IT OFF TO WIN` — the once the win condition is ever written down, the headline
+carve-out); **`back`** glides home to your boots and clears. While it runs `sampleHumanInput`
+zeroes the controls exactly as the ceremony does, the M toggle is refused, `player.invuln` is
+held up so nobody dies watching the lesson, and the match runs on underneath — the world is the
+backdrop, not paused. `BRIEF_MAX_T` (20 s) is the safety rail, and `state.eagleCine` (or leaving
+mode `play`) outranks and clears it.
 
 **`state.drop` now outlives the whole match** — it never goes null, because the roosts are the
 objectives. A bird's life is `fly → dive → down → flee → gone` (`e.state`): at the end of its line

@@ -135,6 +135,14 @@ function update(dt) {
       : state.drop.eagles.find((q) => q.state === 'flee');
     camX += (ec.x - WV_W / 2 - camX) * Math.min(1, dt * 3.5);
     camY += (ec.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
+  } else if (state.drop && state.dropBrief) {
+    // the drop brief (updateDrop, js/boot.js): a forced landing's roost tour.
+    // The same glide the driven-off ceremony uses, aimed by the brief's phase
+    // - out to your own bird (tracking its dive if it is still falling), the
+    // rival's, then home to your boots, where the play camera takes over.
+    const bt = dropBriefTarget();
+    camX += (bt.x - WV_W / 2 - camX) * Math.min(1, dt * 3.5);
+    camY += (bt.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
   } else {
     const vp = viewPlayer();
     const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre

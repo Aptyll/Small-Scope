@@ -359,7 +359,9 @@ nearest open tile to where it jumped. Jumping only unlocks over the line's **las
 (4 s)**: AI slots jump at a hashed fraction of that window, the human where they press Space —
 drifting with WASD on the way down — or at the window's end, the last open ground before the
 treeline (nobody is ever force-dropped in the trees; a profile's first flight auto-drops itself at
-8 s behind a countdown). That tile is what the bot brain
+8 s behind a countdown, and refuses a manual leap — that ride is scripted). A forced local drop
+lands into the [drop brief](rendering.md#the-drop-brief), the camera tour of both roosts; a real
+jump is the opt-out. That tile is what the bot brain
 treats as "home". There are no spawn pockets, no starter rings, and no guaranteed resources near
 a landing — reading the ride (the dotted path over the snow, or M for the map) is the whole
 point. `ringPts` (six points on a ring

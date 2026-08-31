@@ -83,8 +83,10 @@ file is a save file.
   it). Boot calls it **before `loadSettings()`**, which now reads `PROFILE.settings()`.
 - **`PROFILE.validate(raw)`** is the one name validator: trimmed, uppercased, `A-Z0-9` only, 16
   characters, and a basic profanity list matched after the obvious digit-for-letter swaps are
-  folded out. It returns `{ ok, name }` or `{ ok: false, why }`. A stored name that no longer
-  passes is dropped at load and the first-launch prompt comes back for it.
+  folded out. It returns `{ ok, name }` or `{ ok: false, why }`. **A profile always has a name**:
+  a fresh install (and a stored name that no longer passes) rolls one from `NAME_POOL` at load —
+  winter words, every one clean under the validator — so there is no first-launch prompt, and the
+  name panel only opens when the player asks for it.
 - **The stat calls coalesce.** `addGold` fires on every payout, `addWin` once per
   `endMatch('won')`, `addDay` at eagle takeoff and at each dawn the local slot is still in, so
   writes are batched behind an 800 ms timer and flushed on `pagehide` / `visibilitychange`;

@@ -124,9 +124,8 @@ const state = {
   menu: { sel: 0, hover: [0, 0, 0, 0, 0, 0], t: 0,
     panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
     // the PLAYER panel (the `player profile` banner): the name being typed,
-    // whether this is the first-launch prompt (SKIP) or an edit (CANCEL),
     // the refusal rattle and the two planks' hover eases
-    nameBuf: '', nameFirst: false, nameShake: 0, nameHover: [0, 0],
+    nameBuf: '', nameShake: 0, nameHover: [0, 0],
     moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
     // frozen planks: refusal shudder timer, which plank was struck (menu index),
     // per-knock crack seed, the struck point (plank-local) and the ice chips it sprays (screen-space).
@@ -147,6 +146,13 @@ const state = {
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from
   drop: null,          // the eagle while it is in the air: see makeEagleRoute() / beginDrop()
+  // the DROP BRIEF: a forced (never-jumped) landing pans the camera to both
+  // roosts and states the objective before handing the controls back -
+  // { ph: 'ours-go'|'ours'|'theirs-go'|'theirs'|'back', t, total }, run by
+  // updateDrop (js/boot.js), camera in js/sim.js, text in drawDropBrief.
+  // dropBriefPend arms it between the forced jump and the boots landing.
+  dropBrief: null,
+  dropBriefPend: false,
   fade: null,          // screen fade: { a, to, spd, color, then }
 };
 
