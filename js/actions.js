@@ -34,32 +34,32 @@ const SHAFT_R = 10;       // px: walk this close to pull one out
 const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
 const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
 const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
-const SHAFT_BURY = 12;    // body pixels 0..this-1 (head, collar, some shaft) are under the snow
-const SHAFT_MID = 20;     // stickArrow stores the shaft at this body pixel - the visible middle
+const SHAFT_BURY = 6;     // body pixels 0..this-1 (head, collar, some shaft) are under the snow
+const SHAFT_MID = 10;     // stickArrow stores the shaft at this body pixel - the visible middle
 const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
 const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
 const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
 const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over snow
 // The arrow's body, one ASCII master: i runs 0 (tip) .. ARROW_LEN (tail) along
-// the flight, j -4..+4 across it. W the white tip, F the flint head, B the
+// the flight, j -3..+3 across it. W the white tip, F the flint head, B the
 // loaded bit's colour (the collar behind the head - the shaft itself never
 // recolours), G the shaft's one gold, T the team feather (TEAMS mark), D the
 // feather's dark edge (TEAMS coatD). The flying arrow, the spent shaft, the
 // arrow standing in a target face and the volley's rain all draw THIS body
 // through arrowBodyPx/paintArrowPx (js/draw-world.js) - change it here and
-// every shaft in the game follows.
+// every shaft in the game follows. 16 long by 7 deep, so the whole arrow
+// lives in one 16x16 sprite cell - the scale everything else in the world
+// is drawn at.
 const ARROW_MAP = [
-  '.........................DDDDD',
-  '......................TTTTTDD.',
-  '....F...............TTTTTTTD..',
-  '..FFF.............TTTTTTTT....',
-  'WFFFFBBGGGGGGGGGGGGGGGG.......',
-  '..FFF.............TTTTTTTT....',
-  '....F...............TTTTTTTD..',
-  '......................TTTTTDD.',
-  '.........................DDDDD',
+  '.............DDD',
+  '...........TTTD.',
+  '..F......TTTTT..',
+  'WFFBGGGGGGGG....',
+  '..F......TTTTT..',
+  '...........TTTD.',
+  '.............DDD',
 ];
-const ARROW_LEN = 29;     // i of the tail pixel: trail motes lay off behind this
+const ARROW_LEN = 15;     // i of the tail pixel: trail motes lay off behind this
 const ARROW_INK = { W: '#ffffff', F: '#9aa3b8', G: '#d09549' }; // T/D per team, B per bit
 const ARROW_BODY = [];    // flat [i, j, key] triples parsed from the map once,
 // fill first and structure last: arrowBodyPx paints in this order, so when a
@@ -71,7 +71,7 @@ const ARROW_BODY = [];    // flat [i, j, key] triples parsed from the map once,
   const px = [];
   for (let r = 0; r < ARROW_MAP.length; r++)
     for (let i = 0; i < ARROW_MAP[r].length; i++)
-      if (ARROW_MAP[r][i] !== '.') px.push([i, r - 4, ARROW_MAP[r][i]]);
+      if (ARROW_MAP[r][i] !== '.') px.push([i, r - 3, ARROW_MAP[r][i]]);
   px.sort((a, b) => pri[a[2]] - pri[b[2]]);
   for (const p of px) ARROW_BODY.push(p[0], p[1], p[2]);
 }

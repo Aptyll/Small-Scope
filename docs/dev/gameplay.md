@@ -563,7 +563,7 @@ A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodie
 a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
 with no bearing at all (`drawMote`) — and everything else is **the one arrow body**: `ARROW_MAP`
 (js/actions.js), an ASCII master parsed once into `ARROW_BODY` — a white tip, a tapered flint
-head, a 2 px collar in the bit's own `col` (the bit is readable from the collar; the shaft never
+head, a 1 px collar in the bit's own `col` (the bit is readable from the collar; the shaft never
 recolours), a single-gold shaft, and swept swallow-tail feathers in `TEAMS[a.team].mark` edged
 with the team's `coatD` — so whose shot it is reads from the tail. `arrowBodyPx`
 (js/draw-world.js) rasterises it at the live bearing by **DDA** — the spine advances exactly one
@@ -574,9 +574,11 @@ row sits one exact pixel further out along the perpendicular's dominant axis, so
 collapse together and the two vanes stay mirrored at every angle. At the four cardinals this
 degenerates to plain rounding, so straight shots kept their exact pre-2.28 pixels. `paintArrowPx` dilates every pixel into `ARROW_RIM` first (a plus-shaped
 1 px dark edge) so the shaft reads over snow. The body is built into the `ARROW_PX` scratch
-array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` px behind
-it, which is why the view cull uses the widened ±36 bound. The spent shaft, the arrow standing in
-a target face and the volley's rain all draw stretches of this same body.
+array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` (15) px
+behind it, which is why the view cull uses the widened ±22 bound. The whole body is 16 long by
+7 deep — one 16×16 sprite cell, the scale everything else in the world is drawn at. The spent
+shaft, the arrow standing in a target face and the volley's rain all draw stretches of this same
+body.
 
 Behind it, each shot lays a **trail of team-coloured motes** into `particles` (fire instead, if a
 FLAME modifier is riding it — the burn is the more urgent fact about that shot than whose it is),

@@ -450,7 +450,7 @@ function render() {
     const vd = Math.hypot(a.vx, a.vy) || 1;
     const nx = a.vx / vd, ny = a.vy / vd;
     const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
-    if (hx < -36 || hx > WV_W + 36 || hy < -36 || hy > WV_H + 36) continue;
+    if (hx < -22 || hx > WV_W + 22 || hy < -22 || hy > WV_H + 22) continue;
     // Not everything a tool fires is a shaft. A thrown log tumbles as a block
     // and a conjured mote is a glow with no bearing at all, so those two get
     // bodies of their own; every other bit is the arrow silhouette, wearing

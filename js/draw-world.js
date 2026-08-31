@@ -619,7 +619,7 @@ function drawPTarget(t, ex, ey, now) {
     const tm = TEAMS[t.stickTeam || 0];
     ARROW_PX.length = 0;
     arrowBodyPx(ARROW_PX, ix, iy, Math.cos(t.stickA), Math.sin(t.stickA),
-      16, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
+      8, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
     paintArrowPx(ARROW_PX);
   }
 }
