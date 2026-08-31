@@ -13,6 +13,18 @@
   <img src="docs/media/practice-tool.webp" alt="Knocking the ice off the Practice Tool plank and stepping onto the training field" width="920">
 </p>
 
+<p align="center">
+  <img src="docs/media/eagles.webp" alt="Red and blue team eagles flying past each other, then the riders dropping onto the snow" width="920">
+</p>
+
+<p align="center">
+  <img src="docs/media/hunt-deer.webp" alt="Drawing a bow and dropping a deer in a snowy clearing" width="920">
+</p>
+
+<p align="center">
+  <img src="docs/media/robots.webp" alt="Worker bots chopping snow-loaded pines beside their bay" width="920">
+</p>
+
 <table>
 <tr>
 <td align="center" valign="middle" width="50%">
