@@ -300,7 +300,7 @@ pixel — no margin, the 1 px rim is the edge — so a resize keeps them flush o
 | top left | **nothing** — see the strip below | — |
 | top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
 | bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
-| bottom centre | the one weapon well (centred) over a quiver/dodge rail and the xp bar, flush to the bottom; hovering the well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
+| bottom centre | the segmented plum xp bar over the weapon and ability wells, flush to the bottom; hovering the weapon well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
 | bottom right | the backpack **and** both upgrade rows: one frame — the gear row, the ability row and the grid when open, a gold strip; flush to the bottom-right | `drawBag` |
 
 ### The hover tooltip
@@ -362,18 +362,21 @@ never point at different nodes.
 
 ### The hud strip
 
-`drawHudStrip` is one plate, flush to the bottom: **five 34px wells** — `[1][2][ WEAPON ][3][4]`,
-the class abilities flanking the one tool well two a side in key order (`stripCellRect`;
-`abCellRect(i)` skips the centre) — a thin rail under them, then a gold xp bar along the bottom
-(lifetime gold, left-to-right, no level number — that lives on the overhead badge). The bar has a
-dark silhouette and a frost rim so it reads against the plate. The plate swallows clicks so
-nothing fires through it.
+`drawHudStrip` is one plate, flush to the bottom: the **plum xp bar** along the top (lifetime
+gold, left-to-right, no level number — that lives on the overhead badge), then **five 34px
+wells** — `[ WEAPON ][1][2][3][4]`, the weapon leading and the class abilities following in key
+order (`stripCellRect`; `toolCellRect(i)` is well 0, `abCellRect(i)` is well `1 + i`). The bar
+has a dark silhouette and a frost rim so it reads against the plate, and is **notched into
+`AB_SEGS` segments** WoW-fashion — a tick cuts dark plum through the fill and sits faint on the
+empty track, so progress through a level is countable either way. The plate swallows clicks so
+nothing fires through it. There is no rail: the quiver count and dodge pips it once carried are
+said by the reticle, the overhead bar and the pack's ability row.
 
 The tool well (`drawToolCell`) says four things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
 tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
-highlight across the top tier's plate); the 12px tool art is drawn doubled, so the centrepiece
-weapon reads at the ability icons' size. The well wears the lit rim (it is always the live
+highlight across the top tier's plate); the 12px tool art is drawn doubled, so the lead
+weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
 weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
 tell. Along the top inner edge sits one **pip per bit cell** in that bit's own colour: filled is a
 bit, hollow is a free cell, the bright one is what the next press fires, and red is a bit this
@@ -397,9 +400,6 @@ raised shield would be a lie (`activeF` in the table row is the readout) — and
 white** the frame a cooldown comes home. A click on the well sets `input.ability` exactly as the
 key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — cooldown and
 cast numbers, the blurb, nothing the well itself already shows better).
-
-The rail carries the two numbers a firefight is read off and nothing else: shafts left in the
-quiver on the left with the arrow that spends them, dodge charges as pips on the right.
 
 The **upgrade** half of this strip — the four ability wells and the plus that spends a skill point
 — moved into the backpack, under the gear row: both rows are "buy the next level of this", one

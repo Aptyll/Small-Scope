@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.29'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.30'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.30', 'THE BOTTOM STRIP IS COMPACT NOW - A SEGMENTED PLUM XP BAR RIDES ABOVE THE WELLS, THE WEAPON LEADS WITH THE FOUR ABILITIES AFTER IT, AND THE QUIVER AND DODGE COUNTERS ARE GONE.'],
   ['2.29', 'THE ARROW IS DRAWN AT THE WORLD\'S OWN SCALE NOW - A 16-PIXEL BODY THAT FITS THE SAME CELL AS EVERYTHING ELSE, SAME FLINT HEAD, BIT COLLAR, GOLD SHAFT AND SWALLOW-TAIL FEATHERS.'],
   ['2.28', 'DIAGONAL ARROWS ARE CRISP NOW - THE SHAFT IS A CLEAN STAIRCASE WITH NO DOUBLED PIXELS AND THE SWALLOW-TAIL KEEPS EVERY FEATHER ROW AT EVERY BEARING.'],
   ['2.27', 'THE DIRT PATCH UNDER THE TRAINING DUMMY IS GONE - THE DUMMY, BELL AND RACK ALL STAND IN CLEAN OPEN SNOW NOW.'],

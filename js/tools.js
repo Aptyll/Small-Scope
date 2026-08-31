@@ -166,7 +166,7 @@ const TOOLS = {
   hornbow:  { name: 'HORN BOW',    tier: 1, rof: 34, cap: 4, tensile: 5, art: 'bow' },
   longbow:  { name: 'LONGBOW',     tier: 2, rof: 28, cap: 5, tensile: 9, art: 'recurve' },
 };
-const TOOL_SLOTS = 1;        // ONE weapon slot: the class weapon, centre of the strip
+const TOOL_SLOTS = 1;        // ONE weapon slot: the class weapon, left end of the strip
 const TOOL_ROF_STEP = 1 / 60; // a tool's `rof` is counted in game steps of this length
 
 // ---- items: one bag entry per kind ---------------------------------------

@@ -1164,11 +1164,13 @@ function drawBag(now) {
   ctx.restore();
 }
 
-// ---- hud strip: the four weapon slots over the xp bar, bottom-centre -----
-// One opaque plate. Four TOOL wells on top - keys 1-4, the weapon the button
-// fires - then a thin rail carrying the two numbers a fight is read off (what
-// is left in the quiver, and how many dodges are charged), then the gold xp
-// bar flush along the bottom (xp IS lifetime gold).
+// ---- hud strip: the weapon and ability wells under the xp bar, bottom-centre
+// One opaque plate. The plum xp bar runs along the top (xp IS lifetime gold),
+// notched into AB_SEGS segments so progress through a level is countable at a
+// glance, then the five wells: the WEAPON first on the left - the tool the
+// button fires - with the four class abilities following in key order 1-4.
+// The quiver count and dodge pips the old rail carried are gone: the reticle,
+// the overhead bar and the pack's ability row already say both.
 //
 // A tool cell says four things without a word on it. The PLATE behind the icon
 // is the tool's tier colour, the same colour it wears in every other well it
@@ -1186,14 +1188,13 @@ function drawBag(now) {
 // one with gold and one with skill points, so they belong stacked in the same
 // grid rather than split across two corners of the screen.
 //
-// The strip proper is FIVE wells: [1][2][ WEAPON ][3][4] - the class
-// abilities flank the one weapon well two a side, in key order left to
-// right, each wearing its 32px icon (classAbIcon, js/abilities.js).
-const AB_CELL = 34, AB_GAP = 3, AB_N = 4; // AB_CELL: a strip well; AB_N: abilities
+// The strip proper is FIVE wells: [ WEAPON ][1][2][3][4] - the weapon leads
+// and the class abilities follow in key order, each wearing its 32px icon
+// (classAbIcon, js/abilities.js).
+const AB_CELL = 34, AB_GAP = 2, AB_N = 4; // AB_CELL: a strip well; AB_N: abilities
 const AB_W = (AB_N + 1) * AB_CELL + AB_N * AB_GAP;
-const AB_PAD = 2, AB_UP = 8, AB_XP = 5;
-const AB_RAIL = 9; // the quiver + dodge rail between the wells and the bar
-const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_RAIL + AB_XP + AB_PAD;
+const AB_PAD = 2, AB_XP = 5, AB_SEGS = 10; // AB_SEGS: xp bar notches
+const AB_H = AB_PAD + AB_XP + AB_PAD + AB_CELL + AB_PAD;
 const AB_BG = '#0d1229';
 const AB_COVER = 'rgba(8,12,30,0.82)';
 // The weapon well's half of the refusal the backpack already has: a bit that
@@ -1210,16 +1211,19 @@ function toolDenied() {
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
-// well j of the five, left to right
+// well j of the five, left to right, under the xp bar
 function stripCellRect(j) {
   const R = hudStripRect();
-  return { x: R.x + j * (AB_CELL + AB_GAP), y: R.y + AB_PAD, w: AB_CELL, h: AB_CELL };
+  return {
+    x: R.x + j * (AB_CELL + AB_GAP), y: R.y + AB_PAD + AB_XP + AB_PAD,
+    w: AB_CELL, h: AB_CELL,
+  };
 }
-// the ONE weapon well, centred in the strip (i is kept so the drag plumbing
+// the ONE weapon well, the strip's left end (i is kept so the drag plumbing
 // stays generic over slots)
-function toolCellRect(i) { return stripCellRect(2 + i); }
-// ability i's well: keys 1-2 left of the weapon, 3-4 right of it
-function abCellRect(i) { return stripCellRect(i < 2 ? i : i + 1); }
+function toolCellRect(i) { return stripCellRect(i); }
+// ability i's well: keys 1-4, in order to the weapon's right
+function abCellRect(i) { return stripCellRect(1 + i); }
 // { kind:'slot', i } | { kind:'ab', i } | { kind:'frame' } | null. Shared by
 // the click handler, the cursor and the strip's own hover so they cannot
 // disagree.
@@ -1611,18 +1615,26 @@ function drawXpBar(now, x, y) {
   ctx.fillRect(x + AB_W - 1, y, 1, AB_XP);
   ctx.fillStyle = '#05070f';
   ctx.fillRect(x + 1, y + 1, inner, AB_XP - 2);
-  if (fw <= 0) return;
   const gx = x + 1, gy = y + 1, gh = AB_XP - 2;
-  // 1px dark leading edge so the fill's end reads as a silhouette
-  const cap = fw < inner ? 1 : 0;
-  ctx.fillStyle = '#0a0e1c';
-  ctx.fillRect(gx, gy, fw, gh);
-  ctx.fillStyle = hot ? '#f4f7ff' : '#f5c542';
-  ctx.fillRect(gx, gy, Math.max(1, fw - cap), gh);
-  ctx.fillStyle = hot ? '#ffffff' : '#ffe08a';
-  ctx.fillRect(gx, gy, Math.max(1, fw - cap), 1);
-  ctx.fillStyle = hot ? '#cfd8e8' : '#b07a1c';
-  ctx.fillRect(gx, gy + gh - 1, Math.max(1, fw - cap), 1);
+  if (fw > 0) {
+    // 1px dark leading edge so the fill's end reads as a silhouette
+    const cap = fw < inner ? 1 : 0;
+    ctx.fillStyle = '#0a0e1c';
+    ctx.fillRect(gx, gy, fw, gh);
+    ctx.fillStyle = hot ? '#f4f7ff' : '#9d4fb3';
+    ctx.fillRect(gx, gy, Math.max(1, fw - cap), gh);
+    ctx.fillStyle = hot ? '#ffffff' : '#c98ad8';
+    ctx.fillRect(gx, gy, Math.max(1, fw - cap), 1);
+    ctx.fillStyle = hot ? '#cfd8e8' : '#5f2d75';
+    ctx.fillRect(gx, gy + gh - 1, Math.max(1, fw - cap), 1);
+  }
+  // the notches: AB_SEGS segments - a tick cuts dark through the fill and sits
+  // faint on the empty track, so the bar is countable full or empty
+  for (let s = 1; s < AB_SEGS; s++) {
+    const tx = gx + Math.round(s * inner / AB_SEGS);
+    ctx.fillStyle = tx < gx + fw ? '#3d1c4d' : '#1c2448';
+    ctx.fillRect(tx, gy, 1, gh);
+  }
 }
 // The tier plate behind an item's icon, wherever that icon sits: a bag cell,
 // a weapon slot, a bit cell, the drag ghost. This is the ONLY place a tier is
@@ -1751,7 +1763,7 @@ function drawToolCell(i, now, hov) {
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
   if (cell) {
     tierShine(r, y, cell.type, now);
-    // the 12px tool art doubled: the weapon well is the strip's centrepiece
+    // the 12px tool art doubled: the weapon well leads the strip
     // and reads at the ability icons' size, not the bag's
     const im = ITEMS[cell.type] && SPRITES[ITEMS[cell.type].icon];
     if (im) {
@@ -1830,10 +1842,9 @@ function drawClassAbCell(i, now, on) {
     cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632');
 }
 function drawHudStrip(now) {
-  const p = player;
   const R = hudStripRect();
   const hov = mouse.inside ? stripHit(mouse.x, mouse.y) : null;
-  // one chamfered plate behind bar, rail and slots - the bag's ground, so the
+  // one chamfered plate behind bar and wells - the bag's ground, so the
   // two HUD pieces sit in the same family
   ctx.fillStyle = AB_BG;
   ctx.fillRect(R.x - 3, R.y, R.w + 6, R.h);
@@ -1848,36 +1859,7 @@ function drawHudStrip(now) {
   for (let i = 0; i < AB_N; i++) {
     drawClassAbCell(i, now, hov && hov.kind === 'ab' && hov.i === i);
   }
-  // The rail: the two numbers a firefight is actually read off, and nothing
-  // else. Shafts left in the quiver on the left with the arrow that spends
-  // them, dodge charges on the right as the pips they always were - both were
-  // on the ability wells that moved into the pack, and both are needed with
-  // the pack shut.
-  const ry = R.y + AB_PAD + AB_CELL + AB_PAD;
-  if (abChSeen >= 0 && p.dodgeCharges > abChSeen) abChFlash = now + 0.22;
-  abChSeen = p.dodgeCharges;
-  const dry = p.quiver <= 0;
-  ctx.globalAlpha = dry ? 0.5 : 1;
-  ctx.drawImage(SPRITES.bitArt_arrow, R.x + 1, ry);
-  ctx.globalAlpha = 1;
-  drawPixelTextOutline(ctx, String(p.quiver), R.x + 11, ry + 2,
-    dry ? '#e0637a' : p.quiverFlash > 0 ? '#f2cc6a' : '#f4f7ff', '#0f1632');
-  const chF = p.dodgeCharges >= DODGE_CHARGES ? 1
-    : Math.max(0, Math.min(1, 1 - p.dodgeRegenT / Math.max(0.01, kitOf(p).dodgeCd)));
-  for (let k = 0; k < DODGE_CHARGES; k++) {
-    const x = R.x + R.w - 1 - (DODGE_CHARGES - k) * 6;
-    ctx.fillStyle = '#0f1632';
-    ctx.fillRect(x, ry + 1, 5, 6);
-    const on = k < p.dodgeCharges;
-    ctx.fillStyle = now < abChFlash && on ? '#f4f7ff' : on ? '#f2cc6a' : '#2c3560';
-    ctx.fillRect(x + 1, ry + 2, 3, 4);
-    if (!on && k === p.dodgeCharges) { // the one coming back fills from the bottom
-      const h = Math.max(1, Math.round(chF * 4));
-      ctx.fillStyle = '#9fb6d8';
-      ctx.fillRect(x + 1, ry + 6 - h, 3, h);
-    }
-  }
-  drawXpBar(now, R.x, R.y + AB_PAD + AB_CELL + AB_PAD + AB_RAIL);
+  drawXpBar(now, R.x, R.y + AB_PAD);
 }
 
 // The bit column, rising out of the slot whose key is held. Bottom cell is bit
@@ -2332,7 +2314,7 @@ function renderUI(now) {
     ctx.restore();
   }
 
-  // hud strip (the four weapon slots, the quiver/dodge rail and the xp bar),
+  // hud strip (the xp bar over the weapon and ability wells),
   // bottom-centre; it rides the intro slide up from below. The bit column
   // rises out of it and the carried item rides over everything, so both are
   // drawn after it and outside the slide.

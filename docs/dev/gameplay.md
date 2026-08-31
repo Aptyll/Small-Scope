@@ -528,17 +528,11 @@ someone on their ground is also shooting them ammo. Bots join in: `updateAI`'s l
 shafts as loot once a bot is at or below half a quiver. Dying spills whatever is left in the
 quiver as shafts around the body, the same way `spillInventory` spills the bag.
 
-Five indicators carry it, and none of them is a word:
+Four indicators carry it, and none of them is a word (the hud strip itself carries no quiver or
+dodge counter — its weapon well only reddens its rim when the selected tool cannot answer, the
+old dry-bow tell):
 
-- **The hud strip's rail** (`drawHudStrip`, bottom-centre). Above it sit the five wells — the one
-  weapon slot ([above](#tools-and-bits)) between the four class-ability wells
-  ([rendering.md](rendering.md#the-hud-strip)); between them and the gold xp bar sits a thin rail carrying the
-  two numbers a firefight is actually read off — what is left in the quiver, with the arrow that
-  spends it, on the left, and the dodge charges as pips on the right. Both used to live on the
-  ability wells that moved into the backpack, and both are needed with the pack shut. A gained
-  arrow (`quiverFlash`) inks the count gold; an empty one reddens it and dims the icon, and a
-  press on a tool that cannot answer (`dryT`, set by `dryFire`) reddens the selected slot's rim.
-- **The ability row in the backpack** (`drawAbilityRow`) keeps the rest of that readout: the
+- **The ability row in the backpack** (`drawAbilityRow`) keeps the numeric readout: the
   renock, dodge and fletch cooldowns still wipe their wells top-down, rank is three pips along the
   bottom edge, and an ability a skill point can land on wears a pulsing gold rim and a plus badge
   in its corner — gone the moment one cannot. The pack's own column counts the unspent points.

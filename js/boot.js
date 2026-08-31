@@ -930,8 +930,8 @@ window.DBG = {
   flagTarget, // what the held press is aiming at right now (null = nothing drawn)
   get flag() { return player.flag; },
   // the quiver: the shafts lying in the world, the ceiling, and a way to set
-  // a slot's ammo / cycle without playing to it. hudStripRect is the weapon
-  // strip + xp bar that reads it back, bottom-centre.
+  // a slot's ammo / cycle without playing to it. hudStripRect is the xp bar +
+  // weapon/ability strip, bottom-centre.
   shafts, QUIVER_MAX, QUIVER_REGEN, SHAFT_LIFE, hudStripRect, stickArrow, stripHit, buySkill,
   AB_RANK_MAX,
   // Tools and bits: the two tables, the tier palette, an instance maker, the
