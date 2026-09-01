@@ -1178,20 +1178,20 @@ landing intro above.
 A local slot that **rode the landing** — the scripted first flight always, or a veteran who
 never jumped (a real jump is the opt-out) — sits through a camera tour of the two objectives
 before the hop. `landAboard` (from `eagleCrash`) sets `state.dropBrief` (`{ ph, t, total }`),
-and `updateDrop` runs the phases:
-**`ours-go`** glides the camera to your own bird — the sim camera (js/sim.js) follows
+and `updateDrop` runs the phases, rival first and your own last so the final word lands where
+you are sitting: **`wait`** holds the crash you are in for `BRIEF_WAIT` (1 s); **`theirs-go`**
+glides the camera across the map to the rival bird — the sim camera (js/sim.js) follows
 `dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
-is *tracked* and the crash lands on screen — and holds until the bird is down; **`ours`** holds
-`BRIEF_HOLD_OURS` (5 s — long enough to watch the merchant climb down and the lane fall open
-toward you) under a two-line headline (`drawDropBrief`, baked opaque and faded as a canvas, the
-dayPop grammar) across the **top** of the view (`VIEW_H * 0.08`): `YOUR EAGLE` in your team's
-paint at **three times** the drop HUD's text scale over `LOSE IT, LOSE THE MATCH` at one;
-**`theirs-go`**/**`theirs`** do the same across the map for the rival roost for `BRIEF_HOLD`
-(3 s): `THEIR EAGLE` / `DRIVE IT OFF TO WIN` — the once the win condition is ever written down,
-the headline carve-out, and deliberately no third line; **`back`** glides home to your seat on
-the bird and clears through `endBrief()`, which also pops the `DAY 1` headline the landing owes
-(the camera banner in sim.js holds it back while the brief has the top of the screen) — and
-from there the E - HOP OFF indicator (above) is the way down. While it runs
+is *tracked* and the crash lands on screen — and holds until it is down; **`theirs`** holds
+`BRIEF_HOLD` (3 s) under a two-line headline (`drawDropBrief`, baked opaque and faded as a
+canvas, the dayPop grammar) across the **top** of the view (`VIEW_H * 0.08`): `THEIR EAGLE` in
+the rival's paint at **three times** the drop HUD's text scale over `DRIVE IT OFF TO WIN` at one
+— the once the win condition is ever written down, the headline carve-out, and deliberately no
+third line; **`ours-go`**/**`ours`** glide home and finish on your own roost for
+`BRIEF_HOLD_OURS` (4 s) under `YOUR EAGLE` / `LOSE IT, LOSE THE MATCH`, then clear through
+`endBrief()`, which also pops the `DAY 1` headline the landing owes (the camera banner in sim.js
+holds it back while the brief has the top of the screen) — and from there the E - HOP OFF
+indicator (above) is the way down. While it runs
 `sampleHumanInput`
 zeroes the controls exactly as the ceremony does, the M toggle is refused, `player.invuln` is
 held up so nobody dies watching the lesson, and the match runs on underneath — the world is the
@@ -1257,12 +1257,19 @@ in gold that brightens and pulses once the lock opens — then runs `drawEagle` 
 `DROP_ALT` 56 px in flight, converging to 0 down the dive so shadow and bird meet at the crash
 point), the bird itself in its team's armour (`SPRITES.eagleTeam[team]` cycling spread → mid →
 back → mid, rotated to its heading, at `EAGLE_SCALE` 3× walking down to `EAGLE_REST_SCALE` 2×
-through the dive, bobbing 3 px in level flight), **every rider on its wing seat** (unrotated so
-the faces read, at `RIDER_SCALE` 2×, the local slot drawn last), and a pulsing gold landing ring
+through the dive, bobbing 3 px in level flight), **every rider seated on its wing** (`drawSeated`:
+the pose set's direction picked by the heading's dominant axis — `riderDir`, so a crew flying
+down-left shows its profiles — the bottom three rows tucked into the plumage so a body sits
+rather than stands, the hem meeting the feathers at the seat point, lifted a pixel on the
+downstroke; **world-sized** — `riderScale(e)` is the bird's own perspective, `eagleScale / 2`:
+1× on the roosting bird, 1.5× in flight because the bird itself is 1.5× bigger up there, so a
+body never changes size against the feathers under it; the merchant on the neck the same way; the
+local slot drawn last), and a pulsing gold landing ring
 under the human's own bird — only while the jump window is open, so the ring never promises a jump
 the lock refuses — then every faller: a `sin` **hop** off the wing
-over the first quarter of the fall, then the shrink from `RIDER_SCALE` to 1× along
-`alt = DROP_ALT·(1 − q²)` with a widening shadow. The faller cull is against `WV_*`, the world
+over the first quarter of the fall, then the shrink from `p.dropSc` (the seat's size as it left)
+to 1× along
+`alt = p.dropAlt·(1 − q²)` with a widening shadow. The faller cull is against `WV_*`, the world
 pass rule — it was `VIEW_*` once, which is exactly why fallers in the far half of the zoomed-out
 frame used to vanish mid-air. A `down` bird casts **no shadow** — it is on the ground, and a dark
 copy under it read as a second bird — and folds its wings over `EAGLE_SETTLE_T` (the three

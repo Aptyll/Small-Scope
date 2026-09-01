@@ -57,13 +57,13 @@ white, for the downed objective's hit flash):
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), `robotTeam[team]`, and `merchant[team]` — the eagle's driver
-([the merchant](gameplay.md#the-merchant)): the twelve standing player grids run through
-`merchantize` — rows 1-5 rewritten from the pom-pom hat into a tall **wide-brimmed hat** (crown,
-a team band `y`/`Y`, a brim overhanging the head a pixel each side; every hat char below the
-brim goes hat-dark `h`/`H`, the back and sides of the head) — under `merchantPal`, a plum coat
-(`r`/`R`/`d`) with gold trim (`m`/`M`), so nothing on it is a slot's coat: the ONLY team ink is
-the hat band, and the side reads off that, the nameplate and the bar (no prone poses — it never
-lies down). A new character or building sprite has to
+([the merchant](gameplay.md#the-merchant)): its **own grids**, `merchDown`/`merchUp`/`merchSide`
+plus `merchFeet` — **16 × 18**, two rows taller than a slot and a hand wider at the shoulder — a
+**hooded robe**: the hood's shadow (`s`) around a narrow four-wide face, gold trim (`g`) at the
+collar and the hem, a belt (`y`) that is the ONLY team ink on it, boots under the hem, three
+frames a direction (the boots walk, the robe hangs; the side grid faces right and flips), under
+`merchantPal` (plum `r`/`R`/`d`). Nothing on it is a slot's coat or hat, so the side reads off
+the belt, the nameplate and the bar (no prone poses — it never lies down). A new character or building sprite has to
 be added to those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's
 colour — and every read of one of them indexes by `skin(team)` (js/player.js), never the bare
 team, so your side is painted blue whichever index it was dealt. The swing

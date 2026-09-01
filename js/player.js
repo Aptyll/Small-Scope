@@ -410,6 +410,7 @@ class Player {
     this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
     this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
     this.dropAlt = 0;                   // px the fall started from: the flight's DROP_ALT, or a hop's HOP_ALT off the roost
+    this.dropSc = 1;                    // the body's drawn scale as it left the seat (riderScale), shrinking to 1 as it falls
     this.dropU = 1;                     // route fraction at which an AI slot jumps
     // bot brain (unused by a human slot): current job, give-up timers and the
     // short blacklists that keep a bot from re-picking work it cannot reach

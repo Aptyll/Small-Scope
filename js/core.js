@@ -149,7 +149,7 @@ const state = {
   // the DROP BRIEF: a local slot that never jumped rides the landing, and the
   // crash pans the camera to both roosts and states the objective before
   // handing the controls (and the E hop off the bird) back -
-  // { ph: 'ours-go'|'ours'|'theirs-go'|'theirs'|'back', t, total }, run by
+  // { ph: 'wait'|'theirs-go'|'theirs'|'ours-go'|'ours', t, total }, run by
   // updateDrop (js/boot.js), camera in js/sim.js, text in drawDropBrief.
   dropBrief: null,
   fade: null,          // screen fade: { a, to, spd, color, then }

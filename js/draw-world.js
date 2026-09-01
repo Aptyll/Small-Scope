@@ -1213,9 +1213,9 @@ function drawRobot(b, ex, ey, now) {
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
 }
 
-// The merchant (the `merchant` banner, robots.js): the player body plan under
-// a wide-brimmed hat and a plum coat (sprites.js's merchantize), standing on
-// player feet (b.y + 8 in the sort, the sprite at the player's own anchor),
+// The merchant (the `merchant` banner, robots.js): its own 16x18 hooded-robe
+// grids (sprites.js), two rows taller than a slot, standing on player feet
+// (b.y + 8 in the sort, the feet on the player's own foot row),
 // with the worker's axe swing over whatever it is felling or setting, the hop
 // off the bird as a lift, the shared tells, and a MERCHANT nameplate over its
 // bar in the side's paint - a name, the one text a body over the world gets.
@@ -1223,10 +1223,13 @@ function drawMerchant(b, ex, ey, now) {
   const set = SPRITES.merchant[skin(b.team)];
   const frames = set[b.dir] || set.down;
   const spr = frames[b.moving ? 1 + (Math.floor(b.animT / 2) % 2) : 0];
-  const px = Math.round(b.x - 8 - ex), py = Math.round(b.y - 12 - ey);
-  const lift = b.hopT > 0 ? Math.round(Math.sin(Math.min(1, b.hopT / MERCH_HOP_T) * Math.PI) * 10) : 0;
+  // 16 x 18: the feet land on the player's own foot row (b.y + 4), so the
+  // extra two rows are height, and a walking robe bobs a pixel like a slot
+  const px = Math.round(b.x - 8 - ex), py = Math.round(b.y + 4 - ey) - spr.height;
+  const lift = (b.hopT > 0 ? Math.round(Math.sin(Math.min(1, b.hopT / MERCH_HOP_T) * Math.PI) * 10) : 0) +
+    (b.moving ? Math.floor(b.animT / 2) % 2 : 0);
   ctx.fillStyle = 'rgba(110,130,170,0.35)';
-  ctx.fillRect(px + 5, py + 15, 6, 2);
+  ctx.fillRect(px + 5, py + spr.height - 1, 6, 2);
   drawSpriteFlash(spr, px, py - lift, b.flash);
   // the swing: the worker's wind-up and chop, aimed at the tile in hand
   if (b.tgt && !b.moving && lift === 0) {
@@ -1237,13 +1240,13 @@ function drawMerchant(b, ex, ey, now) {
       const e = prog < 0.7 ? prog / 0.7 * 0.3 : 0.3 + (prog - 0.7) / 0.3 * 0.7;
       const a = Math.atan2(tdy, tdx) - 1.6 * (1 - e);
       ctx.save();
-      ctx.translate(Math.round(px + 8 + Math.cos(a) * 8), Math.round(py + 8 + Math.sin(a) * 8));
+      ctx.translate(Math.round(px + 8 + Math.cos(a) * 8), Math.round(py + 10 + Math.sin(a) * 8));
       ctx.rotate(a + Math.PI / 2);
       ctx.drawImage(SPRITES.itemAxe, -4, -4);
       ctx.restore();
     }
   }
-  drawUnitStates(b, px, py - lift, 16, 16, now);
+  drawUnitStates(b, px, py - lift, spr.width, spr.height, now);
   drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14);
   drawPixelTextOutline(ctx, 'MERCHANT', centreTextX(b.x - ex, 'MERCHANT'), py - 17 - lift, TEAMS[skin(b.team)].mark, '#0f1632');
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), py - 10, b, 5);

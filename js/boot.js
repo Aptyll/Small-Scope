@@ -40,13 +40,15 @@ const HOP_FALL_T = 0.7;     // s the hop off a GROUNDED bird takes (a step down,
 const HOP_ALT = 16;         // ...from this many px up
 // the DROP BRIEF: a local slot that rides the landing (the first flight
 // always - its manual jump is refused, the ride is fully scripted - or a
-// veteran who never jumped) sits through a camera tour before the hop: hold
-// your own roost while the merchant climbs down and the lane falls open under
-// the lose condition, glide to the rival roost with the win condition, then
-// back to your seat, where the E - HOP OFF indicator takes over. A real jump
-// is the opt-out, so a veteran never sees it twice.
-const BRIEF_HOLD_OURS = 5;  // s the camera holds on your roost - long enough to watch the lane open
+// veteran who never jumped) sits through a camera tour before the hop: a
+// beat on the crash you are sitting in, then across the map to the RIVAL
+// roost with the win condition, then home to finish on YOUR OWN roost with
+// the lose condition - the last thing said is where you are - and the
+// E - HOP OFF indicator takes over. A real jump is the opt-out, so a
+// veteran never sees it twice.
+const BRIEF_WAIT = 1;       // s the camera stays on the crash before it leaves
 const BRIEF_HOLD = 3;       // s it holds on the rival roost
+const BRIEF_HOLD_OURS = 4;  // s it holds on your own to finish
 const BRIEF_GO_MIN = 1;     // s a glide leg lasts at least, however close the target
 const BRIEF_MAX_T = 24;     // s the whole tour may run before it force-ends (safety)
 // the LANE the crash cuts back to the open snow, pine by pine
@@ -61,7 +63,9 @@ const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tile
 const DROP_ALT = 56;        // screen px between the bird / a faller and its shadow
 const EAGLE_SCALE = 3;      // the bird is huge and high above the ground: drawn at 3x in flight
 const EAGLE_REST_SCALE = 2; // ...settling to 2x once it roosts (the dive walks 3 down to 2)
-const RIDER_SCALE = 2;      // the riders on its wings, and where a faller's shrink starts
+// the riders are WORLD-SIZED: 1x on the roosting bird, and in flight exactly
+// as much bigger as the bird itself is for being nearer the camera (3/2), so
+// a body never changes size against the feathers under it - riderScale(e)
 const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of the shared line
 const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
 const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the resting pose
@@ -169,6 +173,25 @@ function eagleScale(e) {
   if (e.state === 'dive') { const u = Math.min(1, e.diveT / EAGLE_DIVE_T); return EAGLE_SCALE - (EAGLE_SCALE - EAGLE_REST_SCALE) * u * u; }
   return EAGLE_REST_SCALE;
 }
+// how big a body on the bird draws: the bird's own perspective, 1x at rest
+function riderScale(e) { return eagleScale(e) / EAGLE_REST_SCALE; }
+// which way a rider on the bird faces: the heading's dominant axis, so a
+// crew flying down-left shows its profiles and one flying up its backs -
+// bodies ride a bird the way it points, they are not stuck on facing you
+function riderDir(e) {
+  const c = Math.cos(e.heading), s = Math.sin(e.heading);
+  return Math.abs(c) >= Math.abs(s) ? (c > 0 ? 'right' : 'left') : (s > 0 ? 'down' : 'up');
+}
+// A body SEATED on the bird, drawn at (x, y) = the seat point on the feathers:
+// the bottom three rows (the boots) are tucked into the plumage - a rider
+// sits, it does not stand on a wing - and the body rises from that point, so
+// the hem meets the bird's back and nothing floats. `set` is a pose set
+// (classSet(p) or SPRITES.merchant[...]), any height.
+function drawSeated(set, dir, x, y, sc, frame) {
+  const spr = set[dir][frame || 0];
+  const w = spr.width, keep = spr.height - 3;
+  ctx.drawImage(spr, 0, 0, w, keep, Math.round(x - w * sc / 2), Math.round(y - (keep - 2) * sc), Math.round(w * sc), Math.round(keep * sc));
+}
 // a seat's world position on a bird right now: the seat offset rotated by the
 // heading, off the bird's centre, at the bird's current scale
 function seatPos(e, si) {
@@ -226,7 +249,7 @@ function dropJump(p, force) {
   // and the ride lands with you on it - the brief that follows is the lesson
   if (!force && p === player && state.drop.firstFlight) { SFX.deny(); return; }
   p.aboard = false;
-  p.dropT = FALL_T; p.dropAlt = DROP_ALT;
+  p.dropT = FALL_T; p.dropAlt = DROP_ALT; p.dropSc = riderScale(d); // the fall shrinks from the seat's size to 1x
   // the leap starts from the wing seat the rider was sitting on (p.x/p.y are
   // already there - updateDrop keeps every rider glued to its seat), so the
   // fall visibly begins at the wing; drawDropAir adds the hop off it
@@ -298,7 +321,7 @@ function landAboard(p) {
   state.shake = 9;
   state.rayT = RAY_AFTER;
   SFX.music.play('jump', { out: 0.1, in: 0.05 });
-  state.dropBrief = { ph: 'ours-go', t: 0, total: 0 };
+  state.dropBrief = { ph: 'wait', t: 0, total: 0 };
 }
 
 // E on the grounded bird: a step down off the wing - short, low, steerable
@@ -308,7 +331,7 @@ function hopOff(p) {
   const e = state.drop.eagles[p.team];
   if (e.state !== 'down') return;
   p.aboard = false;
-  p.dropT = HOP_FALL_T; p.dropAlt = HOP_ALT;
+  p.dropT = HOP_FALL_T; p.dropAlt = HOP_ALT; p.dropSc = 1;
   if (p === player) { PROFILE.markDropped(); SFX.dodge(); }
 }
 
@@ -341,11 +364,11 @@ function updateDrop(dt) {
       const birdDown = (t) => { const e = state.drop.eagles[t]; return e.state !== 'fly' && e.state !== 'dive'; };
       const step = (ph) => { brief.ph = ph; brief.t = 0; };
       if (brief.total > BRIEF_MAX_T) endBrief();
-      else if (brief.ph === 'ours-go') { if (near && brief.t > BRIEF_GO_MIN && birdDown(player.team)) step('ours'); }
-      else if (brief.ph === 'ours') { if (brief.t > BRIEF_HOLD_OURS) step('theirs-go'); }
+      else if (brief.ph === 'wait') { if (brief.t > BRIEF_WAIT) step('theirs-go'); }
       else if (brief.ph === 'theirs-go') { if (near && brief.t > BRIEF_GO_MIN && birdDown(1 - player.team)) step('theirs'); }
-      else if (brief.ph === 'theirs') { if (brief.t > BRIEF_HOLD) step('back'); }
-      else if (near && brief.t > BRIEF_GO_MIN) endBrief(); // 'back': the boots have the camera again
+      else if (brief.ph === 'theirs') { if (brief.t > BRIEF_HOLD) step('ours-go'); }
+      else if (brief.ph === 'ours-go') { if (near && brief.t > BRIEF_GO_MIN && birdDown(player.team)) step('ours'); }
+      else if (brief.t > BRIEF_HOLD_OURS) endBrief(); // 'ours': the finish, on the roost you are sitting on
     }
   }
   for (const p of players) {
@@ -769,7 +792,7 @@ function drawDropAir(ex, ey, now) {
     const q = 1 - p.dropT / fallT;           // 0 just jumped .. 1 touching down
     const hop = Math.sin(Math.min(1, q * 4) * Math.PI) * 7; // the leap: up and off the wing first
     const alt = p.dropAlt * (1 - q * q) + hop; // then gravity: slow start, fast finish (a roost hop starts low)
-    const sc = RIDER_SCALE - (RIDER_SCALE - 1) * q;
+    const sc = p.dropSc - (p.dropSc - 1) * q;  // from the seat's perspective size down to the ground's 1x
     const px = Math.round(p.x - ex), py = Math.round(p.y - ey);
     if (px < -40 || py < -DROP_ALT - 60 || px > WV_W + 40 || py > WV_H + 40) continue;
     const sw = Math.round(3 + 5 * q);
@@ -806,22 +829,23 @@ function drawEagle(e, ex, ey, now) {
     ctx.rotate(e.heading);
     ctx.drawImage(spr, -w / 2, -h / 2, w, h);
     ctx.restore();
-    // every rider on its wing seat, unrotated so the faces read; the local
-    // slot draws last so it is never under a teammate
+    // every rider seated on its wing, facing the way the bird flies, at the
+    // bird's own perspective size (riderScale); the local slot draws last so
+    // it is never under a teammate. A wingbeat lifts the whole crew a pixel.
     const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
+    const RS = riderScale(e), rd = riderDir(e);
+    const beat = frames.indexOf(spr) === 0 ? -1 : 0; // the downstroke (spread frame) rides high
     { // the driver first, on the neck: the team's merchant, who climbs down at the crash
       const dx = MERCH_SEAT[0] * S, dy = MERCH_SEAT[1] * S;
-      const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + bob + Math.round(dx * hs + dy * hc);
-      const rs = 16 * RIDER_SCALE;
-      ctx.drawImage(SPRITES.merchant[skin(e.team)].down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
+      const rx = sx + dx * hc - dy * hs, ry = sy + bob + beat + dx * hs + dy * hc;
+      drawSeated(SPRITES.merchant[skin(e.team)], rd, rx, ry, RS);
     }
     for (let pass = 0; pass < 2; pass++) for (const p of players) {
       if (!p.active || !p.aboard || p.team !== e.team || (p === player) !== (pass === 1)) continue;
       const st = EAGLE_SEATS[p.seat % EAGLE_SEATS.length];
       const dx = st[0] * S, dy = st[1] * S;
-      const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + bob + Math.round(dx * hs + dy * hc);
-      const rs = 16 * RIDER_SCALE;
-      ctx.drawImage(classSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
+      const rx = sx + dx * hc - dy * hs, ry = sy + bob + beat + dx * hs + dy * hc;
+      drawSeated(classSet(p), rd, rx, ry, RS);
     }
     // where a jump right now would land: a pulsing ring under the bird -
     // only while the jump window is open, or it promises a jump the lock refuses
@@ -885,18 +909,18 @@ function drawEagle(e, ex, ey, now) {
         ctx.globalAlpha = 1;
       }
       ctx.restore();
-      // whoever rode the landing, still in their seat at the roost's scale
+      // whoever rode the landing, still seated - world-sized now, the bird at
+      // rest is just a big bird - breathing with it, facing where it points
       // (the local slot: their first ground is this bird's back), with the
       // gold landing ring pulsing under the bird once the brief has handed
       // back - the flight's own "a jump lands here" mark, now for the hop
       const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
+      const rd = riderDir(e);
       for (const p of players) {
         if (!p.active || !p.aboard || p.team !== e.team) continue;
         const st = EAGLE_SEATS[p.seat % EAGLE_SEATS.length];
         const dx = st[0] * S, dy = st[1] * S;
-        const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + breath + Math.round(dx * hs + dy * hc);
-        const rs = 16 * RIDER_SCALE;
-        ctx.drawImage(classSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
+        drawSeated(classSet(p), rd, sx + dx * hc - dy * hs, sy + breath + dx * hs + dy * hc, 1);
       }
       if (player.aboard && player.team === e.team && state.mode === 'play' && !state.dropBrief) {
         const ph = (now * 1.2) % 1;
@@ -1025,7 +1049,7 @@ function dropBriefTarget() {
   if (!b || !d) return { x: player.x, y: player.y };
   if (b.ph === 'ours-go' || b.ph === 'ours') return d.eagles[player.team];
   if (b.ph === 'theirs-go' || b.ph === 'theirs') return d.eagles[1 - player.team];
-  return { x: player.x, y: player.y };
+  return { x: player.x, y: player.y }; // 'wait': the seat you are in
 }
 
 // the brief's two headlines, one per roost: the bird on screen is the

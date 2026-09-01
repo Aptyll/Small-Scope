@@ -2680,31 +2680,84 @@
   // the MERCHANT who drives each team's eagle and works its roost (the
   // `merchant` banner, js/robots.js): the player body plan in a trader's tan
   // coat, with the hat and the trim in the team's colour so the side reads
-  // Not another player: the pom-pom hat is swapped for a tall WIDE-BRIMMED
-  // hat (rows 1-5 of every standing grid - crown, a band, then a brim that
-  // overhangs the head a pixel each side; the back and sides of the head
-  // below it go hat-dark too), the coat is plum with gold trim instead of a
-  // team coat, and the ONLY team ink is the hat band - so at a glance it is a
-  // hat and a coat no slot wears, and its side reads off the band, the
-  // nameplate and the bar.
-  const merchantize = (g) => g.map((row, i) => {
-    if (i === 1) return '......hhhh......';
-    if (i === 2) return '.....ohHHho.....';
-    if (i === 3) return '.....ohhhhho....';
-    if (i === 4) return '.....oyYYyo.....';
-    if (i === 5) return '...ohhhhhhhho...';
-    return row.replace(/t/g, 'h').replace(/T/g, 'H');
-  });
+  // Not another player: its own grids, 16 x 18 - two rows taller than a slot,
+  // and a hand wider at the shoulder - a HOODED ROBE with gold trim at the
+  // collar and the hem, the hood's shadow around a narrow face, a belt that
+  // is the ONLY team ink on it, and boots showing under the hem. Three
+  // directions like a slot (the side grid faces right and flips), three
+  // frames each: the feet walk, the robe hangs. Chars: r/R/d robe, g gold,
+  // s the hood's shadow, k/K skin, e eye, y the team belt, b boots, o outline.
+  const merchDown = [
+    '......oooo......',
+    '.....orRRro.....',
+    '....orrRRrro....',
+    '...orrrrrrrro...',
+    '...orssssssro...',
+    '...orskkkksro...',
+    '...orsekkesro...',
+    '...orsKkkKsro...',
+    '...orrssssrro...',
+    '..orrggggggrro..',
+    '..orrrrrrrrrro..',
+    '..orrgyyyygrro..',
+    '..orRrrrrrrRro..',
+    '..orrrrrrrrrro..',
+    '..orrrrrrrrrro..',
+    '..orrggggggrro..',
+    '..oddddddddddo..',
+  ];
+  const merchUp = [
+    '......oooo......',
+    '.....orRRro.....',
+    '....orrRRrro....',
+    '...orrrRRrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrddddrro...',
+    '..orrggggggrro..',
+    '..orrrrrrrrrro..',
+    '..orrgyyyygrro..',
+    '..orRrrrrrrRro..',
+    '..orrrrrrrrrro..',
+    '..orrrrrrrrrro..',
+    '..orrggggggrro..',
+    '..oddddddddddo..',
+  ];
+  const merchSide = [ // facing right: the hood's peak sits back, the face shows at the front
+    '.....oooo.......',
+    '....orRRro......',
+    '....orrRrro.....',
+    '...orrrrrrro....',
+    '...orrrrrsso....',
+    '...orrrrskko....',
+    '...orrrrskeo....',
+    '...orrrrsKko....',
+    '...orrrrrsro....',
+    '..orrggggggro...',
+    '..orrrrrrrrro...',
+    '..orrgyyyygro...',
+    '..orRrrrrrrro...',
+    '..orrrrrrrrro...',
+    '..orrrrrrrrro...',
+    '..orrgggggrro...',
+    '..odddddddddo...',
+  ];
+  const merchFeet = { // the walk is the boots under the hem: planted, the far foot up, the near foot up
+    front: [['.....bb..bb.....'], ['.....bb.........'], ['.........bb.....']],
+    side:  [['.....bb.bb......'], ['....bb...bb.....'], ['......bbbb......']],
+  };
   const merchantPal = (t) => Object.assign({}, PPAL, {
-    r: '#5c3d70', R: '#7d5a94', d: '#3c2650', m: '#e2b24e', M: '#b48a2c',
-    h: '#4a3220', H: '#6b4a30', y: t.coat, Y: t.coatL,
+    r: '#5c3d70', R: '#7d5a94', d: '#3c2650', g: '#e2b24e', s: '#2a1d36', y: t.coat, b: '#4a3324',
   });
-  const merchantSet = (pal) => ({
-    down: [bake(merchantize(playerDownIdle), pal), bake(merchantize(playerDownA), pal), bake(merchantize(playerDownB), pal)],
-    up: [bake(merchantize(playerUpIdle), pal), bake(merchantize(playerUpA), pal), bake(merchantize(playerUpB), pal)],
-    right: [bake(merchantize(playerSideIdle), pal), bake(merchantize(playerSideA), pal), bake(merchantize(playerSideB), pal)],
-    left: [flipH(bake(merchantize(playerSideIdle), pal)), flipH(bake(merchantize(playerSideA), pal)), flipH(bake(merchantize(playerSideB), pal))],
-  });
+  const merchantSet = (pal) => {
+    const f = (body, feet) => [0, 1, 2].map((i) => bake(body.concat(feet[i]), pal));
+    return {
+      down: f(merchDown, merchFeet.front), up: f(merchUp, merchFeet.front),
+      right: f(merchSide, merchFeet.side), left: f(merchSide, merchFeet.side).map(flipH),
+    };
+  };
   const teamMerchants = TEAM_SKINS.map((t) => merchantSet(merchantPal(t)));
 
   // ---------------------------------------------------------------- eagle
