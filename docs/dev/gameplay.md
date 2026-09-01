@@ -1423,8 +1423,8 @@ hauler it always was — see [Worker flags](#worker-flags) for why the anger is 
 
 ### The merchant
 
-Each eagle is **driven** by its team's merchant — the taller hooded figure in the gold-trimmed
-plum robe seated on the bird's neck in flight (`MERCH_SEAT`, `drawEagle`; the look is
+Each eagle is **driven** by its team's merchant — the taller hooded figure, its hood in the
+team's colour over a plain dark robe, seated on the bird's neck in flight (`MERCH_SEAT`, `drawEagle`; the look is
 [sprites.md](sprites.md)'s own 16 × 18 grids, built so it never reads as a slot on either side,
 with a `MERCHANT` nameplate and a bar in its side's paint over it, `drawMerchant`) — who climbs
 down the moment it roosts (`spawnMerchant`, called

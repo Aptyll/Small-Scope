@@ -2680,76 +2680,77 @@
   // the MERCHANT who drives each team's eagle and works its roost (the
   // `merchant` banner, js/robots.js): the player body plan in a trader's tan
   // coat, with the hat and the trim in the team's colour so the side reads
-  // Not another player: its own grids, 16 x 18 - two rows taller than a slot,
-  // and a hand wider at the shoulder - a HOODED ROBE with gold trim at the
-  // collar and the hem, the hood's shadow around a narrow face, a belt that
-  // is the ONLY team ink on it, and boots showing under the hem. Three
-  // directions like a slot (the side grid faces right and flips), three
-  // frames each: the feet walk, the robe hangs. Chars: r/R/d robe, g gold,
-  // s the hood's shadow, k/K skin, e eye, y the team belt, b boots, o outline.
+  // Not another player: its own grids, 16 x 18 - two rows taller than a slot
+  // and the same ten wide - and deliberately SIMPLE, a silhouette first: a
+  // round HOOD in the team's colour (the one team ink, and all of it), the
+  // hood's shadow around a narrow face, a plain dark robe hanging straight
+  // to the hem with no belt and no trim, and boots under it. Three directions
+  // like a slot (the side grid faces right and flips), three frames each: the
+  // feet walk, the robe hangs. Chars: y/Y the team hood, r/R/d robe, s the
+  // hood's shadow, k/K skin, e eye, b boots, o outline.
   const merchDown = [
     '......oooo......',
-    '.....orRRro.....',
-    '....orrRRrro....',
+    '.....oyYYyo.....',
+    '....oyyYYyyo....',
+    '...oyyyyyyyyo...',
+    '...oyssssssyo...',
+    '...oyskkkksyo...',
+    '...oysekkesyo...',
+    '...oysKkkKsyo...',
+    '...oyyssssyyo...',
     '...orrrrrrrro...',
-    '...orssssssro...',
-    '...orskkkksro...',
-    '...orsekkesro...',
-    '...orsKkkKsro...',
-    '...orrssssrro...',
-    '..orrggggggrro..',
-    '..orrrrrrrrrro..',
-    '..orrgyyyygrro..',
-    '..orRrrrrrrRro..',
-    '..orrrrrrrrrro..',
-    '..orrrrrrrrrro..',
-    '..orrggggggrro..',
-    '..oddddddddddo..',
+    '...orRrrrrRro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
   ];
   const merchUp = [
     '......oooo......',
-    '.....orRRro.....',
-    '....orrRRrro....',
-    '...orrrRRrrro...',
+    '.....oyYYyo.....',
+    '....oyyYYyyo....',
+    '...oyyyYYyyyo...',
+    '...oyyyyyyyyo...',
+    '...oyyyyyyyyo...',
+    '...oyyyyyyyyo...',
+    '...oyyyyyyyyo...',
+    '...oyddddddyo...',
+    '...orrrrrrrro...',
+    '...orRrrrrRro...',
     '...orrrrrrrro...',
     '...orrrrrrrro...',
     '...orrrrrrrro...',
     '...orrrrrrrro...',
-    '...orrddddrro...',
-    '..orrggggggrro..',
-    '..orrrrrrrrrro..',
-    '..orrgyyyygrro..',
-    '..orRrrrrrrRro..',
-    '..orrrrrrrrrro..',
-    '..orrrrrrrrrro..',
-    '..orrggggggrro..',
-    '..oddddddddddo..',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
   ];
   const merchSide = [ // facing right: the hood's peak sits back, the face shows at the front
     '.....oooo.......',
-    '....orRRro......',
-    '....orrRrro.....',
+    '....oyYYyo......',
+    '....oyyYyyo.....',
+    '...oyyyyyyyo....',
+    '...oyyyyysso....',
+    '...oyyyyskko....',
+    '...oyyyyskeo....',
+    '...oyyyysKko....',
+    '...oyyyyysyo....',
     '...orrrrrrro....',
-    '...orrrrrsso....',
-    '...orrrrskko....',
-    '...orrrrskeo....',
-    '...orrrrsKko....',
-    '...orrrrrsro....',
-    '..orrggggggro...',
-    '..orrrrrrrrro...',
-    '..orrgyyyygro...',
-    '..orRrrrrrrro...',
-    '..orrrrrrrrro...',
-    '..orrrrrrrrro...',
-    '..orrgggggrro...',
-    '..odddddddddo...',
+    '...orRrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...odddddddo....',
   ];
   const merchFeet = { // the walk is the boots under the hem: planted, the far foot up, the near foot up
     front: [['.....bb..bb.....'], ['.....bb.........'], ['.........bb.....']],
     side:  [['.....bb.bb......'], ['....bb...bb.....'], ['......bbbb......']],
   };
   const merchantPal = (t) => Object.assign({}, PPAL, {
-    r: '#5c3d70', R: '#7d5a94', d: '#3c2650', g: '#e2b24e', s: '#2a1d36', y: t.coat, b: '#4a3324',
+    y: t.coat, Y: t.coatL, r: '#4a3f5e', R: '#63577a', d: '#2f2740', s: '#231a30', b: '#4a3324',
   });
   const merchantSet = (pal) => {
     const f = (body, feet) => [0, 1, 2].map((i) => bake(body.concat(feet[i]), pal));
