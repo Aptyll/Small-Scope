@@ -51,12 +51,24 @@ const BRIEF_HOLD = 3;       // s it holds on the rival roost
 const BRIEF_HOLD_OURS = 4;  // s it holds on your own to finish
 const BRIEF_GO_MIN = 1;     // s a glide leg lasts at least, however close the target
 const BRIEF_MAX_T = 24;     // s the whole tour may run before it force-ends (safety)
-// the LANE the crash cuts back to the open snow, pine by pine
+// the LANE the crash cuts back to the open snow, pine by pine - aimed from
+// the crater at the MIDDLE of the corner's treeline (e.mouth: the diagonal's
+// own edge tile, diagEnd), and run until the woods are provably behind it
 const LANE_R = 0.8;         // tiles either side of the centreline a fell reaches: a diagonal band two tiles across
 const LANE_SPD = 3.5;       // tiles/s the felling front walks out from the crater
 const LANE_WARN = 0.5;      // s a pine shudders on its feet before it goes down
 const LANE_DELAY = 0.8;     // s after the impact before the first pine shudders
-const LANE_MAX = 70;        // tiles the lane may run at most (the border is 30-70 deep)
+const LANE_MAX = 90;        // tiles the lane may run at most (the border is 30-70 deep, the roost ~8 inside it)
+const LANE_CLEAR = 6;       // tiles of pine-free snow past the last fell that prove the lane is OUT - a bay inside the border is not the field
+// the WIND TRAIL: the air the bird tears in level flight - streaks born
+// behind the wingtips and off the body at TRAIL_RATE, left hanging where they
+// were torn so the bird streams away from them, each fading over TRAIL_T
+// (drawEagleTrail - pure reads of the flight clock, no particles)
+const TRAIL_T = 0.8;        // s a streak hangs in the air
+const TRAIL_RATE = 36;      // streaks born per second, per bird
+const TRAIL_LEN = 20;       // px a streak is when born...
+const TRAIL_STRETCH = 60;   // ...and how much longer it draws out over its life
+const TRAIL_RIM = 'rgba(40,60,100,0.5)'; // the dark line under each streak: white air over white snow needs a rim, like the text does
 const MERCH_SEAT = [8, 0];  // where the merchant sits in flight: on the neck, ahead of the back seat (EAGLE_SEATS' frame)
 const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
@@ -72,7 +84,8 @@ const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the r
 const EAGLE_HP = 320;       // the grounded objective's nerve: hits spook it, at zero it flees
 const EAGLE_WORK_DMG = 10;  // what one rival E swing chips off the roosting bird
 const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid - the hitbox arrows AND walkers test
-const MIN_CRASH_TREES = 20; // trees the crash site's 7x7 must hold - the roost sits properly INSIDE the woods
+const CRASH_DEPTH = 14;     // tiles inside the treeline (forestDepth) the roost sits at least - never on the edge, and a proper lane of pines past the stump ring
+const MIN_CRASH_TREES = 40; // of the 49 tiles in the crash site's 7x7 that must still hold a pine (the border is solid, so fewer means an edge or a bay)
 // the wing gust: the bird's own defense. A rival inside GUST_R makes it rear
 // up - wings spread for GUST_WIND_T, the whole telegraph - then the buffet
 // throws every rival in GUST_BLAST_R into a tumble. No damage on purpose: the
@@ -102,23 +115,34 @@ const EAGLE_SEATS = [[-2, 0], [2, -11], [2, 11], [-7, -19], [-7, 19]];
 
 // The line is FIXED: the map's one diagonal, corner to corner - there is no
 // randomness in where a team roosts. Each end sits EAGLE_END tiles inside the
-// corner's treeline as the seed grew it on that diagonal, so the dive past it
-// always has forest to land in and the window's end (lastOpenU) is always open
-// snow. Pure reads of borderDepth (world.js) - no rng(), no hash2 - so a seed
-// always flies the same line. fromLeft: the bottom-left corner, else top-right.
+// corner's treeline as the seed grew it on that diagonal - the LAST wooded
+// tile out from the corner, so a bay in the border short of it is still
+// forest on the corner side - so the dive past it always has forest to land
+// in and the window's end (lastOpenU) is always open snow. `mouth` is the
+// treeline itself on the diagonal - the first open tile past that last pine,
+// the MIDDLE of the corner's tree edge - which the lane the crash cuts aims
+// at (planLane). Pure reads of borderDepth (world.js) - no rng(), no hash2 -
+// so a seed always flies the same line. fromLeft: the bottom-left corner,
+// else top-right.
 function diagEnd(fromLeft) {
   const at = (k) => fromLeft ? [k, WORLD - 1 - k] : [WORLD - 1 - k, k];
-  const open = (k) => { const [x, y] = at(k); return k >= borderDepth(x, y); }; // genWorld's own tree rule, inverted
-  let k = 0;
-  while (k < WORLD / 2 - 3 && !(open(k) && open(k + 1) && open(k + 2))) k++;
-  const [tx, ty] = at(Math.max(6, k - EAGLE_END));
-  return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+  const wooded = (k) => { const [x, y] = at(k); return k < borderDepth(x, y); }; // genWorld's own tree rule
+  let last = 0;
+  for (let k = 0; k < WORLD / 2 - 3; k++) if (wooded(k)) last = k;
+  const [tx, ty] = at(Math.max(6, last + 1 - EAGLE_END));
+  const [mx, my] = at(last + 1);
+  return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE, mouth: { x: (mx + 0.5) * TILE, y: (my + 0.5) * TILE } };
 }
 // team 0 (RED) flies x0 -> x1: from the top-right end down to the bottom-left
 function makeEagleRoute() {
   const a = diagEnd(false), b = diagEnd(true);
   const len = Math.hypot(b.x - a.x, b.y - a.y);
-  return { x0: a.x, y0: a.y, x1: b.x, y1: b.y, len, dur: EAGLE_FLIGHT_T, heading: Math.atan2(b.y - a.y, b.x - a.x) };
+  return { x0: a.x, y0: a.y, x1: b.x, y1: b.y, mouth0: a.mouth, mouth1: b.mouth, len, dur: EAGLE_FLIGHT_T, heading: Math.atan2(b.y - a.y, b.x - a.x) };
+}
+// how far inside the treeline a tile sits, in tiles: positive is woods
+// (genWorld's own rule, `edge < borderDepth`), negative the open field
+function forestDepth(tx, ty) {
+  return borderDepth(tx, ty) - Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty);
 }
 
 // the last point on a bird's line still over open ground: forced drops land
@@ -158,6 +182,8 @@ function makeEagles() {
       gustCd: 0, windT: 0, hitT: 99,          // the wing gust and the calm-down clock
       idleT: 3 + team * 2, ruffleT: 0,        // the resting idle: seconds to the next wing shuffle (offset so the birds never sync)
       fleeT: 0, fleeFrom: 0, fleeTo: 0,       // the driven-off takeoff
+      mouth: team === 0 ? r.mouth1 : r.mouth0, // the middle of its roost corner's treeline: where the lane aims (diagEnd)
+      laneDir: null,                          // the lane's unit direction, set at the crash (eagleCrash) - the gate and the merchant's post read it
       lane: null, merchant: null,             // the road falling open (planLane) and the driver once it is down (robots.js)
     };
     e.jumpEnd = lastOpenU(e);
@@ -532,25 +558,30 @@ function beginDive(e) {
   e.diveT = 0;
 }
 
-// walk out past the line's end looking for DEEP forest: the first spot whose
-// 7x7 holds MIN_CRASH_TREES takes the impact, so the roost always sits a
-// proper way into the woods rather than kissing the tree edge. Pure reads -
-// no rng(), no hash2 - so the same seed buries the same bird in the same
-// trees; the densest spot seen stands in if no window ever fills.
+// walk out past the line's end looking for DEEP forest: the first tile that
+// sits CRASH_DEPTH inside the treeline by the border's own measure
+// (forestDepth - inside the roost disc, world.js, that is tiles in from the
+// arc) AND whose 7x7 still holds MIN_CRASH_TREES takes the impact, so the
+// roost always sits a proper way into the woods with trees all round it, never
+// kissing the tree edge or a bay in it. Pure reads - no rng(), no hash2 - so
+// the same seed buries the same bird in the same trees; the deepest, densest
+// spot seen stands in if no tile ever qualifies.
 function findCrashPoint(e) {
   const hx = Math.cos(e.heading), hy = Math.sin(e.heading);
-  let best = null, bestTrees = -1;
-  for (let step = 8; step <= 44; step++) {
+  let best = null, bestScore = -Infinity;
+  for (let step = 4; step <= 60; step++) {
     const tx = Math.floor((e.x + hx * step * TILE) / TILE);
     const ty = Math.floor((e.y + hy * step * TILE) / TILE);
     if (tx < 4 || ty < 4 || tx >= WORLD - 4 || ty >= WORLD - 4) break;
+    const depth = forestDepth(tx, ty);
     let trees = 0;
     for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
       const o = inWorld(tx + dx, ty + dy) && objAt(tx + dx, ty + dy);
       if (o && (o.type === 'tree' || o.type === 'deadTree')) trees++;
     }
-    if (trees >= MIN_CRASH_TREES) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
-    if (trees > bestTrees) { bestTrees = trees; best = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }; }
+    if (depth >= CRASH_DEPTH && trees >= MIN_CRASH_TREES) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+    const score = Math.min(depth, CRASH_DEPTH) * 4 + trees;
+    if (score > bestScore) { bestScore = score; best = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE }; }
   }
   if (best) return best;
   const tx = Math.max(4, Math.min(WORLD - 5, Math.floor((e.x + hx * 8 * TILE) / TILE)));
@@ -595,42 +626,53 @@ function eagleCrash(e) {
   SFX.boom();
   logEvent('THE ' + TEAMS[skin(e.team)].name + ' EAGLE HAS LANDED', players.find((p) => p.team === e.team));
   // the crater is not the whole landing: the lane back to the snow starts
-  // falling (laneStep), and the driver climbs down to work the roost
+  // falling (laneStep) - aimed from the crater at the middle of the corner's
+  // treeline (e.mouth), back the way the bird came if the mouth is somehow
+  // under it - and the driver climbs down to work the roost
+  const mx = e.mouth.x - e.x, my = e.mouth.y - e.y, ml = Math.hypot(mx, my);
+  e.laneDir = ml > TILE ? { x: mx / ml, y: my / ml } : { x: -Math.cos(e.heading), y: -Math.sin(e.heading) };
   e.lane = planLane(e);
   spawnMerchant(e);
   for (const p of players) if (p.active && p.aboard && p.team === e.team && p === player) landAboard(p);
 }
 
-// The LANE: the crash's one road out. From the crater back along the bird's
-// own approach to the open snow, every pine within LANE_R of the centreline
-// becomes a felling event timed by its distance along the lane, so a FRONT
-// walks out from the roost at LANE_SPD - the parkour roll's grammar (pkAnimStep,
-// world.js): each pine shudders LANE_WARN ahead of the front (o.shake, decayed
-// by sim.js's object-timer loop), then goes down in needles and snow. Pays no
-// gold, like the crater; leaves no stumps, because a road is a road. Pure
-// reads - the lane a seed gets is the lane it always gets.
+// The LANE: the crash's one road out. From the crater along e.laneDir - at
+// the MIDDLE of the corner's treeline (e.mouth), so every roost's road comes
+// out where the field is widest - to the open snow, every pine within LANE_R
+// of the centreline becomes a felling event timed by its distance along the
+// lane, so a FRONT walks out from the roost at LANE_SPD - the parkour roll's
+// grammar (pkAnimStep, world.js): each pine shudders LANE_WARN ahead of the
+// front (o.shake, decayed by sim.js's object-timer loop), then goes down in
+// needles and snow. A rock in the band shatters the same way, so the road is
+// a road for a walker and not just for the eye. The lane is OUT only when the
+// last LANE_CLEAR tiles held nothing to fell AND the border itself says open
+// (forestDepth) - a clearing inside the woods used to end it early and leave
+// the roost walled in behind a bay. Pays no gold, like the crater; leaves no
+// stumps, because a road is a road. Pure reads - the lane a seed gets is the
+// lane it always gets.
+function laneFells(o) { return !!o && (o.type === 'tree' || o.type === 'deadTree' || o.type === 'rock'); }
 function planLane(e) {
-  const hx = -Math.cos(e.heading), hy = -Math.sin(e.heading); // back toward the field
+  const hx = e.laneDir.x, hy = e.laneDir.y;
   const ev = [], seen = new Set();
   const reach = Math.ceil(LANE_R);
-  let open = 0;
-  for (let s = 0; s < LANE_MAX && open < 6; s += 1 / 3) {
+  let lastFell = 0;
+  for (let s = 0; s < LANE_MAX; s += 1 / 3) {
     const fx = (e.x - 8) / TILE + hx * s, fy = (e.y - 8) / TILE + hy * s; // tile-index space, like pkPlanCarve
     const cx = Math.round(fx), cy = Math.round(fy);
     if (!inWorld(cx, cy)) break;
-    if (Math.min(cx, cy, WORLD - 1 - cx, WORLD - 1 - cy) >= borderDepth(cx, cy)) open++; // out of the woods: two more tiles, then done
     for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
       const tx = cx + dx, ty = cy + dy;
       if (!inWorld(tx, ty) || Math.hypot(tx - fx, ty - fy) > LANE_R) continue;
       const i = idx(tx, ty);
       if (seen.has(i)) continue;
       seen.add(i);
-      const o = objects[i];
-      if (!o || (o.type !== 'tree' && o.type !== 'deadTree')) continue;
+      if (!laneFells(objects[i])) continue;
+      lastFell = s;
       const t = LANE_DELAY + s / LANE_SPD;
       ev.push({ t: Math.max(LANE_DELAY * 0.4, t - LANE_WARN), i, k: 2 }); // the shudder
       ev.push({ t, i, k: 1 });                                            // the fall
     }
+    if (s - lastFell >= LANE_CLEAR && forestDepth(cx, cy) < 0) break; // out of the woods for real
   }
   ev.sort((a, b) => a.t - b.t);
   return ev.length ? { t: 0, ev, next: 0, sfxT: 0 } : null;
@@ -646,10 +688,16 @@ function laneStep(e, dt) {
   while (L.next < L.ev.length && L.ev[L.next].t <= L.t && spent < 24) {
     const ev = L.ev[L.next++]; spent++;
     const o = objects[ev.i];
-    if (!o || (o.type !== 'tree' && o.type !== 'deadTree')) continue; // already felled by hand, or grown into something else
+    if (!laneFells(o)) continue; // already felled by hand, or grown into something else
     if (ev.k === 2) { o.shake = 0.55; continue; }
     const tx = ev.i % WORLD, ty = (ev.i / WORLD) | 0, px = tx * TILE + 8, py = ty * TILE + 8;
     objects[ev.i] = null;
+    if (o.type === 'rock') {
+      burst(px, py - 6, '#9aa4b4', 6, 50, 0.45, true); // the rock shatters
+      burst(px, py - 4, '#f4f7ff', 4, 40, 0.4, true);
+      if (L.sfxT > 0.3 && nearPlayer(px, py, 320)) { L.sfxT = 0; SFX.break_(); }
+      continue;
+    }
     burst(px, py - 8, o.type === 'tree' ? '#88b090' : '#6b5a48', 5, 45, 0.45, true); // needles off the falling pine
     burst(px, py - 4, '#f4f7ff', 4, 40, 0.4, true);
     if (o.type === 'deadTree') flushBirds(landmarkAt(px, py), { x: px, y: py });
@@ -804,6 +852,54 @@ function drawDropAir(ex, ey, now) {
   }
 }
 
+// The WIND TRAIL: level flight tears the air. Streaks are born at TRAIL_RATE
+// - most behind the wingtips, the rest off the body - at the point the bird
+// was when they were torn, and HANG there while the bird flies on, so the
+// trail streams back off the wings and the snow rushes away under it: the
+// speed read. Each draws out (TRAIL_LEN + TRAIL_STRETCH) and fades over
+// TRAIL_T, born where the wing actually was on that beat (the flap frame's
+// own tip). Pure reads of the flight clock - no particle, no sim step, the
+// same trail at any dt - and the stoop keeps the last of them, fading, as the
+// bird tips over. Drawn at the bird's altitude, under the sprite.
+const TRAIL_TIP = [23, 19, 15, 19];  // sprite px across to the wingtip, per flap frame (spread, mid, back, mid)
+const TRAIL_BACK = [-4, -8, -12, -8]; // ...and how far back along the body it sits
+function drawEagleTrail(e, ex, ey, S, now) {
+  const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
+  const dive = e.state === 'dive' ? Math.min(1, e.diveT / EAGLE_DIVE_T) : 0;
+  if (dive >= 1) return;
+  const T = e.t + (e.state === 'dive' ? e.diveT : 0);   // the flight clock: e.t stops at the line's end
+  const last = Math.floor(Math.min(T, e.dur) * TRAIL_RATE); // nothing is born past the line
+  ctx.save();
+  for (let i = Math.max(0, Math.ceil((T - TRAIL_T) * TRAIL_RATE)); i <= last; i++) {
+    const age = T - i / TRAIL_RATE, u = age / TRAIL_T;
+    if (u >= 1 || u < 0) continue;
+    const d = Math.min(e.spd * i / TRAIL_RATE, e.len);
+    const r = hash2(i * 3 + 1, e.team * 11 + 5);
+    const wing = r < 0.72;
+    const fr = (((Math.floor((e.flap - age) * 7) % 4) + 4) % 4);
+    const lat = (wing ? (r < 0.36 ? -1 : 1) * TRAIL_TIP[fr] : ((r - 0.72) / 0.28 * 2 - 1) * 9) * S * (1 + 0.15 * u);
+    const back = (wing ? TRAIL_BACK[fr] : -10 - 6 * hash2(i * 5 + 2, e.team + 9)) * S;
+    const bobB = Math.round(Math.sin((now - age) * 2.4 + e.team * 2.1) * 3);
+    const px = e.x0 + hc * (d + back) - hs * lat - ex, py = e.y0 + hs * (d + back) + hc * lat - ey + bobB;
+    if (px < -80 || py < -80 || px > WV_W + 80 || py > WV_H + 80) continue;
+    const len = (TRAIL_LEN + TRAIL_STRETCH * u) * (wing ? 1 : 0.6);
+    const a = (1 - u) * (wing ? 0.75 : 0.4) * (1 - dive);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(px - hc * len, py - hs * len);
+    ctx.globalAlpha = a * 0.7; // the rim first, a px wider, so the streak reads over the snow
+    ctx.strokeStyle = TRAIL_RIM;
+    ctx.lineWidth = wing ? 4 : 3;
+    ctx.stroke();
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = wing ? '#f6f8ff' : '#dfe7f4';
+    ctx.lineWidth = wing ? 2 : 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
 // one bird in its team's armour, whatever its state. In the air the sprite
 // sits at (x, y) with the shadow `alt` px below it; the dive walks that gap
 // to zero so shadow and bird meet exactly at the crash point.
@@ -817,6 +913,7 @@ function drawEagle(e, ex, ey, now) {
     const S = EAGLE_SCALE - (EAGLE_SCALE - EAGLE_REST_SCALE) * fall; // 3x down to the roost's 2x
     const spr = frames[[0, 1, 2, 1][Math.floor(e.flap * (7 + 6 * u)) % 4]]; // wingbeats quicken into the stoop
     const w = spr.width * S, h = spr.height * S;
+    drawEagleTrail(e, ex, ey, S, now); // before the cull: the trail hangs behind a bird already off the frame
     if (sx < -w - 40 || sy < -h - DROP_ALT - 40 || sx > WV_W + w + 40 || sy > WV_H + h + 40) return;
     const bob = e.state === 'fly' ? Math.round(Math.sin(now * 2.4 + e.team * 2.1) * 3) : 0;
     ctx.save();

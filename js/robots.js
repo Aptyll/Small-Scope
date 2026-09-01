@@ -328,7 +328,7 @@ function freeTileNear(tx, ty, rMax) {
 // the crash: the driver climbs down on the lane side of the roost and plans
 // its gate off the stumps the impact left (eagleCrash, js/boot.js)
 function spawnMerchant(e) {
-  const lx = -Math.cos(e.heading), ly = -Math.sin(e.heading); // the lane runs back the way the bird came
+  const lx = e.laneDir.x, ly = e.laneDir.y; // the lane's own direction: from the crater to the middle of the corner's treeline (eagleCrash)
   const wx = e.x + lx * (EAGLE_TILE_R + 1.4) * TILE, wy = e.y + ly * (EAGLE_TILE_R + 1.4) * TILE;
   const at = freeTileNear(Math.floor(wx / TILE), Math.floor(wy / TILE), 6) || { tx: Math.floor(e.x / TILE), ty: Math.floor(e.y / TILE) };
   const b = {
@@ -450,7 +450,7 @@ function updateMerchant(b, dt) {
     return finish();
   }
   // ---- done: keep to the mouth of the lane, a step or two either way ----
-  const postX = e.x - Math.cos(e.heading) * (EAGLE_TILE_R + 1.6) * TILE, postY = e.y - Math.sin(e.heading) * (EAGLE_TILE_R + 1.6) * TILE;
+  const postX = e.x + e.laneDir.x * (EAGLE_TILE_R + 1.6) * TILE, postY = e.y + e.laneDir.y * (EAGLE_TILE_R + 1.6) * TILE;
   if (b.moveT > 0) {
     b.moveT -= dt;
     moving = true;

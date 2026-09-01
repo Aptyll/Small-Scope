@@ -9,7 +9,15 @@ anything that must stay stable per tile.
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world (under `PRACTICE` the const is
   76 instead — see [the practice arena](#the-practice-arena)). The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
-  open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
+  open interior (~132 tiles across, double the old ~92²'s area). The two **roost corners** —
+  bottom-left and top-right, where the eagles always come down
+  ([eagle drop](rendering.md#eagle-drop-mode-drop)) — are forested to `ROOST_R` (68 tiles from the
+  corner, ~48 along the diagonal) outright: `borderDepth` is the seed's own `borderNoise` **or**
+  a quarter-disc whose arc wobbles ±`ROOST_WOBBLE` (3) on the fine noise, so whatever the seed grew
+  there the corner holds one solid block of woods and the treeline the lane cuts to is at least
+  the arc. The union only adds pines, and `genWorld` rolls its per-tree `rng()` only under
+  `borderNoise`, so a seed's interior is exactly what it was before the corners were guaranteed
+  (the seed-42 ground hash and landmarks are unchanged); not under `PRACTICE`. Interior feature counts
   (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is `RING_N`
   (6) points, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre at
   the treeline — the old spawn camps. Nobody starts there any more (players land from the eagles,
@@ -361,7 +369,8 @@ in `title` mode the main menu prints the seed instead, next to the reroll die.
 - `hash2(x, y)` mixes `SEED` in, and `vnoise(x, y)` is built on it. Both are still pure functions
   of position *within a run* — use them for anything that must stay stable per tile no matter when
   it is asked (ground texture, forest boundary, tree rare-drops, panel mottling, map dithering).
-  `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map.
+  `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map
+  (everywhere but inside the two roost discs, which every seed grows alike).
 - Two exceptions to the single stream, both for the same reason — nothing outside worldgen may
   perturb the main `rng`'s worldgen prefix. `fxRng` (`SEED ^ 0x9e3779b9`) feeds resize-driven
   snowflake top-ups in `fitFlakes()`, so window size / resolution changes cannot move the world

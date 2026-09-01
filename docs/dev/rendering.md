@@ -1130,8 +1130,12 @@ puts every active slot aboard **its team's bird** (`p.aboard`) and builds
 **the map's diagonal, fixed for every match and seed**: RED (team 0) flies it from the top-right
 corner down to roost in the **bottom-left** woods, BLUE the reverse to the **top-right**. Each end
 is `diagEnd()`, the point `EAGLE_END` (2) tiles inside that corner's treeline as the seed grew it
-on the diagonal (pure reads of `borderDepth` — no `rng()`, no `hash2`), so the dive past it always
-has forest to land in. The two birds fly it in **opposite directions**, each shifted
+on the diagonal — the **last wooded tile** out from the corner, so a bay in the border short of it
+is still forest on the corner side (pure reads of `borderDepth` — no `rng()`, no `hash2`) — so the
+dive past it always has forest to land in; both corners are guaranteed woods anyway by the
+[roost disc](world.md#the-tile-world). `diagEnd` also returns the corner's **mouth** — the first
+open tile past that last pine, the middle of the corner's tree edge — which `makeEagles` hands each
+bird as `e.mouth`: the point its lane aims at. The two birds fly it in **opposite directions**, each shifted
 `EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass over the
 map's centre is a fly-by, ~5 tiles apart, never a collision. `beginDrop` sets mode `drop`, snaps
 the world zoom to `DROP_ZOOM` around its centre and starts the menu exit. Every rider gets a
@@ -1200,10 +1204,14 @@ mode `play`) outranks and clears it.
 
 **`state.drop` now outlives the whole match** — it never goes null, because the roosts are the
 objectives. A bird's life is `fly → dive → down → flee → gone` (`e.state`): at the end of its line
-`beginDive` throws any remaining rider, `findCrashPoint` walks 8–44 tiles further along the
-heading for the first spot whose 7×7 holds ≥`MIN_CRASH_TREES` (20) trees — the roost sits properly
-**inside** the woods, with the densest spot seen as the fallback (pure reads — no `rng()`, no
-`hash2` — so a seed always buries its birds in the same trees) — and the stoop runs `EAGLE_DIVE_T` (1.4 s,
+`beginDive` throws any remaining rider, `findCrashPoint` walks 4–60 tiles further along the
+heading for the first tile that sits ≥`CRASH_DEPTH` (14) tiles inside the treeline by the border's
+own measure (`forestDepth` = `borderDepth` − edge distance; inside the
+[roost disc](world.md#the-tile-world) that is tiles in from the arc) **and** whose 7×7 still holds
+≥`MIN_CRASH_TREES` (40 of 49 — the border is solid, so fewer means an edge or a bay) — the roost
+sits a proper way **inside** the woods with trees all round it, never on the tree edge, with the
+deepest, densest spot seen as the fallback (pure reads — no `rng()`, no `hash2` — so a seed always
+buries its birds in the same trees) — and the stoop runs `EAGLE_DIVE_T` (1.4 s,
 `u²`-eased, wingbeats quickening, speed motes streaming). `eagleCrash` then clears every tree
 within `BOOM_R` (3.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (4.6) to stumps —
 **paying no gold**, a crater of free fells would warp the economy at minute one — plants the
@@ -1215,14 +1223,21 @@ so they read as a blast wave along the ground, never a halo), distance-scaled `s
 `SFX.boom()` (the timber sample dropped low under a synth blast, layered on purpose) and a
 `HAS LANDED` feed headline — the landing is a landing, not a wound: the bird takes **no damage**
 from its own dive. **The lane** (`planLane`/`laneStep`, `e.lane = { t, ev, next }`): from the
-crater back along the bird's own approach to the first open snow, every pine within `LANE_R`
+crater along `e.laneDir` — set by `eagleCrash` as the unit vector from the crash to `e.mouth`, the
+**middle of the corner's tree edge** (`diagEnd`), back the way the bird came only if the mouth is
+somehow under it — to the open snow, every pine (and rock: `laneFells`) within `LANE_R`
 (0.8 tiles — a diagonal band two tiles across) of the centreline becomes two events timed by its
 distance along the lane, so a **felling front** walks out from the roost at `LANE_SPD` (3.5
 tiles/s) starting `LANE_DELAY` after the impact: each pine **shudders `LANE_WARN` (0.5 s) ahead
 of the front** (`o.shake`, the parkour roll's own tell, decayed by sim.js's object-timer loop),
-then goes down in needles and snow with a throttled `SFX.treeFall`. It is the parkour's
+then goes down in needles and snow with a throttled `SFX.treeFall` (a rock shatters to
+`SFX.break_`). It is the parkour's
 `pkAnimStep` grammar without the ice — a watched transition, never a blink — and it pays nothing
-and leaves no stumps: a road is a road. Pure reads, so a seed's lane is always the same lane;
+and leaves no stumps: a road is a road. The lane is **out** only when the last `LANE_CLEAR` (6)
+tiles held nothing to fell *and* `forestDepth` says open — a clearing inside the border used to
+end it early and leave the roost walled in behind a bay — capped at `LANE_MAX` (90) tiles. Pure
+reads, so a seed's lane is always the same lane; the merchant's gate and post read `e.laneDir`
+too, so the gate flanks the road that was actually cut.
 `laneStep` runs from `updateEagle`'s `down` branch and drops `e.lane` when the last event is
 spent. The grounded bird is the team's **objective**, and its hp pool is its
 **nerve**: `EAGLE_HP` (320), spooked down by rival arrows through `hurtEagle` (the sim.js arrow
@@ -1257,7 +1272,15 @@ in gold that brightens and pulses once the lock opens — then runs `drawEagle` 
 `DROP_ALT` 56 px in flight, converging to 0 down the dive so shadow and bird meet at the crash
 point), the bird itself in its team's armour (`SPRITES.eagleTeam[team]` cycling spread → mid →
 back → mid, rotated to its heading, at `EAGLE_SCALE` 3× walking down to `EAGLE_REST_SCALE` 2×
-through the dive, bobbing 3 px in level flight), **every rider seated on its wing** (`drawSeated`:
+through the dive, bobbing 3 px in level flight), under it the **wind trail** (`drawEagleTrail`,
+drawn before the bird's own cull because it hangs behind a bird already off the frame): streaks
+born at `TRAIL_RATE` (36/s) — most behind the wingtips, at the flap frame's own tip
+(`TRAIL_TIP`/`TRAIL_BACK`), the rest off the body — at the point the bird *was* when they were
+torn, left hanging there while the bird flies on, so the trail streams back off the wings and
+the snow rushes away under it; each draws out from `TRAIL_LEN` by `TRAIL_STRETCH` and fades
+over `TRAIL_T` (0.8 s), a `TRAIL_RIM` dark line a px wider under the white so it reads over snow,
+the whole field fading through the stoop. Pure reads of the flight clock (`e.t`, `e.spd`, a
+`hash2` per streak) — no particles, no sim step, the same trail at any dt. Then **every rider seated on its wing** (`drawSeated`:
 the pose set's direction picked by the heading's dominant axis — `riderDir`, so a crew flying
 down-left shows its profiles — the bottom three rows tucked into the plumage so a body sits
 rather than stands, the hem meeting the feathers at the seat point, lifted a pixel on the

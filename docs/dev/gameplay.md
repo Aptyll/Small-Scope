@@ -1431,7 +1431,8 @@ down the moment it roosts (`spawnMerchant`, called
 from `eagleCrash`, the `merchant` banner in js/robots.js) and works the roost for its side, in
 order: a **gate** at the mouth of the lane the crash cut — `createStruct` a turret on the crash's
 ring stump flanking the lane each side (the nearest stump outside `MERCH_GATE_GAP` of the lane's
-centreline on the field side), then walls on the ring stumps out to `MERCH_GATE_W` (`b.plan`,
+centreline — `e.laneDir`, the road's own direction toward the middle of the corner's tree edge,
+[the lane](rendering.md#eagle-drop-mode-drop) — on the field side), then walls on the ring stumps out to `MERCH_GATE_W` (`b.plan`,
 built in that order, `MERCH_BUILD_T` of hammering each, a site skipped while a body stands on it
 and retried last when no route reaches it); then the **rim**: every pine within `MERCH_CLEAR_R`
 (5.6 tiles — one ring past `BOOM_STUMP_R`) of the roost felled to a **stump** at

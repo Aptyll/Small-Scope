@@ -207,13 +207,41 @@ for (let i = 0; i < RING_N; i++) {
 }
 
 const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
+// The two ROOST corners - bottom-left and top-right, where the eagles always
+// come down (makeEagleRoute, boot.js) - are forested to ROOST_R outright: a
+// quarter-disc of woods UNIONED with the noise border, so whatever the seed
+// grew there the corner holds one solid block for the bird to bury itself in,
+// and the treeline its lane cuts to is at least the disc's arc (ROOST_R along
+// the diagonal is ROOST_R / sqrt 2 ~ 48 tiles in). The union only ever ADDS
+// trees: past the disc the border keeps every seed's own noise, and the arc
+// itself wobbles ROOST_WOBBLE on the fine noise so it never reads as a compass
+// stroke. Not under PRACTICE - the training field is its own collar.
+const ROOST_R = 68;      // tiles from the corner
+const ROOST_WOBBLE = 3;  // +- tiles the arc wanders
 
 // depth of the forest boundary at a given tile: smooth irregular inner edge,
-// always solid from the world edge inward (variation eats into the interior)
-function borderDepth(tx, ty) {
+// always solid from the world edge inward (variation eats into the interior).
+// borderNoise is the seed's own border alone; borderDepth is that OR the roost
+// disc, and is what everything reads - genWorld's tree rule, the landmarks'
+// edge scan, the eagles' line, the lane. genWorld spends its per-tree rng()
+// only under borderNoise (the disc's extra pines roll nothing), so a seed's
+// interior is exactly what it was before the corners were guaranteed.
+function borderNoise(tx, ty) {
   let n = vnoise(tx / 22, ty / 22) * 0.65 + vnoise(tx / 9 + 40, ty / 9 + 40) * 0.35;
   n = Math.max(0, Math.min(1, (n - 0.5) * 1.6 + 0.5)); // stretch toward full range
   return BORDER_MIN + (BORDER_MAX - BORDER_MIN) * n;
+}
+function borderDepth(tx, ty) {
+  const d = borderNoise(tx, ty);
+  if (PRACTICE) return d;
+  const c = Math.min(Math.hypot(tx, WORLD - 1 - ty), Math.hypot(WORLD - 1 - tx, ty)); // to the nearer roost corner
+  if (c >= ROOST_R + ROOST_WOBBLE) return d;
+  const R = ROOST_R + (vnoise(tx / 9 + 40, ty / 9 + 40) - 0.5) * 2 * ROOST_WOBBLE;
+  if (c >= R) return d;
+  // inside the disc: deeper than this tile's own edge distance by the tile's
+  // depth into the disc, so genWorld's `edge < borderDepth` plants it and
+  // forestDepth (boot.js) reads how far inside the arc it sits
+  return Math.max(d, Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty) + R - c);
 }
 
 // per-tile jackpot roll for trees: hash-based, so it stays stable for a tile
@@ -231,8 +259,11 @@ function genWorld() {
       // `variant` picks no art any more - there is one pine in sixteen wind
       // frames and treeFrame() reads the tile's own hash for the one it rests
       // on - but the ROLL stays: dropping an rng() call here reshuffles every
-      // existing seed (the hard rule in CLAUDE.md).
-      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+      // existing seed (the hard rule in CLAUDE.md). It is rolled exactly where
+      // the seed's own border (borderNoise) plants a pine; the roost discs'
+      // extra pines (borderDepth) take variant 0 and roll nothing, so the
+      // stream past this loop is what it always was.
+      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: d < borderNoise(tx, ty) ? randi(0, 1) : 0, rare: treeRare(tx, ty) });
     }
   }
 
