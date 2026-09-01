@@ -34,6 +34,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | movement, tools and bits, the class abilities, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
+| a **new look** for anything drawn — concept sheets Noah picks from before a grid ships | the `concept-art` skill ([.claude/skills/concept-art/SKILL.md](.claude/skills/concept-art/SKILL.md)); past sheets in `docs/media/concepts/` |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
 | the file layout, load order, what each file exposes, `app/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | which banner / function in which js file owns a thing | [docs/dev/code-map.md](docs/dev/code-map.md) |

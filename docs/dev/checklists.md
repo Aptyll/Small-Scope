@@ -3,6 +3,17 @@
 Step-by-step lists for the changes that touch many places at once, plus the intentionally dead
 code you should not "clean up".
 
+## Concepting a new look
+
+A new sprite — a character, an NPC, a creature, a building — is **picked off a concept sheet
+before its grid goes into `js/sprites.js`**: three candidate looks in the game's own ASCII grid
+language, rendered at 6× in both team colours and every facing beside a player for scale, saved
+under `docs/media/concepts/` and handed to Noah to choose from. The whole procedure, the sheet
+template and the grid lint are the `concept-art` skill in
+[.claude/skills/concept-art/](../../.claude/skills/concept-art/SKILL.md); the merchant's two
+rounds (`merchant-concepts-1`, hoods, rejected; `merchant-concepts-2`, D picked) are the worked
+example.
+
 ## Verifying a change
 
 The rule is in [CLAUDE.md](../../CLAUDE.md): look at the running game, don't re-read the code and

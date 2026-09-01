@@ -58,12 +58,14 @@ white, for the downed objective's hit flash):
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
 still reads as tier), `robotTeam[team]`, and `merchant[team]` — the eagle's driver
 ([the merchant](gameplay.md#the-merchant)): its **own grids**, `merchDown`/`merchUp`/`merchSide`
-plus `merchFeet` — **16 × 18**, two rows taller than a slot and the same ten wide — a plain
-**hooded figure**, silhouette first: a round hood in the **team's colour** (`y`/`Y`, the one
-team ink and all of it), the hood's shadow (`s`) around a narrow four-wide face, a dark robe
-(`r`/`R`/`d`) hanging straight to the hem with no belt and no trim, boots under it, three frames
-a direction (the boots walk, the robe hangs; the side grid faces right and flips), under
-`merchantPal`. Nothing on it is a slot's coat or hat, so the side reads off the hood, the
+plus `merchFeet` — **16 × 18**, two rows taller than a slot — an old trader in a wide flat
+**fur hat** (`f`/`F`, twelve wide, the silhouette) with a **team-cloth crown** (`y`/`Y`, the one
+team ink and all of it), a white **beard** (`w`/`W`) down the chest, a khaki wool coat
+(`r`/`R`/`d`) hanging straight to the hem, boots under it, three frames a direction (the boots
+walk, the coat hangs; the side grid faces right and flips), under `merchantPal`. It is look **D**
+off the concept sheet in `docs/media/concepts/merchant-concepts-2.png` (the `concept-art` skill
+in `.claude/skills/` is how a sheet is made and picked — two rounds of hoods and hats came
+before this one). Nothing on it is a slot's coat or hat, so the side reads off the crown, the
 nameplate and the bar (no prone poses — it never lies down). A new character or building sprite has to
 be added to those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's
 colour — and every read of one of them indexes by `skin(team)` (js/player.js), never the bare
