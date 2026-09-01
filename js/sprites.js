@@ -560,6 +560,714 @@
     '....oSSooSSo....',
   ];
 
+  // ---------------------------------------------------------------- stalker (champion 3)
+  // Same 16x16 body plan as the player and the skater so every pose, frame and
+  // ground contact lines up. A deep hood with the face lost inside it, cloth
+  // wraps instead of the pom hat, and a snow-cloak thrown over the shoulders.
+  //
+  // The white is deliberately NOT team-tinted - a snow-cloak is snow on both
+  // sides - so the team still has to read off the hood (t/T) and the coat
+  // (r/R/d) underneath it, which is why the mantle is a shoulder cape and
+  // never covers the standing body whole.
+  //
+  // The PRONE set is the one that matters. Lying down, the cloak is what shows:
+  // the coat rows the other two champions keep are white here, so a settled
+  // stalker reads as a drift with a hooded head at one end rather than as a
+  // person on the ground.
+  // Extra palette chars: h hood shadow, w cloak, v cloak shade.
+  const STPAL_EXTRA = { 'h': '#1a1626', 'w': '#e8eef7', 'v': '#c3ccd9' };
+  const stDownBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '...otTTTTTTto...',
+    '...othhhhhhto...',
+    '...othkkkkhto...',
+    '...othkeekhto...',
+    '....ohhKKhho....',
+    '....owwwwwwo....',
+    '...owwvvvvwwo...',
+    '...owwrrrrwwo...',
+    '...omorrrromo...',
+    '....orrrRRro....',
+    '....oddddddo....',
+  ];
+  const stDownIdle = stDownBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const stDownA = stDownBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const stDownB = stDownBody.concat(['.....bb..pp.....', '.........bb.....']);
+  const stUpBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '...otTTTTTTto...',
+    '...otttttttto...',
+    '...otttttttto...',
+    '....otttttto....',
+    '....owwwwwwo....',
+    '...owwwwwwwwo...',
+    '...owwrrrrwwo...',
+    '...omorrrromo...',
+    '....orrrrrro....',
+    '....orrrRRro....',
+    '....oddddddo....',
+  ];
+  const stUpIdle = stUpBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const stUpA = stUpBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const stUpB = stUpBody.concat(['.....bb..pp.....', '.........bb.....']);
+  // side = facing right, with the cloak trailing off the back edge
+  const stSideBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '...otTTTTTtto...',
+    '...othhhhhkto...',
+    '...othhhhekto...',
+    '....ohhhKKko....',
+    '....owwwwwwo....',
+    '..vwowwwwwwo....',
+    '.vvwowwrrrro....',
+    '....orrrRRro....',
+    '....orrommro....',
+    '....odddddo.....',
+    '....odddddo.....',
+  ];
+  const stSideIdle = stSideBody.concat(['......pp.pp.....', '......bb.bb.....']);
+  const stSideA = stSideBody.concat(['.....pp...pp....', '.....bb...bb....']);
+  const stSideB = stSideBody.concat(['.......pp.......', '.......bb.......']);
+  const pnStDownIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddo...',
+    'ommowwwwwwwwommo',
+    'ommowwvvvvwwommo',
+    '...owwwwwwwwo...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....ohheehho....',
+  ];
+  const pnStDownA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddommo',
+    '...owwwwwwwwommo',
+    'ommowwvvvvwwo...',
+    'ommowwwwwwwwo...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....ohheehho....',
+  ];
+  const pnStDownB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    'ommoddddddddo...',
+    'ommowwwwwwwwo...',
+    '...owwvvvvwwommo',
+    '...owwwwwwwwommo',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....ohheehho....',
+  ];
+  const pnStUpIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...owwwwwwwwo...',
+    'ommowwvvvvwwommo',
+    'ommowwwwwwwwommo',
+    '...owwwwwwwwo...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnStUpA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...owwwwwwwwommo',
+    '...owwvvvvwwommo',
+    'ommowwwwwwwwo...',
+    'ommowwwwwwwwo...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnStUpB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    'ommowwwwwwwwo...',
+    'ommowwvvvvwwo...',
+    '...owwwwwwwwommo',
+    '...owwwwwwwwommo',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnStSideIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodwwwttThKo',
+    '.oBbbpwwwvwtheho',
+    '.oBbbpwwwvwthhho',
+    '..obbpdwwwwohho.',
+    '...oooodwwoowwwo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnStSideA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '...oppooooottTo.',
+    '..oooodwwwttThKo',
+    '.oBbbpwwwvwtheho',
+    '.oBbbpwwwvwthhho',
+    '..obbpdwwwwohho.',
+    '...oooodwwoowwwo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnStSideB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodwwwttThKo',
+    '.oBbbpwwwvwtheho',
+    '.oBbbpwwwvwthhho',
+    '..obbpdwwwwohho.',
+    '...oooodwwoowwwo',
+    '...oppoooooooo..',
+    '................',
+  ];
+
+  // ---------------------------------------------------------------- tinker (champion 4)
+  // Same 16x16 body plan again. Goggles pushed up onto the forehead, a padded
+  // work coat, and a harness of straps and brass fittings across the chest.
+  //
+  // She is the widest silhouette on the roster and that is the whole point: the
+  // chest runs the full 12 px where every other champion stops at 10, so "she
+  // is carrying more than she can fire" reads before any number does. One
+  // oversized glove on her left, because the class throws what nobody else can
+  // lift. Extra palette chars: L strap leather, n brass, g/G goggle glass.
+  const TKPAL_EXTRA = { 'L': '#6b4a30', 'n': '#c8a24a', 'g': '#203a52', 'G': '#8fd8ff' };
+  const tkDownBody = [
+    '................',
+    '.....oooooo.....',
+    '....oGgGgGGo....',
+    '....otttttto....',
+    '....okkkkkko....',
+    '....okekkeko....',
+    '....oxkKKkxo....',
+    '..oLLLLLLLLLLo..',
+    '..oLnrrrrrrnLo..',
+    '..oLnrrrrrrnLo..',
+    '..oLLnrrrrnLLo..',
+    '..ommorrrrromo..',
+    '...orrrRRrrro...',
+    '....oddddddo....',
+  ];
+  const tkDownIdle = tkDownBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const tkDownA = tkDownBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const tkDownB = tkDownBody.concat(['.....bb..pp.....', '.........bb.....']);
+  const tkUpBody = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otttttto....',
+    '....otttttto....',
+    '....ommmmmmo....',
+    '..oLLLLLLLLLLo..',
+    '..oLnrrrrrrnLo..',
+    '..oLnrrrrrrnLo..',
+    '..oLLnrrrrnLLo..',
+    '..ommorrrrromo..',
+    '...orrrRRrrro...',
+    '....oddddddo....',
+  ];
+  const tkUpIdle = tkUpBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const tkUpA = tkUpBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const tkUpB = tkUpBody.concat(['.....bb..pp.....', '.........bb.....']);
+  // side = facing right, the harness and its pouches on the near shoulder
+  const tkSideBody = [
+    '................',
+    '.....oooooo.....',
+    '....oGgGgGto....',
+    '....otttttto....',
+    '....ottkkkko....',
+    '....ottkkeko....',
+    '....otkKKKko....',
+    '..oLLLLLLLLo....',
+    '.oLnrrrrrrLo....',
+    '.oLnrrrrrrLo....',
+    '..oLnrrrrnLo....',
+    '..orrommmro.....',
+    '....odddddo.....',
+    '....odddddo.....',
+  ];
+  const tkSideIdle = tkSideBody.concat(['......pp.pp.....', '......bb.bb.....']);
+  const tkSideA = tkSideBody.concat(['.....pp...pp....', '.....bb...bb....']);
+  const tkSideB = tkSideBody.concat(['.......pp.......', '.......bb.......']);
+  const pnTkDownIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddo...',
+    'ommorrLnnLrrommo',
+    'ommorrLnnLrrommo',
+    '...orrLnnLrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnTkDownA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddommo',
+    '...orrLnnLrrommo',
+    'ommorrLnnLrro...',
+    'ommorrLnnLrro...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnTkDownB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    'ommoddddddddo...',
+    'ommorrLnnLrro...',
+    '...orrLnnLrrommo',
+    '...orrLnnLrrommo',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....oGgGgGgo....',
+  ];
+  const pnTkUpIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...oLLLLLLLLo...',
+    'ommorrLnnLrrommo',
+    'ommorrLnnLrrommo',
+    '...orrLnnLrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnTkUpA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '...oLLLLLLLLommo',
+    '...orrLnnLrrommo',
+    'ommorrLnnLrro...',
+    'ommorrLnnLrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnTkUpB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....otttttto....',
+    '....otTTTTto....',
+    'ommoLLLLLLLLo...',
+    'ommorrLnnLrro...',
+    '...orrLnnLrrommo',
+    '...orrLnnLrrommo',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnTkSideIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodrrLnttGko',
+    '.oBbbprrLnrtkeko',
+    '.oBbbprrLnrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrroommmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnTkSideA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '...oppooooottTo.',
+    '..oooodrrLnttGko',
+    '.oBbbprrLnrtkeko',
+    '.oBbbprrLnrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrrommmmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnTkSideB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooottTo.',
+    '..oooodrrLnttGko',
+    '.oBbbprrLnrtkeko',
+    '.oBbbprrLnrtkKko',
+    '..obbpdrrrrokKo.',
+    '...oooodrrooommo',
+    '...oppoooooooo..',
+    '................',
+  ];
+
+  // ---------------------------------------------------------------- warden (champion 5)
+  // The last of the five on the shared 16x16 plan. A hood under a stiff iron
+  // BRIM, bracers jutting a pixel past the shoulders, and a long banded coat
+  // that runs to the boots.
+  //
+  // She and the tinker are the two that break the 10 px body, and they break
+  // it differently: the tinker is a solid 12 px slab from collar to hem, which
+  // reads as CARRYING; the warden is 10 px banded top to bottom with only the
+  // two bracer rows out at 12, which reads as ARMOURED. One is loaded, the
+  // other is planted, and at sixteen pixels that difference has to come out of
+  // where the width sits rather than how much of it there is.
+  //
+  // The ember at her belt is the only warm colour on any champion set and the
+  // only one not team-tinted - a lit thing on a cold figure, and the mark her
+  // hearth and her braziers are the same fire as. It is small on purpose: one
+  // or two pixels, so it reads as carried rather than as a light source (the
+  // game has none - renderLighting grades the finished frame instead).
+  // Extra palette chars: A brim/bracer iron, N its shade, E ember, F its core.
+  const WDPAL_EXTRA = { 'A': '#9aa3ad', 'N': '#6c7684', 'E': '#e0533a', 'F': '#ffd95c' };
+  const wdDownBody = [
+    '................',
+    '....oooooooo....',
+    '...oAAAAAAAAo...',
+    '....otttttto....',
+    '....otkkkkto....',
+    '....otkeekto....',
+    '....okKKKKko....',
+    '...ommmmmmmmo...',
+    '..oArrrrrrrrAo..',
+    '..oNrrrrrrrrNo..',
+    '...oddddddddo...',
+    '...orrEFErrro...',
+    '...oddddddddo...',
+    '...orrrrrrrro...',
+  ];
+  const wdDownIdle = wdDownBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const wdDownA = wdDownBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const wdDownB = wdDownBody.concat(['.....bb..pp.....', '.........bb.....']);
+  const wdUpBody = [
+    '................',
+    '....oooooooo....',
+    '...oAAAAAAAAo...',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otttttto....',
+    '....otttttto....',
+    '...ommmmmmmmo...',
+    '..oArrrrrrrrAo..',
+    '..oNrrrrrrrrNo..',
+    '...oddddddddo...',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+    '...orrrrrrrro...',
+  ];
+  const wdUpIdle = wdUpBody.concat(['.....pp..pp.....', '.....bb..bb.....']);
+  const wdUpA = wdUpBody.concat(['.....pp..bb.....', '.....bb.........']);
+  const wdUpB = wdUpBody.concat(['.....bb..pp.....', '.........bb.....']);
+  // side = facing right; the brim juts forward and the ember rides the belt
+  const wdSideBody = [
+    '................',
+    '....oooooooo....',
+    '...oAAAAAAAAAo..',
+    '....otttttto....',
+    '....ottkkkko....',
+    '....ottkkeko....',
+    '....otkKKKko....',
+    '...ommmmmmmo....',
+    '..oArrrrrrAo....',
+    '..oNrrrrrrNo....',
+    '...odddddEFo....',
+    '...orrrrrro.....',
+    '...oddddddo.....',
+    '...orrrrrro.....',
+  ];
+  const wdSideIdle = wdSideBody.concat(['......pp.pp.....', '......bb.bb.....']);
+  const wdSideA = wdSideBody.concat(['.....pp...pp....', '.....bb...bb....']);
+  const wdSideB = wdSideBody.concat(['.......pp.......', '.......bb.......']);
+  const pnWdDownIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddo...',
+    'ommorrrrrrrrommo',
+    'ommorrEFEErrommo',
+    '...oddddddddo...',
+    '....otttttto....',
+    '....oAAAAAAo....',
+    '....okekkeko....',
+  ];
+  const pnWdDownA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    '...oddddddddommo',
+    '...orrrrrrrrommo',
+    'ommorrEFEErro...',
+    'ommoddddddddo...',
+    '....otttttto....',
+    '....oAAAAAAo....',
+    '....okekkeko....',
+  ];
+  const pnWdDownB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '....oooooooo....',
+    '....obboobbo....',
+    '....oppooppo....',
+    '...oppppppppo...',
+    'ommoddddddddo...',
+    'ommorrrrrrrro...',
+    '...orrEFEErrommo',
+    '...oddddddddommo',
+    '....otttttto....',
+    '....oAAAAAAo....',
+    '....okekkeko....',
+  ];
+  const pnWdUpIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....oAAAAAAo....',
+    '....otttttto....',
+    '...ommmmmmmmo...',
+    'ommorrrrrrrrommo',
+    'ommoddddddddommo',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnWdUpA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....oAAAAAAo....',
+    '....otttttto....',
+    '...ommmmmmmmommo',
+    '...orrrrrrrrommo',
+    'ommoddddddddo...',
+    'ommorrrrrrrro...',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnWdUpB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '......ommo......',
+    '....oooooooo....',
+    '....oAAAAAAo....',
+    '....otttttto....',
+    'ommommmmmmmmo...',
+    'ommorrrrrrrro...',
+    '...oddddddddommo',
+    '...orrrrrrrrommo',
+    '...oddddddddo...',
+    '...oppppppppo...',
+    '....oppooppo....',
+    '....obboobbo....',
+  ];
+  const pnWdSideIdle = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooAAATo.',
+    '..oooodrrEttTkKo',
+    '.oBbbprrFRrtkeko',
+    '.oBbbprrErrtkKko',
+    '..obbpdddrrokKo.',
+    '...oooodrroommmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnWdSideA = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '...oppoooAAATo..',
+    '..oooodrrEttTkKo',
+    '.oBbbprrFRrtkeko',
+    '.oBbbprrErrtkKko',
+    '..obbpdddrrokKo.',
+    '...oooodrrommmmo',
+    '......oooooooo..',
+    '................',
+  ];
+  const pnWdSideB = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '........ommoooo.',
+    '.....oooooAAATo.',
+    '..oooodrrEttTkKo',
+    '.oBbbprrFRrtkeko',
+    '.oBbbprrErrtkKko',
+    '..obbpdddrrokKo.',
+    '...oooodrrooommo',
+    '...oppoooooooo..',
+    '................',
+  ];
+
   // ---------------------------------------------------------------- raider
   // Player-like night raider: same body grids, hostile palette.
   const RDPAL = {
@@ -2661,9 +3369,83 @@
       },
     };
   };
+  const stalkerSet = (pal) => {
+    const sp = Object.assign({}, pal, STPAL_EXTRA);
+    return {
+      down: [bake(stDownIdle, sp), bake(stDownA, sp), bake(stDownB, sp)],
+      up: [bake(stUpIdle, sp), bake(stUpA, sp), bake(stUpB, sp)],
+      right: [bake(stSideIdle, sp), bake(stSideA, sp), bake(stSideB, sp)],
+      left: [flipH(bake(stSideIdle, sp)), flipH(bake(stSideA, sp)), flipH(bake(stSideB, sp))],
+      prone: {
+        down: [bakeSpan(pnStDownIdle, sp), bakeSpan(pnStDownA, sp), bakeSpan(pnStDownB, sp)],
+        up: [bakeSpan(pnStUpIdle, sp), bakeSpan(pnStUpA, sp), bakeSpan(pnStUpB, sp)],
+        right: [bakeSpan(pnStSideIdle, sp), bakeSpan(pnStSideA, sp), bakeSpan(pnStSideB, sp)],
+        left: [flipH(bakeSpan(pnStSideIdle, sp)), flipH(bakeSpan(pnStSideA, sp)), flipH(bakeSpan(pnStSideB, sp))],
+      },
+    };
+  };
+  const tinkerSet = (pal) => {
+    const sp = Object.assign({}, pal, TKPAL_EXTRA);
+    return {
+      down: [bake(tkDownIdle, sp), bake(tkDownA, sp), bake(tkDownB, sp)],
+      up: [bake(tkUpIdle, sp), bake(tkUpA, sp), bake(tkUpB, sp)],
+      right: [bake(tkSideIdle, sp), bake(tkSideA, sp), bake(tkSideB, sp)],
+      left: [flipH(bake(tkSideIdle, sp)), flipH(bake(tkSideA, sp)), flipH(bake(tkSideB, sp))],
+      prone: {
+        down: [bakeSpan(pnTkDownIdle, sp), bakeSpan(pnTkDownA, sp), bakeSpan(pnTkDownB, sp)],
+        up: [bakeSpan(pnTkUpIdle, sp), bakeSpan(pnTkUpA, sp), bakeSpan(pnTkUpB, sp)],
+        right: [bakeSpan(pnTkSideIdle, sp), bakeSpan(pnTkSideA, sp), bakeSpan(pnTkSideB, sp)],
+        left: [flipH(bakeSpan(pnTkSideIdle, sp)), flipH(bakeSpan(pnTkSideA, sp)), flipH(bakeSpan(pnTkSideB, sp))],
+      },
+    };
+  };
+  const wardenSet = (pal) => {
+    const sp = Object.assign({}, pal, WDPAL_EXTRA);
+    return {
+      down: [bake(wdDownIdle, sp), bake(wdDownA, sp), bake(wdDownB, sp)],
+      up: [bake(wdUpIdle, sp), bake(wdUpA, sp), bake(wdUpB, sp)],
+      right: [bake(wdSideIdle, sp), bake(wdSideA, sp), bake(wdSideB, sp)],
+      left: [flipH(bake(wdSideIdle, sp)), flipH(bake(wdSideA, sp)), flipH(bake(wdSideB, sp))],
+      prone: {
+        down: [bakeSpan(pnWdDownIdle, sp), bakeSpan(pnWdDownA, sp), bakeSpan(pnWdDownB, sp)],
+        up: [bakeSpan(pnWdUpIdle, sp), bakeSpan(pnWdUpA, sp), bakeSpan(pnWdUpB, sp)],
+        right: [bakeSpan(pnWdSideIdle, sp), bakeSpan(pnWdSideA, sp), bakeSpan(pnWdSideB, sp)],
+        left: [flipH(bakeSpan(pnWdSideIdle, sp)), flipH(bakeSpan(pnWdSideA, sp)), flipH(bakeSpan(pnWdSideB, sp))],
+      },
+    };
+  };
   // champ[c][team] - one full pose set per champion per team colour
-  const champPlayers = [teamPlayers, TEAM_SKINS.map((t) => skaterSet(teamPlayerPal(t)))];
+  const champPlayers = [teamPlayers, TEAM_SKINS.map((t) => skaterSet(teamPlayerPal(t))),
+    TEAM_SKINS.map((t) => stalkerSet(teamPlayerPal(t))),
+    TEAM_SKINS.map((t) => tinkerSet(teamPlayerPal(t))),
+    TEAM_SKINS.map((t) => wardenSet(teamPlayerPal(t)))];
+  // The WARDEN's ice wall. Its own art and its own palette rather than the
+  // palisade's tier swap, because it is not a building anybody paid for - it
+  // is a slab of river ice hauled up for nine seconds. One team band across
+  // the middle so a wall still says whose it is, and no tier: it has one.
+  const iceWall = [
+    '................',
+    '.....IIII.......',
+    '....IiiiiI......',
+    '...IiiiiiiI.....',
+    '...IiisssiiI....',
+    '..IiissssiiI....',
+    '..IiisscciiI....',
+    '..IiisscciiI....',
+    '..IiissssiiI....',
+    '..diissssiid....',
+    '..ddisssidd.....',
+    '...dddsddd......',
+    '....oooooo......',
+    '.....oooo.......',
+    '................',
+    '................',
+  ];
+  const iceWallPal = (t) => ({
+    '.': null, o: '#2f5a78', d: '#3f7396', s: '#7fb8d8', i: '#bfe6ff', I: '#eaf6ff', c: t.coat,
+  });
   const teamBuild = TEAM_SKINS.map((t) => ({
+    icewall: [bake(iceWall, iceWallPal(t))],
     wall: TIER_PALS.map((b) => bake(wall, teamBuildPal(b, t))),
     turret: TIER_PALS.map((b) => bake(turret, teamBuildPal(b, t))),
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),

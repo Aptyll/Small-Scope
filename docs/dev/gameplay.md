@@ -146,10 +146,27 @@ One entry in the `TOOLS` table (`shortbow`, `sling`, `recurve`, `hornbow`, `long
 
 | field | means |
 | --- | --- |
-| `rof` | game steps between shots. `toolRof(p, cell)` turns it into seconds and scales it by `kit.nock / BOW_NOCK`, so QUICKDRAW, the LOOSE ability rank and QUICK HANDS all still quicken it |
-| `cap` | how many bit cells it has (2–5) |
-| `tensile` | the heaviest bit it can throw; anything heavier sits in its cell as dead weight and is skipped |
+| `rof` | game steps between shots. `toolRof(p, cell)` turns it into seconds and scales it by `kit.nock / BOW_NOCK` **and `kit.rofMul`**, so QUICKDRAW, the LOOSE ability rank and QUICK HANDS all still quicken it |
+| `cap` | how many bit cells it has (2–5). The one number of the three a kit may **not** bend — see below |
+| `tensile` | the heaviest bit it can throw; anything heavier sits in its cell as dead weight and is skipped. Asked through **`tensileOf(cell, p)`**, never off the table, because `kit.tensile` adds to it |
 | `tier` / `art` | which of the three `TOOL_TIERS` palettes it wears, and which 12×12 silhouette |
+
+**Two of those three bend to the kit**, so a class changes what a *found* tool does rather than only
+what it flew in with: `kit.tensile` (a flat delta) and `kit.rofMul`. Both are read fresh per shot, so
+they carry onto a bow looted thirty seconds ago with no instance state — and both are 0 / 1 for
+every class shipped today.
+
+`tensileOf(cell, p)` is the single place the delta lands, and **every** site that asks what a tool can
+throw goes through it: the firing gate (`bitFires`), the bot stuffing bits into its own tool
+(`botFitLoadout`), and all six HUD/tooltip sites that *draw* the answer — the bit column's weight
+pips and ceiling plate, the tool tooltip's MAX WEIGHT row and TOO HEAVY marks, the bit tooltip, and
+the empty-cell note. A class that raises the ceiling while the column still greys the bit out is a
+HUD lying about its own weapon, which is the same failure as an aim line lying about range.
+
+`cap` is deliberately **not** bendable. It is baked into the `bits` array at `makeTool()` time, and a
+tool instance moves between players through drops — so a 3-cell shortbow built by one class would
+still be a 3-cell shortbow in another's hands, and the extra cell would leak across the match. A cap
+delta would have to gate usable cells at *fire* time over a max-length array instead.
 
 A tool is **instanced**: its bag cell *is* the tool, `bits` array and all (`makeTool`), so it is
 moved between bag, slot and drop rather than rebuilt from its type name — see the hard rule in
@@ -169,10 +186,28 @@ flight. A spent shot is simply gone — nothing lands to be picked back up.
 A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
 **every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
 `spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot becomes N in a spread), `twin` (fire the
-next two projectile bits in one press), `lit`, and the fire quartet below. Cells fold **in whatever
-order they sit in**, so a `mod` must write values that do not depend on that order — a max or a set,
-never a multiply of what is already there. Eight exist: SPEEDUP, SPLITTER, DUPLICATE, HEFT,
-LONGSHOT, and the three that carry fire.
+next two projectile bits in one press), `lit`, the fire quartet below, and the three **rule
+overrides**. Cells fold **in whatever order they sit in**, so a `mod` must write values that do not
+depend on that order — a max or a set, never a multiply of what is already there. Eight exist:
+SPEEDUP, SPLITTER, DUPLICATE, HEFT, LONGSHOT, and the three that carry fire.
+
+#### The three rule overrides
+
+`solid` (does a wall stop it), `ff` (will it hurt your own side) and `col` (the shaft's ink) are the
+per-shot **rules** rather than numbers, and they live in the envelope as **overrides**: `null` means
+"nobody touched this, use the bit's own", and `emitBit` supplies the bit's value when it fires.
+
+They cannot be plain values defaulted from the bit, and the reason is worth keeping: the envelope is
+built **once per press**, before `nextBit` has chosen anything, and DUPLICATE then fires the *next
+two* bits through that same `m` — usually two different bits with different flags. A value copied off
+"the bit" at fold time would hand the second shot the first one's rules.
+
+`col` is the one part of the envelope that **reads at range**: everything else about a class's shot
+is invisible to the other team, which is why a class is allowed to tint its ink and why that stays a
+tint rather than anything mechanical.
+
+Anything that *predicts* a shot reads these the way `emitBit` will, not off the bit — `drawAimLine`
+included, or a wall-passing shot draws a line that stops at a pine.
 
 #### Fire on a shot
 
@@ -207,10 +242,31 @@ A tool holding only modifiers fires nothing, the same as one holding only bits t
    `risePlayer` (the shot is what breaks cover).
 
 `emitBit` is where the player is folded back in: the bit's own damage leads, and the draw
-(`pwScale`), the class kit's `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`), the hero level and then
-the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
-about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
+(`pwScale`), the class kit's `dmgBase`/`dmgPow`, the hero level and then the modifiers scale it —
+so gear, cards and levels all still matter to a weapon they know nothing about. `emitBit` knows
+nothing about *classes*, though: everything a class does to a shot arrives through the envelope
+below. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
 `type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old fields.
+
+#### The class folds into the envelope too
+
+`toolMods(cell, p)` folds the modifier bits **and then the firing class** — `CLASSES[p.cls].mod(m, p)`,
+the same `mod` interface a modifier bit has. Two different contracts, and the difference matters: a
+**bit** folds in whatever order it happens to sit in its cells, so its `mod` must write something
+order-independent (a max or a set, never a multiply of what another bit may not have written yet);
+the **class** folds last and exactly once, so it may lean on what the bits left behind.
+
+`p` is optional. The bit tooltip folds a synthetic one-bit cell to read out what that bit *alone*
+does and passes no `p`, so a reader's class never leaks into the numbers printed there. Everything
+else that measures a real shot passes the real slot — including `drawAimLine`, which would
+otherwise lie about range.
+
+This is the half of a class that **survives the first chest**. A kit number only says "more or less
+of something the formula already had", and the weapon a class flies in with is gone the moment its
+owner finds a better one — [`LOOT_POOL`](#the-tech-tree) is class-blind. The `mod` follows the
+player onto whatever they picked up: the HUNTER's `m.lifeMul *= 1.3` outranges the same bit from
+the same bow in anyone else's hands, and the WARRIOR's speed bonus (`WAR_SPD_DMG`, js/player.js) is
+one flat `m.dmgAdd` on every projectile, exactly like FLAME's.
 
 `toolReady(p)` is the second half of the old quiver gate: an empty slot and a tool with no bit
 light enough to throw are both as dry as an empty quiver, and `updatePlayer` refuses the draw on
@@ -390,7 +446,7 @@ HUNTER — bow, traps, distance control:
 | 1 | **SNARE TRAP** | 10 s | sets an iron jaw at the aim (≤ `TRAP_RANGE`, tile-snapped, visible to everyone). Arms in 1 s — the jaws visibly spread — then the first rival on it takes 8 and is **rooted** (`p.rootT`, 1.2 s: no walk, no roll, no slide; tools still work). `TRAP_MAX` 2 per owner, a third springs the oldest |
 | 2 | **NET SHOT** | 11 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
 | 3 | **FALCON SWEEP** | 18 s | the bird flies the aim line (`falcons`, 340 px): every rival under it is **marked** (`p.markT`, 4 s) — `seenAt()` returns full range for a marked body (its one legal bypass) and both maps keep showing them |
-| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then 14 damage in `VOLLEY_R` |
+| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then **`VOLLEY_SHOTS` (3) of the caster's own loaded bit** fall into it — see below. `VOLLEY_DMG` (14) is the floor when there is nothing to throw |
 
 WARRIOR — close pressure, blocking, momentum:
 
@@ -401,6 +457,46 @@ WARRIOR — close pressure, blocking, momentum:
 | 3 | **AVALANCHE STOMP** | 14 s | a leap-stomp at the feet: 12 damage + radial knockback + a beat of stun in `STOMP_R`, and the **crater** (`craters`) is deep snow that slows rivals crossing it for 4 s |
 | 4 | **JUGGERNAUT** | 20 s | 5 s: immune to stun (`stunUnit` head) and knockback (`damagePlayer`), speed ramps +50 % over the duration, and body contact at speed bowls rivals over — damage scales with the speed carried in, once per rival per activation (`p.jugHit`) |
 
+STALKER — cover, patience, the ambush. **None of the four does damage**; all four move the one
+question nothing else on the roster touches, which is who can see whom:
+
+| key | name | cd | what it does |
+| --- | --- | --- | --- |
+| 1 | **SNOWBLIND** | 12 s | a drift of blown snow at the aim (≤ 130 px, `BLIND_R` 40). Everything standing in it is **veiled** (`veilUnit`/`p.veilT`, refreshed per step the way a crater refreshes a slow), cutting every sight range against it to `VEIL_CUT`. It is **weather, not a team effect** — it hides the caster, her rivals and a deer alike — and it drifts downwind off `windSway`, so it is never a static circle where it was thrown |
+| 2 | **COLD TRAIL** | 14 s | `TRAIL_T` 5 s of leaving **no footprint** and a longer stride (`TRAIL_SPD`). The step still *sounds*: what the ability hides is the track, not the walker |
+| 3 | **KILLING FROST** | 14 s | for `FROST_T` 6 s the next shot counts as an ambush shot **regardless of cover**, and spends itself on that press (`fireTool`). It multiplies whatever bit is loaded, which is the class's one tie into the arsenal |
+| 4 | **WHITEOUT** | 22 s | `WHITE_T` 4 s in which a **crawl keeps its cover** — `concealOf` normally discounts a moving mound to `PRONE_MOVE`, and this is the one thing that lifts it — at `WHITE_SPD` × the crawl. The one ability that finishes a burial it found in progress |
+
+`veilT` is the only thing besides the falcon's `markT` that edits `seenAt`, and they pull opposite
+ways. Neither escapes the floor: `PRONE_SNIFF` still finds anything at arm's length, storm or not.
+
+TINKER — the arsenal, and what it will throw. Two of her four reach into the *tool* rather than the
+world, which no other class does:
+
+| key | name | cd | what it does |
+| --- | --- | --- | --- |
+| 1 | **SCATTER** | 11 s | throws **every** throwable bit in the tool at once, in one `SCAT_SPREAD` fan, through `abFireBit` — one arrow of quiver each. Its floor is unusual: with nothing throwable it hands most of the cooldown back rather than doing nothing for eleven seconds |
+| 2 | **OVERCLOCK** | 20 s | `CLOCK_T` 5 s of `m.fan` 3 and `m.dmgMul` `CLOCK_DMG` — volume, not power — with the rhythm cut to `CLOCK_ROF` and footwork to `CLOCK_MOVE`. The **only timed envelope override**, written by the class mod off `p.clockT` |
+| 3 | **FIELD CACHE** | 18 s | a crate that fills a quiver to `QUIVER_MAX`. It is **neutral ground**: whoever stands on it claims it and `contest()` settles two who do, so a cache dropped badly has resupplied the other team |
+| 4 | **MAGNET** | 16 s | `MAG_T` 3 s in which loose drops slide to her from `MAG_R` instead of the `DROP_PULL` 28 px everyone gets. It widens a reach that already exists (`dropReach`, read by the drop loop in js/sim.js) rather than adding a second pull |
+
+`abilityRofMul(p)` folds every ability allowed to touch the **rhythm**, exactly as `abilityMoveMul`
+folds the movement caps — `toolRof` spends it, so no ability ever edits a tool's own numbers.
+
+WARDEN — geometry, denial, the held ground. The only class whose abilities change the **map**:
+
+| key | name | cd | what it does |
+| --- | --- | --- | --- |
+| 1 | **ICE WALL** | 16 s | raises `WALL_LEN` (3) tiles of solid wall square to the aim (≤ 120 px), for `WALL_T` 9 s. It is a real `STRUCTS` entry made through `createStruct` and taken back down with `destroyStructure`, so it is registered, shootable (55 hp) and destructible like any building. Skips tiles that are occupied, open water, or have a **body standing on them** — a wall that entombs someone is a wall that deleted them. Nowhere to put it hands most of the cooldown back |
+| 2 | **BRAZIER** | 20 s | a hearth for `BRAZ_T` 12 s: `BRAZ_HEAL` hp/s to her **own side** inside `BRAZ_R`, and it clears their slows and nets outright. The one team-only zone on the roster — a fire you built is yours, which is why it is not weather the way SNOWBLIND is |
+| 3 | **SPIKE LINE** | 12 s | a staked line square to the aim: `SPIKE_DMG` **once per body** (a thing you crossed, not a thing you stand in) and a slow that refreshes the whole time it lasts |
+| 4 | **REDOUBT** | 24 s | `RED_T` 6 s of a ring at `RED_R` that **no shot crosses in either direction** — hers included. `redoubtStops` is read once per arrow per step by the arrow loop, off a list that is empty almost always |
+
+**The geometry costs no special case, and that is the point.** `isSolidTile` answers "any `STRUCTS`
+entry is solid" straight off the table, so an `icewall` row is enough to make arrows stop on it,
+bodies collide with it and `navTo` reroute around it without one line anywhere naming it. If a later
+change to this class needs an `if` on the type, something has gone wrong upstream rather than here.
+
 A slot's movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
 crater drag, juggernaut ramps — applied to the walk cap **and** the ice cap in `updatePlayer`. An
 animal or a bot folds the same root and slow through `unitMoveMul(e)`, spent inside `navStep`.
@@ -408,6 +504,56 @@ All damage passes its `src`, so an ability kill credits like an arrow — a trap
 caster has since gone down credits nobody (`abCredit`) rather than a corpse. Bots spend abilities in
 `updateAI`'s fight rung, off cooldown at ranges each is good at. The strip's ability wells (icons,
 cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.md).
+
+### An ability that throws your own bit
+
+`abFireBit(p, x, y, ang, o)` is the **one** reach from abilities.js into the tool system, and it
+exists so an ability shaped like a *shot* can fire whatever the caster actually has loaded instead of
+carrying a damage constant of its own. A hunter who found PYRE gets a burning volley and one holding
+an ICE LANCE gets a very different one, with no code here to say so — the multiplication lives in the
+tables, the way `OBJECTS` and `STRUCTS` already work.
+
+It fires `o.n` shots from `(x, y)` along `ang` through the caster's full envelope, each spending one
+arrow, and **returns how many actually left**. Three rules it owns rather than each caller:
+
+- **0 is a real answer.** A dry quiver or a tool holding nothing throwable fires nothing, and the
+  *caller* decides the fallback — an ability that silently does nothing is dead weight, so every
+  caller needs a floor.
+- **No `risePlayer`, no `nockT`.** The cast already broke cover, and the ability's cooldown is its
+  rhythm rather than the bow's.
+- **`m.twin` is ignored, `m.fan` is not.** DUPLICATE doubles what one *press* spends and an ability
+  is not a press — the caller named its own count. SPLITTER splits each shot rather than adding
+  shots, so it still applies.
+
+**VOLLEY is the one caller today**, and it is the shape every later one should copy. When the ring
+closes it aims one shaft at each body the ring promised to hit (up to `VOLLEY_SHOTS`), scatters any
+left over inside the ellipse, and drops each from `VOLLEY_DROP` above its mark flying straight down
+over a bounded reach — so the shaft passes through that body and dies inside the circle. A hunter
+who found PYRE drops a burning volley; one carrying an ICE LANCE drops a 36-damage one; nothing in
+`abilities.js` says so.
+
+Three things that keep that honest, and are worth copying:
+
+- **Bounded flight.** `o.reach` sets an absolute flight in px, because the dashed ring is a promise
+  about *where the damage lands*. Without it one PYRE longbow volley sprays 300 px past the circle it
+  telegraphed.
+- **One squash constant.** The ring is drawn as an ellipse, so `VOLLEY_SQUASH` is read by the scatter
+  **and** the draw — two copies of `0.72` would let the rain drift off the picture of it.
+- **The floor owns the practice dummies too.** When real shafts fall, the arrow loop already rings a
+  dummy (js/sim.js); `abHitDummies` therefore runs only on the fallback path, or practice
+  double-counts.
+
+`VOLLEY_SHOTS` is 3 against a `QUIVER_MAX` of 6: half the quiver, back in ~7 s of the 16 s cooldown,
+so a volley costs real ammunition without disarming the bow the class is built around. The eight
+staged shafts in `volleyFx` are the *picture* of a rain — most of a volley misses.
+
+The launch itself is `emitBit`'s optional `o` — `{x, y, ang, pow, reach}`. A bow shot takes its origin from
+the hands, its line from the aim and its power from the draw; a shot an ability threw names all three,
+because a volley falls inside a ring nowhere near the caster and there is no draw behind it.
+Everything below the launch — the damage formula, the envelope, the arrow struct — is identical,
+which is the whole reason abilities come through `emitBit` instead of building arrows of their own.
+A shot with an override also leaves the caster's **facing** alone, or a volley would spin the body
+once per falling arrow.
 
 ## The tech tree
 
@@ -1351,7 +1497,7 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
   construction's gold so the two read as different things. What the Keep does for **respawns and
   the win condition** lives in [multiplayer.md](multiplayer.md#the-keep); what a dropped card
   *does* once picked up lives in [Roguelike cards](#roguelike-cards).
-- None of the five structures emits light (see [Lighting](rendering.md#lighting)).
+- None of the five structures emits light (see [Lighting](rendering.md#light-and-weather)).
 
 ## Robots
 

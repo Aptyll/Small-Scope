@@ -174,25 +174,59 @@ rule, which refuses to draw a straight line for a path that does not fly straigh
 **Adding a class** — the tables make most of it mechanical, and every screen picks the new
 entry up with no edit: the select roster grows a portrait (the column wraps right past
 `SEL_P_PER`), the strip, the gear pop-up's preview/ledger and the bot class hash
-(`initPlayers`, already `floor(hash × CLASSES.length)`) are all generic over the tables. What a
-new class needs written:
+(`initPlayers`, already `floor(hash × CLASSES.length)`) are all generic over the tables.
 
-1. a `CLASSES` entry ([js/player.js](../../js/player.js)) — `name` and the `kit` numbers are
-   the load-bearing halves;
-2. the full sprite set in the byte-fragile [js/sprites.js](../../js/sprites.js) —
+**Ask the design question before the code one: *what rule does this class change?*** A class made
+only of kit numbers is comparable to every other class column by column — hp against hp, draw
+against draw — and anything comparable in every column can be beaten in every column, so it
+eventually is. That is structural, not a tuning slip: it is exactly how the WARRIOR came to
+out-shoot the HUNTER with a worse bow. A class that changes a *rule* has no column to lose in. If
+the answer is "it has more health", it is a difficulty slider, not a class.
+
+**Sprites land in a commit BEFORE the `CLASSES` entry — this is a crash, not a bug.**
+`initPlayers` hashes bot classes over `CLASSES.length`, so the instant a `CLASSES` entry exists,
+every AI slot can roll it; `classSet(p)` then reads `SPRITES.champ[p.cls][p.team]` and throws on
+an index the bakes do not have. Sprites first, always, even though it is the slow half.
+
+What a new class needs written:
+
+1. the full sprite set in the byte-fragile [js/sprites.js](../../js/sprites.js) —
    4 directions × 3 frames plus the 5-pose prone set, baked into `SPRITES.champ[c]` per team
-   via the `TEAM_SKINS` bakes ([sprites.md](sprites.md)) — **this is the expensive part**;
+   via the `TEAM_SKINS` bakes ([sprites.md](sprites.md)) — **this is the expensive part**, and
+   it ships first per the rule above. Append-only: the file has a BOM and byte-fragile grids and
+   is never rewritten;
+2. a `CLASSES` entry ([js/player.js](../../js/player.js)) — `name`, the `kit` numbers, and the
+   `mod`:
+   - **`mod(m, p)`** is the half that survives the first chest. `LOOT_POOL` is class-blind, so
+     the weapon a class flies in with is gone the moment its owner finds a better one; the mod is
+     the same interface a modifier bit has, folded last into the shot envelope by `toolMods`, and
+     it follows the player onto whatever they picked up
+     ([gameplay.md](gameplay.md#the-class-folds-into-the-envelope-too)). It may set `m.solid`,
+     `m.ff` and `m.col` as well as the numbers;
+   - **`kit.tensile`** (+ the tool's own ceiling) and **`kit.rofMul`** (× seconds between shots)
+     bend the *found* tool rather than only the issued one. There is deliberately no `cap` delta
+     — see the comment in `baseKit`;
 3. a `CLASS_AB` row of four actives ([js/abilities.js](../../js/abilities.js)): each ability's
    `cd`/`cast`/`blurb`/`use(p)` (plus `acol`/`activeF` if a state runs on the body), its
    `abilityPose` case, any world entities it leaves and their tick/draw, and its on-body draw
-   in `drawAbilityOnPlayer` if it leaves a visible state;
+   in `drawAbilityOnPlayer` if it leaves a visible state. An ability shaped like a **shot** fires
+   the caster's own loaded bit through `abFireBit` instead of carrying a damage constant — and
+   then needs a **floor** for when that returns 0
+   ([gameplay.md](gameplay.md#an-ability-that-throws-your-own-bit));
 4. four detailed 32×32 icons in `AB32` (on `AB32_PAL` — one palette across every big icon);
 5. a 32×32 class **emblem** in `CLASS32` ([js/menu.js](../../js/menu.js), same palette) — the
    symbolic mark the select roster reads the class by;
 6. a `CLASS_LOADOUT` entry ([js/tools.js](../../js/tools.js));
 7. a fight rung in `updateAI` ([js/ai.js](../../js/ai.js)) that spends the four keys at the
    ranges the kit is good at — the class branch there is per-class content and the one `if`
-   that must grow.
+   that must grow. A roster whose bots all play the same way reads as one class five times.
+
+**Whatever PREDICTS a shot has to grow with the envelope.** This has caught three separate
+changes: `drawAimLine` measuring range off the bit while the class stretched it, the bit column
+greying out a bit a raised `tensile` would happily throw, and the aim line stopping at a pine for
+a shot the envelope had made wall-passing. If a class or a mod can change something about a shot,
+find every site that *draws or decides* that thing — `tensileOf` and `toolMods(cell, p)` exist so
+there is one answer rather than nine — before assuming two call sites is the whole job.
 
 **Adding a stored profile field** — the field goes in `blank()` in
 [js/profile.js](../../js/profile.js) *and* in the repair loop `PROFILE.load()` runs over an

@@ -59,23 +59,102 @@ const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 // Every slot plays one of these. A class is a look (SPRITES.champ[c] - the
 // sprite key keeps its legacy name; js/sprites.js is never rewritten) plus a
 // kit - the numbers updatePlayer / emitBit / tryDodge read through kitOf(p)
-// instead of the bare constants - plus its four ACTIVE ABILITIES on keys 1-4
-// (CLASS_AB, js/abilities.js). Picked on the class select screen (local) or
-// hashed from the seed (AI slots) in initPlayers().
+// instead of the bare constants - plus a MOD, plus its four ACTIVE ABILITIES
+// on keys 1-4 (CLASS_AB, js/abilities.js). Picked on the class select screen
+// (local) or hashed from the seed (AI slots) in initPlayers().
+//
+// The MOD is the half that survives the first chest. A kit number only ever
+// says "more or less of something the formula already had", and the weapon a
+// class flies in with is gone the moment its owner finds a better one -
+// LOOT_POOL is class-blind, every tool and bit drops for everybody. So a
+// class expressed only as kit numbers plus a starting bow stops being itself
+// halfway through the match. `mod(m, p)` is the fix: it is the SAME interface
+// a modifier bit has (BITS[].mod, js/tools.js), folded into the same shot
+// envelope by toolMods, so what a class does to a shot follows the player
+// onto whatever they picked up.
+const WAR_SPD_DMG = 5;    // WARRIOR: flat damage on every shot at full carry...
+const WAR_SPD_REF = 200;  // ...ramped in linearly up to this body speed (px/s)
+const HUNT_RANGE_MUL = 1.3; // HUNTER: every shot from any tool flies this much further
+const STK_RANGE_MUL = 1.15; // STALKER: a smaller reach than the hunter's...
+const STK_INK = '#bfe6ff';  // ...and a colder shaft, the one part of an envelope
+                            // that reads at range (m.col)
+const TNK_SPD_MUL = 1.15;   // TINKER: heavy bits fly flatter in her hands, which
+                            // is exactly what HEFT and a lobbed log cost
+const TNK_TENSILE = 2;      // ...and she throws two weights past what the tool says
+const WDN_RANGE_MUL = 0.85; // WARDEN: a short reach...
+const WDN_DMG_ADD = 2;      // ...paid back flat on every shot
 const CLASSES = [
   {
     name: 'HUNTER', role: 'BOW, TRAPS, DISTANCE',
     blurb: ['THE BOW IS THE ARGUMENT: KEEP THE GAP.', 'TRAPS, NETS AND A FALCON CONTROL THE GROUND.', 'CALL A VOLLEY ON ANYONE WHO STANDS STILL.'],
-    stats: { ice: 3, draw: 4, power: 4, tough: 2 },
     kit: { iceMax: 1, iceSteer: 2.8, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.55,
-      bowCharge: BOW_CHARGE, nock: 0.4, dmgBase: 4, dmgPow: 9, spdDmg: 0, dodgeSpeed: DODGE_SPEED, maxHp: 92 },
+      bowCharge: BOW_CHARGE, nock: 0.4, dmgBase: 4, dmgPow: 9, dodgeSpeed: DODGE_SPEED, maxHp: 92 },
+    // KEEP THE GAP, said once and for every tool: the hunter's shots outrange
+    // the same shot from the same bow in anyone else's hands.
+    mod: (m) => { m.lifeMul *= HUNT_RANGE_MUL; },
   },
   {
     name: 'WARRIOR', role: 'PRESSURE, BLOCKING, MOMENTUM',
     blurb: ['THE FIGHT IS AT ARM\'S LENGTH: GET THERE.', 'THE SHIELD EATS ARROWS; THE RUSH CARRIES BODIES.', 'SPEED IS DAMAGE - NOTHING STOPS A JUGGERNAUT.'],
-    stats: { ice: 4, draw: 2, power: 3, tough: 5 },
     kit: { iceMax: 1.15, iceSteer: 3.2, slideMin: 70, fatigue: 0.7, chargeMul: 0.7,
-      bowCharge: 0.75, nock: 0.5, dmgBase: 3, dmgPow: 6, spdDmg: 5, dodgeSpeed: 230, maxHp: 120 },
+      bowCharge: 0.75, nock: 0.5, dmgBase: 3, dmgPow: 6, dodgeSpeed: 230, maxHp: 120 },
+    // SPEED IS DAMAGE. This was a bespoke `kit.spdDmg` term inside emitBit;
+    // as an envelope write it is one flat bonus on every projectile, exactly
+    // like FLAME's, and emitBit went back to knowing nothing about classes.
+    mod: (m, p) => { m.dmgAdd += WAR_SPD_DMG * Math.min(1, Math.hypot(p.vx, p.vy) / WAR_SPD_REF); },
+  },
+  {
+    name: 'STALKER', role: 'COVER, PATIENCE, THE AMBUSH',
+    blurb: ['THE SNOW IS THE WEAPON: BE UNDER IT.', 'A SHOT DOES NOT GIVE YOU AWAY - IT COSTS YOU COVER.', 'WIN THE SHOT YOU CHOSE, NEVER THE FIREFIGHT.'],
+    // The lightest body in the game, the fastest to disappear, and slow
+    // between shots on purpose: she is not meant to survive being found.
+    // `coverShot` is the rule the whole class is - see spendCover, actions.js.
+    kit: { iceMax: 1, iceSteer: 2.6, slideMin: SLIDE_MIN, fatigue: 1.1, chargeMul: 0.6,
+      bowCharge: 0.95, nock: 0.45, dmgBase: 3, dmgPow: 8, dodgeSpeed: 205, maxHp: 84,
+      bury: 0.9, stealth: 0.72, ambushMul: 3.2, rofMul: 1.2, coverShot: 0.34 },
+    // The barb the shortbow could never throw is her opening shot, and the
+    // reach is the hunter's idea at a smaller size: she wants the second-best
+    // range and the best first shot, not the other way round.
+    mod: (m) => { m.lifeMul *= STK_RANGE_MUL; m.col = STK_INK; },
+  },
+  {
+    name: 'TINKER', role: 'THE ARSENAL, AND WHAT IT WILL THROW',
+    blurb: ['THE BOW IS NOT THE WEAPON - WHAT IS IN IT IS.', 'SHE THROWS WEIGHT NOBODY ELSE CAN LIFT.', 'HER OWN NUMBERS ARE THE WORST ON THE FIELD.'],
+    // `dmgBase` 2 is the lowest on the roster ON PURPOSE: her damage is
+    // supposed to come out of bits nobody else can throw, never out of her own
+    // arm. tensile +2 is the whole class - see the note on the mod below.
+    kit: { iceMax: 1, iceSteer: 2.9, slideMin: SLIDE_MIN, fatigue: 1, chargeMul: 0.62,
+      bowCharge: 0.85, nock: 0.48, dmgBase: 2, dmgPow: 7, dodgeSpeed: 215, maxHp: 100,
+      tensile: TNK_TENSILE, rofMul: 1.15 },
+    // +2 rather than +3, and the difference is the whole tool ladder. At +3
+    // every bow in the game reaches weight 8 and throws the entire arsenal, so
+    // which tool she is holding stops meaning anything - the class would erase
+    // the axis it is built on. At +2 a HORN BOW (5 -> 7) makes her the only
+    // slot that throws an ICE LANCE without a tier-2 bow, and a THROWING LOG
+    // (8) still costs her a RECURVE (6 -> 8). She has to choose, which is the
+    // point of her.
+    mod: (m, p) => {
+      m.spdMul *= TNK_SPD_MUL;
+      // OVERCLOCK is a TIMED envelope override, and the reason a class mod
+      // takes `p` at all: volume now, at a real cost per shot.
+      if (p.clockT > 0) { m.fan = Math.max(m.fan, CLOCK_FAN); m.dmgMul *= CLOCK_DMG; }
+    },
+  },
+  {
+    name: 'WARDEN', role: 'GEOMETRY, DENIAL, THE HELD GROUND',
+    blurb: ['THE MAP IS THE WEAPON: CHANGE IT.', 'A WALL YOU RAISED IS WORTH ANY ARROW.', 'SHE DOES NOT CHASE. SHE DECIDES WHERE.'],
+    // The one kit that heals through the night on its own (nightHeal), which
+    // is the same fire the brazier is. Slow, armoured, and short-ranged: every
+    // number says stay where you are.
+    kit: { iceMax: 0.95, iceSteer: 2.5, slideMin: SLIDE_MIN + 10, fatigue: 1.2, chargeMul: 0.6,
+      bowCharge: 0.88, nock: 0.5, dmgBase: 4, dmgPow: 7, dodgeSpeed: 200, maxHp: 112,
+      walkMul: 0.92, dr: 1, nightHeal: true },
+    // Shorter shots, harder ones: she fights from a place rather than toward
+    // one. She shares the HORN BOW body with the tinker and loads it
+    // completely differently - a modifier where the tinker carries a weight -
+    // which is the first time two classes have shared a tool, and fine: the
+    // loadout is the tool PLUS its bits, and those have nothing in common.
+    mod: (m) => { m.lifeMul *= WDN_RANGE_MUL; m.dmgAdd += WDN_DMG_ADD; },
   },
 ];
 // the kit every sim site reads: the class's numbers with the slot's gear
@@ -313,13 +392,38 @@ function pick3Distinct(rarity) {
 // carries; a variant's mod() edits them in place. Shared by refreshKit and
 // the gear pop-up's preview ledger (gearPreviewKit, js/menu.js), so the
 // numbers that page shows can never drift from the ones the sim reads.
+// The class's own numbers over a full set of DEFAULTS - defaults first, so a
+// class kit may override any of them. The order matters and used to be the
+// other way round: while every class only ever set fields the defaults did not
+// mention it made no difference, but the moment one wanted a different
+// `stealth` or `ambushMul` the default silently won and the class shipped
+// without the numbers it was written with. Anything a class does not mention
+// falls through to the row below.
 function baseKit(cls) {
-  return Object.assign({}, CLASSES[cls].kit, {
+  return Object.assign({
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
     harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
     ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
     killHeal: 0,
-  });
+    // ---- the tool triangle -------------------------------------------
+    // A tool is three numbers - rof, cap, tensile - and these bend two of
+    // them for whatever the slot is holding, so a class changes what a
+    // FOUND tool can do rather than only what it flew in with. Both are
+    // read fresh per shot (tensileOf, toolRof - js/tools.js), so they carry
+    // onto a bow looted thirty seconds ago with no instance state.
+    tensile: 0,  // + the tool's own ceiling: the heaviest bit these hands throw
+    rofMul: 1,   // x the seconds between shots
+    // 0 = a shot stands you up like everyone else; above 0 it keeps the cover
+    // and spends this much `hide` per shot instead (spendCover, actions.js)
+    coverShot: 0,
+    // There is deliberately NO `cap` delta here, and it must not be added as
+    // one. `cap` is baked into the bits array at makeTool() time, and a tool
+    // INSTANCE moves between players through drops (bagPut/slotPut/spawnDrop)
+    // - so a 3-cell shortbow built by one class would still be a 3-cell
+    // shortbow in another class's hands, and the extra cell would leak across
+    // the match. Wanting one means gating usable cells at FIRE time over a
+    // max-length array, which is a different job in a different place.
+  }, CLASSES[cls].kit);
 }
 // rebuild p.kit from class + gear + skills + cards
 function refreshKit(p) {
@@ -453,6 +557,12 @@ class Player {
     this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = null;
     this.jugT = 0; this.jugHit = []; this.jugFxT = 0;
     this.hopT = 0;                                 // the net shot's recoil hop, on the body
+    // the stalker's three body clocks: no footprints, the promised ambush,
+    // and the storm that lets a crawl keep its cover
+    this.trailT = 0; this.frostT = 0; this.whiteT = 0;
+    // the tinker's two: the overclocked envelope, and the reach on loose drops
+    this.clockT = 0; this.magT = 0;
+    this.redT = 0;                                 // the warden's ring of cover
     // The one weapon slot the button fires. It holds a tool CELL - the same
     // object a bag cell is, bits and all - so moving one between the bag and
     // the slot is a reference move and a tool never loses what is loaded
@@ -500,7 +610,11 @@ function inAir(p) { return p.aboard || p.dropT > 0; }
 // How buried a slot reads to anything hunting for it. `p.hide` is the cover
 // itself; a mound that is crawling is worth much less than one holding still,
 // which is the whole reason to stop moving before you shoot.
-function concealOf(p) { return p.hide > 0 ? p.hide * (p.moving ? PRONE_MOVE : 1) : 0; }
+// WHITEOUT is the one thing that lifts the moving discount: under the storm a
+// crawling mound is worth as much as a still one, which is the whole ability.
+function concealOf(p) {
+  return p.hide > 0 ? p.hide * (p.moving && !(p.whiteT > 0) ? PRONE_MOVE : 1) : 0;
+}
 // How far p is noticed from by a watcher whose plain sight range is `range`.
 // GHOSTSTEP always shortens it; lying under the snow shortens it hard - but
 // never past PRONE_SNIFF, because at arm's length you are found whatever you
@@ -512,8 +626,11 @@ function seenAt(p, range) {
   // whatever they are lying under, until the mark runs out (js/abilities.js)
   if (p.markT > 0) return range;
   const c = concealOf(p);
-  const r = range * kitOf(p).stealth * (1 - PRONE_CUT * c);
-  return c > 0 ? Math.max(r, Math.min(range, PRONE_SNIFF)) : r;
+  // blown snow (SNOWBLIND) shortens sight for whoever is standing in it,
+  // cover or none - the only other thing besides a mark that edits this
+  const veil = p.veilT > 0 ? VEIL_CUT : 1;
+  const r = range * kitOf(p).stealth * (1 - PRONE_CUT * c) * veil;
+  return c > 0 ? Math.max(r, Math.min(range, PRONE_SNIFF)) : Math.max(r, PRONE_SNIFF * veil);
 }
 // the shot that was worth the wait: full cover, and dead still while it goes
 function ambushReady(p) { return p.prone && p.hide >= 1 && !p.moving; }
@@ -665,7 +782,9 @@ function die(p, src, cause) {
   p.castT = 0; p.castAb = -1;
   p.shieldT = 0; p.rushT = 0; p.rushVictim = null;
   p.jugT = 0; p.hopT = 0;
-  clearUnitStatus(p); // root, slow, net, mark and the fire go out with the body
+  p.trailT = 0; p.frostT = 0; p.whiteT = 0;
+  p.clockT = 0; p.magT = 0; p.redT = 0;
+  clearUnitStatus(p); // root, slow, net, mark, veil and the fire go out with the body
   burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about

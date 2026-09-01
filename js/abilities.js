@@ -39,7 +39,21 @@ const MARK_T = 4;           // s a swept rival stays revealed
 const VOLLEY_RANGE = 150;   // px from the feet the circle can be called
 const VOLLEY_R = 26;        // px radius of the strike
 const VOLLEY_T = 0.8;       // s of telegraph before the arrows land
+// What actually falls is the caster's own loaded bit (abFireBit). VOLLEY_DMG
+// is the FLOOR underneath that - what the ring still does with a dry quiver.
 const VOLLEY_DMG = 14;
+// Three, against a QUIVER_MAX of 6 and QUIVER_REGEN of 2.4s: half the quiver,
+// back in ~7s of the 16s cooldown, so calling a volley costs real ammunition
+// without disarming the bow the class is built around. Six would leave the
+// hunter dry for 14 of those 16 seconds, and the eight staged shafts below
+// are the PICTURE of a rain - most of a volley misses.
+const VOLLEY_SHOTS = 3;
+const VOLLEY_DROP = 22;     // px above its mark a shaft comes down from...
+const VOLLEY_PASS = 6;      // ...and how far past it the shaft carries
+// The ring is drawn as a squashed ellipse (perspective - drawVolley below),
+// and where the shafts SCATTER has to use the same number, or the rain falls
+// somewhere the telegraph never promised. One constant, read by both.
+const VOLLEY_SQUASH = 0.72;
 // warrior
 const SHIELD_T = 2.2;       // s the shield can be held up
 const SHIELD_ARC = 0.35;    // cos-margin of the front arc that blocks
@@ -55,6 +69,47 @@ const STOMP_STUN = 0.25;
 const CRATER_R = 30;        // the deep-snow crater the stomp leaves...
 const CRATER_T = 4;         // ...and how long it slows rivals crossing it
 const CRATER_SLOW = 0.55;
+// stalker
+const BLIND_RANGE = 130;    // px from the feet the cloud can be thrown
+const BLIND_R = 40;         // px radius of blown snow
+const BLIND_T = 7;          // s the cloud hangs before it thins out
+const BLIND_DRIFT = 9;      // px/s it walks downwind while it does
+const VEIL_T = 0.2;         // s of veil a body keeps per step inside it...
+const VEIL_CUT = 0.45;      // ...and what that does to every sight range
+const TRAIL_T = 5;          // s of leaving no print
+const TRAIL_SPD = 1.25;     // ...and the stride while it lasts
+const FROST_T = 6;          // s to spend the promised ambush in
+const WHITE_T = 4;          // s of storm: a crawl keeps its cover...
+const WHITE_SPD = 2.1;      // ...and moves at this multiple of a crawl
+// tinker
+const SCAT_SPREAD = 0.17;   // rad between the arms of a scattered volley
+const CLOCK_T = 5;          // s of overclock...
+const CLOCK_FAN = 3;        // ...every shot splitting this many ways...
+const CLOCK_DMG = 0.55;     // ...each arm worth this much...
+const CLOCK_ROF = 0.55;     // ...and the rhythm cut to this
+const CLOCK_MOVE = 0.85;    // she is planted while it runs: volume costs footwork
+const CACHE_T = 30;         // s a dropped cache waits to be opened
+const CACHE_R = 12;         // px you have to stand within to take it
+const MAG_T = 3;            // s of pull...
+const MAG_R = 90;           // ...and how far it reaches for loose drops
+const DROP_PULL = 28;       // the reach everyone else has (js/sim.js reads both)
+// warden
+const WALL_RANGE = 120;     // px from the feet the wall can be raised
+const WALL_LEN = 3;         // tiles across, laid square to the aim
+const WALL_T = 9;           // s before it melts
+const BRAZ_RANGE = 90;      // px from the feet the hearth can be set
+const BRAZ_R = 46;          // px it warms
+const BRAZ_T = 12;          // s it burns
+const BRAZ_HEAL = 4.5;      // hp/s to an ally standing in it
+const SPIKE_RANGE = 110;    // px from the feet the line can be laid
+const SPIKE_LEN = 54;       // px long
+const SPIKE_R = 11;         // px either side of it
+const SPIKE_T = 8;          // s it lasts
+const SPIKE_DMG = 9;        // once per body, not per step
+const SPIKE_SLOW = 0.5;
+const SPIKE_SLOW_T = 1.2;
+const RED_R = 34;           // px radius of the redoubt ring
+const RED_T = 6;            // s it stands
 const JUG_T = 5;            // s of juggernaut
 const JUG_SPD = 0.5;        // extra speed ramped in over the duration
 const JUG_MIN_SP = 90;      // px/s of body speed before contact hurts anyone
@@ -112,6 +167,78 @@ const CLASS_AB = [
       acol: '#e05a4a', activeF: (p) => (p.jugT > 0 ? p.jugT / JUG_T : 0),
     },
   ],
+  [ // STALKER - cover, patience, the ambush
+    {
+      id: 'blind', name: 'SNOWBLIND', cd: 12, cast: 0.24,
+      blurb: 'THROW UP A DRIFT OF BLOWN SNOW. NOBODY SEES FAR INSIDE IT.',
+      use: (p) => abSnowblind(p),
+    },
+    {
+      id: 'trail', name: 'COLD TRAIL', cd: 14, cast: 0.16,
+      blurb: 'MOVE FAST AND LEAVE NO PRINT IN THE SNOW.',
+      use: (p) => abColdTrail(p),
+      acol: '#9fc4dd', activeF: (p) => (p.trailT > 0 ? p.trailT / TRAIL_T : 0),
+    },
+    {
+      id: 'frost', name: 'KILLING FROST', cd: 14, cast: 0.2,
+      blurb: 'YOUR NEXT SHOT LANDS LIKE ONE LOOSED OUT OF COVER.',
+      use: (p) => abKillingFrost(p),
+      acol: '#bfe6ff', activeF: (p) => (p.frostT > 0 ? p.frostT / FROST_T : 0),
+    },
+    {
+      id: 'white', name: 'WHITEOUT', cd: 22, cast: 0.3,
+      blurb: 'THE STORM COMES WITH YOU. CRAWL FAST AND STAY BURIED.',
+      use: (p) => abWhiteout(p),
+      acol: '#f4f7ff', activeF: (p) => (p.whiteT > 0 ? p.whiteT / WHITE_T : 0),
+    },
+  ],
+  [ // TINKER - the arsenal, and what it will throw
+    {
+      id: 'scatter', name: 'SCATTER', cd: 11, cast: 0.22,
+      blurb: 'THROW EVERY BIT IN THE TOOL AT ONCE, IN ONE SPREAD.',
+      use: (p) => abScatter(p),
+    },
+    {
+      id: 'clock', name: 'OVERCLOCK', cd: 20, cast: 0.26,
+      blurb: 'EVERY SHOT SPLITS THREE WAYS AND COMES TWICE AS FAST, EACH WEAKER.',
+      use: (p) => abOverclock(p),
+      acol: '#c8a24a', activeF: (p) => (p.clockT > 0 ? p.clockT / CLOCK_T : 0),
+    },
+    {
+      id: 'cache', name: 'FIELD CACHE', cd: 18, cast: 0.3,
+      blurb: 'DROP A CRATE OF SHAFTS. WHOEVER REACHES IT FILLS THEIR QUIVER.',
+      use: (p) => abFieldCache(p),
+    },
+    {
+      id: 'magnet', name: 'MAGNET', cd: 16, cast: 0.24,
+      blurb: 'EVERY LOOSE FIND NEARBY SLIDES TO YOUR FEET.',
+      use: (p) => abMagnet(p),
+      acol: '#9fc4dd', activeF: (p) => (p.magT > 0 ? p.magT / MAG_T : 0),
+    },
+  ],
+  [ // WARDEN - geometry and denial
+    {
+      id: 'wall', name: 'ICE WALL', cd: 16, cast: 0.32,
+      blurb: 'RAISE A WALL OF ICE. IT STOPS ARROWS AND FEET ALIKE.',
+      use: (p) => abIceWall(p),
+    },
+    {
+      id: 'brazier', name: 'BRAZIER', cd: 20, cast: 0.3,
+      blurb: 'SET A HEARTH. YOUR SIDE MENDS IN ITS WARMTH AND THAWS OUT.',
+      use: (p) => abBrazier(p),
+    },
+    {
+      id: 'spikes', name: 'SPIKE LINE', cd: 12, cast: 0.26,
+      blurb: 'DRIVE A LINE OF STAKES. WHATEVER CROSSES IT PAYS AND SLOWS.',
+      use: (p) => abSpikeLine(p),
+    },
+    {
+      id: 'redoubt', name: 'REDOUBT', cd: 24, cast: 0.3,
+      blurb: 'THROW UP A RING OF COVER. NO SHOT CROSSES IT - YOURS INCLUDED.',
+      use: (p) => abRedoubt(p),
+      acol: '#9fb6d8', activeF: (p) => (p.redT > 0 ? p.redT / RED_T : 0),
+    },
+  ],
 ];
 
 // the world the abilities put things into
@@ -120,6 +247,12 @@ const craters = [];  // {x, y, team, t}
 const falcons = [];  // {x, y, nx, ny, d, owner, team, seen:[]}
 const nets = [];     // {x, y, nx, ny, d, owner, team, spin}
 const volleys = [];  // {x, y, owner, team, t}
+const blinds = [];   // {x, y, owner, team, t} - blown snow, drifting downwind
+const caches = [];   // {x, y, owner, team, t} - a crate of shafts, first come
+const walls = [];    // {o, t} - the structure the ice wall made, and its clock
+const braziers = []; // {x, y, owner, team, t} - a hearth warming one side
+const spikes = [];   // {x, y, nx, ny, team, t, hit:[]} - a staked line
+const redoubts = []; // {p, t} - a ring no shot crosses. The arrow loop reads it
 const volleyFx = []; // falling shafts, visual only: {x, y, delay, t}
 
 // ---- levelling -----------------------------------------------------------
@@ -149,7 +282,9 @@ function tryAbility(p, i) {
   if (ab.id === 'shield' && p.shieldT > 0) { abShieldDown(p, true); return; }
   if (p.abCd[i] > 0) { if (p === player) SFX.deny(); return; }
   if (ab.id === 'rush' && p.rootT > 0) { if (p === player) SFX.deny(); return; } // pinned: nothing that moves you
-  risePlayer(p); // a cast breaks cover the way the shot does
+  // a cast breaks cover the way the shot does - and is paid for the same way
+  // by a class that keeps it (spendCover, js/actions.js)
+  if (!spendCover(p)) risePlayer(p);
   if (p.charging) { p.charging = false; p.chargeT = 0; }
   p.fireArmed = false;
   p.castAb = i;
@@ -165,6 +300,11 @@ function tryAbility(p, i) {
 function updateAbilities(p, dt) {
   for (let i = 0; i < AB_KEYS; i++) if (p.abCd[i] > 0) p.abCd[i] = Math.max(0, p.abCd[i] - dt);
   if (p.hopT > 0) p.hopT = Math.max(0, p.hopT - dt);
+  if (p.trailT > 0) p.trailT = Math.max(0, p.trailT - dt);
+  if (p.frostT > 0) p.frostT = Math.max(0, p.frostT - dt);
+  if (p.whiteT > 0) p.whiteT = Math.max(0, p.whiteT - dt);
+  if (p.clockT > 0) p.clockT = Math.max(0, p.clockT - dt);
+  if (p.magT > 0) p.magT = Math.max(0, p.magT - dt);
   // root / slow / net / mark / fire: the shared clock every kind of unit runs
   // (updateUnitStatus, js/actions.js) - an animal and a worker bot age the
   // identical states off the identical timers
@@ -242,7 +382,73 @@ function abilityMoveMul(p) {
   if (p.shieldT > 0) m *= 0.4;
   if (p.slowT > 0) m *= p.slowMul;
   if (p.jugT > 0) m *= 1 + JUG_SPD * (1 - p.jugT / JUG_T);
+  if (p.trailT > 0) m *= TRAIL_SPD;
+  if (p.clockT > 0) m *= CLOCK_MOVE;
+  // WHITEOUT multiplies the CRAWL, which is what updatePlayer is capping
+  // while prone - a storm you can only use lying down is the whole trade
+  if (p.whiteT > 0 && p.prone) m *= WHITE_SPD;
   return m;
+}
+
+// The same idea over the RHYTHM instead of the movement caps: every ability
+// allowed to touch the seconds between shots, folded once. `toolRof` spends it
+// (js/tools.js) so no ability ever edits a tool's own numbers.
+function abilityRofMul(p) {
+  return p && p.clockT > 0 ? CLOCK_ROF : 1;
+}
+
+// ---- the one crossing into the arsenal -----------------------------------
+// An ability shaped like a SHOT fires the caster's own loaded bit instead of
+// carrying a damage constant of its own. A hunter who found PYRE gets a
+// burning volley; one holding an ICE LANCE gets a very different one - and
+// neither costs a line of code here, because the multiplication lives in the
+// tables (BITS, the envelope) rather than in a branch, the way OBJECTS and
+// STRUCTS already work.
+//
+// This is deliberately the ONLY reach from this file into the tool system.
+// Everything else here stays kind-blind and constant-driven; anything that
+// wants the arsenal comes through this function rather than around it, or
+// abilities.js quietly grows a second copy of fireTool.
+//
+// Fires `o.n` (default 1) shots of whatever nextBit hands back, from (x, y)
+// along `ang`, each spending one arrow. Every shot still goes through the
+// caster's full envelope, so SPLITTER still fans it and FLAME still lights it.
+//
+// Returns HOW MANY actually left. 0 means the quiver was dry or the tool held
+// nothing it can throw, and the CALLER decides what happens then: an ability
+// that silently does nothing is dead weight, so every caller needs a floor.
+//
+// It does NOT risePlayer - the cast already broke cover - and does NOT touch
+// p.nockT, because the ability's cooldown is its rhythm, not the bow's.
+//
+// It also ignores m.twin on purpose. DUPLICATE doubles what one PRESS spends,
+// and an ability is not a press: the caller named its own shot count, and
+// letting DUPLICATE double an eight-shot volley into sixteen is a
+// multiplication nobody asked for. m.fan is different and DOES apply - it
+// splits each shot rather than adding shots, which is what SPLITTER means.
+function abFireBit(p, x, y, ang, o) {
+  o = o || {};
+  const cell = heldTool(p);
+  if (!cell) return 0;
+  const m = toolMods(cell, p);
+  if (o.mod) o.mod(m); // the ability's own say over the envelope, folded last
+  const n = o.n || 1;
+  // an even fan when the caller asked for one, so a burst is deterministic:
+  // the sim must not spend rng() on where a shot went
+  const spread = o.spread || 0;
+  let fired = 0;
+  for (let i = 0; i < n; i++) {
+    if (p.quiver <= 0) break;
+    const nb = nextBit(cell, p);
+    if (!nb) break;
+    p.quiver = Math.max(0, p.quiver - 1);
+    emitBit(p, BITS[nb.id], nb.id, m, false, 0, {
+      x, y, pow: o.pow === undefined ? 1 : o.pow, reach: o.reach,
+      ang: ang + (n > 1 && spread ? (i - (n - 1) / 2) * spread : 0),
+    });
+    fired++;
+  }
+  return fired;
 }
 
 // ---- hunter: the four effects --------------------------------------------
@@ -305,6 +511,184 @@ function abVolley(p) {
     });
   }
   if (nearPlayer(p.x, p.y)) SFX.arrow();
+}
+
+// ---- stalker: the four effects -------------------------------------------
+// None of the four does damage. All four move the same one question - who can
+// see whom - which is the axis nothing else on the roster touches.
+function abSnowblind(p) {
+  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const r = Math.min(BLIND_RANGE, d);
+  blinds.push({ x: p.x + dx / d * r, y: p.y + dy / d * r, owner: p.id, team: p.team, t: 0 });
+  burst(p.x, p.y, '#eef4fb', 8, 45, 0.45, true);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+function abColdTrail(p) {
+  p.trailT = TRAIL_T;
+  burst(p.x, p.y + 3, '#cfe0f2', 6, 35, 0.4, true);
+  if (nearPlayer(p.x, p.y)) SFX.dodge();
+}
+function abKillingFrost(p) {
+  p.frostT = FROST_T;
+  burst(p.x, p.y - 6, '#bfe6ff', 8, 40, 0.5, true);
+  if (nearPlayer(p.x, p.y)) SFX.rise();
+}
+// the crack of the promise being spent, on the body that spent it (fireTool)
+function frostFx(p) {
+  burst(p.x, p.y - 6, '#bfe6ff', 10, 55, 0.45, true);
+  if (p === player) state.shake = Math.max(state.shake, 2);
+}
+function abWhiteout(p) {
+  p.whiteT = WHITE_T;
+  // the storm arrives already holding: a whiteout cast standing up is wasted,
+  // so it also finishes the burial it found in progress
+  if (p.prone) p.hide = 1;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    particles.push({
+      x: p.x + Math.cos(a) * 7, y: p.y + 2 + Math.sin(a) * 5,
+      vx: Math.cos(a) * 40, vy: Math.sin(a) * 26 - 10,
+      life: 0.55, maxLife: 0.5, color: i % 2 ? '#f4f7ff' : '#cfe0f2', size: 1, grav: 20,
+    });
+  }
+  if (nearPlayer(p.x, p.y)) SFX.hidden ? SFX.hidden() : SFX.place();
+}
+
+// ---- tinker: the four effects --------------------------------------------
+// Two of the four reach into the arsenal rather than the world, which is the
+// only class on the roster that does - SCATTER through abFireBit, OVERCLOCK
+// through the class mod's `p`.
+function abScatter(p) {
+  const cell = heldTool(p);
+  let n = 0;
+  if (cell) for (let i = 0; i < cell.bits.length; i++) if (bitFires(cell, i, p)) n++;
+  const ang = Math.atan2(p.input.aimY - (p.y - BOW_Y), p.input.aimX - p.x);
+  const fired = n ? abFireBit(p, p.x, p.y - BOW_Y, ang, { n, spread: SCAT_SPREAD, pow: 1 }) : 0;
+  // The floor. Everything a tool holds thrown at once is nothing at all when
+  // the tool holds nothing throwable or the quiver is dry - so rather than
+  // burn the cooldown on an empty press, hand most of it back. An ability that
+  // does nothing must not also cost you the next twenty seconds.
+  if (!fired) {
+    const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'scatter');
+    if (i >= 0) p.abCd[i] = Math.min(p.abCd[i], 1.5);
+    if (p === player) SFX.deny();
+    return;
+  }
+  burst(p.x, p.y - BOW_Y, '#c8a24a', 6 + fired * 2, 45, 0.4, true);
+  if (nearPlayer(p.x, p.y)) SFX.arrow();
+}
+function abOverclock(p) {
+  p.clockT = CLOCK_T;
+  burst(p.x, p.y - 4, '#c8a24a', 10, 50, 0.5, true);
+  burst(p.x, p.y - 6, '#f2cc6a', 6, 38, 0.45, true);
+  if (nearPlayer(p.x, p.y)) SFX.levelUp ? SFX.levelUp() : SFX.place();
+}
+function abFieldCache(p) {
+  caches.push({ x: p.x, y: p.y + 4, owner: p.id, team: p.team, t: 0 });
+  burst(p.x, p.y + 4, '#a8794a', 6, 35, 0.4, true);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+function abMagnet(p) {
+  p.magT = MAG_T;
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * Math.PI * 2;
+    particles.push({
+      x: p.x + Math.cos(a) * MAG_R * 0.5, y: p.y + Math.sin(a) * MAG_R * 0.3,
+      vx: -Math.cos(a) * 70, vy: -Math.sin(a) * 44,
+      life: 0.5, maxLife: 0.45, color: i % 2 ? '#9fc4dd' : '#c8a24a', size: 1, grav: 0,
+    });
+  }
+  if (nearPlayer(p.x, p.y)) SFX.pickup();
+}
+// how far a slot reaches for a loose find - everyone's 28 px, hers while the
+// magnet runs. js/sim.js's drop loop is the only reader.
+function dropReach(p) { return p && p.magT > 0 ? MAG_R : DROP_PULL; }
+
+// ---- warden: the four effects --------------------------------------------
+// The only class whose abilities change the MAP. That is handled entirely by
+// the tables: `icewall` is a STRUCTS entry, isSolidTile answers "any STRUCTS
+// entry is solid" off that table, and so arrows stop on it, bodies collide
+// with it and navTo reroutes around it without one line anywhere naming it.
+// Nothing here is a special case, and if a later change needs one, something
+// has gone wrong upstream rather than here.
+function abIceWall(p) {
+  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const r = Math.min(WALL_RANGE, d);
+  const cx = p.x + dx / d * r, cy = p.y + dy / d * r;
+  // laid SQUARE to the aim, so it cuts the line you are looking down
+  const px = -dy / d, py = dx / d;
+  const ctx0 = Math.floor(cx / TILE), cty0 = Math.floor(cy / TILE);
+  let built = 0;
+  for (let k = -(WALL_LEN >> 1); k <= (WALL_LEN >> 1); k++) {
+    const tx = ctx0 + Math.round(px * k), ty = cty0 + Math.round(py * k);
+    if (!inWorld(tx, ty) || objAt(tx, ty) || ground[idx(tx, ty)] === 2) continue;
+    // never raise one THROUGH a body - a wall that entombs whoever is
+    // standing there is a wall that deleted them
+    const wx = tx * TILE + 8, wy = ty * TILE + 8;
+    if (unitsNear(null, wx, wy, 11).length) continue;
+    walls.push({ o: createStruct(tx, ty, 'icewall', 0, p, false), t: 0 });
+    burst(wx, wy, '#bfe6ff', 6, 40, 0.4, true);
+    built++;
+  }
+  // The floor: nowhere to put it - open water, occupied tiles, bodies in the
+  // way. Hand most of the cooldown back rather than eat sixteen seconds.
+  if (!built) {
+    const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'wall');
+    if (i >= 0) p.abCd[i] = Math.min(p.abCd[i], 2);
+    if (p === player) SFX.deny();
+    return;
+  }
+  if (p === player) state.shake = Math.max(state.shake, 3);
+  if (nearPlayer(cx, cy)) SFX.place();
+}
+function abBrazier(p) {
+  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const r = Math.min(BRAZ_RANGE, d);
+  braziers.push({ x: p.x + dx / d * r, y: p.y + dy / d * r, owner: p.id, team: p.team, t: 0 });
+  burst(p.x, p.y - 4, '#ff9440', 8, 45, 0.45);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+function abSpikeLine(p) {
+  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const r = Math.min(SPIKE_RANGE, d);
+  // square to the aim, like the wall: both of hers cut the line you look down
+  spikes.push({
+    x: p.x + dx / d * r, y: p.y + dy / d * r,
+    nx: -dy / d, ny: dx / d, team: p.team, owner: p.id, t: 0, hit: [],
+  });
+  burst(p.x + dx / d * r, p.y + dy / d * r, '#8a6d50', 8, 40, 0.4, true);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+function abRedoubt(p) {
+  p.redT = RED_T;
+  redoubts.push({ p, t: RED_T });
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    particles.push({
+      x: p.x + Math.cos(a) * RED_R * 0.6, y: p.y + 2 + Math.sin(a) * RED_R * 0.4,
+      vx: Math.cos(a) * 30, vy: Math.sin(a) * 18 - 20,
+      life: 0.6, maxLife: 0.55, color: i % 2 ? '#cfe0f2' : '#9fb6d8', size: 1, grav: 40,
+    });
+  }
+  if (p === player) state.shake = Math.max(state.shake, 4);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+// Does this shot die on somebody's redoubt? The ring is symmetric on purpose:
+// it eats what comes in AND what tries to leave, which is the whole cost of
+// standing inside one. Read once per arrow per step by the arrow loop
+// (js/sim.js) - `redoubts` is empty almost always, so this costs nothing.
+function redoubtStops(a, x0, y0, x1, y1) {
+  for (const rd of redoubts) {
+    const q = rd.p;
+    if (!q || q.dead || !q.active) continue;
+    const d0 = Math.hypot(x0 - q.x, y0 - q.y), d1 = Math.hypot(x1 - q.x, y1 - q.y);
+    if ((d0 > RED_R) !== (d1 > RED_R)) return q;
+  }
+  return null;
 }
 
 // ---- warrior: the four effects -------------------------------------------
@@ -477,6 +861,96 @@ function updateAbilityWorld(dt) {
       break;
     }
   }
+  // Blown snow. It hides EVERYONE standing in it, the caster and her rivals
+  // and a deer alike - it is weather, not a team effect - and it walks
+  // downwind off the same field the snow and the pines read (windSway), so it
+  // is never a static circle sitting where it was thrown.
+  for (let i = blinds.length - 1; i >= 0; i--) {
+    const z = blinds[i];
+    z.t += dt;
+    if (z.t > BLIND_T) { blinds.splice(i, 1); continue; }
+    const w = windSway(Math.floor(z.x / TILE), Math.floor(z.y / TILE));
+    z.x += w * BLIND_DRIFT * dt;
+    for (const q of unitsNear(null, z.x, z.y, BLIND_R)) veilUnit(q, VEIL_T);
+  }
+  // A dropped cache is neutral ground, exactly like a loose find: whoever is
+  // standing on it claims it, and the CONTEST decides between two who are -
+  // never the owner by right. A tinker who drops one in the wrong place has
+  // resupplied the other team.
+  for (let i = caches.length - 1; i >= 0; i--) {
+    const c = caches[i];
+    c.t += dt;
+    if (c.t > CACHE_T) { burst(c.x, c.y, '#a8794a', 5, 28, 0.35, true); caches.splice(i, 1); continue; }
+    let taken = false;
+    for (const q of players) {
+      if (!q.active || q.dead || inAir(q) || q.quiver >= QUIVER_MAX) continue;
+      if (Math.hypot(q.x - c.x, q.y - c.y) > CACHE_R) continue;
+      taken = true;
+      contest('cache:' + i, q, () => {
+        gainArrow(q, QUIVER_MAX);
+        addFloater(c.x, c.y - 10, 'QUIVER', '#f2cc6a');
+        burst(c.x, c.y - 2, '#f2cc6a', 10, 50, 0.5, true);
+        if (nearPlayer(c.x, c.y)) SFX.pickup();
+        const at = caches.indexOf(c);
+        if (at >= 0) caches.splice(at, 1);
+      });
+    }
+    if (taken) continue;
+  }
+  // The ice wall melting. Two ways it can already be gone - somebody shot it
+  // down, or a Keep fell on it - and both leave `structures` without it, so
+  // the list is checked rather than trusted before anything is removed twice.
+  for (let i = walls.length - 1; i >= 0; i--) {
+    const w = walls[i];
+    w.t += dt;
+    if (structures.indexOf(w.o) < 0) { walls.splice(i, 1); continue; } // already down
+    if (w.t < WALL_T) continue;
+    destroyStructure(w.o, false, null); // no refund: it was never paid for
+    walls.splice(i, 1);
+  }
+  // The hearth. Its side only - a fire you built is yours, which is the one
+  // asymmetry among the five zone abilities and the reason it is not weather
+  // the way SNOWBLIND is.
+  for (let i = braziers.length - 1; i >= 0; i--) {
+    const b = braziers[i];
+    b.t += dt;
+    if (b.t > BRAZ_T) { burst(b.x, b.y, '#8a6d50', 5, 30, 0.35, true); braziers.splice(i, 1); continue; }
+    for (const q of players) {
+      if (!q.active || q.dead || inAir(q) || q.team !== b.team) continue;
+      if (Math.hypot(q.x - b.x, q.y - b.y) > BRAZ_R) continue;
+      if (q.hp < q.maxHp) q.hp = Math.min(q.maxHp, q.hp + BRAZ_HEAL * dt);
+      q.slowT = 0; q.slowMul = 1;   // thawed out: the crater and the net let go
+      if (q.netT > 0) q.netT = 0;
+    }
+    for (const b2 of robots) {
+      if (b2.dead || b2.team !== b.team) continue;
+      if (Math.hypot(b2.x - b.x, b2.y - b.y) > BRAZ_R) continue;
+      if (b2.hp < (b2.maxHp || b2.hp)) b2.hp = Math.min(b2.maxHp || b2.hp, b2.hp + BRAZ_HEAL * dt);
+    }
+  }
+  // The staked line. Damage is once per body - it is a thing you crossed, not
+  // a thing you are standing in - but the slow refreshes the whole time.
+  for (let i = spikes.length - 1; i >= 0; i--) {
+    const s = spikes[i];
+    s.t += dt;
+    if (s.t > SPIKE_T) { spikes.splice(i, 1); continue; }
+    for (let k = -1; k <= 1; k++) {
+      const sx = s.x + s.nx * k * (SPIKE_LEN / 2), sy = s.y + s.ny * k * (SPIKE_LEN / 2);
+      for (const q of unitsNear(s, sx, sy, SPIKE_R)) {
+        slowUnit(q, SPIKE_SLOW_T, SPIKE_SLOW);
+        if (s.hit.includes(q)) continue;
+        s.hit.push(q);
+        hurtUnit(q, SPIKE_DMG, 0, -0.2, abCredit(s), { kb: 20 });
+        burst(q.x, unitMidY(q), '#8a6d50', 7, 40, 0.4, true);
+        if (nearPlayer(q.x, q.y)) SFX.hit();
+      }
+    }
+  }
+  for (let i = redoubts.length - 1; i >= 0; i--) {
+    const rd = redoubts[i];
+    rd.t -= dt;
+    if (rd.t <= 0 || !rd.p || rd.p.dead) { if (rd.p) rd.p.redT = 0; redoubts.splice(i, 1); }
+  }
   for (let i = craters.length - 1; i >= 0; i--) {
     const z = craters[i];
     z.t += dt;
@@ -533,13 +1007,44 @@ function updateAbilityWorld(dt) {
     if (v.t > 0) continue;
     const src = players[v.owner];
     const by = src && !src.dead ? src : null;
-    // the rain does not check what it is falling on: everything alive under
-    // the ring takes it, a bird crossing it included
-    for (const q of unitsHit(sideOf(v), v.x, v.y, VOLLEY_R + 4)) {
-      const d = Math.hypot(q.x - v.x, q.y - v.y) || 1;
-      hurtUnit(q, VOLLEY_DMG, (q.x - v.x) / d * 0.3, 0.4, by, { kb: 30 });
+    // What falls is the caster's OWN loaded bit. A hunter who found PYRE
+    // drops a burning volley, one carrying an ICE LANCE drops a very
+    // different one, and nothing here says so - the multiplication lives in
+    // BITS and the envelope, never in a branch (abFireBit, the crossing).
+    //
+    // Each shaft is aimed at a body the ring promised to hit, spawned
+    // VOLLEY_DROP above it and flying straight DOWN over a bounded reach, so
+    // it passes through that body and dies inside the circle. Shafts left
+    // over after the bodies are scattered inside the ring, where they can
+    // still catch someone walking in late.
+    let fired = 0;
+    if (by && !inAir(by)) {
+      const marks = [];
+      for (const q of unitsHit(sideOf(v), v.x, v.y, VOLLEY_R)) {
+        if (marks.length >= VOLLEY_SHOTS) break;
+        marks.push([q.x, unitMidY(q)]);
+      }
+      while (marks.length < VOLLEY_SHOTS) { // rand() is the seeded rng: still deterministic
+        const a = rand(0, Math.PI * 2), r = Math.sqrt(rng()) * VOLLEY_R;
+        marks.push([v.x + Math.cos(a) * r, v.y + Math.sin(a) * r * VOLLEY_SQUASH]);
+      }
+      for (const mk of marks) {
+        fired += abFireBit(by, mk[0], mk[1] - VOLLEY_DROP, Math.PI / 2,
+          { reach: VOLLEY_DROP + VOLLEY_PASS });
+      }
     }
-    if (PRACTICE) abHitDummies(v.x, v.y, VOLLEY_R, VOLLEY_DMG);
+    // The floor. A dry quiver, a tool with nothing throwable in it, or a
+    // caster who has gone down since the call - the ability is never dead
+    // weight, so the ring still does the flat strike it did before the
+    // arsenal ever reached it. The dummies belong here too: when real shafts
+    // fall, the arrow loop already rings them (js/sim.js).
+    if (!fired) {
+      for (const q of unitsHit(sideOf(v), v.x, v.y, VOLLEY_R + 4)) {
+        const d = Math.hypot(q.x - v.x, q.y - v.y) || 1;
+        hurtUnit(q, VOLLEY_DMG, (q.x - v.x) / d * 0.3, 0.4, by, { kb: 30 });
+      }
+      if (PRACTICE) abHitDummies(v.x, v.y, VOLLEY_R, VOLLEY_DMG);
+    }
     burst(v.x, v.y, '#eef4fb', 12, 55, 0.5, true);
     if (nearPlayer(v.x, v.y)) SFX.hit();
     volleys.splice(i, 1);
@@ -583,6 +1088,73 @@ function drawAbilityGround(ex, ey, now) {
       ctx.fillRect(px + Math.round(Math.cos(an) * CRATER_R * 0.9), py + Math.round(Math.sin(an) * CRATER_R * 0.55), 2, 1);
     }
   }
+  // the staked line: driven stakes and the churned ground between them
+  for (const s of spikes) {
+    const px = Math.round(s.x - ex), py = Math.round(s.y - ey);
+    if (px < -70 || py < -70 || px > WV_W + 70 || py > WV_H + 70) continue;
+    const a = Math.min(1, (SPIKE_T - s.t) / 1.5);
+    ctx.globalAlpha = a;
+    for (let k = -6; k <= 6; k++) {
+      const t = k / 6;
+      const sx = px + Math.round(s.nx * t * (SPIKE_LEN / 2));
+      const sy = py + Math.round(s.ny * t * (SPIKE_LEN / 2));
+      const h = 4 + ((k + 6) % 3);
+      ctx.fillStyle = '#2b2118';
+      ctx.fillRect(sx, sy - h, 2, h + 1);
+      ctx.fillStyle = '#8a6d50';
+      ctx.fillRect(sx, sy - h, 1, h);
+      ctx.fillStyle = '#c8b08a';
+      ctx.fillRect(sx, sy - h, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // the hearth: a ring of thawed ground, and the fire in the middle of it
+  for (const b of braziers) {
+    const px = Math.round(b.x - ex), py = Math.round(b.y - ey);
+    if (px < -70 || py < -70 || px > WV_W + 70 || py > WV_H + 70) continue;
+    const a = Math.min(1, b.t / 0.4) * Math.min(1, (BRAZ_T - b.t) / 1.5);
+    for (let k = 0; k < 42; k++) {
+      const h1 = hash2(b.x + k * 5, k * 11), h2 = hash2(k * 17, b.y + k * 7);
+      const an = h1 * Math.PI * 2, rr = Math.sqrt(h2) * BRAZ_R;
+      ctx.globalAlpha = a * 0.3 * (1 - rr / BRAZ_R);
+      ctx.fillStyle = h1 < 0.5 ? '#c8956a' : '#a8794a';
+      ctx.fillRect(px + Math.round(Math.cos(an) * rr), py + Math.round(Math.sin(an) * rr * 0.6), 1, 1);
+    }
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#3a2a1c';
+    ctx.fillRect(px - 4, py - 2, 8, 5);
+    ctx.fillStyle = '#6e4a28';
+    ctx.fillRect(px - 3, py - 1, 6, 3);
+    const ph = b.t * 8;
+    for (let k = 0; k < 3; k++) {
+      const lift = 3 + Math.round(2.4 * (1 + Math.sin(ph + k * 2.1)));
+      ctx.fillStyle = '#e0533a';
+      ctx.fillRect(px - 2 + k * 2, py - 2 - lift, 1, lift);
+      ctx.fillStyle = '#ffd95c';
+      ctx.fillRect(px - 2 + k * 2, py - 2 - lift, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // a cache is as plainly visible as a trap is, and to both sides: it is a
+  // crate of shafts sitting in the open, not a secret
+  for (const c of caches) {
+    const px = Math.round(c.x - ex), py = Math.round(c.y - ey);
+    if (px < -16 || py < -16 || px > WV_W + 16 || py > WV_H + 16) continue;
+    const fade = c.t > CACHE_T - 3 ? Math.max(0.25, (CACHE_T - c.t) / 3) : 1;
+    ctx.globalAlpha = fade;
+    ctx.fillStyle = '#3a2a1c';
+    ctx.fillRect(px - 6, py - 5, 12, 9);
+    ctx.fillStyle = '#a8794a';
+    ctx.fillRect(px - 5, py - 4, 10, 7);
+    ctx.fillStyle = '#6e4a28';
+    ctx.fillRect(px - 5, py - 1, 10, 1);
+    // the shafts standing in it, and the team ribbon on the lid
+    ctx.fillStyle = '#e8dcb4';
+    for (let k = 0; k < 4; k++) ctx.fillRect(px - 4 + k * 3, py - 7, 1, 3);
+    ctx.fillStyle = TEAMS[c.team].mark;
+    ctx.fillRect(px - 5, py - 4, 10, 1);
+    ctx.globalAlpha = 1;
+  }
   for (const t of traps) {
     const px = Math.round(t.x - ex), py = Math.round(t.y - ey);
     if (px < -16 || py < -16 || px > WV_W + 16 || py > WV_H + 16) continue;
@@ -615,7 +1187,7 @@ function drawAbilityGround(ex, ey, now) {
       if ((i + ((now * 10) | 0)) % 2) continue;
       const a = (i / 26) * Math.PI * 2;
       ctx.fillStyle = 'rgba(224,99,122,0.85)';
-      ctx.fillRect(px + Math.round(Math.cos(a) * VOLLEY_R), py + Math.round(Math.sin(a) * VOLLEY_R * 0.72), 1, 1);
+      ctx.fillRect(px + Math.round(Math.cos(a) * VOLLEY_R), py + Math.round(Math.sin(a) * VOLLEY_R * VOLLEY_SQUASH), 1, 1);
     }
     const ir = VOLLEY_R * closing;
     for (let i = 0; i < 16; i++) {
@@ -629,6 +1201,45 @@ function drawAbilityGround(ex, ey, now) {
 // airborne ability bodies, drawn with the arrows: the net spinning open, the
 // falcon and its shadow racing the snow, the volley's shafts coming down
 function drawAbilityAir(ex, ey, now) {
+  // The redoubt ring, drawn over the bodies because it is what a shot meets.
+  // Both sides see the same ring: it eats their arrows and hers alike, so
+  // there is nothing here to keep from them.
+  for (const rd of redoubts) {
+    const q = rd.p;
+    if (!q || q.dead || !q.active) continue;
+    const px = Math.round(q.x - ex), py = Math.round(q.y - ey);
+    const a = Math.min(1, rd.t / 0.8);
+    ctx.globalAlpha = a * 0.85;
+    for (let k = 0; k < 30; k++) {
+      const an = (k / 30) * Math.PI * 2;
+      const wob = 1 + Math.sin(now * 3 + k) * 0.5;
+      const sx = px + Math.round(Math.cos(an) * (RED_R + wob));
+      const sy = py + Math.round(Math.sin(an) * (RED_R + wob) * 0.62);
+      ctx.fillStyle = k % 3 ? '#cfe0f2' : '#9fb6d8';
+      ctx.fillRect(sx, sy, 1, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // Blown snow: drawn OVER the bodies, because that is what makes it hard to
+  // see through them. It fades in over its first beat and thins out over its
+  // last, so "the cloud is going" is visible before it goes.
+  for (const z of blinds) {
+    const px = Math.round(z.x - ex), py = Math.round(z.y - ey);
+    if (px < -BLIND_R * 2 || py < -BLIND_R * 2 || px > WV_W + BLIND_R * 2 || py > WV_H + BLIND_R * 2) continue;
+    const a = Math.min(1, z.t / 0.35) * Math.min(1, (BLIND_T - z.t) / 1.4);
+    for (let k = 0; k < 44; k++) {
+      // each mote keeps its own place in the drift and slides across it
+      const h1 = hash2(z.x + k * 7, k * 13), h2 = hash2(k * 29, z.y + k * 3);
+      const an = h1 * Math.PI * 2 + now * (0.5 + h2 * 0.7);
+      const rr = (0.25 + h2 * 0.75) * BLIND_R;
+      const sx = px + Math.round(Math.cos(an) * rr);
+      const sy = py + Math.round(Math.sin(an) * rr * 0.62);
+      ctx.globalAlpha = a * (0.25 + h1 * 0.45);
+      ctx.fillStyle = h2 < 0.5 ? '#f4f7ff' : '#cfe0f2';
+      ctx.fillRect(sx, sy, 1 + (h1 > 0.8 ? 1 : 0), 1);
+    }
+    ctx.globalAlpha = 1;
+  }
   for (const n of nets) {
     const px = Math.round(n.x - ex), py = Math.round(n.y - ey);
     if (px < -12 || py < -12 || px > WV_W + 12 || py > WV_H + 12) continue;
@@ -701,6 +1312,18 @@ function abilityPose(p) {
     case 'rush': return { dx: 0, dy: 0, rot: 0.14 * (p.dir === 'left' ? -1 : 1) };  // head down
     case 'stomp': return { dx: 0, dy: -Math.round(6 * Math.sin(Math.PI * prog)), rot: 0 }; // the leap
     case 'jug': return { dx: 0, dy: prog < 0.5 ? 1 : -1, rot: 0 };                  // the chest-beat
+    case 'blind': return { dx: p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0, dy: 0, rot: 0 }; // the underarm throw
+    case 'trail': return { dx: 0, dy: 1, rot: 0 };                                  // crouched to run
+    case 'frost': return { dx: 0, dy: -1, rot: 0 };                                 // drawn up, holding it
+    case 'white': return { dx: 0, dy: Math.round(2 * Math.sin(Math.PI * prog)), rot: 0 }; // pulled under
+    case 'scatter': return { dx: 0, dy: -1, rot: p.dir === 'left' ? -0.16 : 0.16 };  // the whole armful thrown
+    case 'clock': return { dx: 0, dy: prog < 0.5 ? 1 : -1, rot: 0 };                 // winding it up
+    case 'cache': return { dx: 0, dy: 2, rot: 0 };                                   // set down at the feet
+    case 'magnet': return { dx: 0, dy: -1, rot: 0 };                                 // arm out, palm open
+    case 'wall': return { dx: 0, dy: -Math.round(3 * Math.sin(Math.PI * prog)), rot: 0 }; // hauled up
+    case 'brazier': return { dx: 0, dy: 2, rot: 0 };                                 // set down and lit
+    case 'spikes': return { dx: 0, dy: 2, rot: 0 };                                  // driven in
+    case 'redoubt': return { dx: 0, dy: 1, rot: 0 };                                 // braced, arms wide
   }
   return null;
 }
@@ -752,6 +1375,18 @@ function drawUnitStates(e, px, py, w, h, now) {
     ctx.fillRect(px + 2, py + h - 1, w - 4, 1);
     ctx.globalAlpha = 1;
   }
+  if (e.veilT > 0) {
+    // veiled: snow blowing ACROSS the body, so a rival standing in a
+    // SNOWBLIND still reads as a rival - the cloud is what is hard to see
+    // through, and the body inside it is never simply erased
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#f4f7ff';
+    for (let k = 0; k < 3; k++) {
+      const yy = py + 3 + ((k * 5 + Math.floor(now * 26)) % Math.max(1, h - 5));
+      ctx.fillRect(px + 1, yy, w - 2, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
   if (e.markT > 0) {
     // the falcon's mark: gold chevrons falling toward the head, for everyone
     const ph = (now * 2.2) % 1;
@@ -793,6 +1428,53 @@ function drawAbilityOnPlayer(p, px, py, now) {
     ctx.fillRect(px + 3, py + 1, 10, 1);
     ctx.fillRect(px + 2, py + 4, 1, 8);
     ctx.fillRect(px + 13, py + 4, 1, 8);
+    ctx.globalAlpha = 1;
+  }
+  // KILLING FROST held: three cold motes over the crown. The tell IS the
+  // point - a promised ambush that nobody can see coming is a shot from
+  // nowhere, and the rule is that everything an ability does to a body is
+  // drawn on that body for both sides.
+  if (p.frostT > 0) {
+    ctx.fillStyle = '#bfe6ff';
+    for (let k = 0; k < 3; k++) {
+      const lift = 2 + Math.round(1.6 * (1 + Math.sin(now * 5 + k * 2.1)));
+      ctx.fillRect(px + 4 + k * 4, py - lift, 1, 1);
+    }
+  }
+  // OVERCLOCKED: brass sparks coming off the harness. The other team needs to
+  // know why the volume tripled before the third arm lands.
+  if (p.clockT > 0) {
+    ctx.fillStyle = Math.sin(now * 22) > 0 ? '#f2cc6a' : '#c8a24a';
+    ctx.fillRect(px + 2, py + 5, 1, 1);
+    ctx.fillRect(px + 13, py + 7, 1, 1);
+    ctx.fillRect(px + 4, py + 9, 1, 1);
+    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(now * 12);
+    ctx.fillStyle = '#c8a24a';
+    ctx.fillRect(px + 3, py + 6, 10, 1);
+    ctx.globalAlpha = 1;
+  }
+  // MAGNET: the pull drawn as rings closing on her, so anyone watching a drop
+  // slide across the snow can see what is doing it
+  if (p.magT > 0) {
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#9fc4dd';
+    const r = 4 + ((now * 26) % 10);
+    for (let k = 0; k < 10; k++) {
+      const a = k * (Math.PI / 5);
+      ctx.fillRect(px + 8 + Math.round(Math.cos(a) * r), py + 9 + Math.round(Math.sin(a) * r * 0.6), 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // WHITEOUT: the storm around her. She is faint under it - concealOf sees to
+  // that - but the swirl is not, so the other team is told WHERE the storm is
+  // even when the body inside it will not resolve.
+  if (p.whiteT > 0) {
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#f4f7ff';
+    for (let k = 0; k < 6; k++) {
+      const a = now * 3.4 + k * (Math.PI / 3);
+      ctx.fillRect(px + 8 + Math.round(Math.cos(a) * 9), py + 9 + Math.round(Math.sin(a) * 5), 1, 1);
+    }
     ctx.globalAlpha = 1;
   }
   drawUnitStates(p, px, py, 16, 16, now);
@@ -1095,6 +1777,420 @@ const AB32 = [
       '......r.................r.......',
       '................................',
       '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+  [ // STALKER
+    [ // SNOWBLIND: blown snow boiling out, motes escaping the edge
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '....Wb......ooooooooo...........',
+      '.........ooooB..BBBBoooo...Wb...',
+      '.......oooBBBBBBBBBBBBBooo......',
+      '......ooBBBBBbbbbbbbBBBBBoo.....',
+      '.....ooBBBBbbbbbbbbbbbBBBBoo.Wb.',
+      '..WbooBBBbbbbbbbbbbbbbbbBBBoo...',
+      '....o.BBbbbbbWWWWWWWbbbbbBB.o...',
+      '...o.BBBbbbbWWWWWWWWWbbbbBB.Bo..',
+      '...oBBBbbbbWWWWWWWWWWWbbbbBBBo..',
+      '...oBBBbbbbWWWWWWWWWWWbbbbBBBo..',
+      '...oBBBbbbbWWWWWWWWWWWbbbbBBBo..',
+      '...oB.BBbbbbWWWWWWWWWbbbbBBBooWb',
+      '...Wb.BBbbbbbWWWWWWWbbbbbBB.o...',
+      '....ooBBBbbbbbbbbbbbbbbbBBBoo...',
+      '.....oBBBBBbbbbbbbbbbbBBBBWb....',
+      '......ooBBBBBbbbbbbbBBBBBoo.....',
+      '.......oooBBBBBBBBBBBBBooo......',
+      '.....Wb..ooooBBBB..Boooo........',
+      '............ooooooooo...........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // COLD TRAIL: the print just made, and the one already filled in
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '...................BBBBBBB......',
+      '..................BBCCCCCBB.....',
+      '..................BCCWCCCCB.....',
+      '..................BCCCCCCCBB....',
+      '..................BBCCCCCCCB....',
+      '...................BCCCCCCWB....',
+      '...................BCCCCCCCB....',
+      '.....ooooooo.......BCCCCCCCB....',
+      '....ooSSSSSoo......BCCCCCCCB....',
+      '....oSSSSSSSo......BCCCCCCCB....',
+      '....oSSSSSSSoo.....BBCCCCCBB....',
+      '....ooSSSSSSSo.....WBBBBBBB.....',
+      '.....oSSSSSSSo.......BCCCBBB....',
+      '.....oSSSSSSSo......BBCCCCCWB...',
+      '.....oSSSSSSSo......BCCCCCCCB...',
+      '.....oSSSSSSSo......BBCCCCCBB...',
+      '.....oSSSSSSSo.......BBCCCBB....',
+      '.....ooSSSSSoo........BBBBB.....',
+      '......ooooooo...................',
+      '.......oSSSooo..................',
+      '......ooSSSSSoo.................',
+      '......oSSSSSSSo.................',
+      '......ooSSSSSoo.................',
+      '.......ooSSSoo..................',
+      '........ooooo...................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // KILLING FROST: the promised shaft, crusted over with a frost star
+      '................................',
+      '................................',
+      '................................',
+      '................b...............',
+      '................b...............',
+      '................b...............',
+      '...............bbb..............',
+      '..............bWWWb.............',
+      '...............bWb..............',
+      '.....b...b.....WWW..............',
+      '......b.bb.....WWW.....bb.bb....',
+      '.......bWWb....WWW....Wb.bb.....',
+      '.......bWbWW..BBBBB..WbWWb......',
+      '.......bbW.WWBBWWWBBWWWb........',
+      '..........WWBBWWWWWBBWW.bb......',
+      '............BWWWWWWWB...........',
+      '............BWWWWWWWB...........',
+      '............BWWWWWWWB...........',
+      '..........WWBBWWWWWBBWW.bb......',
+      '.......bbW.WWBBWWWBBWWWb........',
+      '.......bWbWW..BBBBB..WbWWb......',
+      '.......bWWb....WWW....Wb.bb.....',
+      '......b.bb.....WWW.....bb.bb....',
+      '.....b...b.....WWW..............',
+      '...............bWb..............',
+      '..............bWWWb.............',
+      '...............bbb..............',
+      '................b...............',
+      '................b...............',
+      '................b...............',
+      '................................',
+      '................................',
+    ],
+    [ // WHITEOUT: a hood with no face, dissolving into the storm around it
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '...............BB...............',
+      '..........BBBBBB.BBBBBB.........',
+      '.......BBB.............BBB......',
+      '.....BBB......bbbbb......BB.....',
+      '....BB....bbbb....bbbbb....BB...',
+      '...BB...bbb...........bbb...BB..',
+      '..BB...bb.....WW........bb...BB.',
+      '......bb...WWooooooo.....bb...BB',
+      '.....bb...WW.oSSSSSo......bb...B',
+      '.....b...WW.oSSSSSSSo......b...B',
+      '....b...WW.oSSSSSSSSSo......b...',
+      '....b...W..oSSSSkSSSSo......b...',
+      '....b...W..oDDDkkkDDDo..........',
+      '....b...W..oDDkkkkkDDo..........',
+      '....b...WW.oDDDkkkDDDo..........',
+      '.....b...WWoDDDDkDDDDo.W.......B',
+      '.....bb...WoDDDDDDDDDoW........B',
+      '......bb...WWW....WWWW........BB',
+      '.......bb.....WWWWW..........BB.',
+      '........bbb.................BB..',
+      '...........................BB...',
+      '.........................BB.....',
+      '.......................BBB......',
+      '.................BBBBBB.........',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+  ],
+  [ // TINKER
+    [ // SCATTER: one nock, every shaft leaving it at once
+      '................................',
+      '................................',
+      '................................',
+      '.......................C........',
+      '.......................CC.......',
+      '.......................CCC......',
+      '.......................CCCCC....',
+      '.......................CCCd.....',
+      '......................tCCd......',
+      '....................ttdCC.......',
+      '..................ttdd.CCC......',
+      '................ttdd...CCCCC....',
+      '..............ttdd...ttCCCd.....',
+      '......o.....ttdd.ttttddCC.......',
+      '....ooSoo.ttdttttdddd..CC.......',
+      '....oSCSottttdddd......CCC......',
+      '...oSCCCSotttttttttttttCCCCC....',
+      '....oSCSotttdddddddddddCCCd.....',
+      '....ooSoottdtttt.......CC.......',
+      '......o..ddttdddtttt...CC.......',
+      '...........ddtt.ddddtttCCC......',
+      '.............ddtt...dddCCCCC....',
+      '...............ddtt....CCCd.....',
+      '.................ddtt..CC.......',
+      '...................ddttCC.......',
+      '.....................ddCCC......',
+      '.......................CCCCC....',
+      '.......................CCCd.....',
+      '.......................CC.......',
+      '.......................C........',
+      '................................',
+      '................................',
+    ],
+    [ // OVERCLOCK: the gear wound past its stop, throwing sparks
+      '................................',
+      '................................',
+      '................................',
+      '...................o............',
+      '.................GGG............',
+      '.........oG......GGG............',
+      '.........G.G....GGGG.......g....',
+      '....g....GGGGGGGGGGGG.......G...',
+      '.....G....GGGGGGgGGGGGG.........',
+      '.........GGGGgggggggGGGG.GGo.g..',
+      '........GGGgggggggggggGGGG.G..G.',
+      '........GGgggggggggggggGGGG.....',
+      '.......GGGggggggoggggggGGG......',
+      '...oGGGGGgggggooooogggggGG......',
+      '....GGGGGggggooGGGooggggGG......',
+      '....GGGGGggggoGGGGGoggggGG......',
+      '......GGggggooGGGGGooggggGG.....',
+      '.......GGggggoGGGGGoggggGGGGG...',
+      '.......GGggggooGGGooggggGGGGG...',
+      '.......GGgggggooooogggggGGGGGo..',
+      '.......GGGggggggoggggggGGG......',
+      '......GGGGgggggggggggggGG.......',
+      '..g..G.GGGGgggggggggggGGG.......',
+      '...G.oGG.GGGGgggggggGGGG........',
+      '..........GGGGGGgGGGGGG.....g...',
+      '....g.......GGGGGGGGGGGG.....G..',
+      '.....G.......GGGG....G.G........',
+      '.............GGG......Go........',
+      '.............GGG................',
+      '.............o..................',
+      '................................',
+      '................................',
+    ],
+    [ // FIELD CACHE: the open crate, shafts standing in it
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '.........C..C..C..C..C..........',
+      '.........t..t..t..t..t..........',
+      '........dtddtddtddtddtd.........',
+      '.........t..t..t..t..t..........',
+      '.........t..t..t..t..t..........',
+      '.........t..t..t..t..t..........',
+      '.........t..t..t..t..t..........',
+      '.........t..t..t..t..t..........',
+      '.........t..t..t..t..t..........',
+      '......oootootootootootoooo......',
+      '......oHHHHHHHHHHHHHHHHHHo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......ouuuuuuuuuuuuuuuuuuo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......ouuuuuuuuuuuuuuuuuuo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......owwwwwwwwwwwwwwwwwwo......',
+      '......oooooooooooooooooooo......',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // MAGNET: three loose finds dragged in along their arcs
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '............................g...',
+      '...g.......................ggg..',
+      '..ggg..BBBBbbb............ggGgg.',
+      '.ggGggBB.....bbb...........ggg..',
+      '..ggg......................Bg...',
+      '...g............S.........B.....',
+      '..............SSCSS.......B.....',
+      '..............SCCCS......BB.....',
+      '.............SCCCCCS....bb......',
+      '..............SCCCS...bbb.......',
+      '..............SSCSS.............',
+      '............b...S...............',
+      '............b...................',
+      '............b...................',
+      '............b...................',
+      '............BB..................',
+      '.............BB.................',
+      '..............BB.g..............',
+      '...............Bggg.............',
+      '...............ggGgg............',
+      '................ggg.............',
+      '.................g..............',
+      '................................',
+    ],
+  ],
+  [ // WARDEN
+    [ // ICE WALL: three slabs stood in a row, a shot breaking on them
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '......W........W........W.......',
+      '......W........W........W.......',
+      '.....bWb......bWb......bWb......',
+      '.....bWb......bWb......bWb......',
+      '...oobWbooo.oobWbooo.oobWbooo...',
+      '...oWbbbbbo.oWbbbbbo.oWbbbbbo...',
+      '...oBBBBBBo.oBBBBBBo.oBBBBBBo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbCo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbbo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbCbbo...',
+      '...oBBBBBBo.oBBBBBBo.oBCBBBBo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbtttttt',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbbo...',
+      '...oWWbbbbo.oWWbbbbo.oWWCbbbo...',
+      '...oBBBBBBo.oBBBBBBo.oBBBBBBo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbCbo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbbo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbbo...',
+      '...oBBBBBBo.oBBBBBBo.oBBBBBBo...',
+      '...oWWbbbbo.oWWbbbbo.oWWbbbbo...',
+      '...oooooooo.oooooooo.oooooooo...',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // BRAZIER: the fire bowl on its legs, flame standing out of it
+      '................................',
+      '................................',
+      '................W...............',
+      '................g...............',
+      '................g...............',
+      '...............ggg..............',
+      '............W..rrr..W...........',
+      '............g..rrr..g...........',
+      '...........ggg.rrr.ggg..........',
+      '...........gggrrrrrggg..........',
+      '...........rrrrrrrrrrr..........',
+      '..........rrrrrrrrrrrrr.........',
+      '..........rrrrrrrrrrrrr.........',
+      '..........rrrrrrrrrrrrr.........',
+      '......ooooooooooooooooooooo.....',
+      '......HHHHHHHHHHHHHHHHHHHHH.....',
+      '.......uuwwwwwwwwwwwwwwwuu......',
+      '........uuwwwwwwwwwwwwwuu.......',
+      '.........uuwwwwwwwwwwwuu........',
+      '..........uuwwwwwwwwwuu.........',
+      '...........uuwwwwwwwuu..........',
+      '............uuwwwwwuu...........',
+      '.............ouwwwuo............',
+      '............ou.....uo...........',
+      '...........ou.......uo..........',
+      '..........ou.........uo.........',
+      '.........ou...........uo........',
+      '........ou.............uo.......',
+      '.......ou...............uo......',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // SPIKE LINE: five stakes driven point-up through churned ground
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '....o...........o...........o...',
+      '..o.h.o.......o.h.o.......o.h.o.',
+      '..o.h.o.......o.h.o.......o.h.o.',
+      '..o.h.o...o...o.h.o...o...o.h.o.',
+      '..oHhno.o.h.o.oHhno.o.h.o.oHhno.',
+      '..oHhno.o.h.o.oHhno.o.h.o.oHhno.',
+      '..oHhno.o.h.o.oHhno.o.h.o.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..oHhno.oHhno.oHhno.oHhno.oHhno.',
+      '..SSSSS.SSSSS.SSSSS.SSSSS.SSSSS.',
+      '.DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+    ],
+    [ // REDOUBT: a closed ring of cover, and the arrow it refused
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '...............o.o.........C....',
+      '..........o.o..C.C..o.o..C......',
+      '..........C.C..C.C..C.C.........',
+      '........o.C.C..S.S..C.CCo.tttttt',
+      '......o.C.S.S..S.S..S.S.C.o.....',
+      '......C.C.S.S..S.S..S.S.C.C.....',
+      '.....oC.S.S.S..o.o..S.S.S.Co....',
+      '.....CS.S.o.o.......o.o.S.SC....',
+      '.....CS.S....BBBBBBB....S.SC....',
+      '.....SS.o..BB.......BB..o.SS....',
+      '.....So...BB...DDD...BB...oS....',
+      '.....S....B...DDDDD...B....S....',
+      '.....oo...B..DDDDDDD..B...oo....',
+      '.....SC.o.B...DDDDD...B.o.CS....',
+      '.....oC.C.BB...DDD...BB.C.CS....',
+      '.....SS.C.oBB.......BBo.C.SS....',
+      '.....oS.S.C.CBBBBBBBC.C.S.So....',
+      '......S.S.C.C..C.C..C.C.S.S.....',
+      '......o.S.S.S..C.C..S.S.S.o.....',
+      '........o.S.S..S.S..S.S.o.......',
+      '..........S.S..S.S..S.S.........',
+      '..........o.o..S.S..o.o.........',
+      '...............o.o..............',
       '................................',
       '................................',
       '................................',

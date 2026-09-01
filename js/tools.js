@@ -160,7 +160,12 @@ const CINDER_R = 26;   // px of ring an ending shot sets alight
 // once per tier - so a tool's shape says which family it is and its colour
 // says how good it is, the way GEAR_MATS tints one gear icon across levels.
 const TOOLS = {
-  shortbow: { name: 'SHORTBOW',    tier: 0, rof: 55, cap: 2, tensile: 4, art: 'bow' },
+  // the shortbow's tensile is 5 because the BARBED SHOT weighs 5: the HUNTER
+  // flies in with one, and at 4 it sat in the cell as dead weight from the
+  // drop onward. 5 opens exactly that one bit - nothing else weighs 5 - and
+  // the HORN BOW it now ties on tensile still beats it on both other axes
+  // (cap 4 vs 2, rof 34 vs 55), so the ladder is unchanged.
+  shortbow: { name: 'SHORTBOW',    tier: 0, rof: 55, cap: 2, tensile: 5, art: 'bow' },
   sling:    { name: 'SLING',       tier: 0, rof: 26, cap: 2, tensile: 3, art: 'sling' },
   recurve:  { name: 'RECURVE BOW', tier: 1, rof: 40, cap: 3, tensile: 6, art: 'recurve' },
   hornbow:  { name: 'HORN BOW',    tier: 1, rof: 34, cap: 4, tensile: 5, art: 'bow' },
@@ -203,55 +208,94 @@ function makeTool(id) {
 function heldTool(p) { return p.tools ? p.tools[p.toolSel] || null : null; }
 // how many bit cells are filled - the pips the HUD counts
 function bitsIn(cell) { let n = 0; for (const b of cell.bits) if (b) n++; return n; }
+// The heaviest bit this tool can throw IN THIS PLAYER'S HANDS: the tool's own
+// `tensile` plus the kit's delta (kit.tensile, js/player.js - 0 for everyone
+// today). Every site that asks what a tool can throw goes through here - the
+// firing gate below, the bot stuffing bits into its own tool (botFitLoadout),
+// and all six HUD/tooltip sites that DRAW the answer (js/ui.js) - because a
+// class that raises it and a column that still greys the bit out is a HUD
+// lying about its own weapon. `p` is optional and falls back to the bare
+// table number, exactly like toolMods(cell, p).
+function tensileOf(cell, p) {
+  return TOOLS[toolIdOf(cell.type)].tensile + (p ? kitOf(p).tensile || 0 : 0);
+}
 // a bit too heavy for the tool it sits in is dead weight: it stays in the
 // cell (you can see it, and see that it is wrong) but is skipped when firing
-function bitFires(cell, i) {
+function bitFires(cell, i, p) {
   const id = cell.bits[i];
   if (!id) return false;
   const b = BITS[id];
-  return b.proj && b.weight <= TOOLS[toolIdOf(cell.type)].tensile;
+  return b.proj && b.weight <= tensileOf(cell, p);
 }
-// The shot envelope: every modifier bit in the tool, folded once. Projectile
-// bits are fired THROUGH this, which is the whole "a modifier affects every
-// projectile on this tool" rule in one function.
-function toolMods(cell) {
+// The shot envelope: every modifier bit in the tool, then the firing class,
+// folded once. Projectile bits are fired THROUGH this, which is the whole
+// "a modifier affects every projectile on this tool" rule in one function.
+//
+// Two different fold contracts, and the difference matters:
+//   - BITS fold in whatever order they happen to sit in their cells, so a
+//     bit's mod() must write something order-independent - a max or a set,
+//     never a multiply of what another bit may or may not have written yet.
+//   - The CLASS folds LAST and exactly once, so a class mod() may assume it
+//     is last and may lean on what the bits left behind.
+// `p` is optional: the bit tooltip (tipBit, js/ui.js) folds a synthetic
+// one-bit cell to read out what that bit ALONE does, and must not have a
+// class leak into the numbers it prints.
+function toolMods(cell, p) {
   const m = {
     spdMul: 1, dmgMul: 1, dmgAdd: 0, lifeMul: 1, fan: 1, twin: false, lit: 0,
     // the shot's damage TYPE and the fire it carries: 'blunt' until a fire
     // modifier says otherwise (DMG_TYPES, js/actions.js)
     type: 'blunt', burn: 0, burnDps: 0, cinder: 0,
+    // ---- the three per-shot RULES, as overrides -------------------------
+    // `null` means "nobody overrode this, use the bit's own". They cannot be
+    // plain values defaulted from the bit, because this envelope is built
+    // ONCE per press and then shared: DUPLICATE fires the next TWO bits
+    // through the same `m`, and those are usually different bits with
+    // different flags. So the bit still supplies the default, at emit time.
+    // A mod writing one of these must SET it (an order-independent write,
+    // like m.type), never derive it from what is already there.
+    solid: null, // does a wall stop it
+    ff: null,    // will it hurt your own side
+    col: null,   // the shaft's ink - the one part of the envelope that READS
+                 // at range, which is why a class is allowed to tint it
   };
   for (const id of cell.bits) {
     const b = id && BITS[id];
     if (b && !b.proj && b.mod) b.mod(m);
   }
+  const cls = p && CLASSES[p.cls];
+  if (cls && cls.mod) cls.mod(m, p);
   return m;
 }
 // The firing order, and the index tracker the user sees on the bit column:
 // walk forward from cell.idx, wrapping once, and take the first bit that can
 // actually be thrown. The tracker lands one past what it found, so the next
 // press picks up where this one left off and the list cycles.
-function nextBit(cell) {
+function nextBit(cell, p) {
   const n = cell.bits.length;
   for (let k = 0; k < n; k++) {
     const i = (cell.idx + k) % n;
-    if (bitFires(cell, i)) { cell.idx = (i + 1) % n; return { id: cell.bits[i], i }; }
+    if (bitFires(cell, i, p)) { cell.idx = (i + 1) % n; return { id: cell.bits[i], i }; }
   }
   return null;
 }
 // what the bit column marks as up next, without advancing anything
-function peekBit(cell) {
+function peekBit(cell, p) {
   const n = cell.bits.length;
   for (let k = 0; k < n; k++) {
     const i = (cell.idx + k) % n;
-    if (bitFires(cell, i)) return i;
+    if (bitFires(cell, i, p)) return i;
   }
   return -1;
 }
 // seconds between shots: the tool's own rate, quickened by everything that
 // already quickens a renock (QUICKDRAW, the LOOSE ability, QUICK HANDS)
 function toolRof(p, cell) {
-  return TOOLS[toolIdOf(cell.type)].rof * TOOL_ROF_STEP * (kitOf(p).nock / BOW_NOCK);
+  const kit = kitOf(p);
+  // ...and every ability allowed to touch the rhythm, folded once - the same
+  // shape as abilityMoveMul over the movement caps (js/abilities.js)
+  return TOOLS[toolIdOf(cell.type)].rof * TOOL_ROF_STEP * (kit.nock / BOW_NOCK)
+    * (kit.rofMul || 1) * abilityRofMul(p);
 }
 
 // Can the button do anything at all right now? A slot with no tool in it and a
@@ -259,7 +303,7 @@ function toolRof(p, cell) {
 // and updatePlayer gates the draw on all three the same way.
 function toolReady(p) {
   const cell = heldTool(p);
-  return !!cell && peekBit(cell) >= 0;
+  return !!cell && peekBit(cell, p) >= 0;
 }
 // Whether the weapon's bit column is up: HOVER over the weapon well raises
 // it, and it stays up while the pointer is on the risen column itself (or
@@ -311,20 +355,22 @@ function bitPut(cell, i, id) {
 // changes how many bits an activation consumes rather than what they do.
 function fireTool(p) {
   // the cover is read before anything below can break it - the ambush shot is
-  // what the crawl in was for, whatever bit is loaded
-  const amb = ambushReady(p);
+  // what the crawl in was for, whatever bit is loaded. KILLING FROST is the
+  // promise of one without the crawl: it spends itself on this press.
+  let amb = ambushReady(p);
+  if (!amb && p.frostT > 0) { amb = true; p.frostT = 0; frostFx(p); }
   // bow-fishing survives the new weapon: any tool, standing on ice with a
   // fish underfoot, spears it through the sheet instead of loosing
   if (spearFish(p)) return;
   const cell = heldTool(p);
   if (!cell) { dryFire(p); return; }          // an empty slot has nothing to press
   const T = TOOLS[toolIdOf(cell.type)];
-  const m = toolMods(cell);
+  const m = toolMods(cell, p);
   const shots = m.twin ? 2 : 1;
   let fired = 0;
   for (let s = 0; s < shots; s++) {
     if (p.quiver <= 0) break;
-    const nb = nextBit(cell);
+    const nb = nextBit(cell, p);
     if (!nb) break;                            // no bit this tool can throw
     p.quiver = Math.max(0, p.quiver - 1);
     emitBit(p, BITS[nb.id], nb.id, m, amb, s);
@@ -333,31 +379,47 @@ function fireTool(p) {
   if (!fired) { dryFire(p); return; }          // pressed a tool that cannot answer
   p.nockT = toolRof(p, cell);
   if (nearPlayer(p.x, p.y)) SFX.arrow();
-  // the loose is what breaks cover - one ambush per burrow, then you are a
-  // player lying in the open with a tool that still has to cycle
-  risePlayer(p);
+  // The loose is what breaks cover - one ambush per burrow, then you are a
+  // player lying in the open with a tool that still has to cycle. A class
+  // with kit.coverShot pays for the shot out of the cover instead of standing
+  // up for it (spendCover, js/actions.js).
+  if (!spendCover(p)) risePlayer(p);
 }
 
 // One projectile bit, put into the air. `seq` is which shot of a DUPLICATE
 // pair this is, so the second leaves at a hair of an angle instead of exactly
 // inside the first.
-function emitBit(p, b, id, m, amb, seq) {
+// `o` is the LAUNCH OVERRIDE, and only abFireBit (js/abilities.js) passes it:
+// a bow shot takes its origin from the hands, its line from the aim and its
+// power from the draw, but a shot an ABILITY threw names all three itself -
+// a volley falls inside a ring nowhere near the caster, and there is no draw
+// behind it. Everything BELOW the launch - the damage formula, the envelope,
+// the arrow struct - stays identical, which is the whole reason abilities
+// come through here instead of building arrows of their own.
+function emitBit(p, b, id, m, amb, seq, o) {
   const kit = kitOf(p);
-  const pw = Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
-  const spdBonus = kit.spdDmg * Math.min(1, Math.hypot(p.vx, p.vy) / 200);
+  const pw = o && o.pow !== undefined ? o.pow
+    : Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
   // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise
   // the flight runs parallel to the aim line and never meets it
   const dx = p.input.aimX - p.x, dy = p.input.aimY - (p.y - BOW_Y);
-  const base = Math.atan2(dy, dx);
+  const base = o && o.ang !== undefined ? o.ang : Math.atan2(dy, dx);
+  const sx = o && o.x !== undefined ? o.x : p.x;
+  const sy = o && o.y !== undefined ? o.y : p.y - BOW_Y;
   // the draw still matters, but the bit is what is being thrown: its own
   // numbers lead, and the champion kit, the hero level and the modifiers are
   // what the player brought to it
   const pwScale = 0.55 + 0.45 * pw;
-  let dmg = (b.dmg + kit.dmgPow * pw * 0.5) * pwScale + kit.dmgBase + spdBonus + LVL_DMG * (p.level - 1);
+  let dmg = (b.dmg + kit.dmgPow * pw * 0.5) * pwScale + kit.dmgBase + LVL_DMG * (p.level - 1);
   dmg = Math.round(dmg * m.dmgMul + m.dmgAdd);
   if (amb) dmg = Math.round(dmg * kit.ambushMul);
   const spd = b.speed * m.spdMul;
-  const life = b.life * m.lifeMul;
+  // `reach` is an absolute flight in px, and it exists for the abilities: a
+  // volley's shafts have to die inside the ring its telegraph drew, whatever
+  // bit and whatever LONGSHOT the caster happens to be carrying. Without it
+  // one PYRE longbow volley sprays three hundred px past the circle it
+  // promised the other team, and the telegraph becomes a lie.
+  const life = o && o.reach !== undefined ? o.reach / spd : b.life * m.lifeMul;
   const lit = Math.max(b.lit || 0, m.lit);
   // SPLITTER turns one bit into a fan; every other shot is a single arm of it
   const arms = m.fan;
@@ -365,24 +427,32 @@ function emitBit(p, b, id, m, amb, seq) {
   for (let k = 0; k < arms; k++) {
     const a = base + (arms > 1 ? (k - (arms - 1) / 2) * spread : 0) + (seq ? 0.07 : 0);
     arrows.push({
-      x: p.x, y: p.y - BOW_Y,
+      x: sx, y: sy,
       vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
       t: 0, life, dmg, pow: pw,
       owner: p.id, team: p.team,
       ambush: amb,
       trailD: 0,
       // what makes this a bit rather than the old arrow: how it flies, what
-      // stops it, who it is allowed to hurt, and what it leaves behind
-      bit: id, path: b.path, solid: b.solid !== false, ff: !!b.ff,
-      lit, col: b.col,
+      // stops it, who it is allowed to hurt, and what it leaves behind. The
+      // last three are the bit's own unless the envelope overrode them.
+      bit: id, path: b.path,
+      solid: m.solid === null ? b.solid !== false : !!m.solid,
+      ff: m.ff === null ? !!b.ff : !!m.ff,
+      lit, col: m.col || b.col,
       // what it does when it lands: the damage type, the fire it leaves in
       // the body, and the ring it sets alight where it ends
       type: m.type, burn: m.burn, burnDps: m.burnDps, cinder: m.cinder,
-      ang: a, spd, ox: p.x, oy: p.y - BOW_Y,
+      ang: a, spd, ox: sx, oy: sy,
     });
   }
-  if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
-  else p.dir = dy > 0 ? 'down' : 'up';
+  // the loose turns the body to face it - but only a shot the HANDS made.
+  // An ability already posed the body during its cast, and a volley landing
+  // across the map must not spin the caster once per falling arrow.
+  if (!o) {
+    if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+    else p.dir = dy > 0 ? 'down' : 'up';
+  }
 }
 
 // Bow-fishing, lifted out of the old fireArrow so every tool keeps it: on ice
@@ -569,6 +639,14 @@ function dropLoot(x, y, tier, chance) {
 const CLASS_LOADOUT = [
   { tool: 'shortbow', bits: ['arrow', 'barb'] }, // HUNTER: the plain shaft, and a heavier one
   { tool: 'sling',    bits: ['arrow', 'heft'] }, // WARRIOR: close-in, and hitting like a fist
+  { tool: 'recurve',  bits: ['arrow', 'barb'] }, // STALKER: reach, and the barb as the opener
+  // TINKER: a HORN BOW is tensile 5, and she reads it as 7 - so she flies in
+  // throwing the ICE LANCE that every other class needs a tier-2 bow to lift.
+  { tool: 'hornbow',  bits: ['arrow', 'lance'] },
+  // WARDEN: the same body as the tinker, loaded the opposite way - a modifier
+  // where the tinker carries a weight. Flat fast shots from behind her own
+  // wall, and cap 4 is the most modifier room she can start with.
+  { tool: 'hornbow',  bits: ['arrow', 'speedup'] },
 ];
 function giveLoadout(p) {
   p.tools = new Array(TOOL_SLOTS).fill(null);
@@ -595,7 +673,9 @@ function giveLoadout(p) {
 function botFitLoadout(p) {
   const cur = heldTool(p);
   if (cur) {
-    const tens = TOOLS[toolIdOf(cur.type)].tensile;
+    // the bot's OWN ceiling, not the tool's - a class whose whole point is
+    // throwing what nobody else can lift must not refuse to load it
+    const tens = tensileOf(cur, p);
     for (let i = 0; i < p.bag.length; i++) {
       const s = p.bag[i];
       const id = s && bitIdOf(s.type);
@@ -629,7 +709,7 @@ function botFitLoadout(p) {
   // and always be pointing at a key that can answer the button
   if (!toolReady(p)) {
     for (let k = 0; k < p.tools.length; k++) {
-      if (p.tools[k] && peekBit(p.tools[k]) >= 0) { p.toolSel = k; break; }
+      if (p.tools[k] && peekBit(p.tools[k], p) >= 0) { p.toolSel = k; break; }
     }
   }
 }

@@ -909,7 +909,7 @@ them — and both duck under the map/settings panels. The feed also stands down 
 
 **The feed** (bottom left) is the last `EVENT_MAX` (4) lines of `events`, oldest at the top,
 newest along the bottom. It has that corner to itself now the gear row lives in the
-[backpack](#the-backpack-and-gear-widget), and shares it only with the
+[backpack](#the-backpack), and shares it only with the
 [replay window](#replay-the-last-four-seconds), stepping up by `replayLift()` px for as long as
 that window is open. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
 supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate

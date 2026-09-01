@@ -338,6 +338,35 @@ function tryProne(p) {
 // swing, a roll, or Ctrl again. The cover goes with the body and is not
 // allowed to linger: a slot that is visibly standing must be visibly findable,
 // so `hide` is zeroed here and the snow it stood for is spent as particles.
+// A shot or a cast stands you up - that is the cost of the ambush, and every
+// class pays it through risePlayer below. A class with `kit.coverShot` pays a
+// different one: it KEEPS the cover and spends it, `coverShot` of the buried
+// `hide` per shot, until there is none left to spend. Returns true when it
+// took the cost, and the caller then skips standing up.
+//
+// Spending `hide` is the bound, chosen over the two obvious alternatives:
+//   - a per-shot COOLDOWN would be binary. Cover would be full or gone with
+//     nothing in between, the rhythm would be gamed rather than managed, and
+//     the other team would get no tell at all.
+//   - a separate decaying BUDGET would be a second stealth meter beside the
+//     one `hide` already is - invisible to its owner and to everyone hunting
+//     them, and duplicating a float that already exists.
+// `hide` is better than both because it is ALREADY the whole stealth state and
+// it is ALREADY drawn: the sprite's fade and the snow mound both read off
+// concealOf, so each shot visibly settles the shooter further out of the snow.
+// The other team watches her materialise as she fires, which is the
+// readability rule paid for free. It also self-limits against the kit - a
+// slow rofMul means few shots before the cover is spent - and the ambush
+// multiplier falls off after the first shot on its own, because ambushReady
+// wants `hide >= 1`.
+function spendCover(p) {
+  const c = kitOf(p).coverShot;
+  if (!c || !p.prone || p.hide <= 0) return false;
+  p.hide = Math.max(0, p.hide - c);
+  // the snow she just shrugged off, so the spend is visible at the body
+  burst(p.x, p.y + 2, '#eef4fb', 3, 26, 0.3, true);
+  return true;
+}
 function risePlayer(p) {
   if (!p.prone) return;
   const h = p.hide;
@@ -770,6 +799,15 @@ function markUnit(e, t) {
   if (t <= 0 || !unitAlive(e)) return;
   e.markT = Math.max(e.markT || 0, t);
 }
+// Veiled: standing in blown snow, harder to pick out. The exact opposite of a
+// mark, and the only other thing that edits `seenAt`. Refreshed every step a
+// body is inside a SNOWBLIND cloud, the way a crater refreshes a slow, so it
+// is a short timer rather than a membership test - and it lands on ANY unit,
+// so a deer in the cloud is as hard to see as the rival who threw it.
+function veilUnit(e, t) {
+  if (t <= 0 || !unitAlive(e)) return;
+  e.veilT = Math.max(e.veilT || 0, t);
+}
 
 // ---- fire ----------------------------------------------------------------
 // The one damage type that outlives its own blow. An ignited unit pays
@@ -828,6 +866,7 @@ function douseUnit(e) { e.burnT = 0; e.burnDps = 0; e.burnTick = 0; e.burnBy = -
 function updateUnitStatus(e, dt) {
   if (e.rootT > 0) e.rootT = Math.max(0, e.rootT - dt);
   if (e.markT > 0) e.markT = Math.max(0, e.markT - dt);
+  if (e.veilT > 0) e.veilT = Math.max(0, e.veilT - dt);
   if (e.netT > 0) e.netT = Math.max(0, e.netT - dt);
   if (e.slowT > 0) e.slowT = Math.max(0, e.slowT - dt);
   else e.slowMul = 1;
@@ -846,7 +885,7 @@ function unitMoveMul(e) {
 // every timed state a fresh body starts with none of, on any kind of unit
 function clearUnitStatus(e) {
   e.stunT = 0; e.stunMax = 0;
-  e.rootT = 0; e.slowT = 0; e.slowMul = 1; e.netT = 0; e.markT = 0;
+  e.rootT = 0; e.slowT = 0; e.slowMul = 1; e.netT = 0; e.markT = 0; e.veilT = 0;
   douseUnit(e);
 }
 

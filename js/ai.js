@@ -144,7 +144,13 @@ function updateAI(p, dt) {
   if (wolf) down = false;
   else if (foe) down = p.prone && Math.hypot(foe.x - p.x, foe.y - p.y) > 48;
   else if (p.prone) down = ai.hideT > 0 && p.hp < p.maxHp * 0.9;
-  else if (p.hp < p.maxHp * 0.4 && ai.hideCd <= 0 && canBury) down = true;
+  // Everyone buries as a wounded retreat. A STALKER also buries with nothing
+  // in sight, because lying in wait IS her class rather than her last resort -
+  // and she is the one slot whose shot does not stand her back up. The two
+  // existing rails still hold her: `hideT` (7-12s) forces her up on its own,
+  // and `hideCd` (18s) stops her going straight back down, so a stalker bot
+  // cannot sit buried forever and stall a match out.
+  else if (ai.hideCd <= 0 && canBury && (p.hp < p.maxHp * 0.4 || p.cls === 2)) down = true;
   if (down !== p.prone) {
     inp.prone = true;                                 // the edge-triggered flag Ctrl sets
     if (p.prone) ai.hideCd = 18;                      // back up: no re-burrowing for a while
@@ -180,6 +186,21 @@ function updateAI(p, dt) {
         else if (p.abCd[1] <= 0 && d < 110 && clear) inp.ability = 1; // net the gap
         else if (p.abCd[0] <= 0 && d < 90) inp.ability = 0;           // trap the ground between
         else if (p.abCd[2] <= 0) inp.ability = 2;                     // falcon down the line
+      } else if (p.cls === 4) { // warden: cut the line, hold the ground, mend on it
+        if (p.abCd[2] <= 0 && d > 40 && d < 120) inp.ability = 2;      // SPIKE LINE across the approach
+        else if (p.abCd[0] <= 0 && d > 50 && d < 130 && clear) inp.ability = 0; // ICE WALL to break the shot
+        else if (p.abCd[3] <= 0 && d < 70 && p.hp < p.maxHp * 0.5) inp.ability = 3; // REDOUBT when cornered
+        else if (p.abCd[1] <= 0 && p.hp < p.maxHp * 0.7) inp.ability = 1; // BRAZIER to mend on the spot
+      } else if (p.cls === 3) { // tinker: spend the arsenal, then go refill it
+        if (p.abCd[1] <= 0 && d < 120 && clear) inp.ability = 1;      // OVERCLOCK into the fight
+        else if (p.abCd[0] <= 0 && d < 100 && clear) inp.ability = 0; // SCATTER at close range
+        else if (p.abCd[2] <= 0 && p.quiver <= 2) inp.ability = 2;    // FIELD CACHE when dry
+        else if (p.abCd[3] <= 0 && drops.length > 2) inp.ability = 3; // MAGNET over a littered fight
+      } else if (p.cls === 2) { // stalker: blind them, promise the shot, take it
+        if (p.abCd[2] <= 0 && d < 150 && clear) inp.ability = 2;      // KILLING FROST on the approach
+        else if (p.abCd[0] <= 0 && d < 130) inp.ability = 0;          // SNOWBLIND over the fight
+        else if (p.abCd[3] <= 0 && p.hp < p.maxHp * 0.5) inp.ability = 3; // WHITEOUT to break off
+        else if (p.abCd[1] <= 0 && d > 90) inp.ability = 1;           // COLD TRAIL to close or leave
       } else { // warrior: get there, and be unstoppable arriving
         if (p.abCd[3] <= 0 && d < 110) inp.ability = 3;               // juggernaut into the fight
         else if (p.abCd[1] <= 0 && d > 36 && d < 120 && clear) inp.ability = 1; // rush the line

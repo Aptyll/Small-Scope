@@ -1191,12 +1191,17 @@ function drawAimLine(ex, ey, now) {
   // the bit that is up next, and the envelope its tool would fire it through
   const cell = heldTool(player);
   if (!cell) return;
-  const bi = peekBit(cell);
+  const bi = peekBit(cell, player);
   if (bi < 0) return;
   const bit = BITS[cell.bits[bi]];
   if (bit.path === 'boomer' || bit.path === 'orbit') return;
-  const m = toolMods(cell);
+  // the LOCAL player's envelope, class fold included - the aim line has to
+  // measure the shot this player would actually loose, or it lies about range
+  const m = toolMods(cell, player);
   const range = bit.speed * m.spdMul * bit.life * m.lifeMul * (bit.path === 'lob' ? 0.35 : 0.85);
+  // read the wall rule the way emitBit will, not off the bit: a shot the
+  // envelope made wall-passing must not draw a line that stops at a pine
+  const aimSolid = m.solid === null ? bit.solid !== false : !!m.solid;
   const x0 = player.x, y0 = player.y - BOW_Y; // exactly emitBit()'s origin and direction
   const dx = mouseWX() - x0, dy = mouseWY() - y0;
   const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;
@@ -1206,7 +1211,7 @@ function drawAimLine(ex, ey, now) {
   let len = range, blocked = null; // 'solid' | 'animal'
   for (let s = 10; s < range; s += 3) {
     const x = x0 + nx * s, y = y0 + ny * s;
-    if (bit.solid !== false && isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
+    if (aimSolid && isSolidTile(Math.floor(x / TILE), Math.floor(y / TILE))) { len = s; blocked = 'solid'; break; }
     let hit = false;
     for (const an of animals) if (animalHit(an, x, y)) { hit = true; break; }
     if (!hit) for (const q of players) {

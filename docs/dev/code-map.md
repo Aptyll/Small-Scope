@@ -45,7 +45,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| slots, teams, classes + kits, hero levels, the input struct, contested orders | `Player`, `CLASSES`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
+| slots, teams, classes + kits + class mods, hero levels, the input struct, contested orders | `Player`, `CLASSES`, `CLASSES[].mod`, `WAR_SPD_DMG`/`WAR_SPD_REF`/`HUNT_RANGE_MUL`, `kitOf`, `gainGold`, `levelUp`, `makeInput`, `initPlayers`, `contest` | `players` |
 | the one on-the-spot gold payout every source uses (gold is never a drop) | `awardGold` | `players` (beside `gainGold`) |
 | the numbers a slot is made of: the slot count and teams, walk/roll/slide speeds, hero levels, and the two bow baselines a kit is written against | `MAX_PLAYER_SLOTS`, `TEAM_COUNT`, `PVP`, `PLAYER_SPEED`/`PLAYER_R`, `ICE_MAX`/`SLIDE_MIN`/`SLIDE_EXIT`/`TRAIL_MIN`/`SNOW_TRAIL_*`, `LEVEL_*`/`LVL_*`, `DODGE_*`, `BOW_CHARGE`/`BOW_NOCK` | `players` (above `CHAMPS`, which reads four of them at load time) |
 | the entity arrays and the local aliases | `animals`…`landmarks`, `players`, `player`, `inv` | `players` (the banner's tail) |
@@ -152,8 +152,10 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what every weapon and every shot IS: the two tables the whole system is driven from | `TOOLS`, `BITS`, `TOOL_TIERS`, `TOOL_SLOTS` (1 - the one weapon slot) | `tools & bits` (its head) |
 | the tier a find wears, and where that colour is read back | `TOOL_TIERS`, `itemTier`, `TIER_SHINE` (`tierPlate`/`tierShine`, which paint it: `UI`, ui.js) |`tools & bits` |
 | the bag rows that make tools and bits carryable at all | the `ITEMS` / `RES_COLORS` loops at the foot of the file | `tools & bits` › `icons` |
-| a tool instance and the things that read one | `makeTool`, `heldTool`, `bitsIn`, `bitFires`, `toolMods`, `nextBit`, `peekBit`, `toolRof`, `toolReady` | `tools & bits` › `a tool instance` |
+| a tool instance and the things that read one | `makeTool`, `heldTool`, `bitsIn`, `tensileOf`, `bitFires`, `toolMods`, `nextBit`, `peekBit`, `toolRof`, `toolReady` | `tools & bits` › `a tool instance` |
 | the fire a shot carries, and the three modifier bits that put it there | `BITS.flame`/`pyre`/`cinder`, `PYRE_T`/`PYRE_DPS`/`CINDER_R`, `m.type`/`m.burn`/`m.burnDps`/`m.cinder` in `toolMods` | `tools & bits` (beside `BITS`; what a burn then DOES: `status effects`, actions.js) |
+| the three per-shot RULES a mod or a class may override (`null` = use the bit's own) | `m.solid`/`m.ff`/`m.col` in `toolMods`, applied in `emitBit`, mirrored by `drawAimLine` | `tools & bits` › `what a tool fires` |
+| a shot launched from somewhere other than the hands (the ability path) | `emitBit`'s optional `o` — `{x, y, ang, pow}` | `tools & bits` › `what a tool fires` |
 | moving a tool onto a key or a bit into a cell (the two the drag goes through) | `slotPut`, `bitPut` | `tools & bits` › `equipping` |
 | what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
@@ -173,7 +175,16 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | ability levels: a skill point per level on the four keys, and the level-cut cooldown every setter reads | `AB_LV_MAX`/`AB_LV_CD`, `abLvCanBuy`, `buyAbilityLv`, `abCdOf` (state: `p.abLv`, player.js) | `class abilities` › `levelling` (bought via `runCmd`, ui.js; bots: `updateAI`'s rung 0, ai.js) |
 | a keypress becoming a cast, and the per-slot tick that lands it | `tryAbility`, `updateAbilities` | `class abilities` › `casting` |
 | every movement cap an ability may touch, folded once | `abilityMoveMul` | `class abilities` › `casting` (read by `updatePlayer`, sim.js) |
+| an ability throwing the caster's OWN loaded bit — the one reach from this file into the tool system | `abFireBit` | `class abilities` › `the one crossing into the arsenal` (calls `heldTool`/`toolMods`/`nextBit`/`emitBit`, tools.js) |
 | what the abilities leave in the world, stepped per sim step | `traps`/`craters`/`falcons`/`nets`/`volleys`, `updateAbilityWorld` | `class abilities` › `the world tick` (called from `updatePlay`, sim.js) |
+| the stalker's four, and the drifting cloud one of them leaves | `abSnowblind`/`abColdTrail`/`abKillingFrost`/`abWhiteout`, `blinds`, `BLIND_*`/`VEIL_*`/`TRAIL_*`/`FROST_T`/`WHITE_*` | `class abilities` › `stalker: the four effects` |
+| a shot that keeps its cover instead of standing you up | `spendCover`, `kit.coverShot` (read by `fireTool`, tools.js, and `tryAbility`) | `prone` (actions.js, beside `risePlayer`) |
+| blown snow shortening every sight range — the mark's opposite | `veilUnit`, `e.veilT` (read by `seenAt`, player.js; drawn by `drawUnitStates`) | `status effects` (actions.js) |
+| the tinker's four, the crate one leaves, and the reach another widens | `abScatter`/`abOverclock`/`abFieldCache`/`abMagnet`, `caches`, `dropReach` (read by the drop loop, sim.js), `SCAT_SPREAD`/`CLOCK_*`/`CACHE_*`/`MAG_*` | `class abilities` › `tinker: the four effects` |
+| every ability allowed to touch the rate of fire, folded once | `abilityRofMul` (read by `toolRof`, tools.js) | `class abilities` › `casting` |
+| the warden's four and what they leave in the world | `abIceWall`/`abBrazier`/`abSpikeLine`/`abRedoubt`, `walls`/`braziers`/`spikes`/`redoubts`, `WALL_*`/`BRAZ_*`/`SPIKE_*`/`RED_*` | `class abilities` › `warden: the four effects` |
+| a ring no arrow crosses, in either direction | `redoubtStops` (read by the arrow loop, sim.js) | `class abilities` › `warden: the four effects` |
+| the ice wall itself — solid, shootable, routed around, with no code naming it | `STRUCTS.icewall` (structures.js), `SPRITES.teamBuild[t].icewall` (sprites.js) | read generically by `isSolidTile` (world.js) and `walkable` (nav.js) |
 | the shield eating a shot, the rush's step/grab/slam | `abShieldBlocks` (read by the arrow loop, sim.js), `rushStep`/`rushEnd` (read by `updatePlayer`'s rush branch) | `class abilities` |
 | drawing it all: ground layer, air layer, the pose on the sprite, the states on a body | `drawAbilityGround`, `drawAbilityAir`, `abilityPose`, `drawAbilityOnPlayer` | `class abilities` › `drawing` (called from render.js and `drawPlayer`, draw-world.js) |
 | the net drape, the snare's jaws, the flames and the falcon's mark, on ANY sprite at its own size | `drawUnitStates` | `class abilities` › `drawing` (its four callers: `drawAbilityOnPlayer` here, `drawAnimal`/`drawBird`/`drawRobot`, draw-world.js) |

@@ -409,7 +409,7 @@ plunge through the ice (see [PvP](multiplayer.md#pvp)), and the wolves of a
 ## Ice holes and fishing
 
 **E over a bare ice tile** (no object) brings out the pickaxe and calls `crackIce(tx, ty)` on
-that tile (see [Tools and the bow](gameplay.md#tools-and-the-bow)). Hits accumulate in the
+that tile (see [Tools and the bow](gameplay.md#tools-and-bits)). Hits accumulate in the
 `iceCracks` map (`tile idx → hits`, rendered as bright fracture decals in their own pass);
 `ICE_HOLE_HITS` (2) breaks through — the tile becomes `ground = 2` (open water), joins the
 `holes` list, and is repainted into the ground canvas via `repaintGround()`. Constants live in the `fish` banner of

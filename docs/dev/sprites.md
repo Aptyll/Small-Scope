@@ -39,12 +39,38 @@ just reads as a dark brick. The crawl frames alternate the reaching arm **and** 
 since a belly crawl hauls with one arm and pushes off the opposite leg; the 1 px inch forward
 between them is applied by `drawPlayer`, not baked into a second set of grids. The skater's set
 swaps the pom hat for her hood, the eye for the goggle band, adds the trailing scarf and shows the
-blade as a plate under each boot.
+blade as a plate under each boot. The stalker's swaps the hat for a deep hood with the face lost in
+its shadow (`h`), cloth wraps for the pom, and throws a snow-cloak (`w`/`v`) over the shoulders —
+and where the other two keep their coat rows **prone**, hers are cloak, so a settled stalker reads
+as a drift with a hooded head at one end rather than as a person on the ground. The tinker's puts
+goggles up on the forehead and runs a strap-and-brass harness (`L`/`n`) across a chest **12 px
+wide** where every other champion stops at 10 — she is the only set that breaks the shared body
+width, and that extra 2 px is the whole "carrying more than she can fire" read, before any number
+says it. One oversized glove on her left says the same thing again. The warden's puts a stiff iron
+brim (`A`/`N`) over the hood and bands a long coat down to the boots, with an **ember at the belt**
+(`E`/`F`) — the only warm colour on any champion set, and like the stalker's white it is not
+team-tinted.
+
+Those last two are the only sets that break the 10 px body, and they break it **differently**: the
+tinker is a solid 12 px slab from collar to hem, which reads as *carrying*; the warden is 10 px
+banded top to bottom with only her two bracer rows out at 12, which reads as *armoured*. At sixteen
+pixels the difference between "loaded" and "planted" has to come out of **where** the width sits
+rather than how much of it there is — worth knowing before a sixth set reaches for "make it bigger".
+
+A new champion set is 18 authored grids — 9 standing (down / up / side × idle / A / B; **left is
+free**, `flipH` of side) and 9 prone — plus a `*PAL_EXTRA` for any char the shared palette lacks.
+Two invariants make a new set line up with the old ones, and neither is visible in the grid you are
+editing: every grid is **exactly 16 rows of exactly 16 chars**, and a prone set's **ground contact
+must sit on the same row** as the champions beside it (side-on the ink runs rows 7–14; head-on and
+back-on it ends at row 15). Getting the leading blanks wrong by one shifts the whole body a pixel
+and the y-sort jumps the moment that class drops. The team still has to read off the shared
+`t`/`T` and `r`/`R`/`d` chars, so a class-signature colour that is *not* team-tinted — the
+stalker's white — has to leave those showing somewhere.
 
 These are the one place `bakeSpan()` is used instead of `bake()`: it attaches `spans`, the per-row
 `[firstX, lastX]` of painted pixels computed straight off the char grid, and `flipH` mirrors that
 array with the canvas. The game's snow cover reads it to size the mound to the pose
-([rendering.md](rendering.md#snow-over-a-body)) — which means editing a prone grid updates the
+([rendering.md](rendering.md#snow)) — which means editing a prone grid updates the
 cover for free, and there is no canvas readback anywhere in the feature.
 
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (two presets, RED and BLUE,

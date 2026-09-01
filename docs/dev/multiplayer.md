@@ -88,8 +88,9 @@ on class or gear change — never per frame). The kit fields: `iceMax` (× `ICE_
 `nock` (the baseline every rate of fire is scaled against — a tool's own `rof` is multiplied by
 `nock / BOW_NOCK`, so a class's hands still set the rhythm; see
 [the quiver](gameplay.md#the-quiver)),
-`dmgBase`/`dmgPow` (what the *player* adds to the bit's own damage), `spdDmg` (extra damage scaled
-by the shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
+`dmgBase`/`dmgPow` (what the *player* adds to the bit's own damage), `dodgeSpeed`, `maxHp`, and the two
+that bend the tool itself — `tensile` (added to whatever tool is held, through `tensileOf`) and
+`rofMul` (× the seconds between shots). Sites that read it:
 `updatePlayer`'s movement block, `emitBit`, `tryDodge`, the AI's draw timing, the cursor,
 aim line and draw meter. `setClass(p, c)` swaps one in (full heal — it's a pre-match choice);
 `p.maxHp` is always `levelMaxHp(p)` = kit hp + the level growth below.
@@ -97,7 +98,61 @@ aim line and draw meter. `setClass(p, c)` swaps one in (full heal — it's a pre
 | # | Name | Fantasy | Kit | Flies in with |
 | --- | --- | --- | --- | --- |
 | 0 | **HUNTER** — bow, traps, distance control | keep the gap and own the ground between | the ranged numbers: quick nock (0.4 s), full draw power, 92 hp | a SHORTBOW loaded ARROW + BARBED SHOT |
-| 1 | **WARRIOR** — close pressure, blocking, momentum | get to arm's length and stay there | 120 hp, faster on ice (×1.15), +5 speed damage, dash 230, softer bow numbers | a SLING loaded ARROW + HEFT |
+| 1 | **WARRIOR** — close pressure, blocking, momentum | get to arm's length and stay there | 120 hp, faster on ice (×1.15), dash 230, softer bow numbers | a SLING loaded ARROW + HEFT |
+| 2 | **STALKER** — cover, patience, the ambush | be under the snow, and win the shot you chose | 84 hp, the fastest bury (0.9 s), seen from 72 % of normal, ambush ×3.2, slow between shots (`rofMul` 1.2) — and `coverShot`, below | a RECURVE loaded ARROW + BARBED SHOT |
+| 3 | **TINKER** — the arsenal, and what it will throw | the bow is not the weapon, what is in it is | 100 hp, `tensile` **+2**, `rofMul` 1.15, and `dmgBase` 2 — the lowest on the roster, because her damage is meant to come out of the bits and never out of her arm | a HORN BOW loaded ARROW + ICE LANCE |
+| 4 | **WARDEN** — geometry, denial, the held ground | she does not chase; she decides where | 112 hp, `walkMul` 0.92, `dr` 1, and the only kit with `nightHeal` of its own — the same fire the brazier is | a HORN BOW loaded ARROW + SPEEDUP |
+
+The warden is the **first class to share a tool body** (the horn bow, with the tinker) and that is
+fine: a loadout is the tool *plus its bits*, and a modifier where the other carries a weight-7 bolt
+is not the same weapon. `CLASS_LOADOUT` has always paired both.
+
+Beside the kit, a class carries a **`mod(m, p)`** — the same interface a modifier bit has, folded
+last into the shot envelope by `toolMods` ([tools and bits](gameplay.md#the-class-folds-into-the-envelope-too)).
+The kit says what the *player* is; the mod says what every shot they fire *becomes*, on whatever
+tool they are holding — which is what keeps a class recognisable after it loots a better bow, since
+`LOOT_POOL` hands every tool and bit to everybody. HUNTER: `m.lifeMul *= 1.3` (`HUNT_RANGE_MUL`).
+WARRIOR: a flat `m.dmgAdd` ramped in with body speed up to `WAR_SPD_REF` (`WAR_SPD_DMG`, 5) — the
+"speed is damage" line, which until PATCH 2.47 was a bespoke `kit.spdDmg` term inside `emitBit`.
+STALKER: a smaller reach than the hunter's (`STK_RANGE_MUL`) and a colder shaft (`m.col`).
+TINKER: heavy bits fly flatter (`TNK_SPD_MUL`, which offsets exactly what HEFT and a lobbed log
+cost), plus the one **timed** override on the roster — while OVERCLOCK runs she reads `p.clockT`
+and writes `m.fan` and `m.dmgMul`. That is the reason a class `mod` takes `p` and not just `m`.
+
+**Why the TINKER is `tensile` +2 and not +3.** At +3 every bow in the game reaches weight 8 and
+throws the whole arsenal, so which tool she is holding stops meaning anything — the class would
+erase the axis it is built on. At +2 the ladder survives and she still has to choose:
+
+| tool | table | in her hands | she throws | everyone else |
+| --- | --- | --- | --- | --- |
+| SLING | 3 | 5 | 5 bits | 3 |
+| SHORTBOW / HORN BOW | 5 | 7 | 6 bits — **the ICE LANCE without a tier-2 bow** | 5 |
+| RECURVE | 6 | 8 | 7 bits — **the THROWING LOG** | 5 |
+| LONGBOW | 9 | 11 | 7 bits (no gain: it already threw everything) | 7 |
+
+**`baseKit(cls)` folds the defaults FIRST and the class kit over them**, so a class may override any
+of them. The order used to be the other way round, which cost nothing while every class only set
+fields the defaults did not mention — and silently discarded five of the STALKER's numbers the day
+one did. A class kit wins; anything it does not mention falls through.
+
+### A shot that does not break cover
+
+`kit.coverShot` is the STALKER's rule, and the only kit field that changes what an *action* does
+rather than what a number is. Every other class calls `risePlayer(p)` on the loose (`fireTool`) and
+on a cast (`tryAbility`) — the ambush costs you the burrow. A class with `coverShot` **keeps** the
+cover and spends it instead: `spendCover(p)` (js/actions.js) takes that fraction of `p.hide` per
+shot and returns true, and the caller then skips standing up. At 0.34 that is three shots from a
+full burial, and the fourth stands her up because there is nothing left to spend.
+
+Spending `hide` was chosen over a per-shot cooldown (binary — cover full or gone, a rhythm to game
+rather than manage, and **no tell for the other team**) and over a separate decaying budget (a
+second stealth meter beside the one `hide` already is, invisible to everybody). `hide` wins because
+it is already the whole stealth state *and already drawn*: the sprite fade and the snow mound both
+read off `concealOf`, so each shot visibly settles her further out of the snow and `seenAt` climbs
+with it — 37 px, then 63, then 86 against a 120 px watcher. The other team watches her materialise
+as she fires. It also self-limits against the kit (a slow `rofMul` means few shots before the cover
+is gone) and the ambush multiplier falls away after the first shot on its own, since `ambushReady`
+wants `hide >= 1`.
 
 The **weapon is part of the class**: `CLASS_LOADOUT` (js/tools.js) pairs each one with a tool
 and its bits, and `setClass` / `Player.reset` hand it over — so the two classes do not shoot the

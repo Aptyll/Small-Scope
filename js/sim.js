@@ -291,6 +291,17 @@ function updatePlay(dt) {
     // a bit whose `solid` is false passes through the world - that is the
     // whole of "never hits ground", and the only reason a wisp can circle you
     // through a treeline
+    // a REDOUBT's ring eats anything crossing it in either direction - the
+    // warden inside one cannot shoot out either, which is what it costs
+    if (!dead) {
+      const rq = redoubtStops(a, a.x - a.vx * dt, a.y - a.vy * dt, a.x, a.y);
+      if (rq) {
+        dead = true;
+        burst(a.x, a.y, '#cfe0f2', 5, 35, 0.3, true);
+        burst(a.x, a.y, '#9fb6d8', 3, 26, 0.28, true);
+        if (nearPlayer(a.x, a.y)) SFX.hit();
+      }
+    }
     if (!dead && a.solid !== false && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
       dead = true;
       burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
@@ -422,7 +433,9 @@ function updatePlay(dt) {
       const dd = Math.hypot(d.x - p.x, d.y - p.y);
       if (dd < pd) { pd = dd; near = p; }
     }
-    if (near && d.t > 0.35 && pd < 28) {
+    // MAGNET widens that reach for one slot (dropReach, js/abilities.js) -
+    // the pull itself is the same one everybody already has
+    if (near && d.t > 0.35 && pd < dropReach(near)) {
       d.x += (near.x - d.x) * dt * 10;
       d.y += (near.y - d.y) * dt * 10;
     }
@@ -770,9 +783,13 @@ function updatePlayer(p, dt) {
       const side = p.footSide ? 2 : -2;
       const px = p.dir === 'left' || p.dir === 'right' ? p.x : p.x + side;
       const py = p.dir === 'left' || p.dir === 'right' ? p.y + 6 + (p.footSide ? 1 : -1) : p.y + 6;
-      footprints.push({ x: px, y: py, t: 0 });
+      // COLD TRAIL leaves nothing behind - the step still sounds, because
+      // what the ability hides is the track, not the walker
+      if (!(p.trailT > 0)) {
+        footprints.push({ x: px, y: py, t: 0 });
+        if (footprints.length > 400) footprints.shift();
+      }
       if (p === player) SFX.step();
-      if (footprints.length > 400) footprints.shift();
     }
   } else {
     p.animT = 0; // sliding/gliding uses the standing pose

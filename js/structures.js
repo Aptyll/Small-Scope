@@ -32,6 +32,16 @@ const STRUCTS = {
   spawner: { name: 'BOT BAY', w: 3, h: 2, mm: [170, 140, 220], map: [128, 104, 160], tiers: [
     { cost: { gold: 45 }, hp: 220, buildT: 16, bots: 3, botHp: 24 },
   ]},
+  // The WARDEN's ice wall. It is a STRUCTS entry and nothing else, which is
+  // the entire trick: isSolidTile answers "any STRUCTS entry is solid" off
+  // this table, so arrows stop on it, walkers collide with it and navTo
+  // reroutes around it with no line of code anywhere saying "ice wall". It is
+  // never built from a stump and never costs gold - abIceWall (js/abilities.js)
+  // calls createStruct directly and takes it back down on a timer - so its
+  // one tier carries an empty cost and no build time.
+  icewall: { name: 'ICE WALL', mm: [176, 214, 236], map: [140, 178, 206], tiers: [
+    { cost: {}, hp: 55, buildT: 0 },
+  ]},
   // The fish net: the one building that goes on water instead of a stump.
   // `water: true` is the whole difference, and every site reads that flag
   // rather than the type name - it builds on an open hole (placeStruct),

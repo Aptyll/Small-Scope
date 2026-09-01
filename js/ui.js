@@ -1939,7 +1939,7 @@ function drawBitColumn(now) {
   const s = bitEditSlot();
   if (s < 0) return;
   const cell = player.tools[s], T = TOOLS[toolIdOf(cell.type)];
-  const up = peekBit(cell);
+  const up = peekBit(cell, player);
   const hov = mouse.inside ? bitColHit(mouse.x, mouse.y) : -1;
   // the spine: a 1px line from the tool up the column's left edge, so the
   // stack reads as coming OUT of the slot rather than floating over it
@@ -1948,7 +1948,7 @@ function drawBitColumn(now) {
   ctx.fillRect(c0.x + (AB_CELL >> 1) - 1, top.y - 2, 2, c0.y - top.y + 2);
   for (let i = 0; i < cell.bits.length; i++) {
     const r = bitColRect(s, i), id = cell.bits[i], b = id && BITS[id];
-    const over = b && b.proj && b.weight > T.tensile;
+    const over = b && b.proj && b.weight > tensileOf(cell, player);
     const tp = b ? tierPlate(bitType(id), hov === i) : { plate: '#171f45', rim: hov === i ? '#8fa0c8' : '#2c3560' };
     ctx.fillStyle = 'rgba(4,6,18,0.55)';
     ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
@@ -1980,7 +1980,7 @@ function drawBitColumn(now) {
   // the tool's own ceiling, over the top cell: as many pips as it can throw
   ctx.fillStyle = '#0f1632';
   ctx.fillRect(top.x, top.y - 5, top.w, 4);
-  for (let k = 0; k < T.tensile && k < 9; k++) { // 9 is what an 18px plate holds
+  for (let k = 0; k < tensileOf(cell, player) && k < 9; k++) { // 9 is what an 18px plate holds
     ctx.fillStyle = TOOL_TIERS[T.tier].ink;
     ctx.fillRect(top.x + 1 + k * 2, top.y - 4, 1, 2);
   }
@@ -2064,12 +2064,12 @@ function tipTool(cell) {
   const d = tipBase(cell.type, T.name, TOOL_TIERS[T.tier].name + ' TOOL');
   d.rows.push(['RATE OF FIRE', tipSec(T.rof * TOOL_ROF_STEP), '#f4f7ff']);
   d.rows.push(['BIT SLOTS', bitsIn(cell) + '/' + T.cap, '#f4f7ff']);
-  d.rows.push(['MAX WEIGHT', String(T.tensile), '#f2cc6a']);
-  const up = peekBit(cell);
+  d.rows.push(['MAX WEIGHT', String(tensileOf(cell, player)), '#f2cc6a']);
+  const up = peekBit(cell, player);
   for (let i = 0; i < cell.bits.length; i++) {
     const b = cell.bits[i] && BITS[cell.bits[i]];
     if (!b) continue;
-    const over = b.proj && b.weight > T.tensile;
+    const over = b.proj && b.weight > tensileOf(cell, player);
     // the firing order is the point, so the list is numbered and the next one
     // up is marked - the same thing the column's gold caret says
     d.notes.push([(i === up ? '> ' : '  ') + (i + 1) + ' ' + b.name + (over ? ' - TOO HEAVY' : ''),
@@ -2085,8 +2085,7 @@ function tipBit(id, cell) {
   const d = tipBase(bitType(id), b.name,
     TOOL_TIERS[b.tier].name + (b.proj ? ' BIT' : ' MODIFIER'));
   if (b.proj) {
-    const T = cell && TOOLS[toolIdOf(cell.type)];
-    const over = T && b.weight > T.tensile;
+    const over = cell && b.weight > tensileOf(cell, player);
     d.rows.push(['DAMAGE', String(b.dmg), '#e0637a']);
     d.rows.push(['WEIGHT', String(b.weight) + (over ? ' - TOO HEAVY' : ''), over ? '#e0637a' : '#f2cc6a']);
     d.rows.push(['SPEED', String(b.speed), '#f4f7ff']);
@@ -2103,6 +2102,8 @@ function tipBit(id, cell) {
     // how hard it bites - so it prints them, the same reason the projectile
     // rows above exist. Read out of the envelope itself rather than written
     // twice, so a retuned FLAME can never disagree with its own tooltip.
+    // no `p`: this reads what THIS BIT alone writes, so the reader's own
+    // class must not fold into the numbers printed here
     const m = toolMods({ bits: [id] });
     if (m.burn > 0) {
       d.rows.push(['BURNS FOR', tipSec(m.burn), '#ff9440']);
@@ -2251,7 +2252,7 @@ function tipAt(mx, my) {
     const d = tipBase(cell.type, 'EMPTY BIT CELL', TOOL_TIERS[T.tier].name + ' TOOL');
     d.icon = null; d.tcol = TIP_DIM;
     d.notes.push(['DRAG A BIT IN FROM THE PACK', TIP_DIM]);
-    d.notes.push(['THIS TOOL THROWS UP TO WEIGHT ' + T.tensile, '#f2cc6a']);
+    d.notes.push(['THIS TOOL THROWS UP TO WEIGHT ' + tensileOf(cell, player), '#f2cc6a']);
     return d;
   }
   const abb = abBuyHit(mx, my);
