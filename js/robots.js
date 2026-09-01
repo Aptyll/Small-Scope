@@ -73,7 +73,7 @@ function robotDies(b, src) {
     b.carry = 0;
   }
   // a downed worker is not a downed slot: it makes the feed, never the kill count
-  if (src && src.team !== b.team) logEvent(src.name + (b.merchant ? ' FELLED THE MERCHANT' : ' SCRAPPED A WORKER'), src);
+  if (src && src.team !== b.team) logEvent(src.name + (b.merchant ? ' FELLED MERCH' : ' SCRAPPED A WORKER'), src);
   if (b.merchant) { const e = state.drop && state.drop.eagles[b.team]; if (e && e.merchant === b) e.merchant = null; }
 }
 

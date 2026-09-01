@@ -462,7 +462,7 @@ sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net
   [contested](multiplayer.md#contested-orders), so two players can't land the same fish. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
   cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
   prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
-  pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, hot orange while
+  pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, pale gold while
   pressed/charging — so nothing hints at right-click) reading
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP over a 1.5 s channel a

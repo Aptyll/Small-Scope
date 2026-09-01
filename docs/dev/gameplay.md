@@ -602,7 +602,8 @@ as the arrow update) with an impact cross — line-coloured on a solid, hunt-amb
 otherwise ends in a short perpendicular range-cap bar. A `lob` gets only the first 35% of its
 flight, where it is still on the bearing; a `boomer` or an `orbit` gets **no line at all**, since
 the only honest straight line for those is none — what they do is shown by the shot itself the
-moment it leaves. Colour follows the draw meter: yellow charging, hot orange at full. If the
+moment it leaves. Colour follows the draw meter: gold charging, pale gold at full (`DRAW_COL` / `DRAW_FULL_COL`,
+draw-world.js). If the
 player stands on ice with a fish inside `FISH_CATCH_R` the line is replaced by four ticks closing
 over that fish, because that press becomes the catch and never flies.
 
@@ -1426,7 +1427,7 @@ hauler it always was — see [Worker flags](#worker-flags) for why the anger is 
 Each eagle is **driven** by its team's merchant — the old trader in the wide fur hat with the
 team-cloth crown and the white beard, seated on the bird's neck in flight (`MERCH_SEAT`, `drawEagle`; the look is
 [sprites.md](sprites.md)'s own 16 × 18 grids, built so it never reads as a slot on either side,
-with a `MERCHANT` nameplate and a bar in its side's paint over it, `drawMerchant`) — who climbs
+with a `MERCH` nameplate and a bar in its side's paint over it, `drawMerchant`; the bird wears `PERCH`) — who climbs
 down the moment it roosts (`spawnMerchant`, called
 from `eagleCrash`, the `merchant` banner in js/robots.js) and works the roost for its side, in
 order: a **gate** at the mouth of the lane the crash cut — `createStruct` a turret on the crash's

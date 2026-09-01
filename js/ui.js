@@ -253,7 +253,7 @@ function drawMouseIcon(x, y, pressed) {
   ctx.fillRect(x + 1, y + 5, 7, 4); ctx.fillRect(x + 2, y + 9, 5, 1); // body
   ctx.fillRect(x + 5, y + 1, 3, 3); // right button: body colour, nothing to notice
   ctx.fillStyle = '#dce9f5'; ctx.fillRect(x + 1, y + 5, 7, 1); // body highlight under the seam
-  ctx.fillStyle = pressed ? '#ff9440' : '#ffd95c'; ctx.fillRect(x + 1, y + 1, 3, 3); // left button
+  ctx.fillStyle = pressed ? DRAW_FULL_COL : DRAW_COL; ctx.fillRect(x + 1, y + 1, 3, 3); // left button: the draw meter's golds
   ctx.fillStyle = '#fff3b0'; ctx.fillRect(x + 1, y + 1, 1, 1); // button glint
 }
 

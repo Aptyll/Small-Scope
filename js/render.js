@@ -482,7 +482,7 @@ function render() {
         // bar holding still over a wall that is rocking is a bar centred on
         // nothing. drawBayOverlay is handed `sx + sh` and has always done this.
         if (o.type !== 'spawner' && o.hp < o.maxHp) {
-          drawHealthBar(sx + sh + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)));
+          drawHealthBar(sx + sh + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)), o.team);
         }
       }
     }
@@ -1107,9 +1107,9 @@ function drawCursor(info, now) {
   const R = RETICLE[info.mode];
   let gap = R.gap, col = R.col;
   if (info.mode === 'bow') {
-    // the ring closes as the draw fills and goes hot at full, like the meter
+    // the ring closes as the draw fills and goes pale gold at full, like the meter
     gap = Math.round(6 - 3 * info.frac);
-    if (info.frac >= 1) col = '#ff9440';
+    if (info.frac >= 1) col = DRAW_FULL_COL;
   } else if (info.mode === 'hunt') {
     gap = 4 + (((now * 3) | 0) % 2); // slow breathing
   }
@@ -1170,7 +1170,7 @@ function drawCursor(info, now) {
 function drawAimLine(ex, ey, now) {
   if (!player.charging || state.mode !== 'play') return;
   const full = player.chargeT >= kitOf(player).bowCharge;
-  const col = full ? '#ff9440' : '#ffd95c';
+  const col = full ? DRAW_FULL_COL : DRAW_COL; // the meter's own two golds (draw-world.js)
   const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
   if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
     let best = null, bd = FISH_CATCH_R;

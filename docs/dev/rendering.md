@@ -561,21 +561,33 @@ burning rival still has to read as the rival it is; the embers themselves are pa
 `updateBurn` rather than drawn here. What each state *does* is
 [gameplay.md](gameplay.md#status-effects-one-set-for-every-unit).
 
-`drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
-unit, always visible: every player (in `drawPlayer`), animals (in `drawAnimal`),
-and robots (in `drawRobot`). **Birds are the one exception** — 3 hp means every hit is a kill, and
+**The three bars over a body are three colours, never three shades of one**: health in the side's
+paint, stamina white, the draw meter gold (the palette is one block above `drawHealthBar` in
+[js/draw-world.js](../../js/draw-world.js); the cursor's bow ring, the aim line and the mouse icon
+read the same two golds, so "full draw" is one colour everywhere).
+`drawHealthBar(cxp, topY, hp, maxHp, w, team)` draws a small bar above every unit, always visible
+— every player (in `drawPlayer`), animals (in `drawAnimal`), robots (in `drawRobot`), a hurt
+building — **painted by side** (`barCol`): the team's `mark` through `skin()`, so it is blue over
+you and your allies and red over rivals on your screen, and neutral gold (`BAR_NEUTRAL`, the WoW
+grammar) over wildlife, the practice dummy and anything handed no team. How full it is carries the
+health. The old green → amber → red drain spent the rival's colour on "hurt", so a hurt ally
+read as an enemy at a glance. **Birds are the one exception** — 3 hp means every hit is a kill, and
 a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow
 by `a.alt` instead, which is the only read on how high one is.
 The overhead bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). Above it sits one
 more small meter — **the slot the hands report to**, and it carries three states that can never
-overlap, since a meal puts the bow down and blocks the draw for its whole length: yellow while
-charging, turning hot orange at full draw (two discrete states — a gradient is unreadable at
-14 px); slate while the renock runs, white the instant it comes back; and **heal green** filling
+overlap, since a meal puts the bow down and blocks the draw for its whole length: gold while
+charging (`DRAW_COL`), one white blink (`DRAW_FULL_FLASH`, 0.12 s) and then pale gold
+(`DRAW_FULL_COL`) at full draw — brighter, never a new hue: two discrete states, since a gradient
+is unreadable at 14 px, and the hot orange it used to turn sat beside a red rival's bar as two warm
+bars; slate while the renock runs, pale gold the instant it comes back (the bow's own ready colour
+— white is the stamina bar's); and **heal green** filling
 left to right while a meal is being chewed (`FOOD_EAT`, [Food](gameplay.md#food-the-meal-is-a-channel)).
 All three are drawn for **everyone**, because each is a tell somebody can act on — a shot is
 coming, a shot is not coming, a heal is coming and hitting them takes it away. The overhead stack
-floats clear of the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both
+floats clear of the sprite: stamina plate at `py - 4` (white, `STAM_COL`, on every side — the one
+bar with no side to it; every slot, since the level badge spans both
 bars), health at `py - 7`, that meter at
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
 the stamina bar), and the slot's name tag in team colour at `py - 18`, a clear row above the meter's
@@ -1305,7 +1317,8 @@ every 3.5–7 s (`RUFFLE_T`, mid frame only with a puff of settling snow — the
 the gust's telegraph, so the idle can never cry wolf), flashing via the baked
 all-white `SPRITES.eagleFlash` when hit (it is taller than the 64×64 `drawSpriteFlash` scratch),
 with its team-colour hp bar up **from the moment it roosts** — the bar is the objective's
-introduction, anchored to the bird's rotated extent. A gust windup draws wings thrown open
+introduction, anchored to the bird's rotated extent, under a `PERCH` nameplate in the same paint (its
+driver wears `MERCH`: the side's two named bodies, named the same way). A gust windup draws wings thrown open
 (frame 0) lifted 2 px: the spread IS the telegraph, no text. A `flee` bird climbs back out —
 scale and `alt` walk from the roost's numbers to the flight's over `FLEE_LIFT_T`, the shadow
 returning and diverging as the ground falls away, wingbeats at full panic — and fades over the

@@ -863,15 +863,37 @@ function paintArrowPx(px) {
 }
 
 
-// small overhead bar shared by every living unit; color shifts as hp drains
-function drawHealthBar(cxp, topY, hp, maxHp, w) {
+// The three bars over a body are three COLOURS, never three shades of one:
+//   health  - the SIDE's paint (barCol): your own side's mark over allies and
+//             yourself, the rival's over everything of theirs - through
+//             skin(), so allies are blue and rivals red on your screen - and
+//             neutral gold (the WoW grammar) over wildlife, the dummy and
+//             anything else with no team. How full it is says the rest; the
+//             old green-amber-red drain spent the rival's colour on "hurt",
+//             and a hurt ally read as an enemy at a glance.
+//   stamina - WHITE for every side (the one bar with no side to it).
+//   the draw meter - GOLD filling, PALE GOLD the instant it peaks (a single
+//             white blink, DRAW_FULL_FLASH, marks the moment), slate while
+//             the renock runs, heal green for a meal. Never orange: orange
+//             beside a red rival bar was two warm bars, and it is fire's.
+// The cursor's bow ring, the aim line and the mouse icon speak the same
+// gold / pale gold (render.js, ui.js), so "full draw" is one colour everywhere.
+const BAR_NEUTRAL = '#f2cc6a';
+const STAM_COL = '#f4f7ff', STAM_GHOST = '#9aa4c0'; // the fill, and the dimmer chunk just spent draining into place
+const DRAW_COL = '#ffd95c', DRAW_FULL_COL = '#fff3c4', DRAW_FULL_FLASH = 0.12; // s of white the peak blinks for
+const NOCK_COL = '#6f7ca8', EAT_COL = '#8fe08a'; // reloading; eating (the heal colour the floater lands in)
+function barCol(team) { return team === undefined || team === null ? BAR_NEUTRAL : TEAMS[skin(team)].mark; }
+
+// small overhead bar shared by every living unit, in its side's colour
+// (barCol - pass nothing for a thing with no side)
+function drawHealthBar(cxp, topY, hp, maxHp, w, team) {
   const x = Math.round(cxp - w / 2), y = Math.round(topY);
   const frac = Math.max(0, Math.min(1, hp / maxHp));
   ctx.fillStyle = 'rgba(12,18,42,0.78)';
   ctx.fillRect(x - 1, y - 1, w + 2, 4);
   ctx.fillStyle = '#3a3448';
   ctx.fillRect(x, y, w, 2);
-  ctx.fillStyle = frac > 0.55 ? '#7ce87a' : frac > 0.25 ? '#f2cc6a' : '#ff6a5a';
+  ctx.fillStyle = barCol(team);
   ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
 }
 
@@ -1082,7 +1104,7 @@ function drawBayOverlay(o, px, sy, now) {
   ctx.fillStyle = '#1c2130'; ctx.fillRect(px + 44, sy - 4, 2, 5); ctx.fillRect(px + 42, sy - 7, 6, 4);
   ctx.fillStyle = due ? (Math.floor(now * 4) % 2 ? '#ff9a3c' : '#7a3a1c') : '#6c7486';
   ctx.fillRect(px + 43, sy - 6, 4, 2);
-  if (o.hp < o.maxHp) drawHealthBar(px + 24, sy - 11, o.hp, o.maxHp, 24);
+  if (o.hp < o.maxHp) drawHealthBar(px + 24, sy - 11, o.hp, o.maxHp, 24, o.team);
 }
 
 // The fish net, drawn flat on its hole in the pass right after the ground
@@ -1110,7 +1132,7 @@ function drawNet(o, px, py, now) {
     ctx.fillStyle = '#c9dded'; ctx.fillRect(fx + 1, fy + 1, 2, 1);
     ctx.fillStyle = '#101d2c'; ctx.fillRect(fx + 1, fy, 1, 1);
   }
-  if (o.hp < o.maxHp) drawHealthBar(px + sh + 8, py - 5, o.hp, o.maxHp, 12); // + sh: rides the shudder, like every other building bar
+  if (o.hp < o.maxHp) drawHealthBar(px + sh + 8, py - 5, o.hp, o.maxHp, 12, o.team); // + sh: rides the shudder, like every other building bar
 }
 const NET_FISH_AT = [[3, 4], [8, 8], [4, 11]]; // where a held fish lies in the mesh
 
@@ -1209,7 +1231,7 @@ function drawRobot(b, ex, ey, now) {
 
   // the four shared tells, same as any other body (js/abilities.js)
   drawUnitStates(b, bx, by, spr.width, spr.height, now);
-  drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8);
+  drawHealthBar(b.x - ex, by - 4, b.hp, b.maxHp, 8, b.team);
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
 }
 
@@ -1217,8 +1239,9 @@ function drawRobot(b, ex, ey, now) {
 // grids (sprites.js), two rows taller than a slot, standing on player feet
 // (b.y + 8 in the sort, the feet on the player's own foot row),
 // with the worker's axe swing over whatever it is felling or setting, the hop
-// off the bird as a lift, the shared tells, and a MERCHANT nameplate over its
-// bar in the side's paint - a name, the one text a body over the world gets.
+// off the bird as a lift, the shared tells, and a MERCH nameplate over its
+// bar in the side's paint - a name, the one text a body over the world gets
+// (the bird it drives wears PERCH the same way, drawEagle in boot.js).
 function drawMerchant(b, ex, ey, now) {
   const set = SPRITES.merchant[skin(b.team)];
   const frames = set[b.dir] || set.down;
@@ -1247,8 +1270,8 @@ function drawMerchant(b, ex, ey, now) {
     }
   }
   drawUnitStates(b, px, py - lift, spr.width, spr.height, now);
-  drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14);
-  drawPixelTextOutline(ctx, 'MERCHANT', centreTextX(b.x - ex, 'MERCHANT'), py - 17 - lift, TEAMS[skin(b.team)].mark, '#0f1632');
+  drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14, b.team);
+  drawPixelTextOutline(ctx, 'MERCH', centreTextX(b.x - ex, 'MERCH'), py - 17 - lift, TEAMS[skin(b.team)].mark, '#0f1632');
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), py - 10, b, 5);
 }
 
@@ -1517,7 +1540,7 @@ function drawPlayer(p, ex, ey, now) {
   // fx is the stack's own centre column - the body's, shifted by FRAME_DX so
   // the frame straddles the sprite. Everything in the frame hangs off it.
   const fx = Math.round(p.x - ex) + FRAME_DX;
-  drawHealthBar(p.x - ex + FRAME_DX, hy - 7, p.hp, p.maxHp, 14);
+  drawHealthBar(p.x - ex + FRAME_DX, hy - 7, p.hp, p.maxHp, 14, p.team);
   // level badge: a 7-tall plate sharing its right frame column with the bar
   // backing's left edge (one 1px frame everywhere, never a doubled wall), and
   // spanning the health bar and the stamina bar stacked (hy-8 .. hy-2). Same
@@ -1540,10 +1563,12 @@ function drawPlayer(p, ex, ey, now) {
   drawPixelTextOutline(ctx, p.name,
     centreTextX(p.x - ex, p.name), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
     TEAMS[skin(p.team)].mark, '#0f1632');
-  // dodge stamina: one clean unsegmented bar under the health bar - charges
-  // stay discrete in the sim, the bar just shows the pooled total. Drawn for
-  // every slot (a rival out of rolls is a tell, and the level badge spans
-  // both bars, so a lone hp bar would look broken).
+  // dodge stamina: one clean unsegmented WHITE bar under the health bar -
+  // white on every side, since stamina has no side, and white is neither the
+  // team's paint above it nor the gold of the draw - charges stay discrete
+  // in the sim, the bar just shows the pooled total. Drawn for every slot
+  // (a rival out of rolls is a tell, and the level badge spans both bars, so
+  // a lone hp bar would look broken).
   // The track is painted one row taller than the fill so the gap between the two
   // bars is track grey, not frame colour - one clean outline around both.
   {
@@ -1557,10 +1582,10 @@ function drawPlayer(p, ex, ey, now) {
     // ghost of the chunk just spent: pale segment that drains into place
     const gw = Math.round(14 * Math.max(frac, p.stamGhost)) - Math.round(14 * frac);
     if (gw > 0) {
-      ctx.fillStyle = '#e6f4ff';
+      ctx.fillStyle = STAM_GHOST;
       ctx.fillRect(bx + Math.round(14 * frac), by, gw, 2);
     }
-    ctx.fillStyle = '#8ad8ff';
+    ctx.fillStyle = STAM_COL;
     ctx.fillRect(bx, by, Math.round(14 * frac), 2);
   }
   // stunned: the mirror of the level badge on the other side of the frame -
@@ -1588,9 +1613,10 @@ function drawPlayer(p, ex, ey, now) {
     ctx.fillRect(bx, by + 6 - h, 5, h);
     drawStunStars(bx + 2, by + 3, p, 1.5, 1);
   }
-  // bow draw meter: yellow while charging, turning hot orange the moment the
-  // draw is full. Drawn for everyone - it is the tell that says a shot is
-  // coming. It sits inside the shared frame directly above the hp bar, the
+  // bow draw meter: gold while charging, blinking white and settling to
+  // pale gold the moment the draw is full - brighter, never a new hue, so it
+  // stays the bow's colour next to a red rival's bar. Drawn for everyone -
+  // it is the tell that says a shot is coming. It sits inside the shared frame directly above the hp bar, the
   // mirror of the stamina bar below it: its backing adds the rows above the
   // hp backing (frame top at hy-11, fill hy-10..-9) and the hp backing's top
   // row hy-8 becomes the track-grey gap row, so the frame stays one outline.
@@ -1599,8 +1625,10 @@ function drawPlayer(p, ex, ey, now) {
   // hands, and never two at once, since a meal puts the bow down and blocks
   // the draw for its whole length. So one strip above a head answers the only
   // question a fight asks about it: gold filling = drawing (a shot is coming),
-  // slate filling = reloading (it is not), white = the instant it came back,
-  // GREEN filling = eating (a heal is coming, and hitting them takes it away).
+  // pale gold = it peaked, slate filling = reloading (it is not), pale gold
+  // again for the instant it came back (the bow's own ready colour; white is
+  // the stamina bar's), GREEN filling = eating (a heal is coming, and hitting
+  // them takes it away).
   // All three use the identical geometry, so the bar never jumps when one
   // hands over to the next.
   const nockKit = kitOf(p);
@@ -1614,9 +1642,10 @@ function drawPlayer(p, ex, ey, now) {
     ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
     ctx.fillStyle = '#3a3448';
     ctx.fillRect(x, y, 14, 3);         // fill rows + the gap row
-    ctx.fillStyle = eating ? '#8fe08a' // the heal colour the floater lands in
-      : !drawing ? (p.readyFlash > 0 ? '#f4f7ff' : '#6f7ca8')
-      : frac >= 1 ? '#ff9440' : '#ffd95c';
+    ctx.fillStyle = eating ? EAT_COL
+      : !drawing ? (p.readyFlash > 0 ? DRAW_FULL_COL : NOCK_COL)
+      : frac < 1 ? DRAW_COL
+      : p.chargeT < nockKit.bowCharge + DRAW_FULL_FLASH ? '#ffffff' : DRAW_FULL_COL;
     ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
   }
   ctx.globalAlpha = 1;

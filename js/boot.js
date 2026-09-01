@@ -1031,7 +1031,9 @@ function drawEagle(e, ex, ey, now) {
         ctx.globalAlpha = 1;
       }
       // the pool, in team colour, up from the moment it roosts - the bar IS
-      // the objective's introduction, so it never waits for a first hit.
+      // the objective's introduction, so it never waits for a first hit -
+      // under its PERCH nameplate in the same paint (the driver wears MERCH,
+      // drawMerchant): the side's two named bodies, named the same way.
       // Anchored to the bird's rotated extent, not the unrotated box, so it
       // hugs the sprite whatever way the dive left it pointing.
       const vh = Math.abs(w / 2 * Math.sin(e.heading)) + Math.abs(h / 2 * Math.cos(e.heading));
@@ -1040,6 +1042,7 @@ function drawEagle(e, ex, ey, now) {
       ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = TEAMS[skin(e.team)].mark;
       ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
+      drawPixelTextOutline(ctx, 'PERCH', centreTextX(sx, 'PERCH'), by - 8, TEAMS[skin(e.team)].mark, '#0f1632'); // two clear rows over the frame, as a slot's tag sits
     }
   }
   // the impact shockwave: two rings racing out over the crater, then gone -
