@@ -11,6 +11,16 @@
 // Sim code takes a `p` argument; `player` (the local slot) is for the camera,
 // HUD, cursor and audio only.
 const TEAMS = SPRITES.teams; // the 2 colour presets (RED, BLUE), baked into the sprites
+// Which PRESET a team wears on this screen. With settings.teamBlue (the
+// default) the local slot's side is always the BLUE one and the rival side
+// always RED, whatever team index the roster dealt - so allies read blue and
+// enemies red from the first match to the last, and a future second human
+// sees the mirror. The match itself never asks this: team indices, enemyOf,
+// PVP and every rule read p.team; only the PAINT goes through here - every
+// TEAMS[...] lookup, the per-team sprite sets (champ, eagleTeam, teamBuild,
+// robotTeam, merchant) and the two maps' eagle colours. Bot names are
+// computed from it live (Player.name), so RED-3 turns BLUE-3 with the toggle.
+function skin(team) { return settings.teamBlue && player && player.team === 0 ? 1 - team : team; }
 
 // Player slots. Every combatant in the match - the local human, the AI fills,
 // and (later) network peers - is a Player in `players`, so anything written
@@ -117,12 +127,12 @@ function levelUp(p) {
   if (!inAir(p)) floaters.push({ x: p.x, y: p.y - 22, txt: 'LEVEL ' + p.level, color: '#f2cc6a', t: 0, vx: 0, scale: 2, rise: 20 });
   if (p === player) SFX.levelUp();
 }
-function classSet(p) { return SPRITES.champ[p.cls][p.team]; }
+function classSet(p) { return SPRITES.champ[p.cls][skin(p.team)]; }
 // Five slots share each team colour, so text that names one player (the
 // scoreboard, the event log) also needs a per-slot shade of that team's
 // palette - the team colour stays the background, this is the ink.
 function playerTint(p) {
-  const t = TEAMS[p.team];
+  const t = TEAMS[skin(p.team)];
   return [t.trim, t.hatL, t.trimD, t.hat][Math.floor(p.id / TEAM_COUNT) % 4];
 }
 
@@ -371,8 +381,10 @@ class Player {
     this.team = slot % TEAM_COUNT;
     this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
     // the local slot wears the profile's display name; every other slot is
-    // named off its team. Editing the name at the menu calls applyProfileName().
-    this.name = control === 'human' ? PROFILE.name() : TEAMS[this.team].name + '-' + (slot + 1);
+    // named off its team - live, through the `name` getter below, so the name
+    // follows the paint (skin) when the team-colour setting flips. Editing the
+    // name at the menu calls applyProfileName().
+    this._name = control === 'human' ? PROFILE.name() : null;
     this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
     this.inv = { gold: 0 };             // the wallet is currency only - carried goods are in the bag
     this.bagCap = BAG_CAP;              // slots; one starting backpack
@@ -410,6 +422,10 @@ class Player {
     this.reset(true);
   }
   get active() { return this.control !== 'none'; }
+  // a named slot (the human, via applyProfileName) keeps its name; every other
+  // slot is called after the colour it is WEARING right now
+  get name() { return this._name !== null ? this._name : TEAMS[skin(this.team)].name + '-' + (this.id + 1); }
+  set name(v) { this._name = v; }
   // spawn placement + every transient cleared; boot calls it with first=true,
   // respawnPlayer() (a team's Keep bringing a slot back) with first=false
   reset(first) {
@@ -667,7 +683,7 @@ function die(p, src, cause) {
   p.shieldT = 0; p.rushT = 0; p.rushVictim = null;
   p.jugT = 0; p.hopT = 0; p.grapT = 0;
   clearUnitStatus(p); // root, slow, net, mark and the fire go out with the body
-  burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
+  burst(p.x, p.y - 6, TEAMS[skin(p.team)].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about
   const killer = src && src !== p ? src : null;
@@ -698,7 +714,7 @@ function die(p, src, cause) {
   else p.eliminated = true;
   if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
   else {
-    addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[p.team].mark);
+    addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[skin(p.team)].mark);
     if (state.spec === p.id) specNext(1); // the slot being watched went down: follow another
   }
   checkLastStanding();

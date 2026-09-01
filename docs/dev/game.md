@@ -12,9 +12,17 @@ nine other people are on it.
 
 Ten slots in `players` — **slot 0 is you, the rest are AI** — across **two teams of five, RED vs
 BLUE** (slots alternate). Everyone picks one of **two classes** (the ranged HUNTER, the melee
-WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the one line in
-opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of its line each
-eagle dives into the treeline and becomes its team's **objective**. **Last team standing wins.**
+WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the map's one
+diagonal in opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of
+its line each eagle dives into its **corner's** treeline — RED always bottom-left, BLUE always
+top-right — and becomes its team's **objective**; its **merchant** climbs down to raise a gate and
+clear the rim, and a **lane** of pines falls open back to the snow. **Last team standing wins.**
+
+**Your side is always blue.** Whatever team index the roster dealt you, your allies are painted
+BLUE and your enemies RED — nameplates, arrows, armour, buildings, map marks, bot names, all of
+it — through one function (`skin`, js/player.js) the paint goes through and the rules never do.
+A settings toggle (MY TEAM) shows the roster's real colours instead.
+[Teams and colours](multiplayer.md#teams-and-colours).
 
 The world is 232 tiles of 16 px — a 3712×3712 px snowfield with a forest border and an open
 interior threaded by frozen lakes and rivers. See [world.md](world.md#the-tile-world).
@@ -82,8 +90,10 @@ out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 **Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
 gear pop-up is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
 
-**Your eagle is your life.** The bird that carried the team in crashes into a patch of trees at
-the end of its line and roosts there, armoured in team colour. Its hp pool is its **nerve**:
+**Your eagle is your life.** The bird that carried the team in crashes into its corner's trees at
+the end of its line and roosts there, armoured in team colour — the crater it blows, the lane its
+landing cuts to the open snow and the gate its merchant raises are the team's starting base, an
+easier opening for a new player who can help fortify before walking out. Its hp pool is its **nerve**:
 hits spook it, it calms back down between scares, it defends its own ground with a wing gust —
 and when its nerve breaks it is **driven off**, not killed: every camera pans to watch it fly
 away, and its whole side falls with it as it goes. The second, symmetric way to win a match, and the reason both teams

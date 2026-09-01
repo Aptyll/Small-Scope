@@ -149,6 +149,10 @@ lives in `docs/dev/*.md` beside the code it protects.
   bits](docs/dev/gameplay.md#tools-and-bits).
 - **Anything deciding it can see a player asks `seenAt(p, range)`**, never a bare range — that one
   function is where GHOSTSTEP and burial live (both maps gate on `concealOf(p)`).
+- **Anything painting a team's colour indexes by `skin(team)`** — `TEAMS[skin(p.team)]`,
+  `SPRITES.champ[c][skin(t)]`, every per-team sprite set — never by the bare index: your side is
+  always BLUE on your screen (`settings.teamBlue`), and a bare `TEAMS[p.team]` is the one thing
+  on it painted the wrong colour. Rules (`p.team`, `enemyOf`) never call it.
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).

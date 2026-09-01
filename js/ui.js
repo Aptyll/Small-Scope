@@ -354,7 +354,7 @@ function renderWheel(now) {
     const iy = L.cy + Math.sin(opt.ang) * WHEEL_RING;
     if (w.kind === 'build') {
       const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
-      const tb = SPRITES.teamBuild[player.team];
+      const tb = SPRITES.teamBuild[skin(player.team)];
       const spr = (tb.icon && tb.icon[opt.id]) || tb[opt.id][0];
       ctx.globalAlpha = affordable ? 1 : 0.55;
       ctx.drawImage(spr, Math.round(ix - 8), Math.round(iy - 8));
@@ -589,7 +589,7 @@ function renderMinimap(now) {
     if (Math.hypot(dx, dy) > MM_R - 1) continue;
     ctx.fillStyle = '#0f1632';
     ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
-    ctx.fillStyle = TEAMS[p.team].mark;
+    ctx.fillStyle = TEAMS[skin(p.team)].mark;
     ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
   }
   // worker flags on your side, as the same pennant the chart draws: where the
@@ -598,7 +598,7 @@ function renderMinimap(now) {
     if (!q.active || q.team !== vp.team || !q.flag) continue;
     const dx = (q.flag.tx + 0.5 - ptx) * s, dy = (q.flag.ty + 0.5 - pty) * s;
     if (Math.hypot(dx, dy) > MM_R - 2) continue;
-    drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[q.team].mark);
+    drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[skin(q.team)].mark);
   }
   // the downed eagles: both objectives, always on the disc - keeping yours
   // alive (and finding theirs) is the match
@@ -609,7 +609,7 @@ function renderMinimap(now) {
     const gx = Math.round(MM_CX + dx), gy = Math.round(MM_CY + dy);
     ctx.fillStyle = '#0f1632';
     ctx.fillRect(gx - 3, gy - 1, 7, 3); ctx.fillRect(gx - 1, gy - 3, 3, 7);
-    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillStyle = TEAMS[skin(e.team)].mark;
     ctx.fillRect(gx - 2, gy, 5, 1); ctx.fillRect(gx, gy - 2, 1, 5);
   }
   // named places, glyph only - a name would not fit inside the disc (the
@@ -622,7 +622,7 @@ function renderMinimap(now) {
   // the centre dot: white for you, the team colour for a slot you are watching
   ctx.fillStyle = '#0f1632';
   ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
-  ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[vp.team].mark;
+  ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[skin(vp.team)].mark;
   ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
 
   // day/night cycle ring: a 3 px band of pixels, the elapsed part painted
@@ -1058,7 +1058,7 @@ function drawCharPanel(now) {
   // and hero level beside it in quiet ink
   const head = player.name;
   const sub = CLASSES[player.cls].name + ' ' + player.level;
-  drawPixelTextShadow(ctx, head, panel.x + 8, panel.y + 6, TEAMS[player.team].mark, '#0a0e23');
+  drawPixelTextShadow(ctx, head, panel.x + 8, panel.y + 6, TEAMS[skin(player.team)].mark, '#0a0e23');
   drawPixelTextShadow(ctx, sub, panel.x + 8 + pixelTextWidth(head) + 8, panel.y + 6, '#7a8bb8', '#0a0e23');
   // the body, live: walking in place with its bought bands in their level
   // materials and the held weapon beside it
@@ -1071,7 +1071,7 @@ function drawCharPanel(now) {
   const sx = pr.x + 12, sy = pr.y + 7;
   ctx.fillStyle = 'rgba(4,6,18,0.6)';
   ctx.beginPath(); ctx.ellipse(sx + 32, pr.y + pr.h - 6, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
-  const spr = SPRITES.champ[player.cls][0].down[1 + (Math.floor(now * 3) % 2)];
+  const spr = SPRITES.champ[player.cls][skin(0)].down[1 + (Math.floor(now * 3) % 2)];
   ctx.drawImage(spr, sx, sy, 64, 64);
   drawGearMarks(player, sx, sy, 4);
   const held = heldTool(player);

@@ -56,8 +56,13 @@ the bird already has and the silhouette is untouched (`eagleFlash` is the same t
 white, for the downed objective's hit flash):
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
-still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to
-those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The swing
+still reads as tier), `robotTeam[team]`, and `merchant[team]` — the eagle's driver
+([the merchant](gameplay.md#the-merchant)): the same player pose set (`playerSet`) under
+`merchantPal`, a trader's tan coat (`r`/`R`/`d`) with the hat and trim in the team's colour, so
+the side reads while the coat says it is nobody's slot. A new character or building sprite has to
+be added to those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's
+colour — and every read of one of them indexes by `skin(team)` (js/player.js), never the bare
+team, so your side is painted blue whichever index it was dealt. The swing
 tool icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
 `drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the
 `SWING_TOOLS` table) and by `drawRobot()` for a bot's swing — E picks the tool, there is no tool

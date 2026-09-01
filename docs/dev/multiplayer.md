@@ -154,6 +154,17 @@ is `slot % TEAM_COUNT` (2), so the ten slots alternate into five a side. The tea
 only place a team colour is written down; the game code reads it back as `TEAMS` for name tags,
 map markers, death bursts and the eagles' armour.
 
+**The paint is per screen, the team is not.** Every colour lookup goes through
+`skin(team)` (js/player.js) — `TEAMS[skin(p.team)]`, `SPRITES.champ[cls][skin(team)]`,
+`eagleTeam`/`teamBuild`/`robotTeam`/`merchant[skin(...)]`, the two maps' eagle marks — and with
+`settings.teamBlue` (the default, the ESC menu's MY TEAM row) it returns the BLUE preset for the
+local slot's side and RED for the rival side whatever indices the roster dealt, so allies are
+always blue and enemies always red on your screen (a second human on the other team would see the
+mirror). Bot names follow the paint live (`Player.name` is a getter: `RED-3` becomes `BLUE-3` with
+the toggle); the human's profile name is stored. Nothing in the rules reads `skin` — `p.team`,
+`enemyOf`, `PVP`, ownership and the eagles' `team` fields are untouched — so the toggle is purely
+what colour things are drawn.
+
 A team colour drives both **characters** and **buildings**:
 
 - `SPRITES.playerTeam[team][dir][frame]` — the player grids baked with the coat/hat/trim swapped.
@@ -360,13 +371,15 @@ extend the ladder — a goal that is never dropped is a bot that stands still fo
 ## Where players start
 
 Nowhere, until they land: every active slot boards **its team's** eagle in `beginDrop()` — RED
-and BLUE fly the one line (a fixed `EAGLE_FLIGHT_T` 10 s each) in opposite directions, so the two
-sides salt themselves along it from opposite ends — and gets its `spawn` from `landPlayer()`, the
+and BLUE fly the map's one diagonal (a fixed `EAGLE_FLIGHT_T` 10 s each) in opposite directions,
+RED from the top-right corner down to the bottom-left, BLUE the reverse, so the two sides salt
+themselves along it from opposite ends and each roosts in its own fixed corner — and gets its
+`spawn` from `landPlayer()`, the
 nearest open tile to where it jumped. Jumping only unlocks over the line's **last `DROP_LOCK_T`
 (4 s)**: AI slots jump at a hashed fraction of that window, the human where they press Space —
 drifting with WASD on the way down — or at the window's end, the last open ground before the
-treeline (nobody is ever force-dropped in the trees; a profile's first flight auto-drops itself at
-8 s behind a countdown, and refuses a manual leap — that ride is scripted). A forced local drop
+corner's treeline (nobody is ever force-dropped in the trees; a profile's first flight rides to
+that end behind a countdown, and refuses a manual leap — that ride is scripted). A forced local drop
 lands into the [drop brief](rendering.md#the-drop-brief), the camera tour of both roosts; a real
 jump is the opt-out. That tile is what the bot brain
 treats as "home". There are no spawn pockets, no starter rings, and no guaranteed resources near

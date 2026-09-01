@@ -937,7 +937,7 @@ function paintRimmed(body) {
 }
 function drawTurretHead(o, cx, cy) {
   const ang = o.ang || 0, ca = Math.cos(ang), sa = Math.sin(ang);
-  const tm = TEAMS[o.team === undefined ? 0 : o.team];
+  const tm = TEAMS[skin(o.team === undefined ? 0 : o.team)];
   const M = TUR_METAL[Math.min(TUR_METAL.length - 1, o.tier)];
   const rec = -(o.rec || 0) * 3;   // recoil slides the barrel back through the mantlet
   const chg = o.chg || 0;
@@ -979,7 +979,7 @@ function drawBolt(a, ex, ey) {
   const nx = a.vx / vd, ny = a.vy / vd, qx = -ny, qy = nx;
   const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
   if (hx < -16 || hx > WV_W + 16 || hy < -16 || hy > WV_H + 16) return;
-  const tm = TEAMS[a.team];
+  const tm = TEAMS[skin(a.team)];
   ctx.globalAlpha = 0.28;                       // soft halo under the rim
   ctx.fillStyle = tm.mark;
   ctx.fillRect(hx - 3, hy, 7, 1); ctx.fillRect(hx, hy - 3, 1, 7);
@@ -997,7 +997,7 @@ function drawBolt(a, ex, ey) {
 function drawTurretFx(ex, ey, now) {
   for (const o of structures) {
     if (o.type !== 'turret' || o.building) continue;
-    const tm = TEAMS[o.team === undefined ? 0 : o.team];
+    const tm = TEAMS[skin(o.team === undefined ? 0 : o.team)];
     const m = turretMuzzle(o);
     const mx = Math.round(m.x - ex), my = Math.round(m.y - ey);
     if (mx < -90 || my < -90 || mx > WV_W + 90 || my > WV_H + 90) continue;
@@ -1048,7 +1048,7 @@ function drawBayOverlay(o, px, sy, now) {
   const t = STRUCTS.spawner.tiers[o.tier];
   const due = o.bots.length < t.bots;
   if (due && o.respawnT <= 0.8) {
-    const set = SPRITES.robotTeam[o.team === undefined ? 0 : o.team] || SPRITES.robot;
+    const set = SPRITES.robotTeam[skin(o.team === undefined ? 0 : o.team)] || SPRITES.robot;
     const spr = set[Math.floor(now * 8) % 2];
     const k = 1 - o.respawnT / 0.8;
     ctx.save();
@@ -1116,7 +1116,7 @@ const NET_FISH_AT = [[3, 4], [8, 8], [4, 11]]; // where a held fish lies in the 
 
 // a building wears its owner's team palette over its tier material
 function structSprite(o) {
-  const set = SPRITES.teamBuild[o.team === undefined ? 0 : o.team];
+  const set = SPRITES.teamBuild[skin(o.team === undefined ? 0 : o.team)];
   return set ? set[o.type][o.tier] : SPRITES[o.type][o.tier];
 }
 
@@ -1159,7 +1159,8 @@ function drawBird(a, ex, ey, now) {
 // driving so body and tread never part. No face - the states are the tread
 // rolling, the tool swinging at a target, and the gold held up front.
 function drawRobot(b, ex, ey, now) {
-  const set = SPRITES.robotTeam[b.team === undefined ? 0 : b.team] || SPRITES.robot;
+  if (b.merchant) { drawMerchant(b, ex, ey, now); return; }
+  const set = SPRITES.robotTeam[skin(b.team === undefined ? 0 : b.team)] || SPRITES.robot;
   const spr = set[b.moving ? Math.floor(b.animT) % 2 : 0];
   const bob = b.moving ? Math.floor(b.animT / 2) % 2 : 0;
   const bx = Math.round(b.x - 6 - ex);
@@ -1212,6 +1213,40 @@ function drawRobot(b, ex, ey, now) {
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
 }
 
+// The merchant (the `merchant` banner, robots.js): the player body plan in the
+// trader's coat, standing on player feet (b.y + 8 in the sort, the sprite at
+// the player's own anchor), with the worker's axe swing over whatever it is
+// felling or setting, the hop off the bird as a lift, and the shared tells.
+// No name tag: the coat and the hat are what it is.
+function drawMerchant(b, ex, ey, now) {
+  const set = SPRITES.merchant[skin(b.team)];
+  const frames = set[b.dir] || set.down;
+  const spr = frames[b.moving ? 1 + (Math.floor(b.animT / 2) % 2) : 0];
+  const px = Math.round(b.x - 8 - ex), py = Math.round(b.y - 12 - ey);
+  const lift = b.hopT > 0 ? Math.round(Math.sin(Math.min(1, b.hopT / MERCH_HOP_T) * Math.PI) * 10) : 0;
+  ctx.fillStyle = 'rgba(110,130,170,0.35)';
+  ctx.fillRect(px + 5, py + 15, 6, 2);
+  drawSpriteFlash(spr, px, py - lift, b.flash);
+  // the swing: the worker's wind-up and chop, aimed at the tile in hand
+  if (b.tgt && !b.moving && lift === 0) {
+    const tdx = b.tgt.tx * TILE + 8 - b.x, tdy = b.tgt.ty * TILE + 8 - b.y;
+    if (Math.hypot(tdx, tdy) <= 20) {
+      const total = b.tgt.type === 'stump' ? MERCH_BUILD_T : MERCH_SWING_T;
+      const prog = Math.min(1, b.workT / total);
+      const e = prog < 0.7 ? prog / 0.7 * 0.3 : 0.3 + (prog - 0.7) / 0.3 * 0.7;
+      const a = Math.atan2(tdy, tdx) - 1.6 * (1 - e);
+      ctx.save();
+      ctx.translate(Math.round(px + 8 + Math.cos(a) * 8), Math.round(py + 8 + Math.sin(a) * 8));
+      ctx.rotate(a + Math.PI / 2);
+      ctx.drawImage(SPRITES.itemAxe, -4, -4);
+      ctx.restore();
+    }
+  }
+  drawUnitStates(b, px, py - lift, 16, 16, now);
+  drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14);
+  if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), py - 10, b, 5);
+}
+
 // ---- the landmark glyph both maps and the drop chart stamp ----------------
 // a landmark's glyph, centred on x,y: a rim pass so it reads on parchment,
 // snow and forest alike, then the ink
@@ -1255,7 +1290,7 @@ function drawFlagPennant(g, x, y, col, rim) {
 function drawFlag(q, ex, ey, now) {
   const f = q.flag;
   const bx = Math.round(f.tx * TILE + 8 - ex), by = Math.round((f.ty + 1) * TILE - 2 - ey);
-  const col = TEAMS[q.team].mark;
+  const col = TEAMS[skin(q.team)].mark;
   ctx.fillStyle = 'rgba(110,130,170,0.35)';
   ctx.fillRect(bx - 3, by - 1, 7, 2);
   ctx.fillStyle = '#0f1632'; ctx.fillRect(bx - 1, by - 21, 3, 21);
@@ -1291,7 +1326,7 @@ function drawFlagAim(ox, oy) {
 function drawFlagCursor() {
   const t = flagTarget();
   if (!t) return;
-  if (t.lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[player.team].mark);
+  if (t.lift) drawFlagPennant(ctx, mouse.x + 9, mouse.y + 12, TEAMS[skin(player.team)].mark);
   else drawFlagIcon(ctx, t.job, mouse.x + 12, mouse.y + 9, t.col);
 }
 
@@ -1499,7 +1534,7 @@ function drawPlayer(p, ex, ey, now) {
   // the one label in the game you cannot check.
   drawPixelTextOutline(ctx, p.name,
     centreTextX(p.x - ex, p.name), hy - 18, // clear of the draw meter's frame (top row hy-11) with a gap row
-    TEAMS[p.team].mark, '#0f1632');
+    TEAMS[skin(p.team)].mark, '#0f1632');
   // dodge stamina: one clean unsegmented bar under the health bar - charges
   // stay discrete in the sim, the bar just shows the pooled total. Drawn for
   // every slot (a rival out of rolls is a tell, and the level badge spans
@@ -1712,7 +1747,7 @@ function drawGhost(p, ex, ey) {
   sctx.globalCompositeOperation = 'source-over';
   sctx.drawImage(spr, 0, 0);
   sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = TEAMS[p.team].mark;
+  sctx.fillStyle = TEAMS[skin(p.team)].mark;
   sctx.fillRect(0, 0, 32, 32);
   ctx.globalAlpha = 0.22;
   ctx.drawImage(scratch, 0, 0, spr.width, spr.height, px, py, spr.width, spr.height);

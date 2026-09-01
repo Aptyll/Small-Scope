@@ -1363,7 +1363,8 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
 ## Robots
 
 `robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
-tread frames — see [sprites.md](sprites.md)). `updateRobot()` mirrors the animal state machine plus
+tread frames — see [sprites.md](sprites.md)) — and the two eagles' [merchants](#the-merchant),
+which ride the same list with `merchant: true`. `updateRobot()` mirrors the animal state machine plus
 jobs — `updateUnitStatus` first, so a chassis wears every state a player slot can be put under
 (`makeRobot` clears the full set into it): rooted, netted, slowed, marked, stunned, on fire, and
 scrapped by a burn like anything else ([status effects](#status-effects-one-set-for-every-unit)).
@@ -1419,6 +1420,29 @@ picker — goes after a worker.
 the worker is under a flag**: it fights back for `ROBOT_MAD` (6 s) from where it was standing, and
 never follows past `ROBOT_LEASH` (90 px) of that spot. An unflagged worker is the same defenceless
 hauler it always was — see [Worker flags](#worker-flags) for why the anger is gated on the flag.
+
+### The merchant
+
+Each eagle is **driven** by its team's merchant — the tan-coated figure on the bird's neck in
+flight (`MERCH_SEAT`, `drawEagle`) — who climbs down the moment it roosts (`spawnMerchant`, called
+from `eagleCrash`, the `merchant` banner in js/robots.js) and works the roost for its side, in
+order: a **gate** at the mouth of the lane the crash cut — `createStruct` a turret on the crash's
+ring stump flanking the lane each side (the nearest stump outside `MERCH_GATE_GAP` of the lane's
+centreline on the field side), then walls on the ring stumps out to `MERCH_GATE_W` (`b.plan`,
+built in that order, `MERCH_BUILD_T` of hammering each, a site skipped while a body stands on it
+and retried last when no route reaches it); then the **rim**: every pine within `MERCH_CLEAR_R`
+(5.6 tiles — one ring past `BOOM_STUMP_R`) of the roost felled to a **stump** at
+`MERCH_SWING_T` a swing, **paying no gold** (like the crater and the lane — the same free start
+for both sides), picking the nearest pine to itself that still has an open side to stand on and
+keeping a timed `b.avoids` list of trunks no route reached (one slot flipped forever between two
+walled-in trees); then it keeps to the lane mouth, a step or two either way. The gate's owner is
+the team's first slot (kill credit for the turrets' bolts). It is a unit in `robots` with
+`merchant: true` and `kind: 'merchant'`: the same arrow loop, `hurtUnit` → `hurtRobot`,
+`separateUnits` (player radius and mass — `unitRadius`/`UNIT_MASS.merchant`), turret marking and
+y-sorted draw a worker rides, dispatched to `updateMerchant`/`drawMerchant` off the flag after
+`updateRobot`'s shared status/stun/wreck handling. `owner` is -1, so it reads no flag and no flag
+ever recalls it; killed, it stays dead (`e.merchant` clears, the feed says who felled it) — there
+is no second driver. `DBG.merchants` lists both.
 
 ## Worker flags
 
@@ -1595,6 +1619,7 @@ your own marker cross it. Consequences worth knowing:
 ## Settings
 
 `settings` (`v`, `volume`, `musicVol`, `sfxVol`, `mmR`, `mmZoom`, `hudScale`, `shake`, `muted`, `info`, `pixelCursor`, `hitbox`,
+`teamBlue` — your side always painted BLUE, see [teams and colours](multiplayer.md#teams-and-colours) —
 and the five video toggles `vidClouds`/`vidRays`/`vidStars`/`vidSnow`/`vidVig`) persists
 **under the player profile** — `saveSettings()` is a call to `PROFILE.putSettings()` and
 `loadSettings()` reads `PROFILE.settings()`, which returns `null` when this profile has never

@@ -73,7 +73,8 @@ function robotDies(b, src) {
     b.carry = 0;
   }
   // a downed worker is not a downed slot: it makes the feed, never the kill count
-  if (src && src.team !== b.team) logEvent(src.name + ' SCRAPPED A WORKER', src);
+  if (src && src.team !== b.team) logEvent(src.name + (b.merchant ? ' FELLED THE MERCHANT' : ' SCRAPPED A WORKER'), src);
+  if (b.merchant) { const e = state.drop && state.drop.eagles[b.team]; if (e && e.merchant === b) e.merchant = null; }
 }
 
 function updateRobot(b, dt) {
@@ -94,6 +95,7 @@ function updateRobot(b, dt) {
     b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
     return;
   }
+  if (b.merchant) { updateMerchant(b, dt); return; } // the eagle's driver: its own brain, the shared body above
   const home = b.home;
   const hm = structMouth(home), hx = hm.x, hy = hm.y;
   let moving = false;
@@ -286,6 +288,200 @@ function updateRobot(b, dt) {
   b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
 
   if (b.hp <= 0 && !b.dead) robotDies(b, null);
+}
+
+// ------------------------------------------------------------ merchant
+// Each eagle is DRIVEN by its team's merchant - the figure on the bird's neck
+// in flight (drawEagle, js/boot.js) - who climbs down the moment it roosts
+// and works the roost for its side: first a GATE at the mouth of the lane the
+// crash cut (a turret on the stump flanking the lane each side, walls on the
+// ring stumps behind them), then the ring of pines beyond the crash's stump
+// ring felled to stumps so the base has room and build sites, then it keeps
+// to the roost. It is a unit in `robots` with `merchant: true`: the same
+// arrow, blow, separation, turret-mark and draw pipelines a worker rides,
+// dispatched to updateMerchant/drawMerchant by that flag (updateRobot's
+// status/stun/wreck handling is shared). owner -1: it obeys no flag and pays
+// nobody - its work is the eagle's, free like the crater, the same for both
+// sides.
+const MERCH_HP = 60;
+const MERCH_SPD = 46;        // px/s
+const MERCH_SWING_T = 0.7;   // s per axe swing (a pine is 4 hp: ~3 s a tree)
+const MERCH_BUILD_T = 0.9;   // s of hammering to set a site
+const MERCH_CLEAR_R = 5.6;   // tiles from the roost the felling reaches: one ring past BOOM_STUMP_R (boot.js)
+const MERCH_GATE_GAP = 1.3;  // tiles either side of the lane's centreline the gate leaves open
+const MERCH_GATE_W = 4.2;    // ...and how far out from the centreline its walls reach
+const MERCH_HOP_T = 0.55;    // s of the hop off the bird
+const MERCH_THINK = 0.35;    // s between job picks
+
+// the nearest tile to (tx, ty) nothing stands on, spiralling out
+function freeTileNear(tx, ty, rMax) {
+  for (let r = 0; r <= rMax; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      const x = tx + dx, y = ty + dy;
+      if (inWorld(x, y) && !objAt(x, y) && ground[idx(x, y)] !== 2) return { tx: x, ty: y };
+    }
+  }
+  return null;
+}
+
+// the crash: the driver climbs down on the lane side of the roost and plans
+// its gate off the stumps the impact left (eagleCrash, js/boot.js)
+function spawnMerchant(e) {
+  const lx = -Math.cos(e.heading), ly = -Math.sin(e.heading); // the lane runs back the way the bird came
+  const wx = e.x + lx * (EAGLE_TILE_R + 1.4) * TILE, wy = e.y + ly * (EAGLE_TILE_R + 1.4) * TILE;
+  const at = freeTileNear(Math.floor(wx / TILE), Math.floor(wy / TILE), 6) || { tx: Math.floor(e.x / TILE), ty: Math.floor(e.y / TILE) };
+  const b = {
+    merchant: true, kind: 'merchant', team: e.team, owner: -1, home: null,
+    x: (at.tx + 0.5) * TILE, y: (at.ty + 0.5) * TILE, hp: MERCH_HP, maxHp: MERCH_HP,
+    roost: e, plan: [], tgt: null, workT: 0, thinkT: 0, avoids: [], avoid: null, avoidT: 0, nav: null,
+    hopT: MERCH_HOP_T, dir: 'down', moving: false, animT: 0, mvx: 0, mvy: 0, moveT: 0, idleT: 1,
+    atkAim: null, atkCd: 0, mad: null, madT: 0, carry: 0, flash: 0, kbx: 0, kby: 0, dead: false,
+  };
+  clearUnitStatus(b);
+  // the gate plan: the crash's stump ring, sorted by how far each stump sits
+  // off the lane's centreline on the field side - the nearest one each side
+  // (outside the gap) takes a turret, the rest out to MERCH_GATE_W a wall
+  const ring = [];
+  const R = Math.ceil(BOOM_STUMP_R) + 1, ctx0 = Math.floor(e.x / TILE), cty0 = Math.floor(e.y / TILE);
+  for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
+    const tx = ctx0 + dx, ty = cty0 + dy, o = objAt(tx, ty);
+    if (!o || o.type !== 'stump') continue;
+    const d = Math.hypot(dx, dy);
+    if (d <= BOOM_R - 0.3 || d > BOOM_STUMP_R + 0.3) continue;
+    const px = dx + 0.5 - (e.x / TILE - ctx0), py = dy + 0.5 - (e.y / TILE - cty0); // tiles, roost-relative
+    const along = px * lx + py * ly, lat = px * -ly + py * lx;
+    if (along <= 0 || Math.abs(lat) < MERCH_GATE_GAP || Math.abs(lat) > MERCH_GATE_W) continue;
+    ring.push({ tx, ty, lat });
+  }
+  ring.sort((a, c) => Math.abs(a.lat) - Math.abs(c.lat));
+  const tur = [ring.find((s) => s.lat < 0), ring.find((s) => s.lat > 0)].filter(Boolean);
+  for (const s of tur) b.plan.push({ tx: s.tx, ty: s.ty, type: 'turret' });
+  for (const s of ring) if (!tur.includes(s)) b.plan.push({ tx: s.tx, ty: s.ty, type: 'wall' });
+  e.merchant = b;
+  robots.push(b);
+  burst(b.x, b.y - 4, '#f4f7ff', 10, 50, 0.5, true);
+  burst(b.x, b.y - 2, TEAMS[skin(e.team)].mark, 5, 40, 0.45);
+  return b;
+}
+
+// the merchant's frame: hop, then gate, then the rim, then keep to the roost.
+// Every walk routes (navStep) and drops its goal when the route fails.
+function updateMerchant(b, dt) {
+  const e = b.roost;
+  if (b.hopT > 0) { b.hopT -= dt; if (b.hopT <= 0) { burst(b.x, b.y + 2, '#eef4fb', 8, 45, 0.45, true); if (nearPlayer(b.x, b.y)) SFX.land(); } b.moving = false; return; }
+  let moving = false, mvx = 0, mvy = 0;
+  const from = { x: b.x, y: b.y };
+  const walkToward = (px, py, reach) => {
+    const n = navStep(b, px, py, PLAYER_R, MERCH_SPD, dt, reach);
+    if (!n.ok) return -1;
+    moving = true;
+    return n.d;
+  };
+  const owner = players.find((p) => p.team === b.team) || player;
+  const unitOn = (tx, ty) => { // a body on or beside the tile: setting a solid site there would entomb it
+    const cx = tx * TILE + 8, cy = ty * TILE + 8;
+    for (const q of players) if (q.active && !q.dead && !inAir(q) && Math.abs(q.x - cx) < 8 + PLAYER_R && Math.abs(q.y - cy) < 8 + PLAYER_R) return true;
+    for (const r of robots) if (!r.dead && r !== b && Math.abs(r.x - cx) < 8 + PLAYER_R && Math.abs(r.y - cy) < 8 + PLAYER_R) return true;
+    return false;
+  };
+  // ---- the gate: walk to each planned stump and set the site ----------
+  while (b.plan.length) {
+    const s = b.plan[0], o = objAt(s.tx, s.ty);
+    if (!o || o.type !== 'stump') { b.plan.shift(); continue; } // built on, or gone: next
+    const px = s.tx * TILE + 8, py = s.ty * TILE + 8;
+    if (Math.hypot(px - b.x, py - b.y) > 20) {
+      if (walkToward(px, py, 1) < 0) { b.plan.push(b.plan.shift()); b.workT = 0; } // no route right now: try it last
+      else b.workT = 0;
+    } else if (unitOn(s.tx, s.ty)) {
+      b.plan.push(b.plan.shift()); b.workT = 0;
+    } else {
+      b.tgt = o;
+      b.workT += dt;
+      if (b.workT >= MERCH_BUILD_T) {
+        b.workT = 0; b.tgt = null;
+        b.plan.shift();
+        createStruct(s.tx, s.ty, s.type, 0, owner, true); // the eagle's own gate: nobody pays
+        burst(px, py, '#eef4fb', 8, 40, 0.4, true);
+        if (nearPlayer(px, py)) SFX.hammer();
+      }
+    }
+    return finish();
+  }
+  // ---- the rim: fell the ring past the crash's stumps, no gold ----------
+  // The nearest pine to the MERCHANT inside the ring that still has an open
+  // side to stand on - the ones its own gate walled in are the forest's now.
+  // A pine the route failed on goes on the avoid list for a while, a LIST
+  // because one slot flips forever between two blocked trunks.
+  if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
+  for (let i = b.avoids.length - 1; i >= 0; i--) if ((b.avoids[i].t -= dt) <= 0) b.avoids.splice(i, 1);
+  if (!b.tgt) {
+    b.thinkT -= dt;
+    if (b.thinkT <= 0) {
+      b.thinkT = MERCH_THINK;
+      const openSide = (o) => !isSolidTile(o.tx + 1, o.ty) || !isSolidTile(o.tx - 1, o.ty) || !isSolidTile(o.tx, o.ty + 1) || !isSolidTile(o.tx, o.ty - 1);
+      b.tgt = nearestObj(b.x, b.y, Math.ceil(MERCH_CLEAR_R) + 2, (o) => (o.type === 'tree' || o.type === 'deadTree') &&
+        Math.hypot(o.tx * TILE + 8 - e.x, o.ty * TILE + 8 - e.y) <= MERCH_CLEAR_R * TILE &&
+        !b.avoids.some((a) => a.o === o) && openSide(o));
+    }
+  }
+  if (b.tgt) {
+    const t = b.tgt, px = t.tx * TILE + 8, py = t.ty * TILE + 8;
+    if (Math.hypot(px - b.x, py - b.y) > 20) {
+      if (walkToward(px, py, 1) < 0) { b.avoids.push({ o: t, t: 12 }); b.tgt = null; }
+      b.workT = 0;
+    } else {
+      b.workT += dt;
+      if (b.workT >= MERCH_SWING_T) {
+        b.workT = 0;
+        t.hp--; t.flash = 0.1; t.shake = 0.22;
+        if (nearPlayer(px, py)) SFX.chop();
+        burst(px, py - 10, '#eef4fb', 3, 35, 0.4, true);
+        if (t.hp <= 0) {
+          objects[idx(t.tx, t.ty)] = { type: 'stump', tx: t.tx, ty: t.ty, flash: 0, shake: 0 };
+          burst(px, py - 8, '#eef4fb', 8, 45, 0.5, true);
+          burst(px, py - 8, t.type === 'tree' ? '#2f5c4b' : '#6b5a48', 5, 45, 0.5, true);
+          if (nearPlayer(px, py)) SFX.treeFall();
+          if (t.type === 'deadTree') flushBirds(landmarkAt(px, py), { x: px, y: py });
+          b.tgt = null;
+        }
+      }
+    }
+    return finish();
+  }
+  // ---- done: keep to the mouth of the lane, a step or two either way ----
+  const postX = e.x - Math.cos(e.heading) * (EAGLE_TILE_R + 1.6) * TILE, postY = e.y - Math.sin(e.heading) * (EAGLE_TILE_R + 1.6) * TILE;
+  if (b.moveT > 0) {
+    b.moveT -= dt;
+    moving = true;
+    const drag = unitMoveMul(b);
+    const mv = moveEntity(b, (b.mvx * 24 * drag + b.kbx) * dt, (b.mvy * 24 * drag + b.kby) * dt, PLAYER_R);
+    if (mv.blockedX || mv.blockedY) b.moveT = 0;
+  } else {
+    b.idleT -= dt;
+    if (Math.abs(b.kbx) + Math.abs(b.kby) > 1) moveEntity(b, b.kbx * dt, b.kby * dt, PLAYER_R);
+    if (b.idleT <= 0) {
+      let ang = rng() * Math.PI * 2;
+      if (Math.hypot(postX - b.x, postY - b.y) > 2 * TILE) ang = Math.atan2(postY - b.y, postX - b.x) + rand(-0.5, 0.5);
+      b.mvx = Math.cos(ang); b.mvy = Math.sin(ang);
+      b.moveT = rand(0.4, 1); b.idleT = rand(1.5, 3.5);
+    }
+  }
+  return finish();
+
+  function finish() {
+    mvx = b.x - from.x; mvy = b.y - from.y;
+    if (moving && (Math.abs(mvx) > 0.01 || Math.abs(mvy) > 0.01)) {
+      b.dir = Math.abs(mvx) > Math.abs(mvy) ? (mvx > 0 ? 'right' : 'left') : (mvy > 0 ? 'down' : 'up');
+    } else if (b.tgt) { // face the work
+      const dx = b.tgt.tx * TILE + 8 - b.x, dy = b.tgt.ty * TILE + 8 - b.y;
+      b.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    }
+    b.animT += dt * (moving ? 8 : 0);
+    b.moving = moving;
+    b.x = Math.max(8, Math.min(WORLD * TILE - 8, b.x));
+    b.y = Math.max(8, Math.min(WORLD * TILE - 8, b.y));
+  }
 }
 
 // ------------------------------------------------------------ worker flags

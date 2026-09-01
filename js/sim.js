@@ -160,8 +160,10 @@ function update(dt) {
       camX = state.introFrom.x + (tx - state.introFrom.x) * q;
       camY = state.introFrom.y + (ty - state.introFrom.y) * q;
       // the landing anchors the calendar: DAY 1, the same headline every
-      // dawn after it re-raises (practice is a training room, not a day)
-      if (state.intro === 0 && !PRACTICE) state.dayPop = { day: state.day, t: 0 };
+      // dawn after it re-raises (practice is a training room, not a day). A
+      // drop brief owns the top of the screen until it hands back, so it
+      // pops the day itself (endBrief, js/boot.js)
+      if (state.intro === 0 && !PRACTICE && !state.dropBrief) state.dayPop = { day: state.day, t: 0 };
     } else {
       camX += (tx - camX) * Math.min(1, dt * 7);
       camY += (ty - camY) * Math.min(1, dt * 7);
@@ -237,7 +239,7 @@ function updatePlay(dt) {
         life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE,
         // the trail says WHOSE shot it is, which is what it is for - except a
         // burning one, where the fire is the more urgent fact about it
-        color: a.burn > 0 ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[a.team].mark,
+        color: a.burn > 0 ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[skin(a.team)].mark,
         size: 1, grav: 0, alpha: ARROW_TRAIL_A,
       });
     }

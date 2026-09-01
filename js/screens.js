@@ -386,7 +386,7 @@ function renderDead(now) {
     const hit = specHit();
     ctx.fillStyle = 'rgba(12,18,42,0.82)';
     ctx.fillRect(L.x, L.y, L.w, L.h);
-    const mark = vp === player ? '#8f9cc4' : TEAMS[vp.team].mark;
+    const mark = vp === player ? '#8f9cc4' : TEAMS[skin(vp.team)].mark;
     ctx.fillStyle = mark;
     ctx.fillRect(L.x + SPEC_AW, L.y, L.w - SPEC_AW * 2, 1);
     ctx.fillRect(L.x + SPEC_AW, L.y + L.h - 1, L.w - SPEC_AW * 2, 1);
@@ -851,7 +851,7 @@ function renderVictory(now) {
   const ws = state.end || (state.end = endSnapshot());
   const t = state.deadTimer;
   const L = winLayout();
-  const tm = TEAMS[ws.team];
+  const tm = TEAMS[skin(ws.team)];
   const dim = Math.min(1, t / WIN_T.dim);
 
   // --- backdrop: wash, aurora, rays, vignette, flurry ---------------------
@@ -888,7 +888,7 @@ function renderVictory(now) {
     const bob = Math.round(Math.sin(now * 2.2) * 1.5);
     const bx = L.cx - 40, by = L.champY + lift + bob;
     ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.cls][ws.team].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
+    ctx.drawImage(SPRITES.champ[ws.cls][skin(ws.team)].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
     drawGearMarks(ws, bx, by, 5);
     ctx.globalAlpha = 1;
     // the crown, dropped onto the head
@@ -1097,7 +1097,7 @@ function renderDefeat(now) {
     // the kit is read on this screen.
     const bx = L.cx - 40, by = L.champY - 8 - settle;
     ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.cls][ws.team].prone.right[0], bx, by, 80, 80);
+    ctx.drawImage(SPRITES.champ[ws.cls][skin(ws.team)].prone.right[0], bx, by, 80, 80);
     ctx.globalAlpha = 1;
     // ...and the snow in FRONT of it, over the body's last few rows: the
     // drift has already started taking it back
@@ -1138,7 +1138,7 @@ function renderDefeat(now) {
     const sub = ws.by ? 'FELLED BY ' + ws.by : (DEATH_CAUSE[ws.cause] || 'WENT DOWN');
     ctx.globalAlpha = Math.min(1, (t - DEF_T.rule) / 0.5);
     drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
-      ws.by ? TEAMS[ws.byTeam].mark : '#8f9cc4', '#0a0e23');
+      ws.by ? TEAMS[skin(ws.byTeam)].mark : '#8f9cc4', '#0a0e23');
     ctx.globalAlpha = 1;
   }
 

@@ -63,8 +63,8 @@ const OBJECTS = {
   // reads the `team` an object carries. Drawn by drawEagle, never the object
   // pass; the swing itself lands in hitObject's eagle branch (hurtEagle).
   eagle:    { solid: true,  tool: 'axe',  needs: null,   verb: 'STRIKE', lift: 16,
-              mm: (o) => o.team ? MM_EAGLE_BLUE : MM_EAGLE_RED,
-              map: (o) => o.team ? MAP_EAGLE_BLUE : MAP_EAGLE_RED },
+              mm: (o) => skin(o.team) ? MM_EAGLE_BLUE : MM_EAGLE_RED,
+              map: (o) => skin(o.team) ? MAP_EAGLE_BLUE : MAP_EAGLE_RED },
   // a multi-tile building's filler tiles: solid, and structOf() has resolved
   // them to their anchor long before either map sees one
   part:     { solid: true },

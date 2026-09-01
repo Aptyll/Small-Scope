@@ -2677,6 +2677,13 @@
     },
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
+  // the MERCHANT who drives each team's eagle and works its roost (the
+  // `merchant` banner, js/robots.js): the player body plan in a trader's tan
+  // coat, with the hat and the trim in the team's colour so the side reads
+  const merchantPal = (t) => Object.assign({}, PPAL, {
+    r: '#a67c48', R: '#c9a062', d: '#6e4f2c', t: t.coat, T: t.coatL, m: t.trim, M: t.trimD,
+  });
+  const teamMerchants = TEAM_SKINS.map((t) => playerSet(merchantPal(t)));
 
   // ---------------------------------------------------------------- eagle
   // The drop eagle, seen from above, flying along +x (the game rotates it to
@@ -3036,6 +3043,7 @@
     champ: champPlayers,
     teamBuild: teamBuild,
     robotTeam: teamRobots,
+    merchant: teamMerchants, // merchant[team] - the eagle's driver, a full walking pose set per team colour
     player: teamPlayers[0],
     raider: {
       down: [bake(playerDownIdle, RDPAL), bake(playerDownA, RDPAL), bake(playerDownB, RDPAL)],

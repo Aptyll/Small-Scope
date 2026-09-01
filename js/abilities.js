@@ -770,7 +770,7 @@ function drawAbilityOnPlayer(p, px, py, now) {
     ctx.fillRect(-1, -6, 3, 12);
     ctx.fillStyle = '#c8d2e4';
     ctx.fillRect(-1, -6, 1, 12);
-    ctx.fillStyle = TEAMS[p.team].mark; // the trim carries the side
+    ctx.fillStyle = TEAMS[skin(p.team)].mark; // the trim carries the side
     ctx.fillRect(0, -2, 1, 4);
     ctx.restore();
   }

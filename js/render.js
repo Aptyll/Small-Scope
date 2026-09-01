@@ -276,7 +276,7 @@ function render() {
     draws.push({ y: p.y + 8, p, ghost: !p.active }); // empty slots stand as silhouettes
   }
   for (const a of animals) draws.push({ y: a.y + 4, a });
-  for (const b of robots) draws.push({ y: b.y + 4, r: b });
+  for (const b of robots) draws.push({ y: b.y + (b.merchant ? 8 : 4), r: b }); // a merchant stands on player feet (robots.js)
   // the training grounds' archery targets: entities, never tile objects (a
   // slider crosses tiles every frame), sorted by their base like everything
   if (PRACTICE) for (const t of ptargets) draws.push({ y: t.y + 1, pt: t });
@@ -549,7 +549,7 @@ function render() {
     if (a.path === 'orbit') { drawMote(a, hx, hy, now); continue; }
     ARROW_PX.length = 0;
     arrowBodyPx(ARROW_PX, a.x - ex, a.y - ey, nx, ny, 0, ARROW_LEN,
-      TEAMS[a.team].mark, TEAMS[a.team].coatD, a.col || ARROW_INK.G, 0);
+      TEAMS[skin(a.team)].mark, TEAMS[skin(a.team)].coatD, a.col || ARROW_INK.G, 0);
     paintArrowPx(ARROW_PX);
   }
 

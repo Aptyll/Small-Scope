@@ -1126,14 +1126,19 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGame`/`DBG.beginDrop`)
 puts every active slot aboard **its team's bird** (`p.aboard`) and builds
 `state.drop = { eagles: [red, blue] }` via `makeEagles()`: one base line from `makeEagleRoute()` —
-two points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
-`hash2` so the line is the seed's — flown in **opposite directions**, each bird shifted
-`EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass is a fly-by,
-~5 tiles apart, never a collision. `beginDrop` sets mode `drop`, snaps the world zoom to
-`DROP_ZOOM` around its centre and starts the menu exit. Every rider gets a **wing seat**
-(`p.seat`, dealt per team in `beginDrop`; `seatPos`
+**the map's diagonal, fixed for every match and seed**: RED (team 0) flies it from the top-right
+corner down to roost in the **bottom-left** woods, BLUE the reverse to the **top-right**. Each end
+is `diagEnd()`, the point `EAGLE_END` (2) tiles inside that corner's treeline as the seed grew it
+on the diagonal (pure reads of `borderDepth` — no `rng()`, no `hash2`), so the dive past it always
+has forest to land in. The two birds fly it in **opposite directions**, each shifted
+`EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass over the
+map's centre is a fly-by, ~5 tiles apart, never a collision. `beginDrop` sets mode `drop`, snaps
+the world zoom to `DROP_ZOOM` around its centre and starts the menu exit. Every rider gets a
+**wing seat** (`p.seat`, dealt per team in `beginDrop`; `seatPos`
 rotates the `EAGLE_SEATS` offsets — one on the back, two inner wings, two out on the primaries —
-by the heading, and the human sits seat 0 of their own bird). Every flight takes exactly
+by the heading, and the human sits seat 0 of their own bird); the team's **merchant** rides the
+neck (`MERCH_SEAT`, drawn by `drawEagle` ahead of the riders — see
+[the merchant](gameplay.md#the-merchant)). Every flight takes exactly
 `EAGLE_FLIGHT_T` (10 s) — each bird derives `e.spd` from its own line's length — and jumping is
 **locked until the line's last `DROP_LOCK_T` (4 s)**: `dropJump` refuses (and `SFX.deny`s) an
 unforced jump before then. The window's far end is `e.jumpEnd` from `lastOpenU` — the last point
@@ -1144,8 +1149,8 @@ drop never lands in the treeline**; `e.jumpOpen` is the lock's fraction, clamped
 `p.dropU`: AI slots at a hashed fraction of the jump window (scattered ±4 tiles off the line), the
 human at `jumpEnd` if they never pressed Space/Enter/E/click (`dropJump` — the fall starts **from
 the seat**, so the leap visibly leaves the wing). A profile that has **never jumped**
-(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) instead
-auto-drops at `TUT_DROP_T` (8 s, near the tree edge and clear of the mid-route pass) behind a
+(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) rides the whole
+line to that same `jumpEnd` — the mouth of the lane its eagle is about to cut — behind a
 `TUT_COUNT` (5 s) `PREPARE TO DROP` countdown — first-run onboarding, and on that flight the
 ride is **fully scripted**: `dropJump` refuses the local slot's manual leap outright, so the
 countdown always does the jumping and the [drop brief](#the-drop-brief) below always follows.
@@ -1166,14 +1171,19 @@ flag into `state.dropBrief` (`{ ph, t, total }`), and `updateDrop` runs the phas
 **`ours-go`** glides the camera to your own bird — the sim camera (js/sim.js) follows
 `dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
 is *tracked* and the crash lands on screen — and holds until the bird is down; **`ours`** holds
-`BRIEF_HOLD` (3 s) under a two-line headline (`drawDropBrief`, baked opaque and faded as a canvas,
-the dayPop grammar): `YOUR EAGLE` in your team's colour over `IF IT IS DRIVEN OFF, YOUR TEAM
-FALLS`; **`theirs-go`**/**`theirs`** do the same across the map for the rival roost (`THEIR
-EAGLE` / `DRIVE IT OFF TO WIN` — the once the win condition is ever written down, the headline
-carve-out); **`back`** glides home to your boots and clears. While it runs `sampleHumanInput`
+`BRIEF_HOLD_OURS` (5 s — long enough to watch the merchant climb down and the lane fall open
+toward you) under a two-line headline (`drawDropBrief`, baked opaque and faded as a canvas, the
+dayPop grammar) across the **top** of the view (`VIEW_H * 0.08`): `YOUR EAGLE` in your team's
+paint at **three times** the drop HUD's text scale over `LOSE IT, LOSE THE MATCH` at one;
+**`theirs-go`**/**`theirs`** do the same across the map for the rival roost for `BRIEF_HOLD`
+(3 s): `THEIR EAGLE` / `DRIVE IT OFF TO WIN` — the once the win condition is ever written down,
+the headline carve-out, and deliberately no third line; **`back`** glides home to your boots and
+clears through `endBrief()`, which also pops the `DAY 1` headline the landing owes (the camera
+banner in sim.js holds it back while the brief has the top of the screen). While it runs
+`sampleHumanInput`
 zeroes the controls exactly as the ceremony does, the M toggle is refused, `player.invuln` is
 held up so nobody dies watching the lesson, and the match runs on underneath — the world is the
-backdrop, not paused. `BRIEF_MAX_T` (20 s) is the safety rail, and `state.eagleCine` (or leaving
+backdrop, not paused. `BRIEF_MAX_T` (24 s) is the safety rail, and `state.eagleCine` (or leaving
 mode `play`) outranks and clears it.
 
 **`state.drop` now outlives the whole match** — it never goes null, because the roosts are the
@@ -1183,15 +1193,26 @@ heading for the first spot whose 7×7 holds ≥`MIN_CRASH_TREES` (20) trees — 
 **inside** the woods, with the densest spot seen as the fallback (pure reads — no `rng()`, no
 `hash2` — so a seed always buries its birds in the same trees) — and the stoop runs `EAGLE_DIVE_T` (1.4 s,
 `u²`-eased, wingbeats quickening, speed motes streaming). `eagleCrash` then clears every tree
-within `BOOM_R` (2.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (3.6) to stumps —
+within `BOOM_R` (3.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (4.6) to stumps —
 **paying no gold**, a crater of free fells would warp the economy at minute one — plants the
 **roost hitbox** (`eagle` objects on the open tiles within `EAGLE_TILE_R`, solid to walkers and a
-rival-only E target; `eagleFlee` clears them again at liftoff) and fires `eagleBoomFx` (snow + team-colour
+rival-only E target; `eagleFlee` clears them again at liftoff), plans the **lane** and drops off
+the **merchant** (below), and fires `eagleBoomFx` (snow + team-colour
 bursts, hanging feathers, a radial dust ring, two shockwave rings squashed flat over `BOOM_LIFE`
 so they read as a blast wave along the ground, never a halo), distance-scaled `state.shake`,
 `SFX.boom()` (the timber sample dropped low under a synth blast, layered on purpose) and a
 `HAS LANDED` feed headline — the landing is a landing, not a wound: the bird takes **no damage**
-from its own dive. The grounded bird is the team's **objective**, and its hp pool is its
+from its own dive. **The lane** (`planLane`/`laneStep`, `e.lane = { t, ev, next }`): from the
+crater back along the bird's own approach to the first open snow, every pine within `LANE_R`
+(0.8 tiles — a diagonal band two tiles across) of the centreline becomes two events timed by its
+distance along the lane, so a **felling front** walks out from the roost at `LANE_SPD` (3.5
+tiles/s) starting `LANE_DELAY` after the impact: each pine **shudders `LANE_WARN` (0.5 s) ahead
+of the front** (`o.shake`, the parkour roll's own tell, decayed by sim.js's object-timer loop),
+then goes down in needles and snow with a throttled `SFX.treeFall`. It is the parkour's
+`pkAnimStep` grammar without the ice — a watched transition, never a blink — and it pays nothing
+and leaves no stumps: a road is a road. Pure reads, so a seed's lane is always the same lane;
+`laneStep` runs from `updateEagle`'s `down` branch and drops `e.lane` when the last event is
+spent. The grounded bird is the team's **objective**, and its hp pool is its
 **nerve**: `EAGLE_HP` (320), spooked down by rival arrows through `hurtEagle` (the sim.js arrow
 loop tests the roost tiles themselves — *before* tile solidity, which would eat the shot — so the
 arrow hitbox is exactly the collision box, corners included) and by rival E swings

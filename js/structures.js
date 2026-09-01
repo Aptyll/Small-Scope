@@ -308,7 +308,7 @@ function fireBolt(o, t, pv) {
     t: 0, life: BOLT_LIFE, dmg: t.dmg, pow: 1,
     owner: o.owner === undefined ? 0 : o.owner, team: team, trailD: 0,
   });
-  burst(m.x, m.y, TEAMS[team].mark, 4, 60, 0.22, true);
+  burst(m.x, m.y, TEAMS[skin(team)].mark, 4, 60, 0.22, true);
   if (nearPlayer(pv.x, pv.y)) SFX.turretFire();
 }
 
