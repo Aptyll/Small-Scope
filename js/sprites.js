@@ -2680,10 +2680,32 @@
   // the MERCHANT who drives each team's eagle and works its roost (the
   // `merchant` banner, js/robots.js): the player body plan in a trader's tan
   // coat, with the hat and the trim in the team's colour so the side reads
-  const merchantPal = (t) => Object.assign({}, PPAL, {
-    r: '#a67c48', R: '#c9a062', d: '#6e4f2c', t: t.coat, T: t.coatL, m: t.trim, M: t.trimD,
+  // Not another player: the pom-pom hat is swapped for a tall WIDE-BRIMMED
+  // hat (rows 1-5 of every standing grid - crown, a band, then a brim that
+  // overhangs the head a pixel each side; the back and sides of the head
+  // below it go hat-dark too), the coat is plum with gold trim instead of a
+  // team coat, and the ONLY team ink is the hat band - so at a glance it is a
+  // hat and a coat no slot wears, and its side reads off the band, the
+  // nameplate and the bar.
+  const merchantize = (g) => g.map((row, i) => {
+    if (i === 1) return '......hhhh......';
+    if (i === 2) return '.....ohHHho.....';
+    if (i === 3) return '.....ohhhhho....';
+    if (i === 4) return '.....oyYYyo.....';
+    if (i === 5) return '...ohhhhhhhho...';
+    return row.replace(/t/g, 'h').replace(/T/g, 'H');
   });
-  const teamMerchants = TEAM_SKINS.map((t) => playerSet(merchantPal(t)));
+  const merchantPal = (t) => Object.assign({}, PPAL, {
+    r: '#5c3d70', R: '#7d5a94', d: '#3c2650', m: '#e2b24e', M: '#b48a2c',
+    h: '#4a3220', H: '#6b4a30', y: t.coat, Y: t.coatL,
+  });
+  const merchantSet = (pal) => ({
+    down: [bake(merchantize(playerDownIdle), pal), bake(merchantize(playerDownA), pal), bake(merchantize(playerDownB), pal)],
+    up: [bake(merchantize(playerUpIdle), pal), bake(merchantize(playerUpA), pal), bake(merchantize(playerUpB), pal)],
+    right: [bake(merchantize(playerSideIdle), pal), bake(merchantize(playerSideA), pal), bake(merchantize(playerSideB), pal)],
+    left: [flipH(bake(merchantize(playerSideIdle), pal)), flipH(bake(merchantize(playerSideA), pal)), flipH(bake(merchantize(playerSideB), pal))],
+  });
+  const teamMerchants = TEAM_SKINS.map((t) => merchantSet(merchantPal(t)));
 
   // ---------------------------------------------------------------- eagle
   // The drop eagle, seen from above, flying along +x (the game rotates it to

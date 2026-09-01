@@ -146,13 +146,12 @@ const state = {
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from
   drop: null,          // the eagle while it is in the air: see makeEagleRoute() / beginDrop()
-  // the DROP BRIEF: a forced (never-jumped) landing pans the camera to both
-  // roosts and states the objective before handing the controls back -
+  // the DROP BRIEF: a local slot that never jumped rides the landing, and the
+  // crash pans the camera to both roosts and states the objective before
+  // handing the controls (and the E hop off the bird) back -
   // { ph: 'ours-go'|'ours'|'theirs-go'|'theirs'|'back', t, total }, run by
   // updateDrop (js/boot.js), camera in js/sim.js, text in drawDropBrief.
-  // dropBriefPend arms it between the forced jump and the boots landing.
   dropBrief: null,
-  dropBriefPend: false,
   fade: null,          // screen fade: { a, to, spd, color, then }
 };
 

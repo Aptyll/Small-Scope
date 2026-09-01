@@ -1213,11 +1213,12 @@ function drawRobot(b, ex, ey, now) {
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), by - 9, b, 4);
 }
 
-// The merchant (the `merchant` banner, robots.js): the player body plan in the
-// trader's coat, standing on player feet (b.y + 8 in the sort, the sprite at
-// the player's own anchor), with the worker's axe swing over whatever it is
-// felling or setting, the hop off the bird as a lift, and the shared tells.
-// No name tag: the coat and the hat are what it is.
+// The merchant (the `merchant` banner, robots.js): the player body plan under
+// a wide-brimmed hat and a plum coat (sprites.js's merchantize), standing on
+// player feet (b.y + 8 in the sort, the sprite at the player's own anchor),
+// with the worker's axe swing over whatever it is felling or setting, the hop
+// off the bird as a lift, the shared tells, and a MERCHANT nameplate over its
+// bar in the side's paint - a name, the one text a body over the world gets.
 function drawMerchant(b, ex, ey, now) {
   const set = SPRITES.merchant[skin(b.team)];
   const frames = set[b.dir] || set.down;
@@ -1244,6 +1245,7 @@ function drawMerchant(b, ex, ey, now) {
   }
   drawUnitStates(b, px, py - lift, 16, 16, now);
   drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14);
+  drawPixelTextOutline(ctx, 'MERCHANT', centreTextX(b.x - ex, 'MERCHANT'), py - 17 - lift, TEAMS[skin(b.team)].mark, '#0f1632');
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), py - 10, b, 5);
 }
 

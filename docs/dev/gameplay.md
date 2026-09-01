@@ -1423,8 +1423,11 @@ hauler it always was — see [Worker flags](#worker-flags) for why the anger is 
 
 ### The merchant
 
-Each eagle is **driven** by its team's merchant — the tan-coated figure on the bird's neck in
-flight (`MERCH_SEAT`, `drawEagle`) — who climbs down the moment it roosts (`spawnMerchant`, called
+Each eagle is **driven** by its team's merchant — the figure in the wide-brimmed hat and plum
+coat on the bird's neck in flight (`MERCH_SEAT`, `drawEagle`; the look is
+[sprites.md](sprites.md)'s `merchantize`, built so it never reads as a slot on either side, with a
+`MERCHANT` nameplate and a bar in its side's paint over it, `drawMerchant`) — who climbs down the
+moment it roosts (`spawnMerchant`, called
 from `eagleCrash`, the `merchant` banner in js/robots.js) and works the roost for its side, in
 order: a **gate** at the mouth of the lane the crash cut — `createStruct` a turret on the crash's
 ring stump flanking the lane each side (the nearest stump outside `MERCH_GATE_GAP` of the lane's

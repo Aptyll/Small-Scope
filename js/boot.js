@@ -16,10 +16,13 @@
 // hashed fraction of the window). A jumper free-falls for FALL_T onto the
 // nearest open tile, which becomes its spawn tile (the bot brain's home); the
 // human's landing snaps the view back to the player's own zoom and runs the
-// HUD slide-in. A rider who never jumps is dropped at the window's end - the
-// last open ground before the corner's treeline, never in the trees - and a
-// profile's very first flight rides the whole line and counts itself down to
-// that drop. state.drop outlives mode 'drop' - and the whole match: past the
+// HUD slide-in. A rider who never jumps RIDES THE LANDING: the bird dives
+// with them on its back, the crash hands the mode over (landAboard), the drop
+// brief tours both roosts with them still seated, and then E hops them off
+// (hopOff, under the E - HOP OFF indicator drawHopPrompt raises). A profile's
+// very first flight is exactly that ride - its manual jump is refused - so a
+// new player's first ground is the roost, beside the merchant and the gate.
+// state.drop outlives mode 'drop' - and the whole match: past the
 // line's end each bird dives into the corner's treeline, blows a crater in
 // the trees, its MERCHANT (the driver on its neck - the `merchant` banner,
 // js/robots.js) hops off to fell the rim and raise a gate, a LANE of pines
@@ -33,14 +36,15 @@ const EAGLE_FLIGHT_T = 10;  // s: every seed's line takes exactly this long (spe
 const DROP_LOCK_T = 4;      // s: the jump only unlocks over the line's last stretch
 const DROP_EDGE_MARGIN = 3; // tiles of open ground a forced drop keeps clear of the treeline
 const EAGLE_END = 2;        // tiles inside the corner's treeline each end of the line sits (diagEnd)
-const TUT_COUNT = 5;        // s: a profile's first flight counts itself down over this long before the window's end drops it
-// the DROP BRIEF: any FORCED drop of the local slot (the first flight always -
-// its manual jump is refused, the ride is fully scripted - or a veteran who
-// rode past the window's end) lands into a camera tour before play: glide to
-// your own roost (watching the dive land if it hasn't yet), hold it while the
-// merchant hops off and the lane falls open under the lose condition, glide
-// to the rival roost with the win condition, then back to your boots. A real
-// jump is the opt-out, so a veteran never sees it twice.
+const HOP_FALL_T = 0.7;     // s the hop off a GROUNDED bird takes (a step down, not a free fall)...
+const HOP_ALT = 16;         // ...from this many px up
+// the DROP BRIEF: a local slot that rides the landing (the first flight
+// always - its manual jump is refused, the ride is fully scripted - or a
+// veteran who never jumped) sits through a camera tour before the hop: hold
+// your own roost while the merchant climbs down and the lane falls open under
+// the lose condition, glide to the rival roost with the win condition, then
+// back to your seat, where the E - HOP OFF indicator takes over. A real jump
+// is the opt-out, so a veteran never sees it twice.
 const BRIEF_HOLD_OURS = 5;  // s the camera holds on your roost - long enough to watch the lane open
 const BRIEF_HOLD = 3;       // s it holds on the rival roost
 const BRIEF_GO_MIN = 1;     // s a glide leg lasts at least, however close the target
@@ -158,11 +162,19 @@ function makeEagles() {
   });
 }
 
+// the bird's drawn scale right now: 3x in flight, walking down to the roost's
+// 2x through the dive (drawEagle's own curve), 2x on the ground
+function eagleScale(e) {
+  if (e.state === 'fly') return EAGLE_SCALE;
+  if (e.state === 'dive') { const u = Math.min(1, e.diveT / EAGLE_DIVE_T); return EAGLE_SCALE - (EAGLE_SCALE - EAGLE_REST_SCALE) * u * u; }
+  return EAGLE_REST_SCALE;
+}
 // a seat's world position on a bird right now: the seat offset rotated by the
-// heading, off the bird's centre
+// heading, off the bird's centre, at the bird's current scale
 function seatPos(e, si) {
   const s = EAGLE_SEATS[si % EAGLE_SEATS.length];
-  const dx = s[0] * EAGLE_SCALE, dy = s[1] * EAGLE_SCALE;
+  const S = eagleScale(e);
+  const dx = s[0] * S, dy = s[1] * S;
   const c = Math.cos(e.heading), sn = Math.sin(e.heading);
   return { x: e.x + dx * c - dy * sn, y: e.y + dx * sn + dy * c };
 }
@@ -180,12 +192,11 @@ function beginDrop() {
     p.seat = seats[p.team]++;
     const sp = seatPos(e, p.seat);
     p.x = sp.x; p.y = sp.y;
-    // bots spread across the jump window; the human rides to the window's end
-    // (the last open ground before the corner's trees) unless they jump - and
-    // the first flight rides the whole way there behind its countdown
+    // bots spread across the jump window; a human is never force-dropped -
+    // unless they jump they ride the landing and hop off at the roost (above)
     p.dropU = p.control === 'ai'
       ? e.jumpOpen + (e.jumpEnd - e.jumpOpen) * (0.08 + 0.84 * hash2(p.id * 31 + 5, 9))
-      : e.jumpEnd;
+      : 2;
   }
   state.mode = 'drop';
   state.menu.panel = null;
@@ -211,14 +222,11 @@ function dropJump(p, force) {
     if (p === player) SFX.deny();
     return;
   }
-  // the first flight is fully scripted: the countdown jumps for you, and the
-  // door stays shut to a manual leap - the brief that follows is the lesson
+  // the first flight is fully scripted: the door stays shut to a manual leap
+  // and the ride lands with you on it - the brief that follows is the lesson
   if (!force && p === player && state.drop.firstFlight) { SFX.deny(); return; }
-  // a forced local drop (the scripted first flight, or riding past the
-  // window's end) lands into the drop brief; a real jump is the opt-out
-  if (force && p === player) state.dropBriefPend = true;
   p.aboard = false;
-  p.dropT = FALL_T;
+  p.dropT = FALL_T; p.dropAlt = DROP_ALT;
   // the leap starts from the wing seat the rider was sitting on (p.x/p.y are
   // already there - updateDrop keeps every rider glued to its seat), so the
   // fall visibly begins at the wing; drawDropAir adds the hop off it
@@ -261,25 +269,47 @@ function landPlayer(p) {
   if (p === player) state.rayT = RAY_AFTER;
   burst(p.x, p.y - 2, '#f4f7ff', 16, 70, 0.5, true);
   if (p === player) {
-    state.mode = 'play';
-    state.mapOpen = false;            // a chart left up mid-flight comes down for the landing
-    applyZoom(0, true);               // back to the player's own zoom, centred on the landing
-    camX = Math.max(0, Math.min(WORLD * TILE - WV_W, p.x - WV_W / 2));
-    camY = Math.max(0, Math.min(WORLD * TILE - WV_H, p.y - WV_H / 2));
-    state.introFrom = { x: camX, y: camY };
-    state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, the camera settles
-    state.menu.screenT = 0;
+    if (state.mode !== 'play') handOver(p); // a jump's landing is where play begins; a hop's already is
     state.shake = 5;
     SFX.land();
-    // a forced drop lands into the brief: the camera leaves for the roost
-    // tour before the play camera ever takes over (see the consts above)
-    if (state.dropBriefPend) {
-      state.dropBriefPend = false;
-      state.dropBrief = { ph: 'ours-go', t: 0, total: 0 };
-    }
   } else {
     addFloater(p.x, p.y - 20, p.name + ' LANDED', TEAMS[skin(p.team)].mark);
   }
+}
+
+// mode 'drop' -> 'play' for the local slot, wherever it is: on its boots
+// after a jump, or still on the bird's back at the crash (landAboard)
+function handOver(p) {
+  state.mode = 'play';
+  state.mapOpen = false;            // a chart left up mid-flight comes down for the landing
+  applyZoom(0, true);               // back to the player's own zoom, centred on the landing
+  camX = Math.max(0, Math.min(WORLD * TILE - WV_W, p.x - WV_W / 2));
+  camY = Math.max(0, Math.min(WORLD * TILE - WV_H, p.y - WV_H / 2));
+  state.introFrom = { x: camX, y: camY };
+  state.intro = HUD_IN_T; state.introLen = HUD_IN_T; // the HUD slides in, the camera settles
+  state.menu.screenT = 0;
+}
+
+// the crash with the local slot still aboard: the ride's song is interrupted
+// by the impact the way a jump interrupts it, play begins with you seated on
+// the roost, and the brief opens - the E hop comes after it (updateDrop)
+function landAboard(p) {
+  handOver(p);
+  state.shake = 9;
+  state.rayT = RAY_AFTER;
+  SFX.music.play('jump', { out: 0.1, in: 0.05 });
+  state.dropBrief = { ph: 'ours-go', t: 0, total: 0 };
+}
+
+// E on the grounded bird: a step down off the wing - short, low, steerable
+// like any fall - and the first flight's countdown never comes back after it
+function hopOff(p) {
+  if (!p.aboard || !state.drop || state.dropBrief) return;
+  const e = state.drop.eagles[p.team];
+  if (e.state !== 'down') return;
+  p.aboard = false;
+  p.dropT = HOP_FALL_T; p.dropAlt = HOP_ALT;
+  if (p === player) { PROFILE.markDropped(); SFX.dodge(); }
 }
 
 function updateDrop(dt) {
@@ -324,7 +354,8 @@ function updateDrop(dt) {
       const e = state.drop.eagles[p.team];
       const sp = seatPos(e, p.seat);
       p.x = sp.x; p.y = sp.y;
-      if (e.prog >= p.dropU) dropJump(p, true); // the window's end drops whoever is still riding
+      if (e.prog >= p.dropU) dropJump(p, true); // the window's end drops a bot still riding
+      else if (e.state === 'down' && state.mode === 'play' && !state.dropBrief && p.input.work) hopOff(p); // E off the roost
     } else if (p.dropT > 0) {
       p.dropT -= dt;
       // steer the fall: the input axis drifts the landing point
@@ -467,10 +498,11 @@ function eagleGustFx(e, k) {
   burst(e.x, e.y - 10, '#f6f8ff', Math.round(5 * k), 40, 0.9, true);
 }
 
-// the end of the line: whoever is still aboard is thrown, and the bird tips
-// over into its dive toward the nearest standing forest past the line's end
+// the end of the line: a bot still aboard is thrown, a human rides the dive
+// down (landAboard at the crash), and the bird tips over toward the nearest
+// standing forest past the line's end
 function beginDive(e) {
-  for (const p of players) if (p.active && p.aboard && p.team === e.team) dropJump(p, true);
+  for (const p of players) if (p.active && p.aboard && p.team === e.team && p.control !== 'human') dropJump(p, true);
   e.state = 'dive';
   e.from = { x: e.x, y: e.y };
   e.crash = findCrashPoint(e);
@@ -543,6 +575,7 @@ function eagleCrash(e) {
   // falling (laneStep), and the driver climbs down to work the roost
   e.lane = planLane(e);
   spawnMerchant(e);
+  for (const p of players) if (p.active && p.aboard && p.team === e.team && p === player) landAboard(p);
 }
 
 // The LANE: the crash's one road out. From the crater back along the bird's
@@ -732,9 +765,10 @@ function drawDropAir(ex, ey, now) {
   // frame, which is what made fallers on the far side of it vanish mid-air.
   for (const p of players) {
     if (!p.active || p.dropT <= 0) continue;
-    const q = 1 - p.dropT / FALL_T;          // 0 just jumped .. 1 touching down
+    const fallT = p.dropAlt === HOP_ALT ? HOP_FALL_T : FALL_T;
+    const q = 1 - p.dropT / fallT;           // 0 just jumped .. 1 touching down
     const hop = Math.sin(Math.min(1, q * 4) * Math.PI) * 7; // the leap: up and off the wing first
-    const alt = DROP_ALT * (1 - q * q) + hop; // then gravity: slow start, fast finish
+    const alt = p.dropAlt * (1 - q * q) + hop; // then gravity: slow start, fast finish (a roost hop starts low)
     const sc = RIDER_SCALE - (RIDER_SCALE - 1) * q;
     const px = Math.round(p.x - ex), py = Math.round(p.y - ey);
     if (px < -40 || py < -DROP_ALT - 60 || px > WV_W + 40 || py > WV_H + 40) continue;
@@ -851,6 +885,27 @@ function drawEagle(e, ex, ey, now) {
         ctx.globalAlpha = 1;
       }
       ctx.restore();
+      // whoever rode the landing, still in their seat at the roost's scale
+      // (the local slot: their first ground is this bird's back), with the
+      // gold landing ring pulsing under the bird once the brief has handed
+      // back - the flight's own "a jump lands here" mark, now for the hop
+      const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
+      for (const p of players) {
+        if (!p.active || !p.aboard || p.team !== e.team) continue;
+        const st = EAGLE_SEATS[p.seat % EAGLE_SEATS.length];
+        const dx = st[0] * S, dy = st[1] * S;
+        const rx = sx + Math.round(dx * hc - dy * hs), ry = sy + breath + Math.round(dx * hs + dy * hc);
+        const rs = 16 * RIDER_SCALE;
+        ctx.drawImage(classSet(p).down[0], rx - rs / 2, ry - rs / 2 - 1, rs, rs);
+      }
+      if (player.aboard && player.team === e.team && state.mode === 'play' && !state.dropBrief) {
+        const ph = (now * 1.2) % 1;
+        ctx.globalAlpha = 0.8 - ph * 0.6;
+        ctx.strokeStyle = '#ffd95c';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(sx, sy, 10 + ph * 14, 0, Math.PI * 2); ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
       // the pool, in team colour, up from the moment it roosts - the bar IS
       // the objective's introduction, so it never waits for a first hit.
       // Anchored to the bird's rotated extent, not the unrotated box, so it
@@ -919,24 +974,6 @@ function renderDropUI(now) {
     const t2 = Math.ceil(left) + 'S';
     drawPixelTextOutline(ctx, t2, bxx + bw + 6 * ts, byy + Math.round(bh / 2) - 3 * ts,
       open ? '#ffd95c' : '#cfe0ff', '#0f1632', ts);
-    // a profile's very first flight counts itself down to the window's end
-    // and jumps (first-run onboarding): PREPARE TO DROP, then the seconds,
-    // then the drop itself
-    if (d.firstFlight) {
-      const tGo = me.jumpEnd * me.dur - me.t;
-      if (tGo > 0 && tGo <= TUT_COUNT) {
-        const t1 = 'PREPARE TO DROP';
-        drawPixelTextOutline(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2),
-          Math.round(VIEW_H * 0.3), '#f4f7ff', '#0f1632', ts);
-        const ns = ts * 3;
-        const s2 = String(Math.ceil(tGo));
-        const frac = tGo - Math.floor(tGo); // each second lands with a fade
-        ctx.globalAlpha = 0.55 + 0.45 * frac;
-        drawPixelTextOutline(ctx, s2, Math.round(cxm - pixelTextWidth(s2, ns) / 2),
-          Math.round(VIEW_H * 0.3) + 9 * ts, '#ffd95c', '#0f1632', ns);
-        ctx.globalAlpha = 1;
-      }
-    }
   } else {
     const t1 = 'WASD - DRIFT';
     drawPixelTextOutline(ctx, t1, Math.round(cxm - pixelTextWidth(t1, ts) / 2), 10 * ts, '#f4f7ff', '#0f1632', ts);
@@ -947,6 +984,28 @@ function renderDropUI(now) {
     drawPixelTextOutline(ctx, tm, VIEW_W - pixelTextWidth(tm, ts) - 6 * ts, VIEW_H - 12 * ts,
       '#9fb6d8', '#0f1632', ts);
   }
+}
+
+// The way off the roost, for a rider still seated after the brief: a keybind
+// indicator - an E key cap with the one word beside it, bobbing at the seated
+// player's shoulder (beside, not above: above is the bird's own bar and
+// whoever is standing on the far side of it) - and the gold landing ring
+// pulsing under the bird (drawEagle), the same ring that marked the open jump
+// window in flight. Play mode's UI pass, over the world (wToSX/wToSY), gone
+// the moment the hop starts.
+function drawHopPrompt(now) {
+  if (!state.drop || !player.aboard || state.dropBrief || window.DBG.hideUI) return;
+  const e = state.drop.eagles[player.team];
+  if (e.state !== 'down') return;
+  const ts = VIEW_H >= 500 ? 2 : 1;
+  const bob = Math.round(Math.sin(now * 4) * 2);
+  const w = 11 * ts, h = 11 * ts;
+  const cx = Math.round(wToSX(player.x)) + 20 * ts, cy = Math.round(wToSY(player.y)) - 14 * ts + bob;
+  ctx.fillStyle = '#0f1632'; ctx.fillRect(cx - ts, cy - ts, w + 2 * ts, h + 2 * ts);
+  ctx.fillStyle = '#f4f7ff'; ctx.fillRect(cx, cy, w, h);
+  ctx.fillStyle = '#c9d0e2'; ctx.fillRect(cx, cy + h - 2 * ts, w, 2 * ts); // the cap's lower face
+  drawPixelText(ctx, 'E', cx + 3 * ts, cy + 2 * ts, '#0f1632', ts);
+  drawPixelTextOutline(ctx, 'HOP OFF', cx + w + 4 * ts, cy + 2 * ts, '#ffd95c', '#0f1632', ts);
 }
 
 // the brief is over, however it ended: the controls come back, and the DAY 1
@@ -1168,6 +1227,7 @@ window.DBG = {
   players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
   // the eagle drop: the live flight records, force a jump, or fly the route from scratch
   get drop() { return state.drop; }, beginDrop, dropJump: (p) => dropJump(p || player, true), landPlayer, makeEagleRoute, makeEagles, inAir,
+  hopOff: (p) => hopOff(p || player), // E off the roost for a rider who rode the landing (refused while the brief runs)
   // the two objectives: read them, chip one, or fell one outright without a siege
   get eagles() { return state.drop && state.drop.eagles; },
   // the paint: which preset a team wears on this screen (settings.teamBlue), and the two merchants

@@ -65,7 +65,7 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 The local player profile — display name, lifetime stats (`wins`, `gold`, `days`), the
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
-eagle, gating the ride's first-flight countdown), the one-shot `practice` flag
+eagle, gating the scripted first flight that rides the landing), the one-shot `practice` flag
 (`practiceOpen()`/`markPractice()`: has the PRACTICE TOOL plank's ice been broken — three
 knocks at the title, after which the plank stays a live menu item), `bestLap`
 (`bestLap()`/`setBestLap()`: the ice parkour's all-time record, the one thing the practice

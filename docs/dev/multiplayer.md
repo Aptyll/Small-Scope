@@ -376,12 +376,14 @@ RED from the top-right corner down to the bottom-left, BLUE the reverse, so the 
 themselves along it from opposite ends and each roosts in its own fixed corner — and gets its
 `spawn` from `landPlayer()`, the
 nearest open tile to where it jumped. Jumping only unlocks over the line's **last `DROP_LOCK_T`
-(4 s)**: AI slots jump at a hashed fraction of that window, the human where they press Space —
-drifting with WASD on the way down — or at the window's end, the last open ground before the
-corner's treeline (nobody is ever force-dropped in the trees; a profile's first flight rides to
-that end behind a countdown, and refuses a manual leap — that ride is scripted). A forced local drop
-lands into the [drop brief](rendering.md#the-drop-brief), the camera tour of both roosts; a real
-jump is the opt-out. That tile is what the bot brain
+(4 s)**: AI slots jump at a hashed fraction of that window (never past its end, the last open
+ground before the corner's treeline — no bot is ever force-dropped in the trees), the human where
+they press Space — drifting with WASD on the way down — or **not at all**: a human who never
+jumps rides the dive and the crash on the bird's back, sits through the
+[drop brief](rendering.md#the-drop-brief) (the camera tour of both roosts), then hops off the
+roost with E under the E - HOP OFF indicator. A profile's first flight is exactly that ride with
+the manual leap refused — scripted onboarding — and a real jump is the opt-out for everyone
+after. That tile is what the bot brain
 treats as "home". There are no spawn pockets, no starter rings, and no guaranteed resources near
 a landing — reading the ride (the dotted path over the snow, or M for the map) is the whole
 point. `ringPts` (six points on a ring

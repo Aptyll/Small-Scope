@@ -161,8 +161,9 @@ everything below draws in screen space; see [World zoom](#world-zoom-and-the-two
 `renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
-the flight bar, the first-flight countdown, keybind indicators) → `drawDropBrief` (mode `play`,
-only while [the drop brief](#the-drop-brief) holds a roost) → `renderWheel` (radial menu, above the UI) →
+the flight bar, keybind indicators) → `drawDropBrief` (mode `play`,
+only while [the drop brief](#the-drop-brief) holds a roost) or `drawHopPrompt` (mode `play`, the
+local slot still seated on its roost: the E - HOP OFF key cap) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays (the M map also in mode `drop`) → `renderTitle` (the main menu, also during the play intro) → the end-of-match
 overlay (`renderDead`: the death dim and its planks, or `renderVictory` / `renderDefeat` — see
 [The end screens](#the-end-screens)) →
@@ -1145,16 +1146,26 @@ unforced jump before then. The window's far end is `e.jumpEnd` from `lastOpenU` 
 on the line still over open ground (`borderDepth` + `DROP_EDGE_MARGIN` tiles clear), so **a forced
 drop never lands in the treeline**; `e.jumpOpen` is the lock's fraction, clamped under it.
 `updateDrop` (called from `updatePlay`, so pause stops it) runs
-`updateEagle` per bird, keeps every rider glued to its seat, and force-drops each slot at its
-`p.dropU`: AI slots at a hashed fraction of the jump window (scattered ±4 tiles off the line), the
-human at `jumpEnd` if they never pressed Space/Enter/E/click (`dropJump` — the fall starts **from
-the seat**, so the leap visibly leaves the wing). A profile that has **never jumped**
-(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) rides the whole
-line to that same `jumpEnd` — the mouth of the lane its eagle is about to cut — behind a
-`TUT_COUNT` (5 s) `PREPARE TO DROP` countdown — first-run onboarding, and on that flight the
-ride is **fully scripted**: `dropJump` refuses the local slot's manual leap outright, so the
-countdown always does the jumping and the [drop brief](#the-drop-brief) below always follows.
-Any real jump (`PROFILE.markDropped`) retires the countdown for good. A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
+`updateEagle` per bird, keeps every rider glued to its seat (`seatPos` at `eagleScale(e)`, the
+bird's drawn size — 3× in flight, 2× on the ground), and force-drops each **AI** slot at its
+`p.dropU`, a hashed fraction of the jump window (scattered ±4 tiles off the line). **A human is
+never force-dropped**: press Space/Enter/E/click inside the window and you jump (`dropJump` —
+the fall starts **from the seat**, so the leap visibly leaves the wing); never press it and you
+**ride the landing** — `beginDive` throws only bots, the dive comes down with you on its back
+(`drawEagle` draws the seated riders through the dive and at rest), and `eagleCrash` calls
+`landAboard`: `handOver` flips mode `drop` → `play` (the zoom, the camera, the HUD slide-in a
+jump's `landPlayer` does), the ride's song is interrupted the way a jump interrupts it, and the
+[drop brief](#the-drop-brief) opens with you still seated. When it hands back, the bird wears
+the flight's gold landing ring again and `drawHopPrompt` raises the **E - HOP OFF** keybind
+indicator (a key cap bobbing over the bird, one word under it); `p.input.work` while seated on a
+`down` bird calls `hopOff` — a short low step off the wing (`HOP_FALL_T`, `HOP_ALT` — every
+faller's arc reads `p.dropAlt`), steerable like any fall, landing on the nearest open tile beside
+the roost. A profile that has **never jumped**
+(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) gets exactly
+that ride with the jump refused — `dropJump` denies the local slot's manual leap outright, so a
+new player's first ground is the roost, beside the merchant and the gate, and the brief is always
+the lesson. The first hop or any real jump (`PROFILE.markDropped`) retires the refusal for good.
+A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
 `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the movement axis alive in mode `drop` while zeroing
 everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object
 and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow
@@ -1164,10 +1175,10 @@ landing intro above.
 
 ### The drop brief
 
-A **forced** local drop — the scripted first flight always, or a veteran who rode past the
-window's end (`dropJump`'s `force` flag arms `state.dropBriefPend`; a real jump is the opt-out) —
-lands into a camera tour of the two objectives before play begins. `landPlayer` turns the pending
-flag into `state.dropBrief` (`{ ph, t, total }`), and `updateDrop` runs the phases:
+A local slot that **rode the landing** — the scripted first flight always, or a veteran who
+never jumped (a real jump is the opt-out) — sits through a camera tour of the two objectives
+before the hop. `landAboard` (from `eagleCrash`) sets `state.dropBrief` (`{ ph, t, total }`),
+and `updateDrop` runs the phases:
 **`ours-go`** glides the camera to your own bird — the sim camera (js/sim.js) follows
 `dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
 is *tracked* and the crash lands on screen — and holds until the bird is down; **`ours`** holds
@@ -1177,9 +1188,10 @@ dayPop grammar) across the **top** of the view (`VIEW_H * 0.08`): `YOUR EAGLE` i
 paint at **three times** the drop HUD's text scale over `LOSE IT, LOSE THE MATCH` at one;
 **`theirs-go`**/**`theirs`** do the same across the map for the rival roost for `BRIEF_HOLD`
 (3 s): `THEIR EAGLE` / `DRIVE IT OFF TO WIN` — the once the win condition is ever written down,
-the headline carve-out, and deliberately no third line; **`back`** glides home to your boots and
-clears through `endBrief()`, which also pops the `DAY 1` headline the landing owes (the camera
-banner in sim.js holds it back while the brief has the top of the screen). While it runs
+the headline carve-out, and deliberately no third line; **`back`** glides home to your seat on
+the bird and clears through `endBrief()`, which also pops the `DAY 1` headline the landing owes
+(the camera banner in sim.js holds it back while the brief has the top of the screen) — and
+from there the E - HOP OFF indicator (above) is the way down. While it runs
 `sampleHumanInput`
 zeroes the controls exactly as the ceremony does, the M toggle is refused, `player.invuln` is
 held up so nobody dies watching the lesson, and the match runs on underneath — the world is the
@@ -1267,8 +1279,7 @@ last 1.4 s of `FLEE_T`; `gone` draws nothing. `renderDropUI` (mode `drop` only) 
 **flight bar**, top centre: the whole line as one track, the flown part filled in team colour
 under the chart-style bird diamond, the **jump window as a gold stretch** (dim while locked,
 pulsing bright once open — the lock is taught by the bar's shape, no sentence), seconds left as a
-number beside it (gold once open); the `PREPARE TO DROP` countdown over the bird on a profile's
-first flight; `WASD - DRIFT` while falling; and an `M - MAP` keybind indicator bottom right —
+number beside it (gold once open); `WASD - DRIFT` while falling; and an `M - MAP` keybind indicator bottom right —
 the ride's wider read is the **M map** now (`renderWorldMap` also runs in mode `drop`, where it
 draws each flying bird's line dashed in team colour with the bird diamond riding it; M/Esc are
 handled in input.js's drop branch, the map swallows the jump click, and the sim keeps running
