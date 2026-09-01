@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.47'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.48'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.48', 'A HANDS-ON PLAYTEST REPORT NOW LIVES IN THE REPO FOR REFERENCE - NOTHING IN THE GAME CHANGED.'],
   ['2.47', 'THE HUNTER HAS A NEW KIT - A TELEGRAPHED PIERCING SHOT THAT GOES THROUGH EVERYONE ON ITS LINE, A GRAPPLE THAT REELS YOU TO TREES AND ROCKS, AND THE SNOW BURROW IS NOW ITS KEY 4 - CTRL DOES NOTHING AND ONLY HUNTERS HIDE.'],
   ['2.46', 'A FORCED DROP NOW LANDS INTO A GUIDED TOUR - THE CAMERA GLIDES TO YOUR ROOSTING EAGLE AND THE RIVAL ONE, STATES HOW THE MATCH IS LOST AND WON, THEN HANDS BACK - AND A FRESH PROFILE GETS A RANDOM NAME INSTEAD OF THE FIRST-LAUNCH PROMPT.'],
   ['2.45', 'SPENT ARROWS ARE GONE THE MOMENT THEY LAND - NO MORE SHAFTS TO PICK BACK UP, FLETCHING IS THE ONLY REFILL - AND A PRACTICE TARGET NOW EXPLODES THE INSTANT AN ARROW TOUCHES IT.'],
