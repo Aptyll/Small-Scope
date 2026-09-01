@@ -36,8 +36,9 @@ in broken rocks, in felled trees, and at the top tier in the treeline's chests �
 finish a match with is one the map handed you a piece at a time. Hover the weapon well and its bit
 column rises out of it to be rebuilt mid-fight. [Tools and bits](gameplay.md#tools-and-bits).
 
-**Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's traps, net,
-falcon and volley; the WARRIOR's shield, rush, stomp and juggernaut — each with a cooldown, a
+**Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's piercing
+shot, net, grapple and snow cover; the WARRIOR's shield, rush, stomp and juggernaut — each with a
+cooldown, a
 cast the body visibly performs, and effects drawn plainly for both sides: the game is readable
 first, sneaky second. [Class abilities](gameplay.md#class-abilities-keys-1-4),
 [Classes](multiplayer.md#classes).
@@ -58,9 +59,11 @@ the dodge is an attack, which is why a player mid-roll passes through small unit
 colliding with them. [Momentum movement](gameplay.md#momentum-movement-players-only),
 [the roll is a hit](gameplay.md#the-roll-is-a-hit).
 
-**Ctrl goes prone and the snow covers you.** Concealment is a real state the world reads, not a
+**Snow cover goes prone and the snow covers you — and it is the hunter's.** Concealment is a real
+state the world reads, not a
 visual effect: everything that decides it can see a player goes through one function, and burial
-lives inside it. [Prone](gameplay.md#prone-under-the-snow).
+lives inside it. It is a class ability now (the hunter's key 4), not a universal key.
+[Prone](gameplay.md#prone-under-the-snow).
 
 **E is the one verb for the world.** The same key harvests a tree, mines a rock, breaks an
 enemy building, and strikes a rival's grounded eagle — and the axe and pick it swings are never

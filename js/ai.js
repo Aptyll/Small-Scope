@@ -126,27 +126,30 @@ function updateAI(p, dt) {
     else if (p.hp < p.maxHp * 0.8 && bagCount(p, 'berry') > 0) inp.eatBerry = true;
   }
 
-  // 2. the burrow. Decided before the ladder because two rungs below read the
-  //    answer: a bot that has come off worse and has nobody looking at it goes
-  //    to ground and waits the fight out, and one that is already down shoots
-  //    from where it lies - which earns it the same ambush multiplier a human
-  //    gets, off the same ambushReady() check. It gets straight back up for a
-  //    wolf, for a rival close enough to find it anyway, or when the spell
-  //    runs out. It only ever tries where a player could: on snow, on its own
-  //    feet, which is also what keeps it from planting itself on a river and
-  //    standing there. `hideT` doubles as the give-up: a plant that will not
-  //    take burns it four times as fast and ends in the lockout.
+  // 2. the burrow - a hunter's alone now, cast as SNOW COVER (key 4) with its
+  //    own 60 s clock on the way under. Decided before the ladder because two
+  //    rungs below read the answer: a bot that has come off worse and has
+  //    nobody looking at it goes to ground and waits the fight out, and one
+  //    that is already down shoots from where it lies - which earns it the
+  //    same ambush multiplier a human gets, off the same ambushReady() check.
+  //    It gets straight back up for a wolf, for a rival close enough to find
+  //    it anyway, or when the spell runs out - rising is free, the cast key
+  //    again. It only ever tries where a player could: on snow, on its own
+  //    feet, with the cooldown in hand. `hideT` doubles as the give-up: a
+  //    plant that will not take burns it four times as fast and ends in the
+  //    lockout.
   const wolf = foe ? null : aiNearestWolf(p);
   if (p.prone) ai.hideT -= dt;
   const btx = Math.floor(p.x / TILE), bty = Math.floor((p.y + 4) / TILE);
-  const canBury = !p.sliding && p.dodgeT <= 0 && inWorld(btx, bty) && ground[idx(btx, bty)] === 0;
+  const canBury = p.cls === 0 && p.abCd[3] <= 0 && !p.sliding && p.dodgeT <= 0 &&
+    inWorld(btx, bty) && ground[idx(btx, bty)] === 0;
   let down = p.prone;
   if (wolf) down = false;
   else if (foe) down = p.prone && Math.hypot(foe.x - p.x, foe.y - p.y) > 48;
   else if (p.prone) down = ai.hideT > 0 && p.hp < p.maxHp * 0.9;
   else if (p.hp < p.maxHp * 0.4 && ai.hideCd <= 0 && canBury) down = true;
   if (down !== p.prone) {
-    inp.prone = true;                                 // the edge-triggered flag Ctrl sets
+    inp.ability = 3;                                  // snow cover: the burrow's one door, in and out
     if (p.prone) ai.hideCd = 18;                      // back up: no re-burrowing for a while
     else if (ai.hideT <= 0) ai.hideT = rand(7, 12);   // going down: how long it means to stay
   }
@@ -174,12 +177,12 @@ function updateAI(p, dt) {
     }
     // the class abilities, spent off cooldown at the foe - through the same
     // edge key a human presses, so a bot can never cast what a hand couldn't
-    if (p.castT <= 0 && p.rushT <= 0 && p.shieldT <= 0 && inp.ability < 0) {
-      if (p.cls === 0) { // hunter: pin, tangle, reveal, rain
-        if (p.abCd[3] <= 0 && d < 150 && clear) inp.ability = 3;      // volley on their feet
-        else if (p.abCd[1] <= 0 && d < 110 && clear) inp.ability = 1; // net the gap
-        else if (p.abCd[0] <= 0 && d < 90) inp.ability = 0;           // trap the ground between
-        else if (p.abCd[2] <= 0) inp.ability = 2;                     // falcon down the line
+    if (p.castT <= 0 && p.rushT <= 0 && p.shieldT <= 0 && p.grapT <= 0 && inp.ability < 0) {
+      if (p.cls === 0) { // hunter: skewer the open lane, tangle the gap
+        // (the grapple is a held key and a terrain read - a hand skill the
+        // ladder does not try to fake; snow cover is spent at rung 2)
+        if (p.abCd[0] <= 0 && d > 55 && d < 230 && clear) inp.ability = 0; // lock the piercing draw on them
+        else if (p.abCd[1] <= 0 && d < 110 && clear) inp.ability = 1;      // net the gap
       } else { // warrior: get there, and be unstoppable arriving
         if (p.abCd[3] <= 0 && d < 110) inp.ability = 3;               // juggernaut into the fight
         else if (p.abCd[1] <= 0 && d > 36 && d < 120 && clear) inp.ability = 1; // rush the line

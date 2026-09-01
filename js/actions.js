@@ -36,8 +36,8 @@ const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over 
 // the flight, j -3..+3 across it. W the white tip, F the flint head, B the
 // loaded bit's colour (the collar behind the head - the shaft itself never
 // recolours), G the shaft's one gold, T the team feather (TEAMS mark), D the
-// feather's dark edge (TEAMS coatD). The flying arrow, the spent shaft, the
-// arrow standing in a target face and the volley's rain all draw THIS body
+// feather's dark edge (TEAMS coatD). Every arrow in flight - the piercing
+// shot included - draws THIS body
 // through arrowBodyPx/paintArrowPx (js/draw-world.js) - change it here and
 // every shaft in the game follows. 16 long by 7 deep, so the whole arrow
 // lives in one 16x16 sprite cell - the scale everything else in the world
@@ -87,10 +87,12 @@ const TACKLE_MIN = 120;    // px/s driven into the blocked axis before a wall is
 const ROLL_KB = 90;        // px/s shove out of a roll hit
 
 // Prone: lie down in the snow, pull it over yourself, and be almost - not
-// quite - invisible. Free, and paid for entirely in speed: the burrow only
-// builds while you are lying perfectly still, and the crawl that carries you
-// anywhere is under a third of a walk. `p.hide` (0..1) is the whole state,
-// and every watcher in the game reads it through seenAt().
+// quite - invisible. The hunter's alone now: SNOW COVER (key 4,
+// js/abilities.js) is the one door in and pays the cooldown, while every way
+// back up is free. Once under, the state is paid for entirely in speed: the
+// burrow only builds while you are lying perfectly still, and the crawl that
+// carries you anywhere is under a third of a walk. `p.hide` (0..1) is the
+// whole state, and every watcher in the game reads it through seenAt().
 const PRONE_SPEED = 20;   // px/s belly crawl (a walk is PLAYER_SPEED, 72)
 const PRONE_BURY = 1.5;   // s of lying still to go from flat on the snow to under it
 const PRONE_RISE = 0.34;  // s of getting back up: 45% walk speed, and no cover left
@@ -180,6 +182,7 @@ function tryDodge(p) {
     p.rootT > 0 || p.rushT > 0) return; // a trap pins the roll too, and a charge is already a dash
   risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
   breakEat(p);   // ...and out of a meal: the roll is the one way YOU end your own channel
+  if (p.grapT > 0) grapEnd(p); // rolling off the rope: the reel's speed feeds the dash below
   let dx = p.input.mx, dy = p.input.my;
   if (!dx && !dy) {
     dx = p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0;
@@ -313,7 +316,8 @@ function rollSweep(p) {
 }
 
 // ---- prone ---------------------------------------------------------------
-// Ctrl: go to ground, or get back up. Dropping needs both feet still and snow
+// Go to ground, or get back up. The way in is the hunter's SNOW COVER cast
+// (abSnowCover, js/abilities.js); dropping needs both feet still and snow
 // underfoot - you cannot dive at speed, and a river has nothing to dig into.
 // Everything else about the state is one number, `p.hide`, which updatePlayer
 // ramps and every watcher reads back through seenAt().
@@ -335,7 +339,7 @@ function tryProne(p) {
 }
 
 // Back on your feet, whatever put you there - the ambush shot, a hit, an E
-// swing, a roll, or Ctrl again. The cover goes with the body and is not
+// swing, a roll, or the snow cover key again. The cover goes with the body and is not
 // allowed to linger: a slot that is visibly standing must be visibly findable,
 // so `hide` is zeroed here and the snow it stood for is spent as particles.
 function risePlayer(p) {
@@ -735,6 +739,7 @@ function stunUnit(e, t) {
     breakEat(e);                                   // ...and so is the meal (js/core.js)
     if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
     if (e.rushT > 0) { e.rushT = 0; e.rushVictim = null; }
+    if (e.grapT > 0) grapEnd(e);                   // the rope is knocked loose too, at its cooldown
   }
   burst(e.x, unitMidY(e) - 3, '#ffe9a8', 4, 26, 0.4, true);
 }

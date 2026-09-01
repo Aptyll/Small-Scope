@@ -231,8 +231,8 @@ function render() {
     }
   }
 
-  // what the abilities left flat on the snow - craters, set traps, volley
-  // warnings - then drops (all under entities)
+  // what the abilities left flat on the snow - craters, and the piercing
+  // shot's telegraph line - then drops (all under entities)
   drawAbilityGround(ex, ey, now);
   for (const d of drops) {
     const spr = SPRITES[ITEMS[d.type] ? ITEMS[d.type].icon : 'itemGold'];
@@ -553,8 +553,8 @@ function render() {
     paintArrowPx(ARROW_PX);
   }
 
-  // airborne ability bodies: the spinning net, the falcon and its shadow,
-  // the volley's shafts coming down - with the arrows, over the entities
+  // airborne ability bodies: the spinning net, and the grapple's rope
+  // between a reeling body and its anchor - with the arrows, over the entities
   drawAbilityAir(ex, ey, now);
 
   drawTurretFx(ex, ey, now);

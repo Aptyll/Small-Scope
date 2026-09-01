@@ -201,7 +201,7 @@ function updatePlay(dt) {
     updatePlayer(p, dt);
   }
   resolveContests(); // this step's work swings, build orders and fish claims
-  updateAbilityWorld(dt); // traps, craters, falcons, nets and called volleys
+  updateAbilityWorld(dt); // craters and nets in flight
   if (state.drop) updateDrop(dt);
 
   // Shots in flight. Everything a tool fires rides this one array, whatever
@@ -268,10 +268,11 @@ function updatePlay(dt) {
         const o = objAt(atx, aty + dd);
         if (o && o.type === 'dummy') dm = o;
       }
-      if (dm) {
+      if (dm && !(a.pierce && a.pierceHit.includes(dm))) {
         hitDummy(dm, a.dmg, a.x, a.y);
         if (a.ambush) ambushFx(a.x, a.y);
-        dead = true;
+        if (a.pierce) a.pierceHit.push(dm); // the pierce keeps flying
+        else dead = true;
       }
       // ...and the archery targets: the shot meets the FACE, wherever its
       // habit has carried it - ptFace is the same geometry the draw uses,
@@ -310,10 +311,14 @@ function updatePlay(dt) {
     if (!dead) {
       // players first: the same shot that drops a deer drops a rival. A bit
       // with friendly fire on skips the team check - but never the shooter,
-      // who is not a target of their own tool at any weight.
+      // who is not a target of their own tool at any weight. A PIERCING shot
+      // (`a.pierce`, js/abilities.js) takes the body and keeps flying -
+      // a.pierceHit is everyone it has already cut, so a slow overlap never
+      // pays twice - and only a raised shield or the world itself stops it.
       for (const t of players) {
         if ((a.team === t.team && !a.ff) || t.id === a.owner ||
             !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
+        if (a.pierce && a.pierceHit.includes(t)) continue;
         if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
           // a raised tower shield eats any shot flying into its front arc -
           // bolts included - before the body behind it is ever asked
@@ -326,6 +331,7 @@ function updatePlay(dt) {
           }
           blow(t);
           burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+          if (a.pierce) { a.pierceHit.push(t); continue; }
           dead = true;
           break;
         }
@@ -336,8 +342,10 @@ function updatePlay(dt) {
       // team, and the only thing that ever stood outside the arrow pipeline
       for (const b of robots) {
         if ((a.team === b.team && !a.ff) || b.dead) continue;
+        if (a.pierce && a.pierceHit.includes(b)) continue;
         if (robotHit(b, a.x, a.y)) {
           blow(b, 40);
+          if (a.pierce) { a.pierceHit.push(b); continue; }
           dead = true;
           break;
         }
@@ -346,8 +354,10 @@ function updatePlay(dt) {
     if (!dead) {
       for (const an of animals) {
         if (an.dead) continue;
+        if (a.pierce && a.pierceHit.includes(an)) continue;
         if (animalHit(an, a.x, a.y)) {
           blow(an, 25 + 45 * a.pow);
+          if (a.pierce) { a.pierceHit.push(an); continue; }
           dead = true;
           break;
         }
@@ -470,7 +480,7 @@ function updatePlayer(p, dt) {
   const inp = p.input;
 
   if (p.dead) { // out of the match: nothing it wants gets through
-    inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.dodge = inp.eatBerry = inp.eatFish = false;
     inp.ability = -1;
     inp.cmd = null;
     return;
@@ -483,7 +493,7 @@ function updatePlayer(p, dt) {
   // you, and the surface spends it like any other momentum.
   if (p.stunT > 0) {
     p.stunT = Math.max(0, p.stunT - dt);
-    inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.dodge = inp.eatBerry = inp.eatFish = false;
     inp.work = inp.fire = inp.slide = false;
     inp.ability = -1;
     inp.cmd = null;
@@ -491,8 +501,8 @@ function updatePlayer(p, dt) {
   }
 
   // edge-triggered intents, consumed here so a controller only has to set them
+  // (the burrow lost its own key: SNOW COVER, hunter key 4, is the door in now)
   if (inp.dodge) { inp.dodge = false; tryDodge(p); }
-  if (inp.prone) { inp.prone = false; tryProne(p); }
   if (inp.eatBerry) { inp.eatBerry = false; eatBerry(p); }
   if (inp.eatFish) { inp.eatFish = false; eatFish(p); }
   if (inp.ability >= 0) { const i = inp.ability; inp.ability = -1; tryAbility(p, i); }
@@ -593,6 +603,24 @@ function updatePlayer(p, dt) {
     p.vy = p.rushNY * RUSH_SPD;
     const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
     rushStep(p, mv, dt);
+  } else if (p.grapT > 0) {
+    // GRAPPLE: the rope owns the velocity while the key is held - hauled
+    // straight at the anchor at GRAP_REEL. Letting go of the key, arriving,
+    // a wall, or the safety timer all end in grapEnd (js/abilities.js), which
+    // KEEPS the velocity - so the reel's speed rides out into the surface
+    // model, and shift turns it into a slide.
+    p.grapT -= dt;
+    const gdx = p.grapX - p.x, gdy = p.grapY - p.y;
+    const gd = Math.hypot(gdx, gdy) || 1;
+    p.vx = gdx / gd * GRAP_REEL;
+    p.vy = gdy / gd * GRAP_REEL;
+    const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
+    p.grapDustT = (p.grapDustT || 0) - dt;
+    if (p.grapDustT <= 0) {
+      p.grapDustT = 0.06;
+      burst(p.x, p.y + 5, '#dfe8f4', 1, 20, 0.3, true);
+    }
+    if (!inp.grapple || gd <= GRAP_ARRIVE || mv.blockedX || mv.blockedY || p.grapT <= 0) grapEnd(p);
   } else {
     const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
     // every cap an ability may drag on (root, net, crater, cast, shield) or
@@ -667,6 +695,7 @@ function updatePlayer(p, dt) {
       p.sliding = false;
       p.slideT = 0;
       if (p.rushT > 0) { p.rushT = 0; p.rushVictim = null; } // the charge ends in the water
+      if (p.grapT > 0) grapEnd(p);                          // the rope goes slack with you
       p.castT = 0; p.castAb = -1; p.shieldT = 0;           // and so does whatever was being cast
       breakEat(p);                                         // the meal goes in the water with you
       p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water

@@ -364,6 +364,11 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 
 ## Known drift
 
+- **`rootUnit`/`markUnit` currently have no caster** (intentional dead code since the hunter's
+  2.47 rework retired the snare trap and the falcon): the two setters, their `drawUnitStates`
+  tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are
+  part of the [universal status set](gameplay.md#status-effects-one-set-for-every-unit) a future
+  ability or bit lands on for free.
 - [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + three gameplay
   loops + mechanic shots in `docs/media/`), not a tech guide. It carries the one-line "double-click
   `index.html`" and links into [game.md](game.md) / [architecture.md](architecture.md); the controls

@@ -51,8 +51,9 @@ fire          bow held: rising edge draws, falling edge looses. The rising edge
 work          E held
 slide         shift held
 dodge         edge-triggered, cleared by the sim when it reads it
-prone         edge-triggered (Ctrl): TOGGLES the burrow, never a held level -
-              holding a modifier while tapping W is Ctrl+W, which closes the tab
+grapple       held (key 3): the hunter's grapple reels only while this is down -
+              the one held ability input (updatePlayer's grapple branch reads it;
+              the burrow is the SNOW COVER cast on `ability`, not a field here)
 eatBerry      edge-triggered (Q): STARTS the 1.5s meal, it does not heal on the spot
 eatFish       edge-triggered (F): same, and off the same shared 3s clock
               (startEat, js/core.js - see Food in gameplay.md)
@@ -96,7 +97,7 @@ aim line and draw meter. `setClass(p, c)` swaps one in (full heal — it's a pre
 
 | # | Name | Fantasy | Kit | Flies in with |
 | --- | --- | --- | --- | --- |
-| 0 | **HUNTER** — bow, traps, distance control | keep the gap and own the ground between | the ranged numbers: quick nock (0.4 s), full draw power, 92 hp | a SHORTBOW loaded ARROW + BARBED SHOT |
+| 0 | **HUNTER** — bow, distance control, the one class that hides | keep the gap and own the ground between | the ranged numbers: quick nock (0.4 s), full draw power, 92 hp | a SHORTBOW loaded ARROW + BARBED SHOT |
 | 1 | **WARRIOR** — close pressure, blocking, momentum | get to arm's length and stay there | 120 hp, faster on ice (×1.15), +5 speed damage, dash 230, softer bow numbers | a SLING loaded ARROW + HEFT |
 
 The **weapon is part of the class**: `CLASS_LOADOUT` (js/tools.js) pairs each one with a tool
@@ -181,7 +182,9 @@ same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` fo
 floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
 shooter. `damagePlayer` takes a seventh argument, `crit`, which the arrow loop passes from
 `a.ambush`: it runs the damage floater hotter and at double scale and doubles the local shake. Any
-hit also calls `risePlayer` before anything else, so nobody stays buried through one.
+hit also calls `risePlayer` before anything else, so nobody stays buried through one. A hunter's
+PIERCING SHOT (`a.pierce`) is the one arrow that takes a body and keeps flying — everyone on the
+line is hit once each (`a.pierceHit`), and only a raised shield or the world stops it.
 
 **Whether a rival can be seen at all is a separate question from whether they can be shot.**
 `enemyOf` answers the second; `seenAt(p, range)` answers the first, and every watcher in the
@@ -303,20 +306,24 @@ the same way, first-come whichever team gets there).
 a human couldn't. It is a priority ladder re-picked a few times a second:
 
 1. **eat** — fish below 50% hp, berry below 80%.
-2. **burrow** — decided up front, because two rungs below read the answer. A bot that has come off
+2. **burrow** — a hunter bot only, and decided up front, because two rungs below read the answer.
+   A bot that has come off
    worse (under 40% hp) with no rival and no wolf in sight goes [prone](gameplay.md#prone-under-the-snow)
-   and waits the fight out for `ai.hideT` (7–12 s); it only ever tries where a player could, on
-   snow and on its own feet, which is also what stops it planting itself on a river. It gets
+   and waits the fight out for `ai.hideT` (7–12 s); it only ever tries where a player could — on
+   snow, on its own feet, and with SNOW COVER's 60 s cooldown in hand. It gets
    straight back up for a wolf, for a rival inside 48 px, or when the spell runs out, and rising
    starts an 18 s lockout so no bot spends the match flopping up and down. `hideT` doubles as the
    give-up: a spot that will not take burns it four times as fast and ends in the lockout.
-   The toggle goes through `inp.prone`, exactly the flag Ctrl sets.
+   Both directions go through `inp.ability = 3`, exactly the cast key a human presses (rising is
+   free — tryAbility's snow toggle).
 3. **fight** — a rival within `AI_SIGHT` (150 px, now filtered through `seenAt()` so a buried one
    is simply not there): circle at ~70 px, draw and loose near full, dodge when hurt. Only shoots
    when `aiLineClear()` says the flight path is open. **Class abilities are spent here, off
    cooldown at the foe** — one per decision tick, through the same edge field a human's key
    sets (`inp.ability`), each gated by the range it is good at (a warrior rushes the mid-gap,
-   stomps at arm's length; a hunter volleys and nets what it can see). **Already prone, it holds perfectly still
+   stomps at arm's length; a hunter locks the piercing draw on an open lane and nets the gap —
+   the grapple alone is skipped, a held key and a terrain read the ladder does not try to fake).
+   **Already prone, it holds perfectly still
    and shoots from where it lies** — which earns it the ambush multiplier off the same
    `ambushReady()` check a human gets, since `concealOf` discounts a moving mound and
    `ambushReady` refuses a moving shot outright.

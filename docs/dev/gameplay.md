@@ -375,22 +375,24 @@ with no edit here. A **structure** is not a unit and takes none of it; the roost
 objective with its own damage path, and takes none of it either.
 
 **A cast is a performance**: `p.castT` runs the ability's `cast` seconds, the body visibly does
-it (`abilityPose` shifts/tilts the sprite — a kneel to set a trap, a hop into the stomp, the
-recoil hop off the net shot), movement halves, and the effect fires at the aim held at the END
+it (`abilityPose` shifts/tilts the sprite — the pierce's locked lean-back, a hop into the stomp,
+the recoil hop off the net shot), movement halves (the pierce windup all but plants the feet —
+`PIERCE_SLOW`), and the effect fires at the aim held at the END
 of the cast. Casting breaks prone cover like a shot, is refused mid-roll / mid-stun / in a hole,
-and a stun knocks a cast (and the shield, and a rush) out of the hands. Everything an ability
+and a stun knocks a cast (and the shield, the rush, and the grapple's rope) out of the hands.
+Everything an ability
 does to a body is **drawn on that body for both sides** (`drawAbilityOnPlayer`) — readability
-first: a trap is plainly visible to both teams, a mark hangs gold chevrons over the head, a
-netted player wears the net.
+first: the pierce telegraph is drawn for everyone the whole windup, a netted player wears the
+net.
 
-HUNTER — bow, traps, distance control:
+HUNTER — bow, distance control, the ground between:
 
 | key | name | cd | what it does |
 | --- | --- | --- | --- |
-| 1 | **SNARE TRAP** | 10 s | sets an iron jaw at the aim (≤ `TRAP_RANGE`, tile-snapped, visible to everyone). Arms in 1 s — the jaws visibly spread — then the first rival on it takes 8 and is **rooted** (`p.rootT`, 1.2 s: no walk, no roll, no slide; tools still work). `TRAP_MAX` 2 per owner, a third springs the oldest |
-| 2 | **NET SHOT** | 11 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
-| 3 | **FALCON SWEEP** | 18 s | the bird flies the aim line (`falcons`, 340 px): every rival under it is **marked** (`p.markT`, 4 s) — `seenAt()` returns full range for a marked body (its one legal bypass) and both maps keep showing them |
-| 4 | **VOLLEY** | 16 s | calls a rain on a circle at the aim (≤ 150 px): a dashed danger ring with an inner ring closing over 0.8 s, then 14 damage in `VOLLEY_R` |
+| 1 | **PIERCING SHOT** | 12 s | locks a full draw for `PIERCE_WIND` (0.7 s) — the body plants (`PIERCE_SLOW` ×0.15 walk), the pose leans back and holds, and a thin dashed **telegraph line** is drawn on the ground along the live aim for BOTH sides, gold-flaring as the loose nears. Then the shot fires itself: one enhanced arrow (a full-draw plain arrow ×`PIERCE_MUL` 1.5, `PIERCE_SPD` 380, `PIERCE_RANGE` 260) that **goes through every body on the line** (`a.pierce`/`a.pierceHit`, the arrow loop in js/sim.js) — only a raised shield or the world stops it. Spends no quiver arrow. The loose is the unmissable cue: `SFX.nock` snap + a white flash on the arrowhead |
+| 2 | **NET SHOT** | 15 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
+| 3 | **GRAPPLE** | 8 s | throws a hook down the aim ray: the first **tree, dead tree or rock** within `GRAP_RANGE` (170 px) and `GRAP_ASSIST` of the line (the aim assist) anchors it, and the body is reeled straight at it at `GRAP_REEL` (260 px/s — over `SLIDE_MIN`, so shift on release carves a slide). The reel runs **while key 3 is held** (`input.grapple`, the one held ability input); releasing, arriving, a wall or a stun lets go through `grapEnd`, which KEEPS the momentum and starts the cooldown — a long ride and an instant release cost the same. A hook that catches nothing costs `GRAP_MISS_CD` (1 s) |
+| 4 | **SNOW COVER** | 60 s | the burrow, moved onto the kit ([Prone](#prone-under-the-snow) is hunter-only now): the cast kneels and calls `tryProne`, the 60 s clock is paid **on the way under**, and the key again — like every other way back up — rises free. A kneel the snow refuses (still moving, sliding, no snow underfoot) refunds the clock. The well's active tell drains with `p.hide` as the cover builds |
 
 WARRIOR — close pressure, blocking, momentum:
 
@@ -402,11 +404,14 @@ WARRIOR — close pressure, blocking, momentum:
 | 4 | **JUGGERNAUT** | 20 s | 5 s: immune to stun (`stunUnit` head) and knockback (`damagePlayer`), speed ramps +50 % over the duration, and body contact at speed bowls rivals over — damage scales with the speed carried in, once per rival per activation (`p.jugHit`) |
 
 A slot's movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
-crater drag, juggernaut ramps — applied to the walk cap **and** the ice cap in `updatePlayer`. An
+crater drag (the pierce windup's own harder drag included), juggernaut ramps — applied to the walk
+cap **and** the ice cap in `updatePlayer`; the grapple's reel is its own movement branch there,
+beside the rush's. An
 animal or a bot folds the same root and slow through `unitMoveMul(e)`, spent inside `navStep`.
-All damage passes its `src`, so an ability kill credits like an arrow — a trap or a volley whose
+All damage passes its `src`, so an ability kill credits like an arrow — a net whose
 caster has since gone down credits nobody (`abCredit`) rather than a corpse. Bots spend abilities in
-`updateAI`'s fight rung, off cooldown at ranges each is good at. The strip's ability wells (icons,
+`updateAI`'s fight rung, off cooldown at ranges each is good at (the grapple is the one they skip —
+a held key and a terrain read the ladder does not try to fake). The strip's ability wells (icons,
 cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.md).
 
 ## The tech tree
@@ -566,8 +571,7 @@ degenerates to plain rounding, so straight shots kept their exact pre-2.28 pixel
 1 px dark edge) so the shaft reads over snow. The body is built into the `ARROW_PX` scratch
 array; `a.x`/`a.y` is the TIP (the point the sim tests) and the body trails `ARROW_LEN` (15) px
 behind it, which is why the view cull uses the widened ±22 bound. The whole body is 16 long by
-7 deep — one 16×16 sprite cell, the scale everything else in the world is drawn at. The volley's
-rain draws stretches of this same body.
+7 deep — one 16×16 sprite cell, the scale everything else in the world is drawn at.
 
 Behind it, each shot lays a **trail of team-coloured motes** into `particles` (fire instead, if a
 FLAME modifier is riding it — the burn is the more urgent fact about that shot than whose it is),
@@ -676,7 +680,7 @@ is not a coincidence to be re-established per feature; it is what these funnels 
 | --- | --- |
 | `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, cause, ambush, crit, burn, burnDps }`. Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
 | `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — slots, wildlife **and** bots in one list |
-| `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps. A lasting ground *condition* (a crater, the falcon's eye) wants `unitsNear` — neither is a hit, and neither is dodged by having just taken one |
+| `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps. A lasting ground *condition* (a crater) wants `unitsNear` — a condition is not a hit, and is not dodged by having just taken one |
 | `stunUnit` `rootUnit` `slowUnit` `netUnit` `markUnit` `igniteUnit` | the one place each state is written. Each takes the worse/longer of what is already on the body |
 | `unitMoveMul(e)` | what is left of a non-player's speed — `abilityMoveMul`'s twin. Spent inside `navStep`, so one edit slows every walker; the two movers that steer themselves rather than route (a loitering bot, a bird in flight) fold it in by hand |
 | `clearUnitStatus(e)` / `douseUnit(e)` | a fresh body, and a fire put out. Called by `Player.reset`, `die`, `makeAnimal`, `makeRobot` |
@@ -684,8 +688,8 @@ is not a coincidence to be re-established per feature; it is what these funnels 
 `unitFoe(src, e)` is the side rule they all share, and it is where **wildlife being neutral** is
 written down once: an animal has no `team` (`unitTeam` → −1), so it is nobody's friend and
 everybody's fair game — exactly how the world already treated a deer. `sideOf(w)` hands one of these
-lists the side of a **thing in the world** — a trap, a net, a shot in flight — rather than a living
-caster, so a trap outlives the hunter who set it and still knows whose it was; `abCredit(w)`
+lists the side of a **thing in the world** — a net, a shot in flight — rather than a living
+caster, so a net outlives the hunter who threw it and still knows whose it was; `abCredit(w)`
 (js/abilities.js) is its other half, and pays a kill to nobody once that caster is down.
 
 The six states, and what each does to a body:
@@ -693,10 +697,10 @@ The six states, and what each does to a body:
 | state | field | what it does | the tell on the body |
 | --- | --- | --- | --- |
 | **stun** | `stunT`/`stunMax` | a slot has every intent dropped out of `p.input` at the top of `updatePlayer` (movement, fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a human and an AI fill are pinned by the identical window — the draw, the swing in flight and any roll are cancelled outright; an animal or a bot skips its brain for the window in `updateAnimal`/`updateRobot`. Never touches velocity: whatever hit you still slides you | three sparks orbiting (`drawStunStars`) |
-| **root** | `rootT` | move multiplier 0 — no walk, no roll, no slide; tools still work | sprung iron jaws at the feet |
+| **root** | `rootT` | move multiplier 0 — no walk, no roll, no slide; tools still work. Currently no ability or bit sets it — the state and its tell stay with the universal set ([Known drift](checklists.md#known-drift)) | sprung iron jaws at the feet |
 | **slow** | `slowT`/`slowMul` | the multiplier on every speed cap | — (the net's drape says it, when a net is why) |
 | **net** | `netT` | the slow, plus the reason for it | a mesh drape over the sprite |
-| **mark** | `markT` | on a slot, `seenAt()` returns full range and both maps keep drawing them (its one legal bypass); an animal or a bot has no cover to strip, so it is the reveal alone | gold chevrons falling toward the head |
+| **mark** | `markT` | on a slot, `seenAt()` returns full range and both maps keep drawing them (its one legal bypass); an animal or a bot has no cover to strip, so it is the reveal alone. Like root, currently sourceless — kept with the set | gold chevrons falling toward the head |
 | **fire** | `burnT`/`burnDps`/`burnBy` | see below | flame tongues off the crown, and lit snow under the feet |
 
 Every one of them is **drawn on the body, for both sides**, at whatever size that body is —
@@ -739,19 +743,21 @@ the roosting eagle is an objective with its own damage path, not a unit, and tak
 
 ## Prone: under the snow
 
-**Ctrl** lies a player face-down in the snow and pulls it over them. It is the game's only
-stealth, and it is paid for entirely in speed.
+**SNOW COVER — the HUNTER's key 4** — lies a player face-down in the snow and pulls it over them.
+It is the game's only stealth, it belongs to one class now, and once under it is paid for
+entirely in speed; the way IN costs the ability's 60 s cooldown
+([class abilities](#class-abilities-keys-1-4)), and every way back up is free. There is no
+dedicated burrow key any more — `input.prone` is gone from the input struct, and Ctrl does
+nothing (it was always a browser-shortcut minefield anyway: Ctrl+W closes the tab and
+`preventDefault()` cannot stop it).
 
-**Ctrl is a tap, not a hold** (`input.prone` is edge-triggered, like `dodge`). This is not a
-style choice: holding a modifier and tapping W is Ctrl+W, which closes the browser tab, and
-`preventDefault()` cannot stop it — the shortcut is reserved above the page, fullscreen included.
-The keydown handler also drops `e.repeat`, since a held modifier auto-repeats and would otherwise
-flip the burrow several times a second.
-
-`tryProne(p)`/`risePlayer(p)` (the `actions` banner) are the only two ways in and out. Going down
+`tryProne(p)`/`risePlayer(p)` (the `actions` banner) are still the only two ways in and out —
+`abSnowCover` (js/abilities.js) is the one caller of `tryProne` and refunds the clock when the
+snow refuses. Going down
 needs **both feet still** (`hypot(vx, vy) <= PRONE_ENTER`, 14 px/s — you cannot dive at a run),
-not sliding, not mid-roll, and **snow underfoot**: a river has nothing to dig into, and Ctrl there
-just plays `SFX.deny`. Getting up happens on Ctrl again, on the ambush shot, on a `tryWork` E
+not sliding, not mid-roll, and **snow underfoot**: a river has nothing to dig into, and the press
+there is denied before the kneel even starts. Getting up happens on key 4 again, on the ambush
+shot, on a `tryWork` E
 press, on `tryDodge` (a roll is the fast way out and costs a charge), on any hit
 (`damagePlayer` calls `risePlayer` before anything else), on falling through the ice, and on death.
 
@@ -833,8 +839,9 @@ None of them is a word:
 
 ### Bots
 
-Bots use it through the same edge-triggered flag Ctrl sets — rung 2 of the
-[ladder](multiplayer.md#ai-slots), decided before the rest because two later rungs read the answer.
+A hunter bot casts it through the same ability key a human presses (`inp.ability = 3`) — rung 2
+of the [ladder](multiplayer.md#ai-slots), decided before the rest because two later rungs read
+the answer; a warrior bot has no burrow to decide.
 
 ## Wildlife
 
@@ -854,7 +861,7 @@ hunt reticle, and joins the y-sorted draws.
 
 **An animal is a unit like any other.** `makeAnimal` hands every kind the full status set through
 `clearUnitStatus`, so a rabbit, a deer, a wolf and a bird take the same damage and the same six
-states from every ability and every bit that a player slot does — snared, netted, slowed, marked,
+states from every ability and every bit that a player slot does — rooted, netted, slowed, marked,
 stunned, set alight — and wear the same tells at their own size
 ([status effects](#status-effects-one-set-for-every-unit)). Nothing about wildlife is exempted
 anywhere; what makes them everybody's target rather than nobody's is simply that they carry no
@@ -1358,7 +1365,7 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
 `robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
 tread frames — see [sprites.md](sprites.md)). `updateRobot()` mirrors the animal state machine plus
 jobs — `updateUnitStatus` first, so a chassis wears every state a player slot can be put under
-(`makeRobot` clears the full set into it): snared, netted, slowed, marked, stunned, on fire, and
+(`makeRobot` clears the full set into it): rooted, netted, slowed, marked, stunned, on fire, and
 scrapped by a burn like anything else ([status effects](#status-effects-one-set-for-every-unit)).
 The root and the slow are spent inside `navStep` for a routed drive and folded into `wander()` by
 hand for the loiter, which is the only movement a worker steers itself. **What job it runs is decided by the [worker flag](#worker-flags) of the player who owns its
@@ -1568,7 +1575,8 @@ runs (`updateTitle`: animals and fish) — see [Main menu](rendering.md#main-men
 **M** opens the world chart with the sim still stepping, the same deal the
 [build wheel](#base-building) takes: night still falls, arrows still fly, bots still hunt you.
 `sampleHumanInput` handles it in its own branch, and the rule is *the map keeps your feet and
-nothing else*: `mx`/`my` and `slide` are read as usual, the edge-triggered `dodge`/`prone` pass
+nothing else*: `mx`/`my`, `slide` and the grapple's held key are read as usual, the edge-triggered
+`dodge` passes
 straight through, and `fire`/`work`/`eatBerry`/`eatFish`/`cmd` are dropped along with any held
 draw (the pointer is over the parchment, so there is nothing to aim or work at, and a gear plate
 bought blind under the dim would be bought by accident). So you walk with the chart up and watch
@@ -1645,7 +1653,7 @@ text. **N** still toggles the same flag from anywhere.
 
 The CONTROLS page is the hotkey listing in two columns, baked once into `controlsCv`
 (`bakeControls`, panels.js) and blitted into the content window at the page's scroll. The title
-screen's TUTORIAL panel carries the same key as `CTRL HIDE IN SNOW`.
+screen's TUTORIAL panel carries the same keys under `1-4 CLASS ABILITIES`.
 
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows

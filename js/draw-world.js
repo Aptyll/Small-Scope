@@ -808,7 +808,7 @@ function drawBanner(o, px, py, now) {
 
 // ---- the arrow body, shared -----------------------------------------------
 // One silhouette for every shaft in the game: the flying arrow (render.js)
-// and the volley's rain (abilities.js) both rasterise ARROW_BODY
+// rasterises ARROW_BODY
 // (js/actions.js) through this pair. hx/hy is the tip's exact (unrounded) screen position,
 // i0..i1 the stretch of the body to draw (a buried head is skipped by raising
 // i0), cT/cD the team feather and its dark edge, cB the bit collar, cG an

@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.46'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.47'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.47', 'THE HUNTER HAS A NEW KIT - A TELEGRAPHED PIERCING SHOT THAT GOES THROUGH EVERYONE ON ITS LINE, A GRAPPLE THAT REELS YOU TO TREES AND ROCKS, AND THE SNOW BURROW IS NOW ITS KEY 4 - CTRL DOES NOTHING AND ONLY HUNTERS HIDE.'],
   ['2.46', 'A FORCED DROP NOW LANDS INTO A GUIDED TOUR - THE CAMERA GLIDES TO YOUR ROOSTING EAGLE AND THE RIVAL ONE, STATES HOW THE MATCH IS LOST AND WON, THEN HANDS BACK - AND A FRESH PROFILE GETS A RANDOM NAME INSTEAD OF THE FIRST-LAUNCH PROMPT.'],
   ['2.45', 'SPENT ARROWS ARE GONE THE MOMENT THEY LAND - NO MORE SHAFTS TO PICK BACK UP, FLETCHING IS THE ONLY REFILL - AND A PRACTICE TARGET NOW EXPLODES THE INSTANT AN ARROW TOUCHES IT.'],
   ['2.44', 'THE README NOW PLAYS FOUR LOOPING CLIPS UNDER THE HERO - THE PRACTICE TOOL BREAKING OPEN, THE EAGLE DROP, A DEER HUNT AND WORKERS CHOPPING PINES - AND THE GALLERY IS A VERTICAL STRIP OF 16:9 SHOTS.'],
@@ -800,7 +801,7 @@ function buildHelpPanel() {
   const g = helpPanelCv.getContext('2d');
   bakeFrostSlab(g, SET_W, SET_H, 'TUTORIAL');
   const cols = [
-    [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CTRL', 'HIDE IN SNOW'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
+    [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['1-4', 'CLASS ABILITIES'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
     [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['TAB', 'SCOREBOARD'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
   ];
   for (let c = 0; c < 2; c++) {

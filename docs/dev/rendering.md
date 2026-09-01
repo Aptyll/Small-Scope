@@ -550,8 +550,8 @@ disagree).
 ## Overhead health bars
 
 Beside the bar sits the other thing drawn on every body alike: **`drawUnitStates(e, px, py, w, h,
-now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the snare's sprung jaws,
-the fire and the falcon's mark over whatever sprite is wearing them, taking the sprite's own box so
+now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the root's sprung jaws,
+the fire and the mark's gold chevrons over whatever sprite is wearing them, taking the sprite's own box so
 a rabbit, a worker bot and a player slot get the same four tells at their own size. `drawPlayer`
 reaches it through `drawAbilityOnPlayer` (which adds the two a slot alone can show — a raised
 shield, the juggernaut's rim); `drawAnimal`, `drawBird` and `drawRobot` call it directly. **The

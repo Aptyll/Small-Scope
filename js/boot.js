@@ -1028,9 +1028,9 @@ window.DBG = {
   toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
   toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
   // the class abilities: the table, a keypress by hand, and the entity lists
-  // an ability leaves in the world - so a driver can stage a trap or a mark
+  // an ability leaves in the world - so a driver can stage a crater or a net
   // without walking a bot into one
-  CLASS_AB, abTraps: traps, abCraters: craters, abFalcons: falcons, abNets: nets, abVolleys: volleys,
+  CLASS_AB, abCraters: craters, abNets: nets,
   tryAbility: (i, p) => tryAbility(p || player, i),
   setAbilityCd: (i, t, p) => { (p || player).abCd[i] = t; },
   // ability levels: gear's ladder on the four keys (js/abilities.js)

@@ -356,9 +356,9 @@ function makeInput() {
     work: false,         // E held
     slide: false,        // shift held
     dodge: false,        // edge-triggered, cleared once the sim reads it
-    prone: false,        // edge-triggered: toggles the burrow (Ctrl). NOT a held
-                         // level - holding a modifier while tapping W closes the
-                         // browser tab, and preventDefault cannot stop it
+    grapple: false,      // held: the grapple reels only while this is down
+                         // (key 3 for the human; the burrow itself is now the
+                         // hunter's SNOW COVER cast, key 4, not an input)
     eatBerry: false, eatFish: false, // edge-triggered
     ability: -1,         // edge-triggered: cast the class ability on this key (1-4), js/abilities.js
     cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'ability', i}
@@ -439,20 +439,21 @@ class Player {
     this.swing = SWING_BOW;                        // held SWING_TOOLS index (bow at rest)
     // the class abilities (keys 1-4, js/abilities.js): per-key cooldowns, the
     // cast in progress, and every timed state one can leave on a body -
-    // rooted by a trap, slowed under a net or a crater, revealed by the
-    // falcon, shielded, mid-rush, or five seconds of juggernaut
+    // slowed under a net or a crater, mid-reel on the grapple, shielded,
+    // mid-rush, or five seconds of juggernaut
     this.abCd = [0, 0, 0, 0];
     this.abLv = [1, 1, 1, 1];                      // ability levels, 1..AB_LV_MAX - gold buys, fresh every match (js/abilities.js)
     this.castAb = -1; this.castT = 0;
-    // Every state ANY unit can be under - stun, root (a snare's jaws), slow
-    // and its net drape, the falcon's mark, and fire - is written and cleared
-    // in one place for all three kinds of unit (`status effects`, js/actions.js),
-    // so a slot, a deer and a worker bot wear the identical set.
+    // Every state ANY unit can be under - stun, root, slow and its net
+    // drape, the mark, and fire - is written and cleared in one place for
+    // all three kinds of unit (`status effects`, js/actions.js), so a slot,
+    // a deer and a worker bot wear the identical set.
     clearUnitStatus(this);
     this.shieldT = 0; this.shieldA = 0;            // the tower shield, and where it faces
     this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = null;
     this.jugT = 0; this.jugHit = []; this.jugFxT = 0;
     this.hopT = 0;                                 // the net shot's recoil hop, on the body
+    this.grapT = 0; this.grapX = 0; this.grapY = 0; // the grapple: reel time left, and the anchor it hauls toward
     // The one weapon slot the button fires. It holds a tool CELL - the same
     // object a bag cell is, bits and all - so moving one between the bag and
     // the slot is a reference move and a tool never loses what is loaded
@@ -664,7 +665,7 @@ function die(p, src, cause) {
   p.eatT = 0; p.eatType = null;
   p.castT = 0; p.castAb = -1;
   p.shieldT = 0; p.rushT = 0; p.rushVictim = null;
-  p.jugT = 0; p.hopT = 0;
+  p.jugT = 0; p.hopT = 0; p.grapT = 0;
   clearUnitStatus(p); // root, slow, net, mark and the fire go out with the body
   burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
