@@ -60,15 +60,13 @@ const LANE_WARN = 0.5;      // s a pine shudders on its feet before it goes down
 const LANE_DELAY = 0.8;     // s after the impact before the first pine shudders
 const LANE_MAX = 90;        // tiles the lane may run at most (the border is 30-70 deep, the roost ~8 inside it)
 const LANE_CLEAR = 6;       // tiles of pine-free snow past the last fell that prove the lane is OUT - a bay inside the border is not the field
-// the WIND TRAIL: the air the bird tears in level flight - streaks born
-// behind the wingtips and off the body at TRAIL_RATE, left hanging where they
-// were torn so the bird streams away from them, each fading over TRAIL_T
-// (drawEagleTrail - pure reads of the flight clock, no particles)
-const TRAIL_T = 1.1;        // s a streak hangs in the air
-const TRAIL_RATE = 36;      // streaks born per second, per bird
-const TRAIL_LEN = 26;       // px a streak is when born...
-const TRAIL_STRETCH = 90;   // ...and how much longer it draws out over its life
-const TRAIL_RIM = 'rgba(40,60,100,0.6)'; // the dark line under each streak: white air over white snow needs a rim, like the text does
+// the WIND TRAIL: the air the bird tears in level flight - ONE continuous
+// ribbon off each wingtip, laid along the flown line where the tip actually
+// was and fading out toward its tail (drawEagleTrail - pure reads of the
+// flight clock, no particles)
+const TRAIL_T = 1.1;        // s of flight a ribbon reaches back
+const TRAIL_STEP = 6;       // px between the ribbon's samples along the line
+const TRAIL_RIM = 'rgba(40,60,100,0.6)'; // the dark line under the ribbon: white air over white snow needs a rim, like the text does
 const MERCH_SEAT = [8, 0];  // where the merchant sits in flight: on the neck, ahead of the back seat (EAGLE_SEATS' frame)
 const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
@@ -852,49 +850,53 @@ function drawDropAir(ex, ey, now) {
   }
 }
 
-// The WIND TRAIL: level flight tears the air. Streaks are born at TRAIL_RATE
-// - most behind the wingtips, the rest off the body - at the point the bird
-// was when they were torn, and HANG there while the bird flies on, so the
-// trail streams back off the wings and the snow rushes away under it: the
-// speed read. Each draws out (TRAIL_LEN + TRAIL_STRETCH) and fades over
-// TRAIL_T, born where the wing actually was on that beat (the flap frame's
-// own tip). Pure reads of the flight clock - no particle, no sim step, the
-// same trail at any dt - and the stoop keeps the last of them, fading, as the
-// bird tips over. Drawn at the bird's altitude, under the sprite.
-const TRAIL_TIP = [23, 19, 15, 19];  // sprite px across to the wingtip, per flap frame (spread, mid, back, mid)
-const TRAIL_BACK = [-4, -8, -12, -8]; // ...and how far back along the body it sits
+// The WIND TRAIL: level flight tears the air. ONE continuous ribbon streams
+// off each wingtip: sampled every TRAIL_STEP px back along the flown line
+// for TRAIL_T seconds of flight, each sample where the tip actually WAS on
+// that beat (the wing's reach and set follow the flap continuously -
+// TRAIL_TIP/TRAIL_TIP_AMP, TRAIL_BACK/TRAIL_BACK_AMP - and the body's bob),
+// so the ribbon waves with the wingbeat and hangs where it was torn while
+// the bird flies on. It is solid at the tip and fades to nothing at its tail
+// (one gradient along it, over a TRAIL_RIM dark line so white air reads over
+// white snow). Pure reads of the flight clock - no particle, no sim step, the
+// same trail at any dt - and the stoop fades the whole ribbon out as the bird
+// tips over. Drawn at the bird's altitude, under the sprite.
+const TRAIL_TIP = 19, TRAIL_TIP_AMP = 2;   // sprite px across to the wingtip, and the gentle swing the flap puts on it (the tip itself moves 4, the air behind it half that)
+const TRAIL_BACK = -8, TRAIL_BACK_AMP = 3; // ...and how far back along the body it sits, and its swing
 function drawEagleTrail(e, ex, ey, S, now) {
   const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
   const dive = e.state === 'dive' ? Math.min(1, e.diveT / EAGLE_DIVE_T) : 0;
   if (dive >= 1) return;
   const T = e.t + (e.state === 'dive' ? e.diveT : 0);   // the flight clock: e.t stops at the line's end
-  const last = Math.floor(Math.min(T, e.dur) * TRAIL_RATE); // nothing is born past the line
+  const head = Math.min(T, e.dur);                       // the ribbon's tip never leaves the line
+  const n = Math.ceil(Math.min(TRAIL_T, head) * e.spd / TRAIL_STEP);
+  if (n < 2) return;
+  // a sample's point on the ribbon: the tip's world position `age` seconds ago
+  const at = (side, age, out) => {
+    const t = head - age, d = Math.min(e.spd * t, e.len);
+    const ph = Math.cos((e.flap - (T - t)) * 7 * Math.PI / 2); // the flap cycle: spread -> mid -> back -> mid over four beats of 1/7 s
+    const lat = side * (TRAIL_TIP + TRAIL_TIP_AMP * ph) * S, back = (TRAIL_BACK + TRAIL_BACK_AMP * ph) * S;
+    out.x = e.x0 + hc * (d + back) - hs * lat - ex;
+    out.y = e.y0 + hs * (d + back) + hc * lat - ey + Math.round(Math.sin((now - age) * 2.4 + e.team * 2.1) * 3);
+  };
+  const a = { x: 0, y: 0 }, b = { x: 0, y: 0 };
   ctx.save();
-  for (let i = Math.max(0, Math.ceil((T - TRAIL_T) * TRAIL_RATE)); i <= last; i++) {
-    const age = T - i / TRAIL_RATE, u = age / TRAIL_T;
-    if (u >= 1 || u < 0) continue;
-    const d = Math.min(e.spd * i / TRAIL_RATE, e.len);
-    const r = hash2(i * 3 + 1, e.team * 11 + 5);
-    const wing = r < 0.72;
-    const fr = (((Math.floor((e.flap - age) * 7) % 4) + 4) % 4);
-    const lat = (wing ? (r < 0.36 ? -1 : 1) * TRAIL_TIP[fr] : ((r - 0.72) / 0.28 * 2 - 1) * 9) * S * (1 + 0.15 * u);
-    const back = (wing ? TRAIL_BACK[fr] : -10 - 6 * hash2(i * 5 + 2, e.team + 9)) * S;
-    const bobB = Math.round(Math.sin((now - age) * 2.4 + e.team * 2.1) * 3);
-    const px = e.x0 + hc * (d + back) - hs * lat - ex, py = e.y0 + hs * (d + back) + hc * lat - ey + bobB;
-    if (px < -80 || py < -80 || px > WV_W + 80 || py > WV_H + 80) continue;
-    const len = (TRAIL_LEN + TRAIL_STRETCH * u) * (wing ? 1 : 0.6);
-    const a = (1 - u * u) * (wing ? 0.95 : 0.55) * (1 - dive); // holds bright, then drops away
+  ctx.lineJoin = 'round';
+  for (const side of [-1, 1]) {
+    at(side, 0, a); at(side, Math.min(TRAIL_T, head), b);
+    if (Math.max(a.x, b.x) < -40 || Math.max(a.y, b.y) < -40 || Math.min(a.x, b.x) > WV_W + 40 || Math.min(a.y, b.y) > WV_H + 40) continue;
     ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(px - hc * len, py - hs * len);
-    ctx.globalAlpha = a * 0.8; // the rim first, a px wider each side, so the streak reads over the snow
-    ctx.strokeStyle = TRAIL_RIM;
-    ctx.lineWidth = wing ? 5 : 3;
-    ctx.stroke();
-    ctx.globalAlpha = a;
-    ctx.strokeStyle = wing ? '#ffffff' : '#eef3ff';
-    ctx.lineWidth = wing ? 3 : 1;
-    ctx.stroke();
+    for (let i = 0; i <= n; i++) {
+      at(side, (i / n) * Math.min(TRAIL_T, head), b);
+      if (i === 0) ctx.moveTo(b.x, b.y); else ctx.lineTo(b.x, b.y);
+    }
+    const g = ctx.createLinearGradient(a.x, a.y, b.x, b.y); // solid at the tip, gone at the tail
+    ctx.globalAlpha = 1 - dive;
+    g.addColorStop(0, TRAIL_RIM); g.addColorStop(0.55, 'rgba(40,60,100,0.32)'); g.addColorStop(1, 'rgba(40,60,100,0)');
+    ctx.strokeStyle = g; ctx.lineWidth = 5; ctx.stroke();
+    const w = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+    w.addColorStop(0, 'rgba(255,255,255,0.95)'); w.addColorStop(0.55, 'rgba(255,255,255,0.55)'); w.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.strokeStyle = w; ctx.lineWidth = 3; ctx.stroke();
   }
   ctx.restore();
   ctx.globalAlpha = 1;

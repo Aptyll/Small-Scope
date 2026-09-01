@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.55'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.56'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.56', 'EACH EAGLE WINGTIP NOW STREAMS ONE CONTINUOUS RIBBON OF WIND THAT FADES OUT AT ITS TAIL, IN PLACE OF THE LOOSE STREAKS.'],
   ['2.55', 'THE EAGLES\' WIND TRAILS ARE LONGER AND BRIGHTER.'],
   ['2.54', 'THE EAGLES ALWAYS BURY THEMSELVES DEEP IN A CORNER THAT IS ALWAYS FORESTED, THEIR LANE CUTS OUT TO THE MIDDLE OF THE TREE EDGE AND NEVER STOPS SHORT IN A CLEARING, AND THEY TEAR WIND TRAILS THROUGH THE AIR IN FLIGHT.'],
   ['2.53', 'THE MERCHANT IS AN OLD TRADER IN A WIDE FUR HAT WITH A TEAM-CLOTH CROWN AND A WHITE BEARD - PICKED OFF A CONCEPT SHEET, AND THE SHEETS NOW LIVE IN THE REPO.'],

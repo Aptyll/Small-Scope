@@ -1273,15 +1273,16 @@ in gold that brightens and pulses once the lock opens — then runs `drawEagle` 
 point), the bird itself in its team's armour (`SPRITES.eagleTeam[team]` cycling spread → mid →
 back → mid, rotated to its heading, at `EAGLE_SCALE` 3× walking down to `EAGLE_REST_SCALE` 2×
 through the dive, bobbing 3 px in level flight), under it the **wind trail** (`drawEagleTrail`,
-drawn before the bird's own cull because it hangs behind a bird already off the frame): streaks
-born at `TRAIL_RATE` (36/s) — most behind the wingtips, at the flap frame's own tip
-(`TRAIL_TIP`/`TRAIL_BACK`), the rest off the body — at the point the bird *was* when they were
-torn, left hanging there while the bird flies on, so the trail streams back off the wings and
-the snow rushes away under it; each draws out from `TRAIL_LEN` by `TRAIL_STRETCH` and fades
-over `TRAIL_T` (1.1 s, holding bright then dropping away), a `TRAIL_RIM` dark line a px wider each
-side under the white so it reads over snow,
-the whole field fading through the stoop. Pure reads of the flight clock (`e.t`, `e.spd`, a
-`hash2` per streak) — no particles, no sim step, the same trail at any dt. Then **every rider seated on its wing** (`drawSeated`:
+drawn before the bird's own cull because it hangs behind a bird already off the frame): **one
+continuous ribbon off each wingtip**, sampled every `TRAIL_STEP` (6) px back along the flown
+line for `TRAIL_T` (1.1 s) of flight, each sample where the tip actually *was* on that beat —
+the wing's reach and set follow the flap continuously (`TRAIL_TIP`±`TRAIL_TIP_AMP`,
+`TRAIL_BACK`±`TRAIL_BACK_AMP`) and the body's bob — so the ribbon waves with the wingbeat and
+hangs where it was torn while the bird flies on and the snow rushes away under it. It is solid
+at the tip and fades to nothing at its tail: one linear gradient along the ribbon, a 3 px white
+over a 5 px `TRAIL_RIM` dark line so white air reads over snow, the whole thing fading through
+the stoop. Pure reads of the flight clock (`e.t`, `e.spd`, `e.flap`) — no particles, no sim step,
+the same trail at any dt. Then **every rider seated on its wing** (`drawSeated`:
 the pose set's direction picked by the heading's dominant axis — `riderDir`, so a crew flying
 down-left shows its profiles — the bottom three rows tucked into the plumage so a body sits
 rather than stands, the hem meeting the feathers at the seat point, lifted a pixel on the
