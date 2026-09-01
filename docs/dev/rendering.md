@@ -1188,7 +1188,9 @@ glides the camera across the map to the rival bird — the sim camera (js/sim.js
 `dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
 is *tracked* and the crash lands on screen — and holds until it is down; **`theirs`** holds
 `BRIEF_HOLD` (3 s) under a two-line headline (`drawDropBrief`, baked opaque and faded as a
-canvas, the dayPop grammar) across the **top** of the view (`VIEW_H * 0.08`): `THEIR EAGLE` in
+canvas, the dayPop grammar, on a **dark plate** — `BAG_BG` at `BRIEF_PLATE_A` 0.82 with the
+team's colour as a 1 px rule top and bottom, because the roost is pines edge to edge and an
+outline alone smeared into the needles) across the **top** of the view (`VIEW_H * 0.08`): `THEIR EAGLE` in
 the rival's paint at **three times** the drop HUD's text scale over `DRIVE IT OFF TO WIN` at one
 — the once the win condition is ever written down, the headline carve-out, and deliberately no
 third line; **`ours-go`**/**`ours`** glide home and finish on your own roost for

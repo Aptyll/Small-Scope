@@ -51,6 +51,7 @@ const BRIEF_HOLD = 3;       // s it holds on the rival roost
 const BRIEF_HOLD_OURS = 4;  // s it holds on your own to finish
 const BRIEF_GO_MIN = 1;     // s a glide leg lasts at least, however close the target
 const BRIEF_MAX_T = 24;     // s the whole tour may run before it force-ends (safety)
+const BRIEF_PLATE_A = 0.82; // the dark plate under the headline (drawDropBrief): the roost is pines edge to edge
 // the LANE the crash cuts back to the open snow, pine by pine - aimed from
 // the crater at the MIDDLE of the corner's treeline (e.mouth: the diagonal's
 // own edge tile, diagEnd), and run until the woods are provably behind it
@@ -1172,14 +1173,23 @@ function drawDropBrief() {
     const team = b.ph === 'ours' ? player.team : 1 - player.team;
     const t1 = b.ph === 'ours' ? 'YOUR EAGLE' : 'THEIR EAGLE';
     const t2 = b.ph === 'ours' ? 'LOSE IT, LOSE THE MATCH' : 'DRIVE IT OFF TO WIN';
-    const hs = 3 * ts, ss = ts;
+    const hs = 3 * ts, ss = ts, pad = 6 * ts; // the plate's margin round the words
     briefCv = document.createElement('canvas');
-    briefCv.width = Math.max(pixelTextWidth(t1, hs), pixelTextWidth(t2, ss)) + 4;
-    briefCv.height = 8 * hs + 8 * ss + 8;
+    briefCv.width = Math.max(pixelTextWidth(t1, hs), pixelTextWidth(t2, ss)) + 4 + pad * 2;
+    briefCv.height = 8 * hs + 8 * ss + 8 + pad * 2;
     const c2 = briefCv.getContext('2d');
-    drawPixelTextOutline(c2, t1, Math.round((briefCv.width - pixelTextWidth(t1, hs)) / 2), 2,
+    // a dark PLATE under the words, the panels' own ink at BRIEF_PLATE_A with
+    // a 1px rim: the roost is a wall of pines, and an outline alone on green
+    // needles at this size was a smear
+    c2.fillStyle = BAG_BG;
+    c2.globalAlpha = BRIEF_PLATE_A;
+    c2.fillRect(0, 0, briefCv.width, briefCv.height);
+    c2.globalAlpha = 1;
+    c2.fillStyle = TEAMS[skin(team)].mark;
+    c2.fillRect(0, 0, briefCv.width, 1); c2.fillRect(0, briefCv.height - 1, briefCv.width, 1); // the team's colour as the plate's rule, top and bottom
+    drawPixelTextOutline(c2, t1, Math.round((briefCv.width - pixelTextWidth(t1, hs)) / 2), pad + 2,
       TEAMS[skin(team)].mark, '#0f1632', hs);
-    drawPixelTextOutline(c2, t2, Math.round((briefCv.width - pixelTextWidth(t2, ss)) / 2), 8 * hs + 6,
+    drawPixelTextOutline(c2, t2, Math.round((briefCv.width - pixelTextWidth(t2, ss)) / 2), pad + 8 * hs + 6,
       '#f4f7ff', '#0f1632', ss);
     briefCvKey = key;
   }
