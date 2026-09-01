@@ -1278,7 +1278,8 @@ born at `TRAIL_RATE` (36/s) — most behind the wingtips, at the flap frame's ow
 (`TRAIL_TIP`/`TRAIL_BACK`), the rest off the body — at the point the bird *was* when they were
 torn, left hanging there while the bird flies on, so the trail streams back off the wings and
 the snow rushes away under it; each draws out from `TRAIL_LEN` by `TRAIL_STRETCH` and fades
-over `TRAIL_T` (0.8 s), a `TRAIL_RIM` dark line a px wider under the white so it reads over snow,
+over `TRAIL_T` (1.1 s, holding bright then dropping away), a `TRAIL_RIM` dark line a px wider each
+side under the white so it reads over snow,
 the whole field fading through the stoop. Pure reads of the flight clock (`e.t`, `e.spd`, a
 `hash2` per streak) — no particles, no sim step, the same trail at any dt. Then **every rider seated on its wing** (`drawSeated`:
 the pose set's direction picked by the heading's dominant axis — `riderDir`, so a crew flying

@@ -64,11 +64,11 @@ const LANE_CLEAR = 6;       // tiles of pine-free snow past the last fell that p
 // behind the wingtips and off the body at TRAIL_RATE, left hanging where they
 // were torn so the bird streams away from them, each fading over TRAIL_T
 // (drawEagleTrail - pure reads of the flight clock, no particles)
-const TRAIL_T = 0.8;        // s a streak hangs in the air
+const TRAIL_T = 1.1;        // s a streak hangs in the air
 const TRAIL_RATE = 36;      // streaks born per second, per bird
-const TRAIL_LEN = 20;       // px a streak is when born...
-const TRAIL_STRETCH = 60;   // ...and how much longer it draws out over its life
-const TRAIL_RIM = 'rgba(40,60,100,0.5)'; // the dark line under each streak: white air over white snow needs a rim, like the text does
+const TRAIL_LEN = 26;       // px a streak is when born...
+const TRAIL_STRETCH = 90;   // ...and how much longer it draws out over its life
+const TRAIL_RIM = 'rgba(40,60,100,0.6)'; // the dark line under each streak: white air over white snow needs a rim, like the text does
 const MERCH_SEAT = [8, 0];  // where the merchant sits in flight: on the neck, ahead of the back seat (EAGLE_SEATS' frame)
 const FALL_T = 1.3;         // seconds of free fall
 const DRIFT_SPD = 130;      // px/s a faller steers sideways with WASD (~10 tiles over the fall)
@@ -883,17 +883,17 @@ function drawEagleTrail(e, ex, ey, S, now) {
     const px = e.x0 + hc * (d + back) - hs * lat - ex, py = e.y0 + hs * (d + back) + hc * lat - ey + bobB;
     if (px < -80 || py < -80 || px > WV_W + 80 || py > WV_H + 80) continue;
     const len = (TRAIL_LEN + TRAIL_STRETCH * u) * (wing ? 1 : 0.6);
-    const a = (1 - u) * (wing ? 0.75 : 0.4) * (1 - dive);
+    const a = (1 - u * u) * (wing ? 0.95 : 0.55) * (1 - dive); // holds bright, then drops away
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(px - hc * len, py - hs * len);
-    ctx.globalAlpha = a * 0.7; // the rim first, a px wider, so the streak reads over the snow
+    ctx.globalAlpha = a * 0.8; // the rim first, a px wider each side, so the streak reads over the snow
     ctx.strokeStyle = TRAIL_RIM;
-    ctx.lineWidth = wing ? 4 : 3;
+    ctx.lineWidth = wing ? 5 : 3;
     ctx.stroke();
     ctx.globalAlpha = a;
-    ctx.strokeStyle = wing ? '#f6f8ff' : '#dfe7f4';
-    ctx.lineWidth = wing ? 2 : 1;
+    ctx.strokeStyle = wing ? '#ffffff' : '#eef3ff';
+    ctx.lineWidth = wing ? 3 : 1;
     ctx.stroke();
   }
   ctx.restore();
