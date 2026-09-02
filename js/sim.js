@@ -192,6 +192,13 @@ function update(dt) {
   updateFx(dt);
 }
 
+// A shot's reach into a body: the disc round a slot's centre an arrow lands
+// in, wider than the 4.5 px body a walker collides with. A walking target
+// crosses its own width twice in the quarter second a full-draw arrow takes
+// to fly 80 px, so at the body's own radius almost nothing lands on a moving
+// rival (2.47's playtest: 24 shots at a circling bot, none hit) - and the
+// same disc on every side keeps it a fact of arrows, not a hidden handicap.
+const ARROW_HIT_R = 10;
 function updatePlay(dt) {
   state.tick++; // with SEED and the player id, this decides contested orders
 
@@ -321,7 +328,7 @@ function updatePlay(dt) {
         if ((a.team === t.team && !a.ff) || t.id === a.owner ||
             !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
         if (a.pierce && a.pierceHit.includes(t)) continue;
-        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
+        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < ARROW_HIT_R) {
           // a raised tower shield eats any shot flying into its front arc -
           // bolts included - before the body behind it is ever asked
           if (abShieldBlocks(t, nx, ny)) {

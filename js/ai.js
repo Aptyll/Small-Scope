@@ -32,8 +32,11 @@ const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
 //   abil    chance each AI_ABIL_T tick that a ready ability is spent
 //   flee    hp fraction under which it hides (hunter) / gives ground
 //   work    duty cycle of the E key while harvesting (its level pace)
-//   strafe  fraction of each 2 s it keeps moving in a fight (the rest it
-//           stands, which is when a new player hits it)
+//   strafe  fraction of each 2 s it keeps moving in a fight; the rest it
+//           PLANTS - stands, draws and shoots, the only time a slow side
+//           fires - so the moment it stops is the moment it is about to
+//           shoot, and the moment a new player hits it. Under 1 it also
+//           circles that much less: it walks in straighter
 //   pick    'near' the closest rival, 'weak' the one with the least hp
 //   push    { t, n } - after t s, the side's first n bots go for the rival
 //           eagle (the objective rung), one more every AI_ESCALATE s after
@@ -42,7 +45,7 @@ const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
 //   defendR px from its own eagle inside which it answers a hit on the bird
 //   support allies only: escort the human and join their fights and pushes
 const AI_LEVELS = [
-  { name: 'NORMAL', sight: 110, react: 0.7, aim: 22, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 900 },
+  { name: 'NORMAL', sight: 110, react: 0.7, aim: 30, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 900 },
   { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 240, n: 3 }, guard: 2, defendR: 1600 },
   { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 150, n: 3 }, guard: 2, defendR: 1e9 },
 ];
@@ -369,10 +372,14 @@ function updateAI(p, dt) {
     }
     const side = p.id % 2 ? 1 : -1;
     const a = Math.atan2(foe.y - p.y, foe.x - p.x);
-    const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
+    const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side * prof.strafe;
     inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
-    if (prof.strafe < 1 && (state.tick % 120) >= 120 * prof.strafe) { inp.mx = 0; inp.my = 0; } // the standing part of the strafe
-    inp.fire = clear && p.chargeT < kitOf(p).bowCharge * prof.draw; // draw, then loose at the profile's draw
+    // a slow side plants its feet to shoot: the standing part of each 2 s is
+    // the only part it draws and looses in (a draw cut off by the walk goes
+    // as the weak tap it is), so stopping IS the tell
+    const planted = prof.strafe >= 1 || (state.tick % 120) >= 120 * prof.strafe;
+    if (planted && prof.strafe < 1) { inp.mx = 0; inp.my = 0; }
+    inp.fire = planted && clear && p.chargeT < kitOf(p).bowCharge * prof.draw; // draw, then loose at the profile's draw
     if (p.hp < p.maxHp * 0.45 && p.dodgeCharges > 0 && rng() < dt * 2 * prof.dodge) inp.dodge = true;
     ai.tgt = null;
     return;

@@ -192,8 +192,11 @@ shade). The team colour stays the background, the tint is the ink — see the
 ## PvP
 
 `enemyOf(p, q)` is the one place the rule lives: another live, active slot on **another** team.
-Arrows carry `owner`/`team` and test players first in `updatePlay`'s arrow loop, using the
-same body radius; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` for knockback, flash,
+Arrows carry `owner`/`team` and test players first in `updatePlay`'s arrow loop, on an
+`ARROW_HIT_R` (10 px) disc round the slot's centre — wider than the 4.5 px body a walker
+collides with, because a walking target crosses its own width twice in the quarter second a
+full-draw arrow takes to fly 80 px, and the same disc on every side keeps it a fact of arrows
+rather than a hidden handicap; a hit calls `damagePlayer(target, dmg, dx, dy, src, cause)` for knockback, flash,
 floater and possibly `die(p, src, cause)`. Friendly fire is off, and an arrow can never hit its
 shooter. `damagePlayer` takes a seventh argument, `crit`, which the arrow loop passes from
 `a.ambush`: it runs the damage floater hotter and at double scale and doubles the local shake. Any
@@ -334,7 +337,9 @@ target's motion), `draw` (0.7 / 0.9 / 0.95 of `bowCharge` it looses at — a sho
 weak shot), `dodge` (×0.5 / 1 / 2), `abil` (0.35 / 0.8 / 1 chance per `AI_ABIL_T` that a
 ready ability is spent), `flee` (0.5 / 0.35 / 0.2 hp it hides at), `work` (0.5 / 0.8 / 1 duty
 cycle of the E key while harvesting — its level pace), `strafe` (0.45 / 0.8 / 1 of each 2 s it
-keeps moving in a fight; the rest it stands, which is when a new player hits it), `pick`
+keeps moving in a fight; the rest it PLANTS — stands, draws and shoots, the only time a slow side
+fires, so stopping is the tell and the moment a new player hits it — and under 1 it circles that
+much less, walking in straighter), `pick`
 (`'near'`, or IMPOSSIBLE's `'weak'` — the rival with the least hp), `push`, `guard` and
 `defendR` (the objective, below), `support` (allies only).
 
