@@ -12,12 +12,22 @@ const MIME = {
 };
 
 http.createServer((req, res) => {
-  if (req.method === 'POST' && req.url === '/shot') {
+  if (req.method === 'POST' && (req.url === '/shot' || req.url.startsWith('/shot?'))) {
     let body = '';
     req.on('data', (c) => { body += c; });
     req.on('end', () => {
       const b64 = body.replace(/^data:image\/png;base64,/, '');
-      fs.writeFileSync(path.join(ROOT, 'shot.png'), Buffer.from(b64, 'base64'));
+      let out = path.join(ROOT, 'shot.png');
+      const q = new URL(req.url, 'http://localhost').searchParams.get('f');
+      if (q) {
+        const safe = path.normalize(q).replace(/^([/\\])+/, '');
+        out = path.join(ROOT, safe);
+        if (!out.startsWith(ROOT) || !out.toLowerCase().endsWith('.png')) {
+          res.writeHead(400); res.end('bad path'); return;
+        }
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+      }
+      fs.writeFileSync(out, Buffer.from(b64, 'base64'));
       res.writeHead(200); res.end('ok');
     });
     return;
