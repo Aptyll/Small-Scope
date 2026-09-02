@@ -460,13 +460,14 @@ sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net
   fish within `FISH_CATCH_R` (16 px); if so the shot becomes the catch (any charge level):
   `p.inv.fish++`, splash, no arrow — and the catch is
   [contested](multiplayer.md#contested-orders), so two players can't land the same fish. **The catch is a pose**: the contest's
-  callback calls `startCatch(p)` (below `spearFish` in js/tools.js), `CATCH_T` (1.1 s) of three
+  callback calls `startCatch(p)` (below `spearFish` in js/tools.js), `CATCH_T` (2 s) of three
   down-facing frames whatever the body faced - `CATCH_STOOP` (0.16 s) bent to the hole,
   `CATCH_HAUL` (0.22 s) with the fish coming up, then the trophy hoist over the head
   (`catchFrame(p)` says which; `drawPlayer` draws it, the held tool and gear marks off, the
-  overhead stack lifted 4 px for the hoist). It locks nothing: `updatePlayer` drops it on any intent
-  (a step, a fresh press, a roll, a cast, a swing, a meal) and `damagePlayer` on a hit, through
-  `cancelCatch`; a net's first fish is hoisted the same way from `updateStructures`. The frames:
+  overhead stack lifted 4 px for the hoist). The body holds still for it - `updatePlayer` swallows
+  WASD while it runs, as a stun does - but it is no channel: any other intent (a fresh press, a roll,
+  a cast, a swing, a meal) and a hit through `damagePlayer` end it early via `cancelCatch`; a net's
+  first fish is hoisted the same way from `updateStructures`. The frames:
   [sprites](sprites.md). `DBG.startCatch`/`cancelCatch`/`catchFrame` stage it. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
   cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
   prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
