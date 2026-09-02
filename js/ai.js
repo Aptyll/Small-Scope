@@ -13,6 +13,12 @@ const AI_SIGHT = 150;   // px: how far a bot notices a rival
 const AI_EAT_R = 110;   // px: a rival closer than this will knock the meal out of its hands, so it waits
 const AI_HUNT = 120;    // px: how far it will go after an animal
 const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
+// The RIVAL bots' difficulty, picked on class select's notches
+// (settings.aiLevel indexes this) and remembered with the profile. Names
+// only so far: the ladder does not read the level yet, and the numbers a
+// level changes hang off these entries when it does (checklists.md, Known
+// drift).
+const AI_LEVELS = [{ name: 'NORMAL' }, { name: 'HARD' }, { name: 'IMPOSSIBLE' }];
 
 function aiNearestEnemy(p) {
   let best = null, bd = AI_SIGHT;

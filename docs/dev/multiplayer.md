@@ -111,7 +111,11 @@ one does, its cooldown, cast, and the states it leaves on a body — are
 The local slot picks on the class select screen (see
 [Main menu](rendering.md#main-menu-title)); AI slots hash theirs — class **and** all four gear
 variants — from the seed in `initPlayers()` so a replayed world fields the same roster in the
-same loadouts. Sprites live in `SPRITES.champ[c][team]` (the sprite key keeps its legacy name;
+same loadouts. Class select shows that roster as two columns of cards — your side left, the
+rivals right, their picks face-down until PLAY's countdown turns them — and the three notches
+over the rivals' column set `settings.aiLevel` (`AI_LEVELS`, js/ai.js: NORMAL / HARD /
+IMPOSSIBLE, remembered with the profile), which is stored and shown but **not yet read by
+`updateAI`** ([known drift](checklists.md#known-drift)). Sprites live in `SPRITES.champ[c][team]` (the sprite key keeps its legacy name;
 js/sprites.js is never rewritten) — same
 16×16 body plan and frame set as the player, so `drawPlayer`/`drawGhost` just swap the set via
 `classSet(p)`; `SPRITES.playerTeam` is class 0.

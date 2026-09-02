@@ -141,6 +141,11 @@ const state = {
     // gearFxT/gearFxSlot the equip flash); the tech tree is a surface of its
     // own on techT, with tsel the keyboard cursor into its flat node list.
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
+    // countT: seconds left of PLAY's countdown to the eagle (0 = not counting),
+    // countN the last whole second it ticked on (-1 = never pressed, 0 = it
+    // ran out); dhover the three difficulty notches' hover eases (menu.js
+    // `class select`)
+    countT: 0, countN: -1, dhover: [0, 0, 0],
     gearT: 0, grow: 0, gearFxT: 0, gearFxSlot: 0, techT: 0, tsel: 0 },
   intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
   introLen: 1,         // that transition's full length (the camera ease divides by it)
@@ -162,6 +167,9 @@ const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom:
   // your side is painted BLUE and the rival side RED whatever team the roster
   // dealt you (skin(), js/player.js); off = the roster's real colours
   teamBlue: true,
+  // the rival bots' difficulty: an index into AI_LEVELS (js/ai.js), picked on
+  // class select's notches and remembered; 0 (NORMAL) until someone moves it
+  aiLevel: 0,
   // the VIDEO page's dressing toggles, all cosmetic-only passes a weak GPU
   // can shed (the ESC panel's QUALITY row presets them; panels.js)
   vidClouds: true, vidRays: true, vidStars: true, vidSnow: true, vidVig: true };

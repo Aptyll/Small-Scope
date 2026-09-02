@@ -1078,28 +1078,43 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The second plank is a
   plain CANCEL that leaves the stored name alone.
   Any open panel ducks the logo to zero alpha.
-- **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): ONE screen on
-  its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
-  vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock, the
-  cinematic band; fully opaque at rest, so the live ambient world is never this screen's
-  backdrop). The **roster** runs down the top-left as symbolic class emblems
-  (`drawSelectPortrait`) — one 36px well per `CLASSES` entry wearing its 32×32 `CLASS32` mark
-  (the hunter's drawn bow, the warrior's gauntlet; baked on `AB32_PAL` like every big icon), a
-  column of `SEL_P_PER` (4) wrapping into further columns as the roster grows, so a new class
-  costs this screen nothing but its emblem — and the **stage** holds the chosen class alone in
-  full glory (`drawSelectStage`): walking in place at 6× under a warm pool of light with a gold
-  ring turning on the snow, the class weapon's own tool art at the hand, the name below, and its
-  four ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as
-  it will be worn, and **hovering a well raises the ability tooltip** (`selectAbilHit` →
-  `tipClassAb(i, csel)`, the strip's own panel minus the in-play rows, so the kit is *readable*
-  before it is ever locked). The chosen emblem wears the gold rim; the others sit dim and warm on hover
-  (`menu.chover` — seeded as a pair in core.js and grown with `|| 0` for any roster size).
-  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a portrait
-  click or the arrows move `menu.csel` (`menu.cswapT` pops the stage), Enter or the **LOCK IN**
-  plank call `lockIn()` — `setClass`, `menu.lockT`, then straight to `beginDrop()` (the eagle
-  ride, below) — and Esc/Backspace go back to the menu. Beside the plank sits the **collapsed
-  gear widget** (the four picked variant icons); clicking it opens the gear pop-up. No
-  instructional text anywhere on the screen.
+- **Class select** (`menu.screen = 'select'`, entered by SINGLEPLAYER via `beginSelect`): ONE
+  screen on its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora
+  ribbons, a vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock,
+  the cinematic band; fully opaque at rest, so the live ambient world is never this screen's
+  backdrop), laid out **the way a League lobby is**. `selectLayout()`/`selectHit()` are the rect
+  source for both drawing and the mouse. Down the **left** run your side's five **roster cards**
+  and down the **right** the rivals' (`drawSelectRosters`/`drawSelectCard`, `SEL_ROST_X` from
+  centre, one `SEL_CARD` well per slot in slot order under a rule in the side's paint): the
+  slot's 16×16 class sprite in `skin(team)` paint with its name beside it — names are text's
+  job — yours gold-rimmed and wearing the class on stage before it is locked, a rival's
+  **face-down** (the body as one flat shade through the scratch canvas) until the countdown turns
+  it. Over the rivals' column sits their **difficulty meter**: three notches filled up to
+  `settings.aiLevel` in the rivals' paint, the hovered one lifting (`menu.dhover`), the level's
+  name (`AI_LEVELS`, js/ai.js — NORMAL / HARD / IMPOSSIBLE) printed once under them, gold and
+  naming the notch under the pointer while one is hovered; a click is `setAiLevel`, which saves
+  the profile's settings. **PLAY** wears the title's first plank in its exact place (`MENU_Y0`,
+  `MENU_BW`×`MENU_BH`); the **stage** under it holds the chosen class alone (`drawSelectStage`):
+  walking in place at 4× in your side's paint under a warm pool of light with a gold ring turning
+  on the snow, the class weapon's own tool art at the hand, the name below, and its four ability
+  icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as it will be
+  worn, and **hovering a well raises the ability tooltip** (`selectAbilHit` →
+  `tipClassAb(i, csel)`). The **class emblems** flank the figure's left (`drawSelectPortrait`,
+  one 36px well per `CLASSES` entry wearing its 32×32 `CLASS32` mark, `SEL_P_PER` (2) to a
+  column with further columns growing leftward, so a new class costs this screen nothing but its
+  emblem), the chosen one gold-rimmed and the others dim and warm on hover (`menu.chover`); the
+  **collapsed gear widget** (the four picked variant icons in a column) flanks its right, and
+  clicking it opens the gear pop-up. A portrait click or the arrows move `menu.csel`
+  (`menu.cswapT` pops the stage). Enter or the plank call `pressPlay()` — `setClass` locks the
+  class and the **countdown** starts: `menu.countT` runs `COUNT_T` (5) seconds, the whole second
+  left drawn in 4× gold digits over the plank (`drawSelectCount`, white the instant it changes,
+  sinking through its second), `SFX.nock` ticking each one, the plank sunk throughout, and
+  **one rival card turning face-up per tick** (`selectRevealed()`: the first on the press, the
+  last on ONE, all of them once it has run out, and none at rest — a white flash as each turns).
+  Gear stays open through the count (the widget still opens its pop-up, which shuts itself at
+  zero); a class swap is refused with `SFX.deny`; Esc/Backspace call it off (`cancelCount`)
+  and, at rest, go back to the menu. At zero `lockIn()` — `menu.lockT`, then straight to
+  `beginDrop()` (the eagle ride, below). No instructional text anywhere on the screen.
 - **Gear pop-up** (`menu.screen = 'gear'`, easing over the still-lit select screen on
   `menu.gearT`): a dim, then a floating panel in two columns (`gearLayout()`/`gearScreenHit()`).
   LEFT is the **live preview** (`drawGearPreview`): the chosen class walking in place at 4×
@@ -1116,7 +1131,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   too). **Picking plays on the preview body** (`pickGear` → `menu.gearFxT`/`gearFxSlot`): a
   white flash through the scratch canvas, gold sparks, the changed piece's band lit. ESC,
   Enter, the **X** in the corner, or a click anywhere off the panel close it back to select
-  (`leaveGear`) — lock-in stays on the select screen behind it. The ledger's labelled rows are
+  (`leaveGear`) — PLAY (and a running count) stays on the select screen behind it. The ledger's labelled rows are
   the PLAYER-panel text carve-out: comparing numbers is this panel's whole job. See
   [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
@@ -1132,8 +1147,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   up from the bottom) while the camera settles onto the play framing.
   The DAY 1 headline fires when that intro ends.
 
-`DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and
-`layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
+`DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro`, `beginSelect`,
+`selectLayout`, `selectHit`, `pressPlay`, `cancelCount`, `setAiLevel`, `lockIn` and `layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
 
 ## Eagle drop (mode `drop`)
 

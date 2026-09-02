@@ -4,7 +4,7 @@
 // order, window.DBG and the requestAnimationFrame loop.
 
 // ------------------------------------------------------------ eagle drop
-// Nobody spawns in a camp: after LOCK IN each TEAM rides its own armoured
+// Nobody spawns in a camp: after PLAY's count each TEAM rides its own armoured
 // eagle down the map's one DIAGONAL - RED flies it from the top-right corner
 // to roost in the BOTTOM-LEFT woods, BLUE the other way to the TOP-RIGHT,
 // every match and every seed - each keeping EAGLE_LANE to its own right so
@@ -1466,7 +1466,7 @@ window.DBG = {
   setSwing: (i, p) => { (p || player).swing = i; },
   getSwing: (p) => (p || player).swing,
   cam: () => ({ x: camX, y: camY }),
-  startGame, beginIntro, beginSelect, lockIn, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
+  startGame, beginIntro, beginSelect, lockIn, pressPlay, cancelCount, setAiLevel, selectLayout, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
   // the ESC panel: what the pointer is over, the speaker's plate, the open
   // page's row anchors (already scrolled - a row's y is where it is on
   // screen) and the navbar cells - so a driver can click a dial without
