@@ -51,6 +51,8 @@ Rules that make a sheet honest:
    console: a thrown width error means the sheet is blank past that variant.
 4. Save it: `cp shot.png docs/media/concepts/<file>.png` — `shot.png` is gitignored and
    overwritten by every render, the copy is the record.
+   (Or have the sheet POST to `/shot?f=docs/media/concepts/<file>.png` and skip the copy - the
+   sink takes a repo-relative path since 2.45; the fish-catch sheet does this.)
 5. Hand it over with `SendUserFile` (display `render`) and a one-line description of each
    letter plus your own pick and why. Then **stop and wait** for the letter.
 6. Build the pick: copy its grids into `js/sprites.js` beside the sprite's palette (the

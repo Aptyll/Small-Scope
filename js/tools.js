@@ -346,6 +346,7 @@ function bitPut(cell, i, id) {
 // worth (`the draw` above), and DUPLICATE is the one modifier that changes
 // how many bits an activation consumes rather than what they do.
 function fireTool(p) {
+  cancelCatch(p); // a press is a press: the hoist gives way to the shot (the spear below re-starts it on a catch)
   // the cover is read before anything below can break it - the ambush shot is
   // what the crawl in was for, whatever bit is loaded
   const amb = ambushReady(p);
@@ -446,6 +447,7 @@ function spearFish(p) {
     if (j < 0) return;
     fish.splice(j, 1);
     bagAdd(p, 'fish', 1);
+    startCatch(p);
     addFloater(f.x, f.y - 10, 'FISH!', '#7ac0e8');
     burst(f.x, f.y, '#9fc4dd', 8, 45, 0.45, true);
     burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
@@ -453,6 +455,24 @@ function spearFish(p) {
   });
   p.nockT = toolCycle(p);
   return true;
+}
+
+// The catch is a pose the body performs - CATCH_STOOP s bent to the hole,
+// CATCH_HAUL s with the fish coming up, then the trophy hoist for the rest of
+// CATCH_T - three DOWN-facing frames whatever the body was facing
+// (classSet(p).catch, drawn by drawPlayer). It locks nothing: any intent at
+// all - a step, a fresh press, a roll, a cast, a swing, a meal - or a hit drops
+// it (cancelCatch, from updatePlayer and damagePlayer), so the hoist is a beat
+// you can take, never a channel you are stuck in. A net hands its first fish
+// up the same way (updateStructures, js/structures.js).
+const CATCH_T = 1.1, CATCH_STOOP = 0.16, CATCH_HAUL = 0.22;
+function startCatch(p) { p.catchT = CATCH_T; }
+function cancelCatch(p) { p.catchT = 0; }
+// which catch frame the body is on: 0 stoop, 1 haul, 2 hoist, -1 not catching
+function catchFrame(p) {
+  if (p.catchT <= 0) return -1;
+  const t = CATCH_T - p.catchT;
+  return t < CATCH_STOOP ? 0 : t < CATCH_STOOP + CATCH_HAUL ? 1 : 2;
 }
 
 // ---- how a bit flies -----------------------------------------------------

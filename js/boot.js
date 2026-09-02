@@ -1363,6 +1363,8 @@ window.DBG = {
   tipAt: (x, y) => tipAt(x == null ? mouse.x : x, y == null ? mouse.y : y),
   tipLift,
   fireTool: (p) => fireTool(p || player),
+  // the fish catch's three beats: start one by hand, read which frame a body is on
+  startCatch: (p) => startCatch(p || player), cancelCatch: (p) => cancelCatch(p || player), catchFrame,
   get tools() { return player.tools; },
   // stage a loaded tool straight onto a slot: DBG.equip(0, 'longbow', ['arrow','flame'])
   equip: (slot, id, bits, p) => {

@@ -454,6 +454,7 @@ class Player {
     // the meal being chewed and the clock BOTH meals share (js/core.js)
     this.eatT = 0; this.eatType = null; this.eatFxT = 0; this.foodCd = 0;
     this.nockT = 0;                                // the cycle: seconds until the next press (toolCycle, js/tools.js)
+    this.catchT = 0;                               // the fish hoist's clock (startCatch/catchFrame, js/tools.js)
     this.fireArmed = false;                        // the bow button has been pressed since the last loose
     this.readyFlash = 0; this.dryT = 0;            // HUD tells: renocked / pressed empty
     this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
@@ -615,6 +616,7 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
   }
   risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
   breakEat(p);   // ...and the meal goes with it - that is what makes the channel a channel
+  cancelCatch(p); // ...and the hoist: a fish over your head is a hit you did not see coming
   // a burn shakes and shouts once, when it lights (igniteUnit) - not four
   // times a second for as long as it runs
   if (p === player && !dot) state.shake = Math.max(state.shake, crit ? 6 : 3);
@@ -837,7 +839,7 @@ function practiceRevive(p) {
   p.vx = p.vy = 0;
   p.dodgeT = 0;
   clearUnitStatus(p); // the fire goes out with the fall, same as the stun
-  p.fallT = 0; p.sliding = false;
+  p.fallT = 0; p.sliding = false; p.catchT = 0;
   p.prone = false; p.hide = 0; p.riseT = 0;
   p.charging = false; p.chargeT = 0; p.fireArmed = false;
   p.eatT = 0; p.eatType = null;                  // the meal dies with the body here too

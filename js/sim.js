@@ -522,6 +522,15 @@ function updatePlayer(p, dt) {
     inp.mx = inp.my = 0;
   }
 
+  // the fish hoist (startCatch, js/tools.js) runs out on its own, and any
+  // intent at all - a step, a fresh press, a roll, a cast, a swing, a meal -
+  // drops it first. It never holds up the intent that ends it.
+  if (p.catchT > 0) {
+    p.catchT = Math.max(0, p.catchT - dt);
+    if (inp.mx || inp.my || inp.dodge || inp.ability >= 0 || inp.work || inp.slide ||
+        inp.eatBerry || inp.eatFish || inp.cmd || (inp.fire && !p.firePrev)) cancelCatch(p);
+  }
+
   // edge-triggered intents, consumed here so a controller only has to set them
   // (the burrow lost its own key: SNOW COVER, hunter key 4, is the door in now)
   if (inp.dodge) { inp.dodge = false; tryDodge(p); }

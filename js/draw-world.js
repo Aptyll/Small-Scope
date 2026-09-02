@@ -1416,7 +1416,12 @@ function drawPlayer(p, ex, ey, now) {
   let frame = 0;
   if (lying) frame = p.moving ? 1 + (Math.floor(p.crawlT) % 2) : 0;
   else if (p.moving) frame = 1 + (Math.floor(p.animT) % 2);
-  const spr = set[frame];
+  let spr = set[frame];
+  // the fish catch: three DOWN-facing frames whatever the body faces
+  // (catchFrame, js/tools.js). The hoist frame is 20 tall on the same feet,
+  // which is what `sy` below pays for
+  const catchF = !lying && p.fallT <= 0 && p.dodgeT <= 0 ? catchFrame(p) : -1;
+  if (catchF >= 0) spr = classSet(p).catch[catchF];
   // the crawl inches: the second frame sits one pixel further along the facing
   // than the first, so the body hauls itself forward instead of flapping in
   // place. Baking two shifted copies of every grid would have said the same
@@ -1470,6 +1475,7 @@ function drawPlayer(p, ex, ey, now) {
     // js/abilities.js), so an ability visibly happens to the model
     const pose = state.mode !== 'title' ? abilityPose(p) : null;
     const ax = px + (pose ? pose.dx : 0), ay = py + (pose ? pose.dy : 0);
+    const sy = ay + (16 - spr.height); // a taller frame (the hoist) keeps its feet
     // deep in the treeline the viewed hero wears a black 1px rim so the body
     // pops off the faded canopy - treeFadeSil (render.js) is the occluder
     // fade's silhouette strength, 0 in the open, so the rim dissolves as the
@@ -1486,7 +1492,7 @@ function drawPlayer(p, ex, ey, now) {
       sctx.fillRect(0, 0, 64, 64);
       ctx.globalAlpha = treeFadeSil;
       for (let ry = -1; ry <= 1; ry++) for (let rx = -1; rx <= 1; rx++) {
-        if (rx || ry) ctx.drawImage(scratch, 0, 0, 16, 16, ax + rx, ay + ry, 16, 16);
+        if (rx || ry) ctx.drawImage(scratch, 0, 0, 16, spr.height, ax + rx, sy + ry, 16, spr.height);
       }
       ctx.globalAlpha = 1;
     }
@@ -1494,7 +1500,7 @@ function drawPlayer(p, ex, ey, now) {
     // lying player shows one only while the bow is actually drawn - a carried
     // axe bobbing over a body on its belly reads as a floating axe. A body
     // mid-cast (or holding the shield, or charging) has no hand free for it.
-    const held = state.mode !== 'title' && (!lying || p.charging) &&
+    const held = state.mode !== 'title' && (!lying || p.charging) && catchF < 0 &&
       p.castT <= 0 && p.shieldT <= 0 && p.rushT <= 0;
     const toolBehind = held && p.dir === 'up' && !p.charging && p.swingT <= 0;
     if (toolBehind) drawHeldTool(p, px, py);
@@ -1506,11 +1512,11 @@ function drawPlayer(p, ex, ey, now) {
       drawSpriteFlash(spr, -8, -8, p.hurtT > 0.12 ? 1 : 0);
       ctx.restore();
     } else {
-      drawSpriteFlash(spr, ax, ay, p.hurtT > 0.12 ? 1 : 0);
+      drawSpriteFlash(spr, ax, sy, p.hurtT > 0.12 ? 1 : 0);
     }
     // gear marks sit at fixed points on the standing body plan, so the prone
     // poses skip them rather than stripe a shoulder across someone's hip
-    if (state.mode !== 'title' && !lying && !(pose && pose.rot)) drawGearMarks(p, ax, ay);
+    if (state.mode !== 'title' && !lying && !(pose && pose.rot) && catchF < 0) drawGearMarks(p, ax, ay);
     ctx.globalAlpha = 1;
     if (held && !toolBehind) drawHeldTool(p, px, py);
     // what an ability left ON this body - shield, net, jaws, fury, mark -
@@ -1536,7 +1542,7 @@ function drawPlayer(p, ex, ey, now) {
   // the whole stack hangs off one y so it can drop with the body: a prone
   // pose starts ~6 rows lower in the same 16x16 cell, and bars floating where
   // a head no longer is look broken
-  const hy = py + (lying ? 6 : 0);
+  const hy = py + (lying ? 6 : 0) - (catchF === 2 ? 4 : 0); // the hoist holds the fish where the plate would sit
   // fx is the stack's own centre column - the body's, shifted by FRAME_DX so
   // the frame straddles the sprite. Everything in the frame hangs off it.
   const fx = Math.round(p.x - ex) + FRAME_DX;

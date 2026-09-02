@@ -159,6 +159,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the fire a shot carries, and the three modifier bits that put it there | `BITS.flame`/`pyre`/`cinder`, `PYRE_T`/`PYRE_DPS`/`CINDER_R`, `m.type`/`m.burn`/`m.burnDps`/`m.cinder` in `toolMods` | `tools & bits` (beside `BITS`; what a burn then DOES: `status effects`, actions.js) |
 | moving a tool onto a key or a bit into a cell (the two the drag goes through) | `slotPut`, `bitPut` | `tools & bits` › `equipping` |
 | what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
+| the catch pose: its clock, the cancel every intent and hit call, which of its three frames is up | `CATCH_T`, `startCatch`, `cancelCatch`, `catchFrame` | `tools & bits` - after `spearFish` (ticked in `updatePlayer`, sim.js; drawn by `drawPlayer`, draw-world.js; the net take in `updateStructures`, structures.js) |
 | how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
 | where tools and bits come from, and how often | `dropLoot`, `LOOT_POOL`, `rebuildLootPool`, `ROCK_DROP`, `TREE_DROP`, `CHEST_TOOL`, `LOOT_TOOL` | `tools & bits` › `loot` (its callers: `hitObject`, actions.js) |
 | the tech tree: the graph every kind hangs off, all of it unlocked | `TECH`, `TECH_BY_ID`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.techSeen`, profile.js; the page: `main menu`, menu.js) |

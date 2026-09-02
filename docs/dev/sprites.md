@@ -44,6 +44,14 @@ These are the one place `bakeSpan()` is used instead of `bake()`: it attaches `s
 array with the canvas. The game's snow cover reads it to size the mound to the pose
 ([rendering.md](rendering.md#snow-over-a-body)) — which means editing a prone grid updates the
 cover for free, and there is no canvas readback anywhere in the feature.
+**The fish catch is three more DOWN frames** in every class set - `catch: [stoop, haul, hoist]` beside
+the four directions and `prone`, baked by `catchSet` from `catchStoop`/`catchHaul`/`catchHold` (the
+skater's `skCatch*` on her body plan) through the class palette plus `CATCHPAL_EXTRA`, the fish's own
+letters (outline, two blues, belly, eye, a flying drop) so the catch keeps its colour under either
+team's paint. The hoist is **16x20**: four rows of fish above the hat on the same feet, which is why
+`drawPlayer` draws every frame at `ay + (16 - spr.height)` and lifts the overhead stack 4 px while it
+is up. Look A off `docs/media/concepts/fish-catch-concepts-1.png`; which frame shows and for how long
+is `catchFrame` / `CATCH_T` in [js/tools.js](../../js/tools.js) - [fishing](world.md#ice-holes-and-fishing).
 
 **Team colours are palette swaps of those same grids.** `TEAM_SKINS` (two presets, RED and BLUE,
 also exported as `SPRITES.teams` so the game code can read the names and marker colours) drives

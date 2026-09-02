@@ -417,6 +417,7 @@ function updateStructures(dt) {
             if (o.fish <= 0 || bagAdd(p, 'fish', 1) < 1) return;
             o.fish--;
             o.takeT = NET_TAKE_T;
+            if (p.catchT <= 0) startCatch(p); // the first fish off the rope is hoisted; the rest come up under it
             addFloater(p.x, p.y - 14, '+1', RES_COLORS.fish);
             if (p === player) SFX.stash();
           });

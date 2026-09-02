@@ -153,6 +153,74 @@
     '.......bb.......',
   ]);
 
+  // ---------------------------------------------------------------- the fish catch
+  // Three DOWN-facing frames the catch plays through whichever way the body
+  // faces (catchFrame, js/tools.js; drawn by drawPlayer): a STOOP to the hole,
+  // the fish HAULED up tail-first with the water flying off it, and the trophy
+  // HOIST - both arms straight up, the fish flat above the hat - which is why
+  // the hold frame is 16x20 and draws four rows higher on the same feet. Look
+  // A off docs/media/concepts/fish-catch-concepts-1.png. The fish letters
+  // (CATCHPAL_EXTRA): n outline, f/F body, w belly, i eye, c a flying drop.
+  const CATCHPAL_EXTRA = { 'n': '#243b52', 'f': '#4f7ea3', 'F': '#6f9fc0', 'w': '#c9dded', 'i': '#101d2c', 'c': '#9fd6f2' };
+  const catchStoop = [
+    '................',
+    '................',
+    '................',
+    '.......mm.......',
+    '.......mM.......',
+    '.....otttto.....',
+    '....otTTTTto....',
+    '....otttttto....',
+    '....okkkkkko....',
+    '....okekkeko....',
+    '....oxkKKkxo....',
+    '....ommmmmmo....',
+    '...orrrRRrrro...',
+    '..morrrRRrrrom..',
+    '....oddddddo....',
+    '.....bb..bb.....',
+  ];
+  const catchHaul = [
+    '................',
+    '.......mm.......',
+    '.......mM.......',
+    '.....otttto.....',
+    '....otTTTTto....',
+    '....otttttto....',
+    '....okkkkkko....',
+    '....okekkeko....',
+    '....oxkKKkxo....',
+    '..c.ommnnmmo.c..',
+    '...orrnFFnrro...',
+    '..c.omnFfFnmo.c.',
+    '...orrnFwFnro...',
+    '....odnFiFndo...',
+    '.....pnnnnpp....',
+    '.....bb..bb.....',
+  ];
+  const catchHold = [
+    '.......nnnn.....',
+    '..n..nFFFFFn....',
+    '..nnnFfFFiFFn...',
+    '..n..nFwwFFn....',
+    '..mm...nnnn.mm..',
+    '..or...mm...ro..',
+    '..or...mM...ro..',
+    '..or.otttto.ro..',
+    '..orotTTTTtoro..',
+    '..orottttttoro..',
+    '..orokkkkkkoro..',
+    '..orokekkekoro..',
+    '..oroxkKKkxoro..',
+    '..orommmmmmoro..',
+    '..orrrrRRrrrro..',
+    '...orrrRRrrro...',
+    '...orrrrrrrro...',
+    '....oddddddo....',
+    '.....pp..pp.....',
+    '.....bb..bb.....',
+  ];
+
   // ---------------------------------------------------------------- skater (champion 2)
   // Same 16x16 body plan as the player so every pose/frame lines up, but a
   // hood instead of the pom hat, goggles, a long trailing scarf and skate
@@ -177,6 +245,66 @@
   const skDownIdle = skDownBody.concat(['.....bb..bb.....', '.....SS..SS.....']);
   const skDownA = skDownBody.concat(['.....bb..SS.....', '.....SS.........']);
   const skDownB = skDownBody.concat(['.....SS..bb.....', '.........SS.....']);
+  // the skater's catch: the same three beats on her body plan (hood, goggles,
+  // the scarf's trailing ends, blades under the boots)
+  const skCatchStoop = [
+    '................',
+    '................',
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otkkkkto....',
+    '....oGgGgGto....',
+    '....otkKKkto....',
+    '....ommmmmmo....',
+    '...ommrrRRrro...',
+    '...orrrRRrrro...',
+    '..morrrRRrmmom..',
+    '....oddddddo....',
+    '.....bb..bb.....',
+    '.....SS..SS.....',
+  ];
+  const skCatchHaul = [
+    '................',
+    '.....oooooo.....',
+    '....otttttto....',
+    '....otTTTTto....',
+    '....otkkkkto....',
+    '....oGgGgGto....',
+    '....otkKKkto....',
+    '..c.ommnnmmo.c..',
+    '...ommnFFnrro...',
+    '..c.omnFfFnmo.c.',
+    '...orrnFwFnmo...',
+    '...omonFiFnomo..',
+    '....odnnnndo....',
+    '.....pp..pp.....',
+    '.....bb..bb.....',
+    '.....SS..SS.....',
+  ];
+  const skCatchHold = [
+    '.......nnnn.....',
+    '..n..nFFFFFn....',
+    '..nnnFfFFiFFn...',
+    '..n..nFwwFFn....',
+    '..mm...nnnn.mm..',
+    '..or.oooooo.ro..',
+    '..orottttttoro..',
+    '..orotTTTTtoro..',
+    '..orotkkkktoro..',
+    '..oroGgGgGtoro..',
+    '..orotkKKktoro..',
+    '..orommmmmmoro..',
+    '..ormmrrRRrrro..',
+    '...orrrRRrrro...',
+    '...orrrRRrmmo...',
+    '...orrrrrrrro...',
+    '....oddddddo....',
+    '.....pp..pp.....',
+    '.....bb..bb.....',
+    '.....SS..SS.....',
+  ];
   const skUpBody = [
     '................',
     '.....oooooo.....',
@@ -2577,11 +2705,17 @@
   const teamBuildPal = (base, t) => Object.assign({}, base, { k: t.fit, K: t.fitL, e: t.glow });
   const bayTeamPal = (t) => Object.assign({}, BAYPAL, { L: t.coatL, T: t.coat, t: t.coatD });
   const teamRobotPal = (t) => Object.assign({}, BOTPAL, { L: t.coatL, T: t.coat, t: t.coatD });
+  // the three catch frames in a class's team paint (the fish keeps its own colours)
+  const catchSet = (pal, stoop, haul, hold) => {
+    const cp = Object.assign({}, pal, CATCHPAL_EXTRA);
+    return [bake(stoop, cp), bake(haul, cp), bake(hold, cp)];
+  };
   const playerSet = (pal) => ({
     down: [bake(playerDownIdle, pal), bake(playerDownA, pal), bake(playerDownB, pal)],
     up: [bake(playerUpIdle, pal), bake(playerUpA, pal), bake(playerUpB, pal)],
     right: [bake(playerSideIdle, pal), bake(playerSideA, pal), bake(playerSideB, pal)],
     left: [flipH(bake(playerSideIdle, pal)), flipH(bake(playerSideA, pal)), flipH(bake(playerSideB, pal))],
+    catch: catchSet(pal, catchStoop, catchHaul, catchHold),
     // belly-down: a sibling of the four walking directions, same frame order
     prone: {
       down: [bakeSpan(pnDownIdle, pal), bakeSpan(pnDownA, pal), bakeSpan(pnDownB, pal)],
@@ -2599,6 +2733,7 @@
       up: [bake(skUpIdle, sp), bake(skUpA, sp), bake(skUpB, sp)],
       right: [bake(skSideIdle, sp), bake(skSideA, sp), bake(skSideB, sp)],
       left: [flipH(bake(skSideIdle, sp)), flipH(bake(skSideA, sp)), flipH(bake(skSideB, sp))],
+      catch: catchSet(sp, skCatchStoop, skCatchHaul, skCatchHold),
       prone: {
         down: [bakeSpan(pnSkDownIdle, sp), bakeSpan(pnSkDownA, sp), bakeSpan(pnSkDownB, sp)],
         up: [bakeSpan(pnSkUpIdle, sp), bakeSpan(pnSkUpA, sp), bakeSpan(pnSkUpB, sp)],
