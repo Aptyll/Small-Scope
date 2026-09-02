@@ -9,23 +9,23 @@
 ---
 
 <p align="center">
-  <img src="docs/media/capsule/01-clearing.png" alt="Scout on open ice with deer and rabbits" width="920">
+  <img src="docs/media/capsule/01-pass.png" alt="The two team eagles crossing mid-flight over the frozen lakes, riders on their wings, wolves on the snow below" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/media/capsule/02-bow.png" alt="Drawing a bow on deer in the snow" width="920">
+  <img src="docs/media/capsule/02-roost.png" alt="Seated on the roosting blue eagle in its crater, the merchant, turrets and gate around it, ready to hop off" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/media/capsule/03-roost.png" alt="A team eagle roosting in its corner of the pines, with the merchant, the gate and the lane cut out to the snow" width="920">
+  <img src="docs/media/capsule/03-catch.png" alt="Hoisting a freshly speared fish overhead on the lake ice" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/media/capsule/04-forest.png" alt="Facing a wolf at a den in the pines" width="920">
+  <img src="docs/media/capsule/04-night-hunt.png" alt="Drawing on a deer among the dead trees of a rookery at night" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/media/capsule/05-map.png" alt="The Frostlands world map on parchment" width="920">
+  <img src="docs/media/capsule/05-practice.png" alt="The practice field: the dummy, the bell and the target track, with a shot lined up on a target" width="920">
 </p>
 
 ---

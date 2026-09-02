@@ -402,18 +402,17 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 - [README.md](../../README.md) is a Steam page mock-up (`PATCH 2.45`, brought level with the
   bird-only objective in `PATCH 2.65`, the page shape in `PATCH 2.66`): genre, a short description
   under 300 characters, tags with the five that matter first, five 1920×1080 capsule stills in
-  `docs/media/capsule/` (`01-clearing`, `02-bow`, `03-roost`, `04-forest`, `05-map`), a Coming soon
+  `docs/media/capsule/` (`01-pass`, `02-roost`, `03-catch`, `04-night-hunt`, `05-practice` - Noah's
+  own played captures with the HUD on, 1919x1079, replacing the 2.45/2.65 set in 2.70), a Coming soon
   block (release, platform, players, price), About this game with a paragraph between each of the
   four loops (`eagles`, `hunt-deer`, `robots`, `practice-tool`) and a Key features list, then a
   Details table (developer, publisher, support contact, languages). The About copy is the pillars
   of [game.md](game.md) in store voice - when a pillar changes, both change. No docs links and no
   controls list - those stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
-  `03-roost` was staged at seed 42 through `DBG`: `PROFILE.markDropped()`, `beginDrop()`, both
-  eagles' `t` set to `dur`, `endBrief()`, `laneStep` until both lanes are open, `hopOff()`, the
-  rivals warped to their own mouth, MY TEAM = AS DEALT so the hero wears the roster's red like the
-  other four stills, `hideUI`, `state.time` reset to mid-morning, `freeze` and one `render()` before
-  the `POST /shot?f=`. The other four stills predate 2.64 (the SCOUT profile name, the hunter in red)
-  but nothing they show has changed. The older gallery pngs in `docs/media/` (`hero`, `player`, `bow`,
+  A still can also be staged through `DBG` (2.65's roost was: `PROFILE.markDropped()`, `beginDrop()`,
+  both eagles' `t` set to `dur`, `endBrief()`, `laneStep` until the lanes are open, `hopOff()`,
+  rivals warped away, `hideUI`, `state.time` reset, `freeze` and one `render()` before
+  `POST /shot?f=`). The older gallery pngs in `docs/media/` (`hero`, `player`, `bow`,
   `axe`, `deer`, `rabbits`) have been unreferenced since 2.45.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
