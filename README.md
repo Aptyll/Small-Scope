@@ -1,8 +1,8 @@
 # Softfall
 
-**Game Description:** Softfall is a cozy pixel-art survival team battle on a snowbound map. Ten scouts drop in by eagle — two teams of five — then hunt, chop, bury themselves in the drift, raise a Keep, and fight until one side keeps the frostlands.
+**Game Description:** Softfall is a cozy pixel-art survival team battle on a snowbound map. Ten scouts drop in by eagle — two teams of five — then hunt, chop, bury themselves in the drift, and fight for the birds that carried them in: drive off the rival eagle and the match is won, and anyone who goes down comes back at their own.
 
-**Tags:** Survival, Multiplayer, Pixel Art, Top-Down, Cozy, PvP, Base Building, Hunting, Winter, Free-for-All, Team-Based, Indie, 2D, Action, Roguelike
+**Tags:** Survival, Multiplayer, Pixel Art, Top-Down, Cozy, PvP, Base Building, Hunting, Winter, Team-Based, Indie, 2D, Action, Roguelike
 
 ---
 
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/media/capsule/03-keep.png" alt="Keep, walls, and turret at the pine treeline" width="920">
+  <img src="docs/media/capsule/03-roost.png" alt="A team eagle roosting in its corner of the pines, with the merchant, the gate and the lane cut out to the snow" width="920">
 </p>
 
 <p align="center">

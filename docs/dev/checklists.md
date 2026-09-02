@@ -399,18 +399,18 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
   the stake pillar, not a bug, but it is the next snowball to weigh: a bounty cap, or a hoarder's
   sink.
-- [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + three gameplay
-  loops + mechanic shots in `docs/media/`), not a tech guide. It carries the one-line "double-click
-  `index.html`" and links into [game.md](game.md) / [architecture.md](architecture.md); the controls
-  list and the code layout stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
-- **The six gallery stills in `docs/media/` predate the free-for-all** — they are solo-survival
-  captures from the original storefront, resized to 1920×1080 16:9, so there is still no still of a
-  roosting eagle, a fish net or a landmark. Current loops under the hero: `practice-tool.webp` (the title
-  menu knocking PRACTICE TOOL open onto the training field), `eagles.webp` (the two team birds
-  passing, then the drop), `hunt-deer.webp` (a bow taking a deer), `robots.webp` (workers chopping
-  pines at a bay). The README copy was rewritten in `PATCH 1.54` to describe the current game
-  *around what those stills actually show*, which is why the wildlife cells carry the economy and
-  the newer pillars sit in text below the table. New stills would let the table carry them instead.
+- [README.md](../../README.md) is a Steam-style storefront page (`PATCH 2.45`, brought level with the
+  bird-only objective in `PATCH 2.65`): the description and tags up top, five 1920×1080 capsule stills
+  in `docs/media/capsule/` (`01-clearing`, `02-bow`, `03-roost`, `04-forest`, `05-map`), then the
+  four loops (`practice-tool`, `eagles`, `hunt-deer`, `robots`) under About this game. No docs links
+  and no controls list - those stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
+  `03-roost` was staged at seed 42 through `DBG`: `PROFILE.markDropped()`, `beginDrop()`, both
+  eagles' `t` set to `dur`, `endBrief()`, `laneStep` until both lanes are open, `hopOff()`, the
+  rivals warped to their own mouth, MY TEAM = AS DEALT so the hero wears the roster's red like the
+  other four stills, `hideUI`, `state.time` reset to mid-morning, `freeze` and one `render()` before
+  the `POST /shot?f=`. The other four stills predate 2.64 (the SCOUT profile name, the hunter in red)
+  but nothing they show has changed. The older gallery pngs in `docs/media/` (`hero`, `player`, `bow`,
+  `axe`, `deer`, `rabbits`) have been unreferenced since 2.45.
 - `SPRITES.imp` (the `imp1`/`imp2` grids, `IPAL`) is baked but unreferenced since the worker bot
   got its own grids — kept in case the imp returns.
 - A tree's `variant` (rolled by `randi(0, 1)` in `genWorld`) picks no art any more: there is one
