@@ -1200,7 +1200,8 @@ the lesson. The first hop or any real jump (`PROFILE.markDropped`) retires the r
 A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
 `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the movement axis alive in mode `drop` while zeroing
 everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object
-and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow
+and no water hole, which becomes `p.spawn` — the bot brain's home tile (a respawn moves it to the
+roost) — with 2 s of i-frames and a snow
 burst. Only the human's landing changes mode: `play` (closing the M map if it was up),
 `applyZoom(0, true)` back to the player's own zoom centred on the landing, `shake`, and the
 landing intro above.

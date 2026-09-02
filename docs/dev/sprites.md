@@ -7,13 +7,11 @@ Sprites are literal ASCII grids paired with a palette object mapping character �
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the raider set (`SPRITES.raider`, `RDPAL`) is baked from the exact
 same grids as the player, so a player pose edit changes both. The tiered structures use the same
-trick: one grid each (`wall`, `turret`, `generator` at 16×16, the **Keep** at 32×28 for its 2×2
-footprint) baked with `WPAL` /
+trick: one grid each (`wall`, `turret`, `generator`, all 16×16) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars, which is also
-what a building's team paint rides on (see below). The Keep's sprite is too big for a 16×16 wheel
-wedge, so it gets the same escape hatch as the turret and the bay: a dedicated `keepIcon` grid,
-baked into `teamBuild[team].icon.keep`. The
+what a building's team paint rides on (see below). A sprite too tall for a 16×16 wheel wedge gets
+a dedicated icon grid baked into `teamBuild[team].icon` (the turret's and the bay's). The
 **bot bay** (`spawner`) is the one big sprite: a single-tier 48×38 grid (`bay`, `BAYPAL`) on a 3×2
 tile footprint — steel plates under a flat two-row snow cap, a team-painted lintel band (`L`/`T`/`t`
 via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols

@@ -16,7 +16,9 @@ WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds 
 diagonal in opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of
 its line each eagle dives into its **corner's** treeline — RED always bottom-left, BLUE always
 top-right — and becomes its team's **objective**; its **merchant** climbs down to raise a gate and
-clear the rim, and a **lane** of pines falls open back to the snow. **Last team standing wins.**
+clear the rim, and a **lane** of pines falls open back to the snow. **Drive off the rival eagle
+and the match is won** — nothing else ends one: a player who goes down waits, and is set back
+down at their own bird.
 
 **Your side is always blue.** Whatever team index the roster dealt you, your allies are painted
 BLUE and your enemies RED — nameplates, arrows, armour, buildings, map marks, bot names, all of
@@ -97,14 +99,17 @@ landing cuts to the open snow and the gate its merchant raises are the team's st
 easier opening for a new player who can help fortify before walking out. Its hp pool is its **nerve**:
 hits spook it, it calms back down between scares, it defends its own ground with a wing gust —
 and when its nerve breaks it is **driven off**, not killed: every camera pans to watch it fly
-away, and its whole side falls with it as it goes. The second, symmetric way to win a match, and the reason both teams
-always have somewhere worth walking to. [Eagle drop](rendering.md#eagle-drop-mode-drop),
-[Death is final](gameplay.md#death-is-final).
+away, and its whole side falls with it as it goes. **It is also the way back**: a player who
+goes down waits out a timer and is set down again at the roost — no Keep, no permadeath; death
+costs the wallet, the bag and the walk. The bird is the **only objective** and the one way a
+match ends, which is why both teams always have somewhere worth walking to — and why every bot
+on the map knows where both birds are and what is happening at them, and answers a hit on its
+own from anywhere. [Eagle drop](rendering.md#eagle-drop-mode-drop),
+[Death and respawn](gameplay.md#death-and-respawn), [AI slots](multiplayer.md#ai-slots).
 
-**A team's Keep is its way back.** No living Keep means **permadeath**, which is what makes a base
-worth defending and worth attacking. The Keep also crafts **rarity-rolled roguelike cards**, drafted
-three-at-a-time from a bag cell without pausing the sim. [The Keep](multiplayer.md#the-keep),
-[Death is final](gameplay.md#death-is-final), [Roguelike cards](gameplay.md#roguelike-cards).
+**Roguelike cards come out of the treeline's chests.** A sprung chest drops a **rarity-rolled
+card**, drafted three-at-a-time from a bag cell without pausing the sim, and a picked card is
+baked into the kit for the rest of the match. [Roguelike cards](gameplay.md#roguelike-cards).
 
 **An ice hole is a build site.** Break the ice twice and the hole it leaves takes the one `water`
 building — a **fish net**, laid flat and walked *on* rather than into — over a live fish population
@@ -122,8 +127,9 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
 
 - **Not a resource tree.** One currency, deliberately. A proposal that adds a second resource is
   proposing a different game.
-- **Not a respawn shooter.** Death is final while your Keep is dead; that is the stake everything
-  else borrows from.
+- **Not a deathmatch.** Kills never win a match and never end one — only the bird does. Death
+  still costs everything you carried and the walk back from your roost; that is the stake
+  everything else borrows from, and the objective is the only place it is ever permanent.
 - **Not a solo survival game.** Every mechanic runs per slot off `p.input`, and `player` is only
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a

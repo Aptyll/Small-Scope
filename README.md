@@ -73,9 +73,10 @@ A cozy survival free-for-all on a winter map
 
 ## The match
 
-**Your Keep is your way back.** Raise one, and dying costs you a walk. Lose it, and dying costs
-you the game — no living Keep means permadeath. It is also what turns gold into **roguelike
-cards**: pick one of three, keep it for the rest of the run.
+**Your eagle is your way back, and the only way to win.** Go down and you come back at your own
+bird after a wait — lighter by everything you were carrying. Drive off the other side's bird and
+the match is over. Spring a chest in the treeline for a **roguelike card**: pick one of three,
+keep it for the rest of the run.
 
 **Lie down and disappear.** Ctrl puts you flat and the snow closes over you. It is not a visual
 effect — a buried player is genuinely harder to see, and the shot that comes out of the snow hits

@@ -335,7 +335,7 @@ bot cannot read a boomerang or an orbit and leaves those for someone who can.
 `Player.reset()` and from `setClass()` — so the weapon is part of picking a class, every AI
 slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
 BARBED SHOT; the WARRIOR with a SLING loaded ARROW + HEFT. Death **spills the equipped tool** with
-the bag (`spillInventory`), so a build lies where its owner fell and the Keep hands back the
+the bag (`spillInventory`), so a build lies where its owner fell and the bird hands back the
 starting one — you come back armed, but not as the player you were. The gear pop-up's preview
 shows the weapon at the body's side (`drawGearPreview`, js/menu.js) — the other half of what a
 class flies out with.
@@ -1036,7 +1036,7 @@ contents — carry `fish` too (`SPRITES.itemFish` in the drop draw pass). Gold, 
 the **strip along the bottom of the open backpack frame** (bottom right, B to open) — food from
 the left as icon + count, gold right-aligned; the food totals the whole bag across its stacks. Death empties
 wallet and bag both —
-see [Death is final](#death-is-final). Drops are neutral: they drift
+see [Death and respawn](#death-and-respawn). Drops are neutral: they drift
 toward the nearest player, and everyone standing on one contests it
 (`canAfford`/`pay` also take the player whose wallet is meant) — except that a player with **no
 room** for a drop is neither magnetised by it nor a claimant, so a full bag hands the pickup to
@@ -1061,7 +1061,7 @@ nothing else. The table:
 An unopened card is a completely ordinary `ITEMS` entry — one per rarity, since a stack has to be
 homogeneous and a white card and a gold card are not interchangeable — which is what makes bag
 storage, the drop pickup, the refusal flash and death-spill (see
-[Death is final](#death-is-final)) all free for it, same as any other carried item. Tools and bits
+[Death and respawn](#death-and-respawn)) all free for it, same as any other carried item. Tools and bits
 register their rows the same way, from [js/tools.js](../../js/tools.js), under namespaced keys so
 a kind can never collide with a berry.
 
@@ -1211,7 +1211,9 @@ spend step: cheapest piece first, keeping a 15-gold float so they still build.
 
 ## Roguelike cards
 
-A permanent buff picked from a team's [Keep](#base-building), one at a time, one draft at a time.
+A permanent buff dropped by a sprung **chest** in the treeline (`placeChests`, js/world.js;
+`hitObject`'s chest branch in js/actions.js rolls the rarity against `CHEST_ODDS` through
+`rollCardRarity`), one at a time, one draft at a time.
 `CARDS` is `{ white: [...], green: [...], blue: [...], purple: [...], gold: [...] }`
 (`CARD_RARITIES`, White → Gold rising in rarity and magnitude), each entry `{ name, blurb, mod(k) }` —
 the exact shape a `GEAR` variant's `mod(k, L)` is, minus the level argument, since a card is a
@@ -1244,10 +1246,10 @@ three is specifically the human decision point.
 ## Base building
 
 Right-clicking a **stump** within 60 px opens a radial **build wheel** anchored at the stump's
-screen position (clamped to stay on-screen), five even wedges now: wall, turret, generator, bot
-bay (`STRUCT_ORDER`, type `spawner`), Keep (`STRUCT_ORDER`, type `keep`) — `wheelSpan(n)`/
-`wheelAng(i, n)` re-derive n even wedges from `STRUCT_ORDER.length` alone, so a 5th entry needed no
-layout code, only the option itself; push out of the hub and release over a wedge to build,
+screen position (clamped to stay on-screen), four even wedges: wall, turret, generator, bot
+bay (`STRUCT_ORDER`, type `spawner`) — `wheelSpan(n)`/
+`wheelAng(i, n)` re-derive n even wedges from `STRUCT_ORDER.length` alone, so an entry comes and
+goes with no layout code (the Keep's did), only the option itself; push out of the hub and release over a wedge to build,
 release inside the hub to cancel.
 
 **The site picks the menu.** `buildSiteAt(tx, ty)` answers `'land'` for a stump, `'water'` for a
@@ -1259,18 +1261,18 @@ another refuses. A water site lists `WATER_STRUCT_ORDER`, which is just the
 
 Right-clicking a **finished** structure (any tile of it) opens a
 **manage wheel**: upgrade straight up, demolish last, and — unlike the build wheel — this list
-*isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it): a Keep gets `craft`
-(QUEUE CARD, see below) between the two. The bay used to get a gather/guard toggle here; that is
-gone — its crew is commanded by the [worker flag](#worker-flags). This wheel is the **only** way to
+*isn't* generic over `STRUCT_ORDER` (`wheelOptions()` hand-builds it), so a type's own extra
+order would go between the two — the Keep's card craft did, and the bay's old gather/guard toggle
+did before its crew went under the [worker flag](#worker-flags); today no type has one. This wheel is the **only** way to
 build — there are no free-placed buildables. All the data lives in the `STRUCTS` table: three
-tiers for wall/turret/generator/**keep** (the wood → stone → gold *look* is just the sprite
+tiers for wall/turret/generator (the wood → stone → gold *look* is just the sprite
 palette) and **one each for the bay and the net**, each with a gold `cost`, `hp`, `buildT`, and
 per-type stats. A `water: true` entry (only the net) goes on a hole instead of a stump, and that
 flag — never the type name — is what `placeStruct`, `isSolidTile` and the dawn refreeze each read;
 see [Fish nets](world.md#fish-nets).
 `tiers[0]` is what the wheel builds; upgrading pays the next tier's cost and re-runs a shorter
 construction, and the last tier (`tiers.length - 1`) reports MAX TIER. Building and [gear](#gear)
-are the two gold sinks (a Keep's card craft is a third, gated behind building one first).
+are the two gold sinks.
 
 Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js](../../js/structures.js)):
 
@@ -1374,33 +1376,14 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
 - Demolish refunds **50% of the cumulative cost across tiers** (`cumulativeCost`), paid to the
   demolisher on the spot through `awardGold` — 23 gold for a fully-upgraded wall. `demolishStruct()` →
   `destroyStructure(o, true, p)` is the live path for that, reached from `runCmd` for the wheel's
-  demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key. Demolishing (or
-  losing) a Keep is **not** specially guarded beyond that — no confirmation dialog exists anywhere
-  in this game — so stripping a team's only way back is a real, deliberate stake, not a bug.
+  demolish order. `canAfford`/`pay`/`costText` are generic over every `inv` key. Demolishing is
+  **not** guarded beyond that — no confirmation dialog exists anywhere in this game.
 - **Every damaged building wears an hp bar** (`drawHealthBar`, centred on the sprite, `sy - 5`),
   drawn only once `hp < maxHp` so an untouched base stays clean — and never while `building`, when
   hp is climbing rather than falling. The bot bay is excluded: `drawBayOverlay` draws its own at
   `sy - 11`. Below 60% hp a building also picks up four crack marks placed as fractions of its
   sprite, so damage reads without the bar.
-- **The Keep** (`STRUCTS.keep`, 2×2, the `bigBuildReveal` construction path): `teamHasLivingKeep(team)`
-  is the one-per-team gate (a Keep still `building` doesn't count — same reason an unfinished
-  generator doesn't pay out yet), checked both at the build order and again inside its
-  [contested](multiplayer.md#contested-orders) callback so two teammates ordering one on different
-  stumps in the same tick can't both land one. A finished Keep's manage-wheel `craft` order
-  (`startCraft`) pays `tiers[tier].craftCost` and starts `o.craftT`/`o.craftTotal`, ticked in
-  `updateStructures`'s per-type dispatch exactly like a generator's `payT` countdown — it freezes
-  for free while the Keep is mid-upgrade (the whole per-type branch is skipped then) and forfeits
-  outright if the Keep is destroyed mid-craft, no refund, the same as a turret's charge or a
-  spawner's mid-roll bot. On completion it rolls a rarity against `tiers[tier].odds`
-  (`rollCardRarity`, the shared runtime `rng()` — never `genWorld`'s stream) and `spawnDrop`s the
-  matching card at `structMouth()` as a neutral pickup. Odds shift toward the
-  rare end at each tier (roughly White-heavy at tier 0 to a real shot at Gold by tier 2) — see the
-  `STRUCTS.keep` table for the exact weights. The same over-the-roof progress bar construction
-  already draws also covers a finished Keep's `craftT` countdown, in an icy blue instead of
-  construction's gold so the two read as different things. What the Keep does for **respawns and
-  the win condition** lives in [multiplayer.md](multiplayer.md#the-keep); what a dropped card
-  *does* once picked up lives in [Roguelike cards](#roguelike-cards).
-- None of the five structures emits light (see [Lighting](rendering.md#lighting)).
+- None of the four structures emits light (see [Lighting](rendering.md#lighting)).
 
 ## Robots
 
@@ -1578,11 +1561,13 @@ draws all three; `FLAG_JOBS`, in robots.js, holds the 7×7 icon grids as landmar
   *hover* preview is gated on `state.flagAim` exactly like the world's — the planted pennants are
   always drawn, the preview never is.
 
-## Death is final
+## Death and respawn
 
-...unless your team's [Keep](multiplayer.md#the-keep) is still standing **and its eagle still
-roosts** (`teamEagleDown`, the eagle-drop banner in js/boot.js — a driven-off objective makes
-every death on that side permanent), in which case it's a flat respawn timer instead. `die(p, src, cause)` marks that slot dead and drops its bow draw and
+Death is a walk back, never the end: while your team's eagle still roosts (`teamEagleDown`, the
+eagle-drop banner in js/boot.js) going down costs a timer and everything you carried, and you are
+set down again at the bird ([Respawn at the bird](multiplayer.md#respawn-at-the-bird)); once the
+eagle has been driven off every death on that side is permanent, and that is the only way anyone
+is ever out of a match. `die(p, src, cause)` marks that slot dead and drops its bow draw and
 momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
 `die`): a credited killer pockets the victim's gold outright through `awardGold` — so a kill levels
 the killer, which is the bounty that makes taking the fight worth it — while an uncredited death
@@ -1601,12 +1586,13 @@ death code, and an instanced tool travels as the same object it always was
 (`spawnDrop`'s `it`). The standings are unaffected because `scoreOf` ranks lifetime
 `xp`, not the purse, so a looted slot keeps the place it earned. `die` also credits the kill (and
 heals the killer if their kit carries `killHeal`, off a card) and writes the feed line — see
-[Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then checks
-`teamHasLivingKeep(p.team)` and `teamEagleDown(p.team)`: with a Keep and a living eagle,
-`p.respawnT` starts counting down (`updateRespawns`, see [The Keep](multiplayer.md#the-keep) for
-the whole respawn path); otherwise `p.eliminated = true`, the permanent path. Either way `checkLastStanding()` asks whether every **rival team**
-is now gone, which ends the match as a win — full detail in
-[The Keep](multiplayer.md#the-keep), since that's now a team-level, not a per-player, question.
+[Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then asks
+`teamEagleDown(p.team)`: with the eagle still roosting, `p.respawnT` starts counting down
+(`respawnTime(p)`, `updateRespawns` — see [Respawn at the bird](multiplayer.md#respawn-at-the-bird)
+for the whole path); with it driven off, `p.eliminated = true`, the permanent path. Either way
+`checkLastStanding()` asks whether every **rival team** is now gone, which ends the match as a
+win — a team-level question a kill can never answer, since a side is in the match while its bird
+roosts ([PvP](multiplayer.md#pvp)).
 
 Either way the local slot's overlay goes up through `endMatch('lost' | 'won' | 'respawning')` (the
 `death & spectate` banner): `state.mode = 'dead'`, every local overlay closed, and the screen goes
@@ -1618,7 +1604,7 @@ to a dim with two planks — **SPECTATE** and **LOBBY** for `'lost'` (permanent)
 plank is the door out — a lost match ends when you stop watching it, not the instant you go down.
 A `'respawning'` LOBBY still leaves directly, and `'respawning'` needs no state of its own beyond
 that: once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same
-one-line way `'KEEP PLAYING'` already does, lands the local slot near its Keep, and replays the HUD
+one-line way `'KEEP PLAYING'` already does, lands the local slot at its bird, and replays the HUD
 slide-in a fresh eagle landing gets. A win *or* an elimination also freezes what its screen will
 print (`endSnapshot()` on `state.end`: gold, kills, level, clock, team, class, the kit, and the
 placing and killer only the loss prints) because the match keeps running underneath and a total

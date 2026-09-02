@@ -269,7 +269,7 @@ What it must do to get them:
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the **build** wheel draws the local team's `SPRITES.teamBuild[team][type][0]` or,
-for a sprite too big to be its own 16×16 icon — see the Keep, the bay, the turret — a dedicated
+for a sprite too big to be its own 16×16 icon — see the bay, the turret — a dedicated
 entry in `teamBuild[team].icon`, and sizes itself: a sixth entry is six even wedges, no layout to
 touch), a grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), and both
 map colour tables (`updateMinimap`/`buildWorldMapImg` — both resolve a multi-tile footprint's
@@ -280,12 +280,12 @@ draws as a bare stump). `isSolidTile()` is now generic (`!!STRUCTS[o.type] || ..
 type needs a line there. `hitObject()`, the draws pass (via `structSprite`), construction,
 ownership and refunds already dispatch on `STRUCTS[o.type]` too — no per-type work there, and
 nothing to add unless the type does something once built (a functional tick branch in
-`updateStructures()`, e.g. the generator's payout timer or the Keep's craft queue).
+`updateStructures()`, e.g. the generator's payout timer or the bay's roll-out).
 **The manage wheel is a separate, hand-built list, not generic over `STRUCT_ORDER`** — this bit
-the Keep's "queue card" order and is worth remembering for the next one: `wheelOptions()` only
-ever returns `[upgrade, (a spawner's mode / a keep's craft), demolish]`, so a structure with its
-own extra manage-wheel order needs a line there (and a matching `runCmd()` branch), regardless of
-how automatic the *build* wheel's sizing is.
+the old Keep's "queue card" order and is worth remembering for the next one: `wheelOptions()` only
+ever returns `[upgrade, demolish]`, so a structure with its own extra manage-wheel order needs a
+line there, between the two (and a matching `runCmd()` branch), regardless of how automatic the
+*build* wheel's sizing is.
 
 **Adding a landmark** — a `LANDMARKS` entry plus its `gen`, and its key in `LANDMARK_ORDER`; that
 is the whole feature (see [world.md](world.md#landmarks) for the fields). The entry's shape:
@@ -334,16 +334,17 @@ transition that owns it. Nothing polls for the right track: `play()` no-ops when
 already current, so it is safe to call from a state change that repeats.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint, the Keep's
-`craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
-cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
-timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
+range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint; the roll-out
+cadence is inline in `updateStructures()`'s spawner branch), `CHEST_ODDS` (a chest's card rarity
+roll, js/actions.js), `RESPAWN_TIME`/`RESPAWN_LV`/`RESPAWN_MIN`/`RESPAWN_MAX` (the wait for the
+bird, beside `die()`, js/player.js), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
 draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the trickle
 (`TRICKLE_GOLD`/`TRICKLE_T`, js/sim.js) and `TREE_HP` (js/world.js) beside it, the hero-level table
 (`LEVEL_XP`/`LVL_HP`/`LVL_DMG`, js/player.js — sized against the harness, see
 [multiplayer.md](multiplayer.md#ai-slots)), the eagle's siege (`EAGLE_HP`/`EAGLE_WORK_DMG`/
 `EAGLE_ARROW_DMG`/`GUST_R`/`PREEN_RATE`, js/boot.js) and the bots' objective clocks (`AI_LEVELS`'
-`push`/`defendR`, `AI_ALLY_PUSH`, `AI_ESCALATE`, js/ai.js), the chest
+`push`/`guard`, `AI_ALLY_PUSH`, `AI_ESCALATE`, `AI_JOIN_HP`, `AI_ALARM_HP`, `AI_ROOST_R`,
+js/ai.js), the chest
 count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 `WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
@@ -385,32 +386,26 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are
   part of the [universal status set](gameplay.md#status-effects-one-set-for-every-unit) a future
   ability or bit lands on for free.
-- **A bot push can stall mid-map with nothing in its way** (2.63, seed 2 on NORMAL, twice in five
-  runs): from `AI_ALLY_PUSH` on, every ally read `aiWantsPush` true, `pushCd` 0, and stood at one
-  spot ~2700 px from the rival roost for eight minutes, hp bleeding a few points a minute — a
-  lake or a den on the route that `aiToRoost` keeps reporting as walkable, or a wolf fight the
-  ladder never leaves. The same seed resolved at 13:50 in another run. Until it is found the
-  bot-vs-bot match-length distribution in [multiplayer.md](multiplayer.md#ai-slots) cannot be
-  read; reproduce with the harness's per-minute rows (own/rival roost distance per slot) and
-  `settings.hitbox = 1` on the stalled bots' routes.
+- **A bot push could stall mid-map with nothing in its way** (2.63, seed 2 on NORMAL, twice in
+  five runs): from `AI_ALLY_PUSH` on, every ally read `aiWantsPush` true, `pushCd` 0, and stood
+  at one spot ~2700 px from the rival roost for eight minutes, hp bleeding a few points a
+  minute. 2.64's blocked-line rule in the fight rung (a bot with no line routes or gives ground
+  instead of walking into the corner) removed the one such stall it reproduced — ten bodies
+  jammed at a lane's bend, seed 99 — and none of 2.64's runs stalled, but seed 2 itself was not
+  re-run; if a push stands still again, the harness's per-minute rows (own/rival roost distance
+  per slot) and `settings.hitbox = 1` on the stalled bots' routes are the way in.
 - **A player's whole wallet still goes to the killer** (2.63): with the fells cut, kill transfers
   are the biggest single swing left in the harness buckets (400–590 gold to one bot in a
   20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
   the stake pillar, not a bug, but it is the next snowball to weigh: a bounty cap, or a hoarder's
   sink.
-- **Seed 7's team-0 roost was never reached by a push in calibration** (2.61): at every level the
-  rivals' pushers stood in its lane with the bird untouched for ten minutes while the same code
-  took the other roost, so something about that lane's cut (a stump or wall across the gap, a
-  pocket the gate walled in) blocks the route. Reproduce with the harness in
-  [multiplayer.md](multiplayer.md#ai-slots) and `settings.hitbox = 1` at the roost; a human
-  may be walled out of it too.
 - [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + three gameplay
   loops + mechanic shots in `docs/media/`), not a tech guide. It carries the one-line "double-click
   `index.html`" and links into [game.md](game.md) / [architecture.md](architecture.md); the controls
   list and the code layout stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
 - **The six gallery stills in `docs/media/` predate the free-for-all** — they are solo-survival
   captures from the original storefront, resized to 1920×1080 16:9, so there is still no still of a
-  Keep, a fish net or a landmark. Current loops under the hero: `practice-tool.webp` (the title
+  roosting eagle, a fish net or a landmark. Current loops under the hero: `practice-tool.webp` (the title
   menu knocking PRACTICE TOOL open onto the training field), `eagles.webp` (the two team birds
   passing, then the drop), `hunt-deer.webp` (a bow taking a deer), `robots.webp` (workers chopping
   pines at a bay). The README copy was rewritten in `PATCH 1.54` to describe the current game

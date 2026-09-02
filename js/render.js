@@ -498,22 +498,18 @@ function render() {
   // the hit-ring flash snapping over whatever face just broke (drawAgRings)
   if (PRACTICE) { drawParkour(ex, ey, now); drawAgame(ex, ey, now); drawAgRings(ex, ey); }
 
-  // construction AND card-crafting progress bars - same bar, same "over the
-  // roof" placement for a big building; a craft in flight (a finished Keep,
-  // o.craftT > 0) draws in an icy blue instead of construction's gold so
-  // the two read as different things at a glance
+  // construction progress bars - "over the roof" for a big building
   for (const o of structures) {
-    const crafting = !o.building && o.type === 'keep' && o.craftT > 0;
-    if (!o.building && !crafting) continue;
+    if (!o.building) continue;
     const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
     if (px < -20 || px > WV_W + 4 || py < -20 || py > WV_H + 4) continue;
-    const p = crafting ? Math.min(1, 1 - o.craftT / o.craftTotal) : Math.min(1, o.buildT / o.buildTotal);
+    const p = Math.min(1, o.buildT / o.buildTotal);
     const big = structW(o.type) > 1;
     const bw = big ? 24 : 12, bx = big ? px + structW(o.type) * 8 - 12 : px + 2;
     const by = big ? (o.ty + structH(o.type)) * TILE - oy - structSprite(o).height - 12 : py - 7;
     ctx.fillStyle = 'rgba(15,22,50,0.8)';
     ctx.fillRect(bx, by, bw, 4);
-    ctx.fillStyle = crafting ? '#8fd8ff' : '#ffd95c';
+    ctx.fillStyle = '#ffd95c';
     ctx.fillRect(bx + 1, by + 1, Math.round((bw - 2) * p), 2);
   }
 

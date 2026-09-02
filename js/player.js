@@ -271,8 +271,9 @@ const GEAR = [
   ],
 ];
 // ---- roguelike cards ------------------------------------------------------
-// Picked from the Keep's craft drops (see STRUCTS.keep, updateStructures'
-// keep branch) via a pick-1-of-3 draft (state.draft, opened from bagClick).
+// Dropped by a sprung chest in the treeline (hitObject's chest branch,
+// js/actions.js, rolled against CHEST_ODDS) and picked via a pick-1-of-3
+// draft (state.draft, opened from bagClick).
 // Same shape as a GEAR variant's mod(k, L) minus the level - a card is a
 // one-shot pick, not a leveled buy - folded into the kit cumulatively by
 // refreshKit below, so every kit-reading site in the sim picks them up for
@@ -404,7 +405,7 @@ class Player {
     // see the `worker flags` banner in js/robots.js): null, or { tx, ty, job, unit }. NOT
     // cleared by reset() - an order outlives the hand that gave it.
     this.flag = null;
-    this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns
+    this.eliminated = false;            // its bird was driven off: no coming back - see die()/eagleFleeResolve
     // who put this slot down last, for the defeat screen's one line: a
     // killer's name and team, or null with a DEATH_CAUSE key when the world
     // did it. die() writes them, endSnapshot() freezes them, nothing else looks.
@@ -441,7 +442,7 @@ class Player {
   get name() { return this._name !== null ? this._name : TEAMS[skin(this.team)].name + '-' + (this.id + 1); }
   set name(v) { this._name = v; }
   // spawn placement + every transient cleared; boot calls it with first=true,
-  // respawnPlayer() (a team's Keep bringing a slot back) with first=false
+  // respawnPlayer() (the team's bird setting a slot back down) with first=false
   reset(first) {
     this.x = (this.spawn.tx + 0.5) * TILE;
     this.y = (this.spawn.ty + 0.5) * TILE;
@@ -487,7 +488,7 @@ class Player {
     // object a bag cell is, bits and all - so moving one between the bag and
     // the slot is a reference move and a tool never loses what is loaded
     // into it. Regranted here rather than kept, because death spills the
-    // build where you fell (spillInventory) and the Keep hands your class's
+    // build where you fell (spillInventory) and the bird hands your class's
     // own loadout back. js/tools.js owns all of it.
     giveLoadout(this);
     this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
@@ -666,13 +667,23 @@ function spillInventory(p, killer) {
   }
 }
 
-const RESPAWN_TIME = 8; // flat, gold-free - "the respawn from a keep is timer-only"
+// The wait for the bird to set a downed slot back down: gold-free, a flat
+// base plus a little per hero level and per minute of the match (League-
+// style - a late death costs more of the match than an early one, which is
+// what makes a wiped side late a real window on a roost its defenders
+// otherwise come back to sixty pixels from the bird every few seconds)
+const RESPAWN_TIME = 8;   // s at level 1, at the start
+const RESPAWN_LV = 1.5;   // s more per level past 1
+const RESPAWN_MIN = 1;    // s more per minute on the match clock
+const RESPAWN_MAX = 45;   // s, the ceiling (level 12 at 25 minutes would be 49.5)
+function respawnTime(p) { return Math.min(RESPAWN_MAX, RESPAWN_TIME + RESPAWN_LV * (p.level - 1) + RESPAWN_MIN * state.elapsed / 60); }
 
-// A slot can go down two ways now. With a living team Keep it is temporary:
-// p.dead is set (out of the world right now, same as always) but
-// p.eliminated stays false and a flat respawnT counts down to a return at
-// the Keep (see updateRespawns/respawnPlayer). With no Keep it is exactly
-// today's permanent death: p.eliminated = true, no way back. Only the local
+// A slot goes down two ways. While its team's bird still roosts (or is
+// still flying in) it is temporary: p.dead is set (out of the world right
+// now) but p.eliminated stays false and respawnT counts down to a return AT
+// THE BIRD (see updateRespawns/respawnPlayer). Once the bird has been driven
+// off it is permanent: p.eliminated = true, no way back - the eagle is the
+// only thing that takes a slot out of a match for good. Only the local
 // slot's ELIMINATION takes the screen with it (the death overlay); a
 // respawn-pending local death gets the lighter 'respawning' overlay instead
 // (see endMatch/DEAD_ITEMS/renderDead).
@@ -720,9 +731,9 @@ function die(p, src, cause) {
   }
   logEvent(killer ? killer.name + ' ' + (KILL_VERB[cause] || 'SHOT') + ' ' + p.name
     : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
-  // a Keep is only a way back while the team's eagle still breathes - a side
-  // whose objective has fallen is out, however its slots go down after that
-  if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) p.respawnT = RESPAWN_TIME;
+  // the bird is the way back - a side whose objective has fallen is out,
+  // however its slots go down after that
+  if (!teamEagleDown(p.team)) p.respawnT = respawnTime(p);
   else p.eliminated = true;
   if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
   else {
@@ -738,26 +749,32 @@ function die(p, src, cause) {
 function updateRespawns(dt) {
   for (const p of players) {
     if (!p.active || !p.dead || p.eliminated) continue;
+    // the bird left mid-timer: eagleFleeResolve puts the whole side out at
+    // the end of the ceremony, so the timer simply stops meaning anything
+    if (teamEagleDown(p.team)) continue;
     p.respawnT -= dt;
     if (p.respawnT > 0) continue;
-    // the Keep may have fallen mid-timer - re-check rather than cutting the
-    // wait short the instant it dies, so a rival can't get credit for
-    // eliminating a team faster than the timer promises
-    if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) respawnPlayer(p);
-    else {
-      p.eliminated = true;
-      if (p === player) endMatch('lost');
-      checkLastStanding(); // this fallback can itself be the match-ending blow
-    }
+    // a bird still in the air has nowhere to set anyone down: hold at zero
+    // until it roosts (a slot shot in the seconds between its own landing
+    // and the bird's)
+    const e = state.drop && state.drop.eagles[p.team];
+    if (!e || e.state !== 'down') { p.respawnT = 0; continue; }
+    respawnPlayer(p);
   }
 }
 
-// brings a downed slot back at its team's Keep: p.reset(false) is the exact
-// full-clear a fresh eagle landing gets (same 3s i-frames), just anchored on
-// the Keep's mouth instead of a landing tile.
+// brings a downed slot back at its team's bird: p.reset(false) is the exact
+// full-clear a fresh eagle landing gets (same 3 s i-frames), anchored
+// RESPAWN_OUT px down the lane from the roost - the nearest tile a body can
+// stand on there - so the way back into the match is the road everyone
+// else walked out on.
+const RESPAWN_OUT = 40;
 function respawnPlayer(p) {
-  const kp = structures.find((o) => o.type === 'keep' && o.team === p.team && !o.building);
-  if (kp) { const m = structMouth(kp); p.spawn = nearestDryTile(m.x, m.y, p); }
+  const e = state.drop && state.drop.eagles[p.team];
+  if (e && e.state === 'down') {
+    const d = e.laneDir || { x: 0, y: 1 };
+    p.spawn = nearestDryTile(e.x + d.x * RESPAWN_OUT, e.y + d.y * RESPAWN_OUT, p);
+  }
   p.eliminated = false;
   p.respawnT = 0;
   p.reset(false);
@@ -777,13 +794,11 @@ function respawnPlayer(p) {
 // slots still in the match (riding the eagle counts: it is about to land)
 function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
 
-// a team is still "in the match" if it has any active, non-eliminated slot -
-// note !eliminated, not !dead: a teammate mid-respawn-timer hasn't left -
-// OR a living Keep (see teamHasLivingKeep): a wiped team a Keep is still
-// waiting to respawn into hasn't lost either.
+// a team is still "in the match" while its bird has not been driven off and
+// anyone is in one of its slots - note !eliminated, not !dead: a wiped team
+// is waiting on its bird, not out, so the objective is the only way to win
 function teamInMatch(team) {
   if (teamEagleDown(team)) return false; // the objective: a fallen eagle takes its whole side out
-  if (teamHasLivingKeep(team)) return true;
   return players.some((q) => q.active && q.team === team && !q.eliminated);
 }
 
@@ -803,8 +818,8 @@ function rivalTeamsInMatch(p) {
 
 // the local slot not eliminated and every RIVAL team gone: the match is won
 // (only once, and only when there was another side to beat). Teams win
-// together - a Keep still standing, or a teammate mid-respawn-timer, keeps
-// a team in it - so this is the last TEAM standing, not the last player.
+// together - a side is in the match while its bird roosts, whoever is
+// standing - so this is the last BIRD standing, never the last player.
 function checkLastStanding() {
   // practice has no rivals and no ending - an empty roster must not read as a win
   if (PRACTICE) return;

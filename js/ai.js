@@ -42,12 +42,16 @@ const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
 //           eagle (the objective rung), one more every AI_ESCALATE s after
 //           that, so a stalemate always breaks
 //   guard   how many of the next bots stand by their own bird from 0.6 t on
-//   defendR px from its own eagle inside which it answers a hit on the bird
 //   support allies only: escort the human and join their fights and pushes
+// What is NOT in a profile: answering a hit on its own bird. At every level
+// a struck roost, or a rival seen standing off it, is answered from anywhere
+// on the map by as many bots as the threat calls for (the two birds, below)
+// - the difficulty is how well they fight when they get there, never
+// whether they come.
 const AI_LEVELS = [
-  { name: 'NORMAL', sight: 110, react: 0.7, aim: 30, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 1600 },
-  { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 360, n: 3 }, guard: 2, defendR: 2400 },
-  { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 300, n: 3 }, guard: 2, defendR: 1e9 },
+  { name: 'NORMAL', sight: 110, react: 0.7, aim: 30, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1 },
+  { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 360, n: 3 }, guard: 2 },
+  { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 300, n: 3 }, guard: 2 },
 ];
 // your allies at each rival level: the next notch up, supportive, one of
 // them on guard, and on the objective on their own clock - late on NORMAL,
@@ -58,14 +62,13 @@ const AI_LEVELS = [
 // to three minutes to drive a bird off, so NORMAL's leaves at twelve
 const AI_ALLY_PUSH = [{ t: 720, n: 2 }, { t: 480, n: 3 }, { t: 420, n: 3 }];
 const AI_ALLIES = AI_LEVELS.map((_, i) => Object.assign({}, AI_LEVELS[Math.min(AI_LEVELS.length - 1, i + 1)],
-  { name: 'ALLY', support: true, push: AI_ALLY_PUSH[i], guard: 1, defendR: 2000 }));
+  { name: 'ALLY', support: true, push: AI_ALLY_PUSH[i], guard: 1 }));
 const AI_GUARD_R = 160;   // px a guard lets itself drift from its bird before walking back
 const AI_ESCALATE = 120;  // s after push.t per extra pusher a side commits
 // how many of a side push right now: push.n, growing past push.t
 function aiPushers(prof) { return state.elapsed < prof.push.t ? 0 : prof.push.n + Math.floor((state.elapsed - prof.push.t) / AI_ESCALATE); }
 const AI_AIM_T = 0.4;     // s between aim scatter re-rolls
 const AI_ABIL_T = 0.5;    // s between ability rolls
-const AI_DEFEND_T = 8;    // s after a hit on its bird a bot still counts it as under attack
 const AI_ANCHOR_R = 260;  // px round an anchor (its bird, the human) a rival is noticed from
 const AI_ANCHOR_D = 420;  // ...but never from farther than this
 const AI_HOLD = 96;       // px a hunter holds off the rival bird at (outside its gust)
@@ -82,6 +85,46 @@ function aiProfile(p) {
 // the two objectives as a bot sees them: a roosting bird, or null
 function aiRivalEagle(p) { const e = state.drop && state.drop.eagles[1 - p.team]; return e && e.state === 'down' ? e : null; }
 function aiOwnEagle(p) { const e = state.drop && state.drop.eagles[p.team]; return e && e.state === 'down' ? e : null; }
+// ---- the two birds --------------------------------------------------------
+// What every bot knows about the objective - both birds, all match: where
+// each roosts, how its nerve stands, when it was last hit, and who is AT it:
+// the rivals standing off it (each through seenAt, so a buried archer is
+// buried for the whole side) and the friends already there. Read once per
+// sim step and shared by all ten slots, so a hit on a roost is news on the
+// far side of the map the same tick - a bird under attack is answered from
+// anywhere, and a bird that is winning the race is not abandoned for one
+// that is losing it. `threat` is the one word the ladder asks.
+const AI_ROOST_R = 240;   // px round a bird inside which a body counts as at it
+const AI_DEFEND_T = 8;    // s after a hit on its bird a side still counts it as under attack
+const AI_JOIN_HP = 0.6;   // a rival bird under this much nerve, with friends on it, is a siege to join
+const AI_ALARM_HP = 0.5;  // its own bird under this much nerve: EVERYONE comes home, pushers included
+const AI_SIEGE_R = 48;    // px: a rival closer than this pulls a besieging pusher off the bird
+// how many of a side a threat on its bird calls home: one more than the
+// attackers seen there, and never fewer than two (a hit with nobody in sight
+// is an archer standing off it). The rest go on with the match - a side
+// that empties the whole map for one arrow is a side that never pushes -
+// until the nerve is under AI_ALARM_HP, when the number is everyone.
+function aiDefendersWanted(s) { return s.hp < AI_ALARM_HP ? 99 : Math.max(2, s.attackers + 1); }
+let aiSitTick = -1, aiSit = null;
+function aiSituation() {
+  if (aiSit && aiSitTick === state.tick) return aiSit;
+  aiSitTick = state.tick;
+  aiSit = [0, 1].map((team) => {
+    const e = state.drop && state.drop.eagles[team];
+    if (!e || e.state !== 'down') return null;
+    const s = { e, team, hp: e.hp / e.maxHp, hitT: e.hitT, attackers: 0, defenders: 0, human: false, threat: false };
+    for (const q of players) {
+      if (!q.active || q.dead || inAir(q)) continue;
+      const d = Math.hypot(q.x - e.x, q.y - e.y);
+      if (d >= AI_ROOST_R) continue;
+      if (q.team === team) s.defenders++;
+      else if (d < seenAt(q, AI_ROOST_R)) { s.attackers++; if (q === player) s.human = true; }
+    }
+    s.threat = s.hitT < AI_DEFEND_T || s.attackers > 0;
+    return s;
+  });
+  return aiSit;
+}
 // p's place among its side's living AI slots (the human is never counted):
 // the profile's push.n lowest go for the rival bird, the guard next stand by
 // their own, and the rest farm, build and (allies) escort
@@ -96,12 +139,15 @@ function aiRank(p) {
 }
 // the objective rung's gate: after push.t the side's push.n lowest bots go
 // for the rival bird; an ally also goes whenever the human is already on
-// it, so a push you start is a push your side joins
-function aiWantsPush(p, prof) {
-  const e = aiRivalEagle(p);
-  if (!e) return null;
-  if (prof.support && !player.dead && !inAir(player) && player !== p &&
-    Math.hypot(player.x - e.x, player.y - e.y) < 220) return e;
+// it, so a push you start is a push your side joins; and ANY bot joins a
+// siege its side already has going once the rival bird is under AI_JOIN_HP
+// - unless its own bird is under attack, which is where it is wanted
+// (`theirs`/`mine` are the aiSituation reads for the two birds)
+function aiWantsPush(p, prof, theirs, mine) {
+  if (!theirs) return null;
+  const e = theirs.e;
+  if (prof.support && theirs.human && player !== p) return e;
+  if (theirs.attackers > 0 && theirs.hp < AI_JOIN_HP && !(mine && mine.threat)) return e;
   return aiRank(p) < aiPushers(prof) ? e : null;
 }
 // the guard's gate: from 0.6 push.t on, the prof.guard bots after the
@@ -271,11 +317,24 @@ function updateAI(p, dt) {
   if (ai.aimT <= 0) { ai.aimT = AI_AIM_T; ai.aox = rand(-1, 1) * prof.aim; ai.aoy = rand(-1, 1) * prof.aim; }
   ai.abilT -= dt;
   if (ai.abilT <= 0) { ai.abilT = AI_ABIL_T; ai.abilOk = rng() < prof.abil; }
-  // what it is minding: its own bird under attack inside defendR, the rival
-  // bird it is due to push, and (an ally) the human it escorts
-  const own = aiOwnEagle(p);
-  const defend = own && own.hitT < AI_DEFEND_T && Math.hypot(own.x - p.x, own.y - p.y) < prof.defendR ? own : null;
-  const pushE = ai.pushCd > 0 ? null : aiWantsPush(p, prof);
+  // what it is minding, off the shared read of both birds: its own bird
+  // under attack - answered from anywhere on the map by as many as the
+  // threat calls for (aiDefendersWanted), a bot already at the roost holding
+  // its station, and once the nerve is under AI_ALARM_HP by everyone, the
+  // one exception a pusher whose side is WINNING the race (the rival bird
+  // lower still), who presses on - the rival bird it is due to push, and
+  // (an ally) the human it escorts
+  const sit = aiSituation();
+  const mine = sit[p.team], theirs = sit[1 - p.team];
+  const own = mine ? mine.e : null;
+  const pushE = ai.pushCd > 0 ? null : aiWantsPush(p, prof, theirs, mine);
+  let defend = null;
+  if (mine && mine.threat) {
+    const alarm = mine.hp < AI_ALARM_HP;
+    if (pushE) defend = alarm && !(theirs.hp < mine.hp) ? own : null;
+    else if (alarm || Math.hypot(own.x - p.x, own.y - p.y) < AI_ROOST_R) defend = own;
+    else defend = mine.defenders < aiDefendersWanted(mine) ? own : null;
+  }
   const guardE = aiOnGuard(p, prof);
   const ward = prof.support && !player.dead && !inAir(player) && player !== p ? player : null;
 
@@ -297,7 +356,14 @@ function updateAI(p, dt) {
   // the reaction: a rival stays noticed prof.react seconds before the bot
   // turns on it (a slow side keeps chopping while you line up the shot)
   ai.seeT = foe ? ai.seeT + dt : Math.max(0, ai.seeT - dt * 2);
-  const engage = foe && ai.seeT >= prof.react ? foe : null;
+  // the siege: a pusher AT the rival roost whose side outnumbers the
+  // defenders there keeps hitting the bird and leaves the fight to its
+  // friends - defenders come back from sixty pixels away every few seconds,
+  // and a push that turns to meet each one never lands a swing - unless a
+  // rival is at arm's length (AI_SIEGE_R), which is a rival it cannot ignore
+  const siege = pushE && theirs && theirs.attackers > theirs.defenders &&
+    Math.hypot(theirs.e.x - p.x, theirs.e.y - p.y) < AI_ROOST_R;
+  const engage = foe && ai.seeT >= prof.react && !(siege && foeD > AI_SIEGE_R) ? foe : null;
   if (p.eatT <= 0 && p.foodCd <= 0 && foeD > AI_EAT_R) {
     if (p.hp < p.maxHp * 0.5 && bagCount(p, 'fish') > 0) inp.eatFish = true;
     else if (p.hp < p.maxHp * 0.8 && bagCount(p, 'berry') > 0) inp.eatBerry = true;
@@ -375,7 +441,21 @@ function updateAI(p, dt) {
     }
     const side = p.id % 2 ? 1 : -1;
     const a = Math.atan2(foe.y - p.y, foe.x - p.x);
-    const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side * prof.strafe;
+    if (!clear) {
+      // no line to them: never walk into the corner that is blocking it
+      // (ten bodies doing exactly that at a lane's bend was a fight nobody
+      // fired a shot in for a quarter of an hour). Far off, ROUTE in through
+      // the open - along a lane's axis rather than into its tree wall;
+      // close in, give ground straight back and let them come round the
+      // corner into the line. Re-read every think, so a cleared line goes
+      // straight back to the strafe below.
+      if (d > 60) { if (steerTo(foe.x, foe.y, 3) < 0) { inp.mx = 0; inp.my = 0; } }
+      else { inp.mx = -Math.cos(a); inp.my = -Math.sin(a); }
+      inp.fire = false;
+      ai.tgt = null;
+      return;
+    }
+    const turn = d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side * prof.strafe;
     inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
     // a slow side plants its feet to shoot: the standing part of each 2 s is
     // the only part it draws and looses in (a draw cut off by the walk goes
@@ -545,13 +625,7 @@ function updateAI(p, dt) {
     }
     if (gi >= 0 && p.inv.gold >= gc + 15) inp.cmd = { kind: 'gear', piece: gi };
   }
-  // a team with no living or rising Keep is one bad fight from permanent
-  // elimination with no way back - a bot saves for and builds one before
-  // anything else it would otherwise spend on
-  const needKeep = !teamHasLivingKeep(p.team) &&
-    !structures.some((o) => o.type === 'keep' && o.team === p.team && o.building);
-  const wantType = needKeep ? (p.inv.gold >= STRUCTS.keep.tiers[0].cost.gold ? 'keep' : null)
-    : p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold ? (rng() < 0.3 ? 'spawner' : 'generator') : null;
+  const wantType = p.inv.gold >= STRUCTS.generator.tiers[0].cost.gold ? (rng() < 0.3 ? 'spawner' : 'generator') : null;
   if (ai.buildT <= 0 && wantType) {
     const st = nearestObj(p.x, p.y, 5, (o) => o.type === 'stump' && aiOpenSides(o.tx, o.ty) >= 3);
     if (st) {
@@ -583,21 +657,13 @@ function updateAI(p, dt) {
       if (ai.spendT > 3) { ai.buildT = 15; ai.spendT = 0; } // wedged: go do something else
       return;
     }
-    if (needKeep) ai.buildT = 4; // no stump nearby yet; keep saving, look again shortly
   }
-  if (ai.buildT <= 0 && !needKeep) {
+  if (ai.buildT <= 0) {
     const up = nearestObj(p.x, p.y, 3, (o) => STRUCTS[o.type] && !o.building &&
       o.team === p.team && o.tier < STRUCTS[o.type].tiers.length - 1 && canAfford(STRUCTS[o.type].tiers[o.tier + 1].cost, p));
     if (up) {
       inp.cmd = { kind: 'upgrade', tx: up.tx, ty: up.ty, id: 'upgrade' };
       ai.buildT = 10;
-      return;
-    }
-    const kp = nearestObj(p.x, p.y, 3, (o) => o.type === 'keep' && !o.building && o.team === p.team &&
-      o.craftT <= 0 && canAfford({ gold: STRUCTS.keep.tiers[o.tier].craftCost }, p));
-    if (kp) {
-      inp.cmd = { kind: 'craft', tx: kp.tx, ty: kp.ty, id: 'craft' };
-      ai.buildT = 14;
       return;
     }
     ai.buildT = 4; // nothing worth spending on nearby; look again shortly

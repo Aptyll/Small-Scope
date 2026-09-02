@@ -1906,60 +1906,6 @@
     '................',
   ];
 
-  // The keep: a 2x2 fortified tower (see STRUCTS.keep w/h), one grid rebaked
-  // per tier material like wall/turret/generator (WPAL/WPAL_STONE/WPAL_GOLD)
-  // and team-painted through the same k/K/e override teamBuildPal already
-  // gives those three - crenellated top, a team banner band, a dark doorway.
-  // keepIcon is the 16x16 wheel glyph (the live sprite is too tall for a wedge).
-  const keep = [
-    'oUUo....oUUo....oUUo....oUUo....',
-    'oUUo....oUUo....oUUo....oUUo....',
-    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
-    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
-    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
-    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
-    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
-    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
-    'ouuuuuuuuuuuvvvvvvvvuuuuuuuuuuuo',
-    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
-    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
-    'ssssssssssssssssssssssssssssssss',
-  ];
-  const keepIcon = [
-    '................',
-    '....oUUUUUUo....',
-    '....oUUUUUUo....',
-    '...oUUUUUUUUo...',
-    '...ouuuuuuuuo...',
-    '...ouuKKKKuuo...',
-    '...ouuKKKKuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuvvvvuuo...',
-    '...ouuvvvvuuo...',
-    '...ouuvvvvuuo...',
-    '...oooooooooo...',
-    '...ssssssssss...',
-  ];
-
   // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
   // arms at the sides, no face. One 12x10 grid, two frames (the tread notches
   // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
@@ -2669,11 +2615,9 @@
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: [bake(bay, bayTeamPal(t))],
     net: [bake(net, teamBuildPal(NETPAL, t))],
-    keep: TIER_PALS.map((b) => bake(keep, teamBuildPal(b, t))),
     // wheel glyphs for sprites too big to be their own icon
     icon: {
       spawner: bake(bayIcon, bayTeamPal(t)), turret: bake(turretIcon, teamBuildPal(WPAL, t)),
-      keep: bake(keepIcon, teamBuildPal(WPAL, t)),
     },
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);

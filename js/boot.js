@@ -86,7 +86,7 @@ const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the r
 // minute or more under the gust, a pair half that, and an arrow only ever
 // spooks it EAGLE_ARROW_DMG whatever the draw, so archers standing off it
 // outside the gust take minutes - long enough either way for the side to
-// answer the hit (defendR, ai.js). At 60 a swing two warriors emptied the
+// answer the hit (the two birds, ai.js). At 60 a swing two warriors emptied the
 // nerve in the fifty seconds between two harness marks, before anyone came
 const EAGLE_HP = 2000;
 const EAGLE_WORK_DMG = 20;  // what one rival E swing chips off the roosting bird
@@ -801,7 +801,7 @@ function eagleFleeResolve(e, src) {
 }
 
 // the objective test the death/respawn path asks (player.js): a driven-off
-// eagle takes its team out of the match, Keep or no Keep
+// eagle takes its team out of the match - the one thing that does
 function teamEagleDown(team) {
   const e = state.drop && state.drop.eagles[team];
   return !!e && (e.state === 'flee' || e.state === 'gone');

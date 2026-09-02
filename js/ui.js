@@ -33,13 +33,10 @@ function wheelOptions() {
   // straight up - picking one IS the roll (or the ring), so neither carries
   // a separate go wedge
   if (w.kind === 'pkdie' || w.kind === 'agbell') return [{ id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
-  const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
-  // so a type's extra option lands between them instead of displacing either
-  const opts = [{ id: 'upgrade' }];
-  if (o && o.type === 'keep' && !o.building) opts.push({ id: 'craft' });
-  opts.push({ id: 'demolish' });
-  return opts;
+  // so a type's extra option would land between them instead of displacing
+  // either (none has one today; the Keep's card craft did)
+  return [{ id: 'upgrade' }, { id: 'demolish' }];
 }
 
 // The whole geometry, in two lines: every wedge is span wide, and wedge i is
@@ -101,7 +98,6 @@ function runCmd(p, c) {
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
   if (c.kind === 'upgrade') startUpgrade(o, p);
   else if (c.kind === 'demolish') demolishStruct(o, p);
-  else if (c.kind === 'craft') startCraft(o, p);
 }
 
 // ------------------------------------------------------------ selection, hints & wheel
@@ -436,13 +432,6 @@ function renderWheel(now) {
       }
     } else if (opt.id === 'demolish') {
       label = 'DEMOLISH'; color = '#ff8a7a';
-    } else if (opt.id === 'craft') {
-      if (o && o.craftT > 0) { label = 'CRAFTING...'; color = '#9fb6d8'; }
-      else {
-        const t = STRUCTS.keep.tiers[o ? o.tier : 0];
-        label = 'QUEUE CARD : ' + costText({ gold: t.craftCost });
-        color = canAfford({ gold: t.craftCost }) ? '#ffd95c' : '#ff8a7a';
-      }
     }
   }
   // centred under the wheel, but never off the edge: the wheel sits where the

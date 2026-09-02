@@ -31,8 +31,8 @@ on from the eagle), `aboard`/`dropT`/`dropU`
 `bag` (see [the backpack](gameplay.md#inventory-and-the-backpack)),
 `level`/`xp` (see [Hero levels](#hero-levels)), `kills`, an `input` struct and an `ai` brain.
 `reset(first)` places it at `spawn` and clears every transient; it is the single definition of
-"a fresh player". Only boot calls it now (death is final — see below); the `first` flag still
-decides whether the slot gets 3 s of i-frames, so a future respawn path can pass `false`.
+"a fresh player". Boot calls it with `first` true, and `respawnPlayer` — the team's bird setting a
+downed slot back down — with `false`, which is what gives the return its 3 s of i-frames.
 
 Behaviour lives in free functions taking `p` (`updatePlayer`, `tryWork`, `fireTool`, `tryDodge`,
 `startEat`, `damagePlayer`, `die`, `spillInventory`, `placeStruct`, …), matching the rest of the file's
@@ -59,7 +59,7 @@ eatFish       edge-triggered (F): same, and off the same shared 3s clock
               (startEat, js/core.js - see Food in gameplay.md)
 ability       edge-triggered (keys 1-4): cast that class ability, -1 = none
               (tryAbility, js/abilities.js - see Classes below)
-cmd           one-shot order {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id}
+cmd           one-shot order {kind:'build'|'upgrade'|'demolish', tx, ty, id}
               or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
               or {kind:'skill', i} - a hud-ability rank: same, free (a skill point)
 ```
@@ -103,7 +103,7 @@ aim line and draw meter. `setClass(p, c)` swaps one in (full heal — it's a pre
 The **weapon is part of the class**: `CLASS_LOADOUT` (js/tools.js) pairs each one with a tool
 and its bits, and `setClass` / `Player.reset` hand it over — so the two classes do not shoot the
 same thing, every AI slot arrives armed, and a respawn is re-armed after
-[death spills the build](gameplay.md#death-is-final). See
+[death spills the build](gameplay.md#death-and-respawn). See
 [Tools and bits](gameplay.md#tools-and-bits). The four ABILITIES beside the weapon — what each
 one does, its cooldown, cast, and the states it leaves on a body — are
 [Class abilities](gameplay.md#class-abilities-keys-1-4) in gameplay.md.
@@ -232,7 +232,7 @@ branch (the roost tiles are `eagle` objects, a rival-only work target — `workT
 `team` they carry), and at zero the bird is **driven off**: `eagleFlee` lifts it away over the
 treeline while every camera pans to watch (`state.eagleCine`, the driven-off ceremony), and
 `EAGLE_CINE_T` later `eagleFleeResolve` takes the whole owning side out of the match (see
-[Death is final](gameplay.md#death-is-final) and the eagle-drop section in
+[Death and respawn](gameplay.md#death-and-respawn) and the eagle-drop section in
 [rendering.md](rendering.md#eagle-drop-mode-drop)). Friendly arrows pass over it; a friendly
 swing is refused. It is not helpless either: a rival lingering in `GUST_R` makes it rear
 (wings spread for `GUST_WIND_T` — the telegraph) and **gust**, throwing every rival in
@@ -244,10 +244,10 @@ hp/s back.
 next: the killer pockets the gold via `awardGold`, an uncredited death's gold goes down with the
 body (gold is never a physical drop), and every carried
 stack always spills, one drop each (the standings rank lifetime `xp`, so they still show what the
-slot earned). What happens next depends on `teamHasLivingKeep(p.team)` **and**
-`teamEagleDown(p.team)` — see [The Keep](#the-keep) — either a flat, gold-free respawn timer
-(`p.respawnT`, ticked by `updateRespawns`; only with a living Keep *and* a living eagle) or
-`p.eliminated = true`, the permanent path;
+slot earned). What happens next depends on `teamEagleDown(p.team)` alone — see
+[Respawn at the bird](#respawn-at-the-bird) — either a gold-free respawn timer (`p.respawnT`,
+`respawnTime(p)`, ticked by `updateRespawns`) while the team's eagle still roosts, or
+`p.eliminated = true`, the permanent path, once it has been driven off;
 `updatePlayer` just zeroes a dead slot's intents either way. Only the local slot's **elimination**
 takes the full death overlay with it (`endMatch('lost')`); a respawn-pending local death gets the
 lighter `endMatch('respawning')` overlay instead — same `state.mode = 'dead'` machinery (so the
@@ -256,37 +256,35 @@ and no permanent loss. Either way `state.mode = 'dead'` offers spectating a livi
 `viewPlayer()`/`specNext()`, or the way out to the title — which for an **elimination** goes
 through [the defeat screen](rendering.md#the-end-screens) first (`openDefeat()`, and its own plank
 calls `toLobby()`), because a lost match ends when you stop watching it rather than when you go
-down. Every death (and every Keep's destruction) runs `checkLastStanding()`, which ends the match
-as a win once no **rival team** is
-left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf` does, so the
-last *team* standing wins: a surviving teammate, or a Keep still waiting to respawn someone into,
-keeps a team in the match even at zero living players — **unless its eagle has been driven off**:
-`teamInMatch` asks `teamEagleDown(team)` first, and a fled eagle takes the side out whatever
-else it still holds (`eagleFlee` in js/boot.js is what puts every slot down at liftoff). **The match keeps simulating while you are
-out** — `update()` runs `updatePlay` in both `play` and `dead` mode; only pause and the settings
-panel stop the world (the map does not). Full detail: [Death is final](gameplay.md#death-is-final).
+down. Every death runs `checkLastStanding()`, which ends the match as a win once no **rival
+team** is left — `rivalTeamsInMatch()`/`teamInMatch()` read the same other-team rule `enemyOf`
+does, and **a team is in the match while its eagle roosts**: `teamInMatch` asks
+`teamEagleDown(team)` first, so a fled eagle takes the side out whatever else it still holds
+(`eagleFlee` in js/boot.js is what puts every slot down at liftoff), and a side with every slot
+dead and waiting on its bird is not out — kills never end a match, only the bird does. **The
+match keeps simulating while you are out** — `update()` runs `updatePlay` in both `play` and
+`dead` mode; only pause and the settings panel stop the world (the map does not). Full detail:
+[Death and respawn](gameplay.md#death-and-respawn).
 
-### The Keep
+### Respawn at the bird
 
-A team's Keep (`STRUCTS.keep`, a 2×2 singleton — `teamHasLivingKeep(team)` is the one-per-team
-gate, checked both before and inside the build's `contest()` callback since two teammates could
-otherwise both pass the pre-check in one tick) is what makes a death temporary: `die()` reads it
-to decide between a respawn timer and permanent elimination, and `checkLastStanding()` reads it to
-decide whether a team with zero living players is actually out. It's built and managed through the
-same [radial wheel](gameplay.md#base-building) every other structure uses — see
-[gameplay.md](gameplay.md#base-building) for the build, the craft queue, and the card drops; see
-[gameplay.md](gameplay.md#roguelike-cards) for what a drafted card actually does to `kitOf(p)`.
-
-`updateRespawns(dt)` (called from `updatePlay` beside `updateStructures`) counts down every
-`p.dead && !p.eliminated` slot's `p.respawnT`; at zero it re-checks the Keep is still standing (it
-may have fallen mid-timer — the wait is never cut short, so a rival can't get credit for
-eliminating a team faster than the timer promises) and either calls `respawnPlayer(p)` — which
-finds a clear tile near the Keep's `structMouth()` (`nearestDryTile`, the same spiral search
-`landPlayer` uses for an eagle landing) and calls `p.reset(false)`, the exact full-clear a fresh
-landing gets, i-frames included — or falls back to `p.eliminated = true` and calls
-`checkLastStanding()` itself, since a Keep dying mid-timer can be the actual elimination blow.
-`p.cards` (picked roguelike cards) is never touched by `reset()`, so a build survives every
-respawn within a match, the same way gear and skill ranks already do.
+There is no Keep and no permadeath: the team's roosting eagle is the way back, and the only thing
+that takes a slot out for good is that eagle being driven off. `updateRespawns(dt)` (called from
+`updatePlay` beside `updateStructures`) counts down every `p.dead && !p.eliminated` slot's
+`p.respawnT` — `respawnTime(p)`: `RESPAWN_TIME` (8 s) plus `RESPAWN_LV` (1.5 s) per hero level
+past 1 plus `RESPAWN_MIN` (1 s) per minute on the match clock, capped at `RESPAWN_MAX` (45 s) —
+League-style, so a late death costs more of the match (a level-8 hero at fifteen minutes waits
+33 s) and a wiped side late in a game is a real window on a roost its defenders otherwise come
+back to from sixty pixels away every few seconds. At zero it calls `respawnPlayer(p)`, which puts `p.spawn`
+`RESPAWN_OUT` (40 px) down the lane from the bird (`e.laneDir`; the nearest standable tile there
+through `nearestDryTile`, the same spiral a hole is climbed out of) and calls `p.reset(false)`,
+the exact full-clear a fresh landing gets, i-frames included — so the way back into the match is
+the road everyone walked out on, past the merchant and the gate. A bird still in the air (a slot
+shot in the seconds between its own landing and the bird's) has nowhere to set anyone down, so
+the timer holds at zero until it roosts; a bird that has fled mid-timer is left to
+`eagleFleeResolve`, which puts the whole side out at the end of the ceremony. `p.cards` (picked
+roguelike cards), gear, skill ranks, level and xp are never touched by `reset()`, so a build
+survives every respawn within a match; the wallet, the bag and the weapon do not.
 
 ### Kills and the event feed
 
@@ -319,9 +317,7 @@ contest('work:' + idx(tx, ty), p, () => { /* runs only if p wins */ });
 resolution, so a loser keeps its gold.
 
 Currently contested: work swings (`swingHit`, keyed by tile), build orders (`placeStruct`, keyed by
-tile — a Keep order adds a second check, `teamHasLivingKeep`, re-run *inside* the winning
-callback so two teammates ordering one on two different stumps in the same tick can't both land
-one), fish spears (`spearFish`, keyed by fish index — a full bag refuses the catch before the
+tile), fish spears (`spearFish`, keyed by fish index — a full bag refuses the catch before the
 contest is even entered), drop pickups (keyed by drop index — every player standing on a drop
 claims it *if they have room for it*, and the magnet pulls it toward the nearest such player,
 so a full bag hands the pickup on rather than sitting on it — a dropped card is a neutral pickup
@@ -347,8 +343,11 @@ cycle of the E key while harvesting — its level pace), `strafe` (0.45 / 0.8 / 
 keeps moving in a fight; the rest it PLANTS — stands, draws and shoots, the only time a slow side
 fires, so stopping is the tell and the moment a new player hits it — and under 1 it circles that
 much less, walking in straighter), `pick`
-(`'near'`, or IMPOSSIBLE's `'weak'` — the rival with the least hp), `push`, `guard` and
-`defendR` (the objective, below), `support` (allies only).
+(`'near'`, or IMPOSSIBLE's `'weak'` — the rival with the least hp), `push` and `guard` (the
+objective, below), `support` (allies only). What is **not** in a profile: answering a hit on its
+own bird — at every level the side answers from anywhere on the map, as many bots as the threat
+calls for (**the two birds**, below); the difficulty is how well they fight when they get there,
+never whether they come.
 
 The ladder:
 
@@ -370,7 +369,11 @@ The ladder:
    ally joins the fight you are in) and **reacted to** (`ai.seeT` past `react`): circle at ~70 px,
    draw and loose at the profile's `draw`, dodge at its rate, stand for the profile's share of
    every strafe. The aim point carries the scatter and the lead. Only shoots
-   when `aiLineClear()` says the flight path is open. **Class abilities are spent here, off
+   when `aiLineClear()` says the flight path is open — and with **no** line it never walks into
+   the corner blocking it: past 60 px it routes in through the open (`steerTo`, so in a lane it
+   comes down the axis rather than into the tree wall), inside it gives ground straight back and
+   lets them come round the corner into the line (ten bodies pushing into a lane's bend was a
+   fight nobody fired a shot in for a quarter of an hour). **Class abilities are spent here, off
    cooldown at the foe** — on the profile's ability roll (`ai.abilOk`), through the same edge
    field a human's key
    sets (`inp.ability`), each gated by the range it is good at (a warrior rushes the mid-gap,
@@ -384,16 +387,24 @@ The ladder:
    ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
 5. **lie low** — prone with nothing in sight: hold still and let the snow finish. Everything below
    this rung walks somewhere, and a bot crawling to a berry bush at 20 px/s has stopped playing.
-6. **defend** — its own bird hit inside the last `AI_DEFEND_T` (8 s) and the bot inside the
-   profile's `defendR` (1600 / 2400 / everywhere; allies 2000): walk to it (`aiToRoost`, below)
-   and stand 80 px off; the bird anchors rung 3, so the attackers are in sight on arrival.
+6. **defend** — its own bird under `threat` on the shared read (**the two birds**, below): as
+   many bots as the threat calls for (`aiDefendersWanted` — one more than the attackers seen at
+   it, never fewer than two) walk to it (`aiToRoost`, below) from wherever on the map they are,
+   farming, escorting or guarding, and stand 80 px off — the bird anchors rung 3, so the
+   attackers are in sight on arrival — while a bot already inside `AI_ROOST_R` holds its station
+   and the rest go on with the match (a side that empties the map for one arrow is a side that
+   never pushes). Under `AI_ALARM_HP` (half its nerve) everyone comes, pushers included, the one
+   exception a pusher whose side is winning the race — the rival bird lower still — who presses on.
 7. **guard** — from 0.6 × `push.t` on, the profile's `guard` bots (1 / 2 / 2; allies 1) after
    the pushers in slot order (`aiRank`) stand by their own bird, going on down the ladder to work
    what is near while inside `AI_GUARD_R` of it. The bird is their anchor.
 8. **push (the objective)** — after `push.t` (360 / 360 / 300 s; allies 720 / 480 / 420) the
    side's `push.n` lowest-ranked bots (2 / 3 / 3), **one more every `AI_ESCALATE`** (120 s) so a
-   stalemate always breaks (`aiPushers`), go for the rival bird — and an ally goes whenever
-   **the human is already on it** (within 220 px), so a push you start is a push your side joins.
+   stalemate always breaks (`aiPushers`), go for the rival bird — an ally goes whenever
+   **the human is already on it** (inside `AI_ROOST_R`), so a push you start is a push your side
+   joins — and **any** bot joins a siege its side has going once the rival bird is under
+   `AI_JOIN_HP` (0.6) with friends at it, unless its own bird is under threat, which is where it
+   is wanted.
    The walk is `aiToRoost`: the roost sits in its corner's forest at the end of its lane and the
    lane is the only way in, so off it the route is field → `aiLaneGate` (`AI_GATE` px past the
    mouth on open snow) → mouth → lane → bird, on a bigger pathfinder budget (`AI_ROOST_BUDGET`,
@@ -404,8 +415,13 @@ The ladder:
    station `AI_HOLD` (96 px) out **on the lane's axis**, where the gate's gap leaves the line to
    the roost open (off the axis its walls eat the shot) and outside the gust, and looses at the
    profile's draw; a warrior walks up to the nearest roost tile (`aiEagleTile`) and swings E on
-   it, gust and all, exactly as a hand does. Defenders in sight are rung 3's business. A roost it
-   cannot route to is left for `ai.pushCd` (10 s).
+   it, gust and all, exactly as a hand does. Defenders in sight are rung 3's business — until
+   the side outnumbers them: a pusher inside `AI_ROOST_R` of the rival bird whose side has more
+   bodies there than the defenders (the `siege` read, above rung 3) keeps hitting the bird and
+   leaves the fight to its friends, turning only for a rival inside `AI_SIEGE_R` (48 px),
+   because defenders come back from sixty pixels away every few seconds and a push that turns
+   to meet each one never lands a swing. A roost it cannot route to is left for `ai.pushCd`
+   (10 s).
 9. **escort** (allies only) — the two lowest allied AI slots (`aiEscorts`) keep within
    `AI_ESCORT` (120 px) of the human while they are on the ground and inside `AI_ESCORT_R`
    (400 px), going on down the ladder while they are close.
@@ -413,19 +429,28 @@ The ladder:
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
 11. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
 12. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
-   plus a 15-gold float. Then: with no living or rising team [Keep](gameplay.md#base-building), a
-   bot saves for and builds one before anything else (`needKeep` short-circuits the rest of this
-   rung until it can afford tier 0 — a team with no Keep is one wipe from permanent elimination
-   with no way back) — otherwise, with gold in hand, build a generator (or, 30% of the time and
+   plus a 15-gold float. Then, with gold in hand, build a generator (or, 30% of the time and
    only where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
-   work, else queue a card craft on an owned finished Keep; steps off a build site first, since a
-   building is solid. Picking up a dropped card off the ground already falls out of the loot rung
+   work; steps off a build site first, since a building is solid. Picking up a dropped card off the ground already falls out of the loot rung
    (drops are type-agnostic loot); a bot never opens the pick-1-of-3 draft itself
    (`bagClick` is mouse-only) — the instant one is carried, `resolveCardForBot` resolves it with a
    single random pick, since choosing among three is specifically the human decision point.
 13. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E at
    the profile's `work` duty cycle.
 14. **roam** — wander between its landing site and the map centre.
+
+**The two birds.** `aiSituation()` (the `the two birds` sub-banner) is what every bot knows
+about the objective, both sides of it, all match — read once per sim step (cached on
+`state.tick`) and shared by all ten slots: for each roosting bird its position, its nerve as a
+fraction of `EAGLE_HP`, how long since it was last hit, and who is **at** it inside `AI_ROOST_R`
+(240 px) — `defenders` (its own side) and `attackers` (rivals, each resolved through `seenAt`, so
+a buried archer is buried for the whole side) — with `human` set when the local slot is among the
+attackers. `threat` is the one word the ladder asks — hit inside `AI_DEFEND_T` (8 s) or an
+attacker seen — and `aiDefendersWanted` is how many it calls home (one more than the attackers,
+at least two, everyone under `AI_ALARM_HP`). A hit on a roost is therefore news on the far side of the map the same tick,
+which is what lets rung 6 answer from anywhere and rungs 6 and 8 weigh one bird against the
+other. Nothing in it lets a bot do what a hand cannot: a human reads the same facts off the
+map's eagle marks and the bird's nerve bar.
 
 Every walk goes through `steerTo(x, y, reach, budget)`, which is `navTo` on the bot's own slot
 ([gameplay.md](gameplay.md#pathfinding)) — it routes around trees, rocks, buildings and water,
@@ -450,11 +475,16 @@ before the harness started, so a seed is a distribution, not a replay. Wrapping 
 and bucketing by the caller in `new Error().stack` (`hitObject`, `spillInventory`,
 `animalDies`, `updateStructures`, else the trickle) is how the economy was sized in 2.63.
 The match-length target is a match that ends round fifteen minutes with the human sitting it
-out, ten to twenty at the tails, which is what the ally clocks are set for; on 2.63's numbers
-the NORMAL runs that resolved did so at 9–14 minutes on the ally push, but half the runs
-stalemated to the cap with every ally flagged as pushing and standing still mid-map — a
-navigation trap, recorded in [Known drift](checklists.md#known-drift), and the reason the
-distribution cannot be read off the harness yet.
+out, ten to twenty at the tails, which is what the ally clocks are set for. On 2.64's numbers
+(respawn at the bird, the proportionate defence, the siege rule and the blocked-line rule)
+every NORMAL run resolved on the ally push — seeds 42, 99 and 7 at 17:28, 18:26 and 20:35, the
+rivals' own pushes taking the allied bird down to 560–1060 nerve on the way and being thrown
+back — where 2.63's runs half-stalemated; seed 42 on HARD was an ally win at 12:35 and on
+IMPOSSIBLE a loss at 16:40, the allies' siege at 380 nerve when the rivals came home and won
+the race. The NORMAL tail runs a few minutes long of the target, so the ally clocks are the
+next thing to tune. Before the siege rule two to four allies sat at the rival roost for eight
+minutes winning every fight against defenders who came back from sixty pixels away and never
+landed a swing on the bird — the reason respawn at the objective needs the rule.
 
 ## Where players start
 

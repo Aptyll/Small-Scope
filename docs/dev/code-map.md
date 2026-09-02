@@ -54,7 +54,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | skill points (one per hero level, spent on class-ability levels) | `p.skillPts` (spent by `buyAbilityLv`, abilities.js) | `players` (granted in `levelUp`) |
 | roguelike card effects and rarities, drawing 3 distinct options | `CARDS`, `CARD_RARITIES`, `cardKey`, `pick3Distinct` | `players` › `roguelike cards` |
 | how hidden a slot is, and how far anything notices it from | `concealOf`, `seenAt`, `ambushReady` | `players` › `being seen` |
-| death, the split between a respawn timer and permanent elimination, the team-level win check | `die`, `RESPAWN_TIME`, `updateRespawns`, `respawnPlayer`, `teamHasLivingKeep`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding`, `endMatch`, `endSnapshot` | `damage & death` |
+| death, the wait for the bird and the return at it, the one permanent path (a driven-off eagle), the team-level win check | `die`, `RESPAWN_TIME`/`RESPAWN_LV`/`RESPAWN_MIN`/`RESPAWN_MAX`, `respawnTime`, `updateRespawns`, `RESPAWN_OUT`, `respawnPlayer`, `teamInMatch`, `rivalTeamsInMatch`, `checkLastStanding`, `endMatch`, `endSnapshot` | `damage & death` (`teamEagleDown`: `eagle drop`, boot.js) |
 | practice undoing a death on the spot | `practiceRevive` (die()'s first branch under `PRACTICE`) | `damage & death` |
 
 ## js/input.js
@@ -107,11 +107,11 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 
 | Looking for | Start at | Banner |
 | --- | --- | --- |
-| build, upgrade, demolish, refunds, the one-Keep-per-team gate, the card craft queue | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost`, `teamHasLivingKeep`, `startCraft`, `rollCardRarity` | `stump structures` |
+| build, upgrade, demolish, refunds, a chest's card rarity roll | `placeStruct`, `startUpgrade`, `demolishStruct`, `cumulativeCost`, `rollCardRarity` | `stump structures` |
 | every buildable: its tiers, costs, HP, footprint, and the two colours the maps paint it | `STRUCTS`, `STRUCT_ORDER`, `WATER_STRUCT_ORDER` | `stump structures` (scenery carries the same `mm`/`map` pair: `OBJECTS`, world.js) |
 | the fish net's tuning: what it holds, what it lures, how fast it catches and hands over | `NET_CAP`, `NET_R`, `NET_LURE`, `NET_CATCH_T`, `NET_TAKE_T` | `stump structures` (beside `STRUCTS`, whose `net` entry it belongs to) |
 | tuning: the turret's pivot and barrel, its lock window, its bolts | `TUR_PIVOT_Y`, `TUR_BARREL`, `TUR_LOCK`, `TUR_MZ`, `BOLT_SPD`, `BOLT_LIFE` | `the building sim` › `turret gunnery` |
-| construction ticks, generators, the bay rolling a bot out, the Keep's craft | `updateStructures` | `the building sim` |
+| construction ticks, generators, the bay rolling a bot out | `updateStructures` | `the building sim` |
 | turret targeting, traverse and firing | `turretPivot`, `turretMark`, `turretSees`, `turretMuzzle`, `fireBolt` | `the building sim` › `turret gunnery` |
 
 ## js/robots.js
@@ -189,7 +189,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | what a bot slot decides to do this frame | `updateAI`, `aiNearestEnemy`, `aiLineClear`, `aiOpenSides` | `ai` |
 | how well it plays: the three rival levels, the ally profile a notch above, which one a slot runs | `AI_LEVELS`, `AI_ALLIES`, `aiProfile`, `AI_AIM_T`/`AI_ABIL_T` | `ai` › `difficulty` |
-| the objective: who pushes and who guards, the walk into a roost through its lane, the gate turrets, the archer's station | `aiRank`, `aiPushers`, `aiWantsPush`, `aiOnGuard`, `aiRivalEagle`/`aiOwnEagle`, `aiToRoost`, `aiLaneGate`, `aiInLane`, `aiEagleTile`, `AI_HOLD`, `AI_GATE`, `AI_ROOST_BUDGET`, `AI_ESCALATE` | `ai` › `difficulty` (the bird's numbers: `EAGLE_HP`/`EAGLE_ARROW_DMG`/`EAGLE_WORK_DMG`, boot.js) |
+| the objective: who pushes and who guards, the walk into a roost through its lane, the gate turrets, the archer's station, the siege that ignores respawning defenders | `aiRank`, `aiPushers`, `aiWantsPush`, `aiOnGuard`, `aiRivalEagle`/`aiOwnEagle`, `aiToRoost`, `aiLaneGate`, `aiInLane`, `aiEagleTile`, `AI_HOLD`, `AI_GATE`, `AI_ROOST_BUDGET`, `AI_ESCALATE`, `AI_SIEGE_R` (the `siege` read in `updateAI`) | `ai` › `difficulty` (the bird's numbers: `EAGLE_HP`/`EAGLE_ARROW_DMG`/`EAGLE_WORK_DMG`, boot.js) |
+| what every bot knows about both birds: nerve, last hit, who is at each, the `threat` read the defend and push rungs ask, how many a threat calls home | `aiSituation`, `aiDefendersWanted`, `AI_ROOST_R`/`AI_DEFEND_T`/`AI_JOIN_HP`/`AI_ALARM_HP` | `ai` › `difficulty` › `the two birds` |
 | an ally at your side: the escorts, the anchors that let it join your fight and your push | `aiEscorts`, `AI_ESCORT`/`AI_ESCORT_R`, `AI_ANCHOR_R`/`AI_ANCHOR_D` | `ai` › `difficulty` |
 
 ## js/sim.js

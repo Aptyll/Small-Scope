@@ -591,10 +591,6 @@ function destroyStructure(o, refund, p) {
     const c = cumulativeCost(o.type, o.tier);
     awardGold(p, Math.floor((c.gold || 0) / 2), ox, oy);
   }
-  // a Keep falling can itself be the elimination blow for a team that
-  // already has zero living players waiting on its respawn timer - only
-  // die() calls checkLastStanding() otherwise, and nothing else would notice
-  if (o.type === 'keep') checkLastStanding();
 }
 
 // ------------------------------------------------------------ status effects
