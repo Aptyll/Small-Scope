@@ -522,15 +522,19 @@ function updatePlayer(p, dt) {
     inp.mx = inp.my = 0;
   }
 
-  // the fish hoist (startCatch, js/tools.js) holds the body still for its two
-  // seconds - WASD is dropped here, the way a stun drops it - and any other
-  // intent (a fresh press, a roll, a cast, a swing, a meal) ends it first. It
-  // never holds up the intent that ends it.
+  // the fish hoist (startCatch, js/tools.js) holds the body still for its
+  // first CATCH_WALK second - WASD is dropped here, the way a stun drops it -
+  // and a step ends it after that; any other intent (a fresh press, a roll, a
+  // cast, a swing, a meal) ends it at once. It never holds up the intent that
+  // ends it.
   if (p.catchT > 0) {
     p.catchT = Math.max(0, p.catchT - dt);
     if (inp.dodge || inp.ability >= 0 || inp.work || inp.slide ||
         inp.eatBerry || inp.eatFish || inp.cmd || (inp.fire && !p.firePrev)) cancelCatch(p);
-    else inp.mx = inp.my = 0;
+    else if (inp.mx || inp.my) {
+      if (CATCH_T - p.catchT >= CATCH_WALK) cancelCatch(p);
+      else inp.mx = inp.my = 0;
+    }
   }
 
   // edge-triggered intents, consumed here so a controller only has to set them

@@ -460,12 +460,13 @@ function spearFish(p) {
 // The catch is a pose the body performs - CATCH_STOOP s bent to the hole,
 // CATCH_HAUL s with the fish coming up, then the trophy hoist for the rest of
 // CATCH_T - three DOWN-facing frames whatever the body was facing
-// (classSet(p).catch, drawn by drawPlayer). WASD is swallowed for the whole
-// CATCH_T - you stand and hold it up - but it is never a channel you are stuck
-// in: a fresh press, a roll, a cast, a swing, a meal or a hit drops it
-// (cancelCatch, from updatePlayer and damagePlayer). A net hands its first
-// fish up the same way (updateStructures, js/structures.js).
-const CATCH_T = 2, CATCH_STOOP = 0.16, CATCH_HAUL = 0.22;
+// (classSet(p).catch, drawn by drawPlayer). WASD is swallowed for the first
+// CATCH_WALK s - you stand and show it - and walks out of it after that; it is
+// never a channel you are stuck in, because a fresh press, a roll, a cast, a
+// swing, a meal or a hit drops it at any moment (cancelCatch, from
+// updatePlayer and damagePlayer). A net hands its first fish up the same way
+// (updateStructures, js/structures.js).
+const CATCH_T = 2, CATCH_STOOP = 0.16, CATCH_HAUL = 0.22, CATCH_WALK = 1;
 function startCatch(p) { p.catchT = CATCH_T; }
 function cancelCatch(p) { p.catchT = 0; }
 // which catch frame the body is on: 0 stoop, 1 haul, 2 hoist, -1 not catching
