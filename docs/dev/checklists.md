@@ -399,11 +399,15 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
   the stake pillar, not a bug, but it is the next snowball to weigh: a bounty cap, or a hoarder's
   sink.
-- [README.md](../../README.md) is a Steam-style storefront page (`PATCH 2.45`, brought level with the
-  bird-only objective in `PATCH 2.65`): the description and tags up top, five 1920×1080 capsule stills
-  in `docs/media/capsule/` (`01-clearing`, `02-bow`, `03-roost`, `04-forest`, `05-map`), then the
-  four loops (`practice-tool`, `eagles`, `hunt-deer`, `robots`) under About this game. No docs links
-  and no controls list - those stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
+- [README.md](../../README.md) is a Steam page mock-up (`PATCH 2.45`, brought level with the
+  bird-only objective in `PATCH 2.65`, the page shape in `PATCH 2.66`): genre, a short description
+  under 300 characters, tags with the five that matter first, five 1920×1080 capsule stills in
+  `docs/media/capsule/` (`01-clearing`, `02-bow`, `03-roost`, `04-forest`, `05-map`), a Coming soon
+  block (release, platform, players, price), About this game with a paragraph between each of the
+  four loops (`eagles`, `hunt-deer`, `robots`, `practice-tool`) and a Key features list, then a
+  Details table (developer, publisher, support contact, languages). The About copy is the pillars
+  of [game.md](game.md) in store voice - when a pillar changes, both change. No docs links and no
+  controls list - those stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
   `03-roost` was staged at seed 42 through `DBG`: `PROFILE.markDropped()`, `beginDrop()`, both
   eagles' `t` set to `dur`, `endBrief()`, `laneStep` until both lanes are open, `hopOff()`, the
   rivals warped to their own mouth, MY TEAM = AS DEALT so the hero wears the roster's red like the
