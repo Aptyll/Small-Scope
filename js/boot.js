@@ -1319,15 +1319,16 @@ window.DBG = {
   flagResolve: (tx, ty, p) => flagResolve(p || player, tx, ty),
   flagTarget, // what the held press is aiming at right now (null = nothing drawn)
   get flag() { return player.flag; },
-  // the quiver: the ceiling and the fletch clock, and the hud strip - the xp
-  // bar + weapon/ability strip, bottom-centre.
-  QUIVER_MAX, QUIVER_REGEN, hudStripRect, stripHit,
+  // the hud strip - the xp bar + weapon/ability strip, bottom-centre.
+  hudStripRect, stripHit,
   // Tools and bits: the two tables, the tier palette, an instance maker, the
   // firing pipeline and the loot roll - so a driver can stage a build without
   // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells
   // the pointer tests against. bitEditSlot is whether the hover-raised column is up (-1 = down).
   TOOL_TIERS, TOOL_SLOTS, makeTool, toolType, bitType, toolMods,
-  toolRof, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
+  toolRof, toolCycle, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
+  // the draw curve: 0..1 off a slot's chargeT, and the flight and damage it buys a bit
+  drawPow, shotFlight, drawDmgMul, DRAW_RANGE_MIN, DRAW_SPEED_MIN, DRAW_DMG_MIN,
   toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
   // the class abilities: the table, a keypress by hand, and the entity lists
   // an ability leaves in the world - so a driver can stage a crater or a net
@@ -1357,8 +1358,7 @@ window.DBG = {
     q.tools[slot] = cell;
     return cell;
   },
-  setQuiver: (n, p) => { const q = p || player; q.quiver = Math.max(0, Math.min(QUIVER_MAX, n)); q.fletchT = 0; return q.quiver; },
-  setNock: (t, p) => { (p || player).nockT = t; },
+  setNock: (t, p) => { (p || player).nockT = t; }, // a huge t parks a slot's bow for a capture
   // multiplayer slots: every slot, the local one, and the teams table
   players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
   // the eagle drop: the live flight records, force a jump, or fly the route from scratch

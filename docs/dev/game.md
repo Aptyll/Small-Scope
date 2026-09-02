@@ -57,10 +57,11 @@ drop is exactly what your first one may drop, so a new player and a veteran play
 a find is a find because of what it *is*, never because of what you have ground out.
 [The tech tree](gameplay.md#the-tech-tree).
 
-**Arrows are finite whatever is firing them.** Every projectile bit spends one from the same small
-quiver, a spent shot is gone for good, and fletching is the only refill — so ammunition is a
-rhythm, not a resource to scavenge, and every archer runs at the same throttle.
-[The quiver](gameplay.md#the-quiver).
+**The draw is the ammunition.** There is no quiver: what a shot is worth — how far, how fast, how
+hard — is how long the string was held, and the tool's own cycle is all that sits between one
+press and the next. Spamming the button is punished by the shots themselves, short and weak, never
+by a counter, so what the meter shows is exactly what you get.
+[The draw](gameplay.md#the-draw).
 
 **Momentum is the movement.** Ice is mechanically slippery, dodges chain, and **a roll is a hit** —
 the dodge is an attack, which is why a player mid-roll passes through small units instead of

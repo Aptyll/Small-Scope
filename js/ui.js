@@ -1265,8 +1265,8 @@ function drawBag(now) {
 // bar sits at the BOTTOM so the strip's top edge is open screen: that is
 // where an affordable ability level floats its buy plate (abBuyRect below),
 // and a plate bobbing through the bar was the reason the bar moved.
-// The quiver count and dodge pips the old rail carried are gone: the reticle
-// and the overhead bar already say both.
+// The dodge pips the old rail carried are gone: the reticle and the overhead
+// bar already say it.
 //
 // A tool cell says three things without a word on it. The PLATE behind the
 // icon is the tool's tier colour, the same colour it wears in every other
@@ -1719,7 +1719,7 @@ function drawToolCell(i, now, hov) {
   const sel = p.toolSel === i;
   const r = toolCellRect(i);
   const y = r.y - (sel ? 1 : 0);
-  const dry = sel && (p.quiver <= 0 || !toolReady(p));
+  const dry = sel && !toolReady(p);
   const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
   // "it does not fit in here": a red band all the way round the well and the
   // pack's own 1px shake, so the two containers refuse in one language
@@ -1747,7 +1747,7 @@ function drawToolCell(i, now, hov) {
     }
     // the wipe IS the rate of fire: a slow tool covers its well for longer
     if (p.nockT > 0 && sel) {
-      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolRof(p, cell))) * (r.h - 2));
+      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolCycle(p))) * (r.h - 2));
       if (cov > 0) {
         ctx.fillStyle = AB_COVER;
         ctx.fillRect(r.x + 1, y + 1, r.w - 2, cov);

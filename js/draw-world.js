@@ -1631,12 +1631,14 @@ function drawPlayer(p, ex, ey, now) {
   // them takes it away).
   // All three use the identical geometry, so the bar never jumps when one
   // hands over to the next.
-  const nockKit = kitOf(p);
   if (p.eatT > 0 || p.charging || p.nockT > 0 || p.readyFlash > 0) {
     const eating = p.eatT > 0, drawing = p.charging;
+    // the reload divides by toolCycle - the same span the well's wipe and the
+    // reticle's marks read - so the slate fill starts at zero the frame the
+    // shot leaves (dividing by the bare kit.nock sat it at 1 px for half the cycle)
     const frac = eating ? 1 - p.eatT / FOOD_EAT
-      : drawing ? Math.min(1, p.chargeT / nockKit.bowCharge)
-      : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, nockKit.nock);
+      : drawing ? drawPow(p)
+      : p.readyFlash > 0 ? 1 : 1 - p.nockT / Math.max(0.01, toolCycle(p));
     const x = fx - 7, y = hy - 10;
     ctx.fillStyle = 'rgba(12,18,42,0.78)';
     ctx.fillRect(x - 1, y - 1, 16, 3); // rows above the hp backing only (translucent - never overlap)
@@ -1645,7 +1647,7 @@ function drawPlayer(p, ex, ey, now) {
     ctx.fillStyle = eating ? EAT_COL
       : !drawing ? (p.readyFlash > 0 ? DRAW_FULL_COL : NOCK_COL)
       : frac < 1 ? DRAW_COL
-      : p.chargeT < nockKit.bowCharge + DRAW_FULL_FLASH ? '#ffffff' : DRAW_FULL_COL;
+      : p.chargeT < kitOf(p).bowCharge + DRAW_FULL_FLASH ? '#ffffff' : DRAW_FULL_COL;
     ctx.fillRect(x, y, Math.max(1, Math.round(14 * frac)), 2);
   }
   ctx.globalAlpha = 1;

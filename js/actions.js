@@ -1,6 +1,6 @@
 'use strict';
 // What a player does: click/E/space resolved - the swing tools and what they
-// harvest, the quiver and its fletching, the roll as a hit, prone, and one
+// harvest, the empty-press tell, the roll as a hit, prone, and one
 // blow against anything built, each with its own tuning above it. What the
 // LEFT button fires is a tool on one of the four slots: js/tools.js.
 // ------------------------------------------------------------ actions
@@ -22,12 +22,6 @@ const SWING_TOOLS = [
 ];
 const SWING_BOW = 0, SWING_AXE = 1, SWING_PICK = 2;
 const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
-// The quiver: arrows are a resource, not an infinite stream. A shot spends one
-// and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
-// sets its own rhythm); a spent arrow is simply gone, and fletching hands one
-// back every QUIVER_REGEN - the one clock the whole ammo economy runs on.
-const QUIVER_MAX = 6;     // arrows carried
-const QUIVER_REGEN = 2.4; // seconds to fletch one arrow back (only ticks below max)
 const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
 const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
 const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
@@ -354,19 +348,10 @@ function risePlayer(p) {
   }
 }
 
-// ---- the quiver ---------------------------------------------------------
-// Two ways an arrow moves: out of the quiver when a shot is loosed, and back
-// in by fletching - a spent shot is gone for good, so the regen clock is the
-// whole ammo economy and every archer runs at the same throttle.
-function gainArrow(p, n) {
-  if (p.quiver >= QUIVER_MAX) return false;
-  p.quiver = Math.min(QUIVER_MAX, p.quiver + (n || 1));
-  p.quiverFlash = 0.35;
-  return true;
-}
-// pressing a tool that cannot answer - an empty quiver, an empty slot, or a
-// tool with no bit light enough to throw: the tell, rate-limited to the press.
-// What the press WOULD have fired lives in fireTool (js/tools.js).
+// ---- the empty press ----------------------------------------------------
+// pressing a tool that cannot answer - an empty slot, or a tool with no bit
+// light enough to throw: the tell, rate-limited to the press. What the press
+// WOULD have fired lives in fireTool (js/tools.js).
 function dryFire(p) {
   p.dryT = 0.45;
   burst(p.x, p.y - BOW_Y, '#8a97bd', 3, 22, 0.3, true);

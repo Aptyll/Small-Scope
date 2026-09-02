@@ -197,24 +197,27 @@ A tool holding only modifiers fires nothing, the same as one holding only bits t
 1. Read the cover first (`ambushReady`), before anything below can break it.
 2. `spearFish(p)` — bow-fishing survived the new weapon: **any** tool, standing on ice with a fish
    in `FISH_CATCH_R`, spears through the sheet instead of loosing. It takes the press and the
-   cycle, and costs no arrow.
+   cycle.
 3. No tool on the selected slot → `dryFire(p)` and stop.
 4. `toolMods(cell)`; DUPLICATE makes the press consume two bits instead of one.
-5. Per shot: spend one from the quiver, `nextBit(cell)` (walk forward from `cell.idx`, wrapping
+5. Per shot: `nextBit(cell)` (walk forward from `cell.idx`, wrapping
    once, and take the first bit that is a projectile **and** light enough — the index tracker
    lands one past what it found, which is what makes the list cycle), then `emitBit`.
 6. Nothing fired at all → `dryFire`. Otherwise `p.nockT = toolRof(...)`, one `SFX.arrow`, and
    `risePlayer` (the shot is what breaks cover).
 
-`emitBit` is where the player is folded back in: the bit's own damage leads, and the draw
-(`pwScale`), the class kit's `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`), the hero level and then
-the modifiers scale it — so gear, cards and levels all still matter to a weapon they know nothing
-about. The shot goes into the same `arrows` array as before, carrying `path`, `solid`, `ff`,
-`type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old fields.
+`emitBit` is where the player is folded back in: the bit's own damage leads, the class kit's
+`dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`) and the hero level add to it, **the draw
+scales the whole sum** (`drawDmgMul`, [The draw](#the-draw)) and then the modifiers scale that —
+so gear, cards and levels all still matter to a weapon they know nothing about, and a spammed
+level-twelve bow is still a weak one. Speed and life come from `shotFlight(b, m, pw)`, the same
+envelope the aim line measures. The shot goes into the same `arrows` array as before, carrying
+`path`, `solid`, `ff`, `type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old
+fields.
 
-`toolReady(p)` is the second half of the old quiver gate: an empty slot and a tool with no bit
-light enough to throw are both as dry as an empty quiver, and `updatePlayer` refuses the draw on
-all three the same way.
+`toolReady(p)` is the only refusal besides the cycle: an empty slot and a tool with no bit light
+enough to throw are both dry, and `updatePlayer` refuses the draw on both the same way
+(`dryFire`, the slack-string tell).
 
 ### Flight paths
 
@@ -389,7 +392,7 @@ HUNTER — bow, distance control, the ground between:
 
 | key | name | cd | what it does |
 | --- | --- | --- | --- |
-| 1 | **PIERCING SHOT** | 12 s | locks a full draw for `PIERCE_WIND` (0.7 s) — the body plants (`PIERCE_SLOW` ×0.15 walk), the pose leans back and holds, and a thin dashed **telegraph line** is drawn on the ground along the live aim for BOTH sides, gold-flaring as the loose nears. Then the shot fires itself: one enhanced arrow (a full-draw plain arrow ×`PIERCE_MUL` 1.5, `PIERCE_SPD` 380, `PIERCE_RANGE` 260) that **goes through every body on the line** (`a.pierce`/`a.pierceHit`, the arrow loop in js/sim.js) — only a raised shield or the world stops it. Spends no quiver arrow. The loose is the unmissable cue: `SFX.nock` snap + a white flash on the arrowhead |
+| 1 | **PIERCING SHOT** | 12 s | locks a full draw for `PIERCE_WIND` (0.7 s) — the body plants (`PIERCE_SLOW` ×0.15 walk), the pose leans back and holds, and a thin dashed **telegraph line** is drawn on the ground along the live aim for BOTH sides, gold-flaring as the loose nears. Then the shot fires itself: one enhanced arrow (a full-draw plain arrow ×`PIERCE_MUL` 1.5, `PIERCE_SPD` 380, `PIERCE_RANGE` 260) that **goes through every body on the line** (`a.pierce`/`a.pierceHit`, the arrow loop in js/sim.js) — only a raised shield or the world stops it. The loose is the unmissable cue: `SFX.nock` snap + a white flash on the arrowhead |
 | 2 | **NET SHOT** | 15 s | a weighted net down a line (`nets`): first rival hit takes 4 and is **slowed** (`p.slowT`/`slowMul` ×0.4, 2 s, the drape drawn on them); the recoil kicks the hunter backward with an animated hop (`p.hopT`) |
 | 3 | **GRAPPLE** | 8 s | throws a hook down the aim ray: the first **tree, dead tree or rock** within `GRAP_RANGE` (170 px) and `GRAP_ASSIST` of the line (the aim assist) anchors it, and the body is reeled straight at it at `GRAP_REEL` (260 px/s — over `SLIDE_MIN`, so shift on release carves a slide). The reel runs **while key 3 is held** (`input.grapple`, the one held ability input); releasing, arriving, a wall or a stun lets go through `grapEnd`, which KEEPS the momentum and starts the cooldown — a long ride and an instant release cost the same. A hook that catches nothing costs `GRAP_MISS_CD` (1 s) |
 | 4 | **SNOW COVER** | 60 s | the burrow, moved onto the kit ([Prone](#prone-under-the-snow) is hunter-only now): the cast kneels and calls `tryProne`, the 60 s clock is paid **on the way under**, and the key again — like every other way back up — rises free. A kneel the snow refuses (still moving, sliding, no snow underfoot) refunds the clock. The well's active tell drains with `p.hide` as the cover builds |
@@ -509,50 +512,76 @@ Every tool is **hold-to-charge**: holding the button arms the shot (`p.fireArmed
 starts as soon as the tool is actually ready and runs `p.charging`/`p.chargeT` (movement targets
 scale to 55% — walk speed and the ice cap both — facing tracks the mouse, a draw meter renders
 above the player's health bar), and the release edge fires via `fireTool(p)`. The draw scales the
-bit's damage and a shot loosed out of full snow cover multiplies the lot by `AMBUSH_MUL` (see
-[Prone](#prone-under-the-snow)). Shots carry their shooter's `owner`/`team`, live in the `arrows`
-array, and are updated in `updatePlay()`: they die on solid tiles (unless the bit passes through
-them), on a **rival player** (tested first — see [PvP](multiplayer.md#pvp)), on an **enemy worker
-bot** (`robotHit`/`hurtRobot`, tested next), on any animal hit (knockback scales with power), or
-at the end of the bit's life. They never hit structures — a building is broken by hand with E, not
-shot. However a shot ends, it is **gone** — nothing lands in the snow to be retrieved — see
-[The quiver](#the-quiver).
+shot's range, speed and damage together ([The draw](#the-draw)) and a shot loosed out of full snow
+cover multiplies the damage by `AMBUSH_MUL` (see [Prone](#prone-under-the-snow)). Shots carry
+their shooter's `owner`/`team`, live in the `arrows` array, and are updated in `updatePlay()`:
+they die on solid tiles (unless the bit passes through them), on a **rival player** (tested first
+— see [PvP](multiplayer.md#pvp)), on an **enemy worker bot** (`robotHit`/`hurtRobot`, tested
+next), on any animal hit (knockback scales with power), or at the end of the bit's life. They
+never hit structures — a building is broken by hand with E, not shot. However a shot ends, it is
+**gone** — nothing lands in the snow to be retrieved.
 
 `p.fireArmed` is what makes the draw survive a tool that isn't ready. It is set on the press edge,
 cleared on release and at every point that cancels a draw (`tryWork`, falling in a hole, an
 overlay opening in `sampleHumanInput`, changing slot, `die`), and the draw begins on the first
-step where it is set *and* `nockT <= 0` *and* `toolReady(p)` *and* `quiver > 0`. Requiring a fresh
-press instead would deadlock every controller that simply holds the button down — which is every
-AI slot: `updateAI` sets `inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight
-back to true and no second edge ever arrives.
+step where it is set *and* `nockT <= 0` *and* `toolReady(p)`. Requiring a fresh press instead
+would deadlock every controller that simply holds the button down — which is every AI slot:
+`updateAI` sets `inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight back to
+true and no second edge ever arrives. `p.chargeT` is the raw seconds held and is **never
+clamped** — every reader takes `drawPow(p)` (0..1) off it, and the meter's white blink at the
+peak needs to see the hold run past the full draw.
 
-### The quiver
+### The cycle
 
-Arrows are a resource, and they are the ammunition for **every** projectile bit, not just the
-plain one — which is what keeps an exotic loadout honest. `p.quiver` starts at `QUIVER_MAX` (6);
-`fireTool` spends one per projectile bit fired (so DUPLICATE costs two) and sets
-`p.nockT = toolRof(p, cell)` — the tool's own `rof`, scaled by the same `kit.nock` factors QUICKDRAW
-and the loose ranks always moved — and no draw can begin while that runs. A spent shot is **gone**
-— nothing lands in the snow, nothing is retrieved, and dying spills no ammo. Below the ceiling,
-`p.fletchT` accumulates and hands back one arrow every `kit.fletch` (starts at `QUIVER_REGEN`
-2.4 s, shortened by fletch ranks) through `gainArrow` — the one clock the whole ammo economy runs
-on, so every archer is throttled the same way. Bow-fishing is the one press that costs nothing:
-it never leaves the tool, so it takes the cycle but not the arrow.
+There is no ammunition. What sits between one press and the next is **the tool's own cycle**:
+`fireTool` sets `p.nockT = toolCycle(p)` — the held tool's `rof` in game steps, scaled by the
+same `kit.nock` factor QUICKDRAW, QUICK HANDS, FLETCHER'S TOUCH and RELENTLESS shorten
+(`toolRof`); bare hands' `kit.nock` when no tool is up, which is what a fish spear costs — and no
+draw can begin while that runs. Its end is the **one** gate: the frame the wipe clears, a held
+button starts the draw. `toolCycle` is also the one number every readout divides `nockT` by —
+the well's wipe, the reticle's corner marks and the overhead slate bar — so no meter can show a
+cooldown a different length from the one running (the overhead bar used to divide by the bare
+`kit.nock`, and sat at 1 px for half of every reload). Dying spills nothing and refills nothing,
+because there is nothing to refill.
 
-Two indicators carry it, and neither is a word (the hud strip itself carries no quiver or
-dodge counter — its weapon well only reddens its rim when the selected tool cannot answer, the
-old dry-bow tell):
+Three indicators carry it, and none is a word (the hud strip's weapon well only reddens its rim
+when the selected tool cannot answer — an empty slot, or nothing light enough to throw):
 
-- **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the renock readout for
-  *every* slot: gold filling = drawing, slate filling = reloading, white = just came back. Same
-  geometry either way, so it never jumps.
+- **The weapon well** (`drawToolCell`) — the top-down cooldown wipe, the same cover every
+  ability well cools by, over exactly `toolCycle`. When the wipe is gone, the bow is ready.
+  Always.
+- **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the cycle readout for
+  *every* slot: gold filling = drawing, slate filling = reloading, pale gold = just came back.
+  Same geometry either way, so it never jumps.
 - **The reticle** (`cursorInfo` → `drawCursor`). Every reticle in play carries `nock` (elapsed
-  fraction, 1 = ready) and `dry` (empty quiver), whatever the pointer is over. While the renock
-  runs, four gold corner marks fall inward and land on the ring; an empty quiver drops the centre
-  pixel and greys the ticks — the crosshair goes hollow.
+  fraction, 1 = ready) and `dry`, whatever the pointer is over. While the cycle runs, four gold
+  corner marks fall inward and land on the ring; a dry tool drops the centre pixel and greys the
+  ticks — the crosshair goes hollow.
 
-Sounds: `SFX.nock()` on the renock completing (very quiet — it plays after every shot) and
+Sounds: `SFX.nock()` on the cycle completing (very quiet — it plays after every shot) and
 `SFX.dryFire()` on an empty press.
+
+### The draw
+
+`drawPow(p)` — `chargeT` over the kit's `bowCharge`, clamped 0..1 — scales the shot three ways
+at once, each on a straight line from a floor to the bit's own number (the `the draw` banner,
+js/tools.js):
+
+| | at a tap (`pw` 0) | at full draw | floor |
+| --- | --- | --- | --- |
+| range | ×`DRAW_RANGE_MIN` | ×1 | 0.22 |
+| speed | ×`DRAW_SPEED_MIN` | ×1 | 0.6 |
+| damage (the whole sum: bit + kit + level, before modifiers) | ×`DRAW_DMG_MIN` | ×1 | 0.3 |
+
+`shotFlight(b, m, pw)` turns that into the `spd` and `life` a bit leaves the tool with, the
+modifiers' envelope folded in and the range curve applied through the life, so a tap also *stops
+short* rather than only arriving late. It is the one envelope: `emitBit` fires through it and
+`drawAimLine` measures it, which is what lets the line on the ground grow out of the bow as the
+string comes back. A plain arrow off the shortbow: 60 px and 4 damage at a tap, 272 px and 18 at
+full. **That curve is the whole punishment for spamming the button** — short, slow and weak, with
+the cycle still to run before the next — dealt by the shot itself rather than by a counter, so
+what a player sees (a stubby line, a pale meter) is exactly what they get. Bots read the same
+curve: `updateAI` holds to `bowCharge × k` before loosing.
 
 A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodies of their own —
 a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
@@ -595,8 +624,10 @@ shot spawns) — not the feet — so the line and the flight pass exactly throug
 of running parallel a few px above it.
 
 The line is **truthful, not decorative**, and it is truthful about the **bit that is up next**
-(`peekBit`), not about a bow in general: it runs exactly as far as that bit would fly
-(`speed × life`, both through the tool's modifiers), and only stops at an `isSolidTile` if that
+(`peekBit`) at the **draw held right now**, not about a bow in general: it runs exactly as far
+as that bit would fly if loosed this instant (`shotFlight` — speed × life through the tool's
+modifiers and the draw curve, so it grows out of the bow as the string comes back, and a tap's
+line is a stub), and only stops at an `isSolidTile` if that
 bit is one a wall stops. It still stops at the first animal it would hit (the same 8 px body test
 as the arrow update) with an impact cross — line-coloured on a solid, hunt-amber on a body — and
 otherwise ends in a short perpendicular range-cap bar. A `lob` gets only the first 35% of its
@@ -1836,7 +1867,7 @@ seek in it.
 
 The bow's rhythm has two of its own: `SFX.nock()` (a dry wooden tick when the renock clears —
 deliberately near-silent, since it fires after every shot) and `SFX.dryFire()` (a slack string on
-an empty quiver). See [the quiver](#the-quiver).
+a press the tool cannot answer). See [the cycle](#the-cycle).
 
 [Prone](#prone-under-the-snow) has four: `SFX.bury()` (a body dropping into deep snow — low crunch,
 no pitch), `SFX.hidden()` (the cover finishing, barely there on purpose: it is the sound of *not*

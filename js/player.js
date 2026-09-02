@@ -61,7 +61,7 @@ const DODGE_CD = 3.5;     // seconds to refill one charge
 
 // The two bow numbers a class kit is expressed against - CLASSES below
 // reads both at load time, which is why they sit here and the rest of the
-// bow (the quiver, the fletching, the trail) is in js/actions.js.
+// bow (the draw curve and the cycle: js/tools.js; the trail: js/actions.js).
 const BOW_CHARGE = 0.9;   // seconds to a full draw
 const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
@@ -285,7 +285,7 @@ const CARDS = {
     { name: 'PADDED VEST', blurb: 'MORE HEALTH', mod: (k) => { k.maxHp += 12; } },
     { name: 'LIGHT FEET', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.06; } },
     { name: 'CAMOUFLAGE', blurb: 'FOES SPOT YOU FROM CLOSER', mod: (k) => { k.stealth -= 0.08; } },
-    { name: "FLETCHER'S TOUCH", blurb: 'ARROWS REGROW FASTER', mod: (k) => { k.fletch *= 0.85; } },
+    { name: "FLETCHER'S TOUCH", blurb: 'FASTER RENOCK', mod: (k) => { k.nock *= 0.85; } },
   ],
   blue: [
     { name: 'HEAVY DRAW', blurb: 'HITS HARDER, SLOWER DRAW', mod: (k) => { k.dmgBase += 2; k.bowCharge *= 1.05; } },
@@ -299,7 +299,7 @@ const CARDS = {
     { name: 'STONE SKIN', blurb: 'MUCH LESS DAMAGE TAKEN', mod: (k) => { k.dr += 3; } },
     { name: 'GHOST', blurb: 'SEEN FROM MUCH CLOSER', mod: (k) => { k.stealth -= 0.18; } },
     { name: 'BLOODLUST', blurb: 'HEAL ON A KILL', mod: (k) => { k.killHeal = (k.killHeal || 0) + 12; } },
-    { name: 'RELENTLESS', blurb: 'FASTER DODGES AND ARROWS', mod: (k) => { k.dodgeCd -= 0.7; k.fletch *= 0.75; } },
+    { name: 'RELENTLESS', blurb: 'FASTER DODGES AND ARROWS', mod: (k) => { k.dodgeCd -= 0.7; k.nock *= 0.8; } },
   ],
   gold: [
     { name: "BERSERKER'S HEART", blurb: 'HITS HARDER, LESS HEALTH', mod: (k) => { k.dmgBase += 5; k.maxHp -= 15; } },
@@ -327,7 +327,7 @@ function baseKit(cls) {
   return Object.assign({}, CLASSES[cls].kit, {
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
     harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
-    ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
+    ambushMul: AMBUSH_MUL, bury: PRONE_BURY,
     killHeal: 0,
   });
 }
@@ -440,10 +440,9 @@ class Player {
     this.charging = false; this.chargeT = 0;      // bow draw state
     // the meal being chewed and the clock BOTH meals share (js/core.js)
     this.eatT = 0; this.eatType = null; this.eatFxT = 0; this.foodCd = 0;
-    // the quiver: what is left, the renock cooldown, and the fletching timer
-    this.quiver = QUIVER_MAX; this.nockT = 0; this.fletchT = 0;
+    this.nockT = 0;                                // the cycle: seconds until the next press (toolCycle, js/tools.js)
     this.fireArmed = false;                        // the bow button has been pressed since the last loose
-    this.quiverFlash = 0; this.readyFlash = 0; this.dryT = 0; // HUD tells: gained / renocked / pressed empty
+    this.readyFlash = 0; this.dryT = 0;            // HUD tells: renocked / pressed empty
     this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
     this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
     this.rollHit = [];                             // what this roll has already swiped (once each)
@@ -696,7 +695,6 @@ function die(p, src, cause) {
   p.downedTeam = killer ? killer.team : p.team;
   p.downedCause = cause;
   spillInventory(p, killer);
-  p.quiver = 0; // arrows die with the archer - nothing to spill, nothing to loot
   if (killer) {
     killer.kills++;
     // BLOODLUST/VAMPIRE: a flat heal on a confirmed kill, the one card

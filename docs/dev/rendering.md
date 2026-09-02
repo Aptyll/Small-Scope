@@ -394,8 +394,7 @@ plate, and is **notched into `AB_SEGS` segments** WoW-fashion — a tick cuts da
 the fill and sits faint on the empty track, so progress through a level is countable either way.
 It sits at the *bottom* so the strip's top edge stays open screen for the ability wells'
 **floating buy plates** (below). The plate swallows clicks so nothing fires through it. There is
-no rail: the quiver count and dodge pips it once carried are said by the reticle, the overhead
-bar.
+no rail: the dodge pips it once carried are said by the overhead stamina bar.
 
 The tool well (`drawToolCell`) says three things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
@@ -404,7 +403,9 @@ highlight across the top tier's plate); the 12px tool art is drawn doubled, so t
 weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
 weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
 tell. And the **cooldown wipe** covers the whole well for exactly
-`toolRof`, so the rate of fire is the shape of the wipe rather than a number. What is loaded
+`toolCycle`, so the rate of fire is the shape of the wipe rather than a number — and the wipe
+clearing IS the bow being ready, since nothing else gates the draw
+([the cycle](gameplay.md#the-cycle)). What is loaded
 stays out of the resting well — the hover-raised bit column is where the build is read and
 edited.
 
@@ -967,18 +968,18 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
   the object under the pointer (`workTarget()` is non-null: tree, rock, berried bush),
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
-  the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
+  the draw fills and turns pale gold at full, like the meter. `dim` (50% alpha) also means tools
   are blocked right now: floundering in a hole, or mid-roll.
 - Every reticle in play also carries the **selected tool's own state**, whatever the pointer is
-  over, since the crosshair is where the eye already is: `nock` (0→1 over that tool's own
-  `toolRof`) draws four gold corner marks falling inward onto the ring, and `dry` — an empty
-  quiver, an empty slot, **or** a tool with no bit light enough to throw — drops the centre
+  over, since the crosshair is where the eye already is: `nock` (0→1 over `toolCycle`) draws
+  four gold corner marks falling inward onto the ring, and `dry` — an empty slot **or** a tool
+  with no bit light enough to throw — drops the centre
   pixel and greys the ticks, a hollow crosshair. `amb` (buried, settled: the next shot is worth
   `AMBUSH_MUL`) grows a second segment out along each of the crosshair's **own axes** and warms the
   centre pixel to gold — deliberately on the cross, where the renock's marks are on the diagonals,
   so a bow that is both reloading and buried says two separate things at once. All three come from
   the one `ret()` helper inside `cursorInfo`, so no return site can forget them. See
-  [the quiver](gameplay.md#the-quiver) and [Prone](gameplay.md#prone-under-the-snow).
+  [the cycle](gameplay.md#the-cycle) and [Prone](gameplay.md#prone-under-the-snow).
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),

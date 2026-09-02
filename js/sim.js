@@ -382,8 +382,7 @@ function updatePlay(dt) {
       // range's consecutive-hit run (agStreak, js/world.js) - minigame or not
       if (PRACTICE && !a.ptHit) agStreak = 0;
       // A shot that ends - a miss, a wall, a body, or the end of its life -
-      // just vanishes: the quiver refills by fletching alone, so nothing is
-      // ever lying in the snow to walk back over.
+      // just vanishes: nothing is ever lying in the snow to walk back over.
       arrows.splice(i, 1);
     }
   }
@@ -848,29 +847,25 @@ function updatePlayer(p, dt) {
   if (p.swingT <= 0 && p.swingCd <= 0) p.swing = SWING_BOW;
   if (inp.work) tryWork(p);
 
-  // the quiver: the renock cooldown counts down, and a short quiver fletches
-  // one arrow back at a time. Both run for every slot, dead or alive is
-  // already filtered above, so a bot recovers on exactly the human's clock.
+  // the cycle: the cooldown a shot starts (toolCycle, js/tools.js) counts
+  // down, and its end is the ONE gate between presses. It runs for every
+  // slot - dead or alive is already filtered above - so a bot recovers on
+  // exactly the human's clock.
   if (p.nockT > 0) {
     p.nockT = Math.max(0, p.nockT - dt);
     if (p.nockT === 0) { p.readyFlash = 0.16; if (p === player) SFX.nock(); }
   }
-  if (p.quiver < QUIVER_MAX) {
-    p.fletchT += dt;
-    if (p.fletchT >= kit.fletch) { p.fletchT = 0; gainArrow(p, 1); }
-  } else p.fletchT = 0;
-  p.quiverFlash = Math.max(0, p.quiverFlash - dt);
   p.readyFlash = Math.max(0, p.readyFlash - dt);
   p.dryT = Math.max(0, p.dryT - dt);
 
   // The tool: pressing arms the shot, releasing fires it. The press does not
   // have to land on a ready tool - it stays armed, so holding through the
-  // cycle (or through an empty quiver) draws the moment the next shot is
-  // there. Without that, a controller that holds fire down - every AI slot
-  // does - would fire once and then wait forever for an edge it already spent.
-  // `toolReady` is the second half of the old quiver gate: a slot with no tool
-  // in it, or a tool with no bit light enough to throw, is just as dry.
-  const armed = p.quiver > 0 && toolReady(p);
+  // cycle draws the moment the wipe clears. Without that, a controller that
+  // holds fire down - every AI slot does - would fire once and then wait
+  // forever for an edge it already spent. `toolReady` is the only other
+  // refusal: a slot with no tool in it, or a tool with no bit light enough to
+  // throw, is dry.
+  const armed = toolReady(p);
   if (inp.fire && !p.firePrev) {
     // THE BUTTON IS THE CANCEL. A meal must never trap the hands: deciding
     // mid-chew that the fight matters more drops it on the spot and the draw
@@ -897,9 +892,12 @@ function updatePlayer(p, dt) {
   }
   p.firePrev = inp.fire;
 
-  // bow draw: charge up and keep facing the aim point
+  // bow draw: charge up and keep facing the aim point. chargeT is the raw
+  // seconds held, never clamped - every reader takes drawPow() (0..1) off it,
+  // and the meter's white blink at the peak (DRAW_FULL_FLASH) needs to see
+  // the hold run PAST the full draw
   if (p.charging) {
-    p.chargeT = Math.min(kitOf(p).bowCharge, p.chargeT + dt);
+    p.chargeT += dt;
     const adx = inp.aimX - p.x, ady = inp.aimY - p.y;
     if (Math.abs(adx) > Math.abs(ady)) p.dir = adx > 0 ? 'right' : 'left';
     else p.dir = ady > 0 ? 'down' : 'up';

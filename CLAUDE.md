@@ -31,7 +31,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
-| movement, tools and bits, the class abilities, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| movement, tools and bits, the draw and the cycle, the class abilities, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | a **new look** for anything drawn — concept sheets Noah picks from before a grid ships | the `concept-art` skill ([.claude/skills/concept-art/SKILL.md](.claude/skills/concept-art/SKILL.md)); past sheets in `docs/media/concepts/` |

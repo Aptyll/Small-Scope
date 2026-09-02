@@ -482,7 +482,7 @@
     // the shot rhythm: a dry wooden tick the moment the next arrow is nocked and
     // the bow can be drawn again. Quiet on purpose - it plays after every shot.
     nock() { tone(880, 0.03, 'square', 0.035); tone(1240, 0.03, 'square', 0.025, 0, 0.03); },
-    // pressing the bow with an empty quiver: a slack string and nothing behind it
+    // pressing a tool that cannot answer (an empty slot, nothing light enough to throw): a slack string and nothing behind it
     dryFire() { noise(0.05, 0.07, 260); tone(120, 0.09, 'triangle', 0.06, -40); },
     // going to ground: a body dropping into deep snow, all low crunch and no pitch
     bury() { noise(0.22, 0.2, 380); tone(96, 0.16, 'triangle', 0.06, -26); },

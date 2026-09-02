@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.58'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.59'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.59', 'THE QUIVER IS GONE - THE WEAPON WELL\'S WIPE IS THE ONLY THING BETWEEN SHOTS, AND HOW LONG YOU HOLD THE DRAW NOW SETS HOW FAR, HOW FAST AND HOW HARD THE ARROW FLIES, WITH THE AIM LINE GROWING TO MATCH.'],
   ['2.58', 'HEALTH BARS ARE PAINTED BY SIDE - BLUE OVER YOU AND YOUR ALLIES, RED OVER RIVALS, GOLD OVER WILDLIFE - STAMINA IS WHITE, THE DRAW METER GOES PALE GOLD AT FULL, AND THE MERCHANT AND EAGLE WEAR MERCH AND PERCH.'],
   ['2.57', 'THE LANDING TOUR\'S HEADLINES SIT ON A DARK PLATE SO THEY READ OVER THE PINES.'],
   ['2.56', 'EACH EAGLE WINGTIP NOW STREAMS ONE CONTINUOUS RIBBON OF WIND THAT FADES OUT AT ITS TAIL, IN PLACE OF THE LOOSE STREAKS.'],

@@ -88,7 +88,7 @@ on class or gear change — never per frame). The kit fields: `iceMax` (× `ICE_
 (snow-slide fatigue rate), `chargeMul` (speed while drawn), `bowCharge` (seconds to full draw),
 `nock` (the baseline every rate of fire is scaled against — a tool's own `rof` is multiplied by
 `nock / BOW_NOCK`, so a class's hands still set the rhythm; see
-[the quiver](gameplay.md#the-quiver)),
+[the cycle](gameplay.md#the-cycle)),
 `dmgBase`/`dmgPow` (what the *player* adds to the bit's own damage), `spdDmg` (extra damage scaled
 by the shooter's speed at release, capped at 200 px/s), `dodgeSpeed`, `maxHp`. Sites that read it:
 `updatePlayer`'s movement block, `emitBit`, `tryDodge`, the AI's draw timing, the cursor,

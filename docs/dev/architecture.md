@@ -28,7 +28,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |
 | [js/robots.js](../../js/robots.js) | ~520 | shared scope, no `window.*` export | the worker bots a bay rolls out, and the one flag per player whose tile is their standing order |
-| [js/actions.js](../../js/actions.js) | ~830 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone, the quiver — and, under its own banner, the damage types and status effects **every** kind of unit shares |
+| [js/actions.js](../../js/actions.js) | ~830 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone — and, under its own banner, the damage types and status effects **every** kind of unit shares |
 | [js/tools.js](../../js/tools.js) | ~760 | shared scope, no `window.*` export | the weapon: the `TOOLS` and `BITS` tables, what a press fires, how each bit flies, the loot rolls, the tech tree, and the icons for both |
 | [js/abilities.js](../../js/abilities.js) | ~640 | shared scope, no `window.*` export | the class abilities on keys 1-4: the `CLASS_AB` table, casting, the pierce/net/grapple/snow-cover/shield/rush/crater/juggernaut sim, and their draw passes |
 | [js/ai.js](../../js/ai.js) | ~380 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |

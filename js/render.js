@@ -1001,15 +1001,12 @@ function cursorInfo() {
 
   // Every reticle in play carries the tool's state, whatever it is hovering:
   // `nock` is how much of the cycle between shots has elapsed (1 = ready) and
-  // `dry` says the button has nothing to answer with - an empty quiver, an
-  // empty slot, or a tool with no bit light enough to throw. drawCursor turns
-  // them into the ring's own behaviour, so the crosshair the eye is already on
-  // is where the cooldown is read.
-  const nockK = kitOf(player);
-  const held = heldTool(player);
-  const nockSpan = held ? toolRof(player, held) : nockK.nock;
-  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockSpan) : 1;
-  const dry = player.quiver <= 0 || !toolReady(player);
+  // `dry` says the button has nothing to answer with - an empty slot, or a
+  // tool with no bit light enough to throw. drawCursor turns them into the
+  // ring's own behaviour, so the crosshair the eye is already on is where the
+  // cooldown is read.
+  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, toolCycle(player)) : 1;
+  const dry = !toolReady(player);
   // `amb` rides along the same way: buried, settled, and the next arrow off
   // this string is the one worth AMBUSH_MUL
   const ret = (mode, dim, extra) =>
@@ -1025,7 +1022,7 @@ function cursorInfo() {
     return { kind: 'hammer', dim: far };
   }
   if (player.charging) {
-    return ret('bow', false, { frac: Math.min(1, player.chargeT / nockK.bowCharge) });
+    return ret('bow', false, { frac: drawPow(player) });
   }
   // a living thing under the pointer: hunting reticle
   for (const q of players) {
@@ -1122,8 +1119,8 @@ function drawCursor(info, now) {
     const g = gap + 1;
     rects.push([mx - g, my - g, 1, 1], [mx + g, my - g, 1, 1], [mx - g, my + g, 1, 1], [mx + g, my + g, 1, 1]);
   }
-  // The bow's own state, on top of whatever the pointer is over. An empty
-  // quiver hollows the reticle out - the centre pixel, the one thing that says
+  // The bow's own state, on top of whatever the pointer is over. A dry tool
+  // hollows the reticle out - the centre pixel, the one thing that says
   // "this shot happens here", is simply gone, and the ticks go slate. While the
   // renock runs, four corner marks fall inward from far out and land on the
   // ring at the moment the bow is ready; there is nothing left of them at rest,
@@ -1169,7 +1166,7 @@ function drawCursor(info, now) {
 // its flight, up to where it starts falling away from the bearing.
 function drawAimLine(ex, ey, now) {
   if (!player.charging || state.mode !== 'play') return;
-  const full = player.chargeT >= kitOf(player).bowCharge;
+  const full = drawPow(player) >= 1;
   const col = full ? DRAW_FULL_COL : DRAW_COL; // the meter's own two golds (draw-world.js)
   const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
   if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
@@ -1197,7 +1194,11 @@ function drawAimLine(ex, ey, now) {
   const bit = BITS[cell.bits[bi]];
   if (bit.path === 'boomer' || bit.path === 'orbit') return;
   const m = toolMods(cell);
-  const range = bit.speed * m.spdMul * bit.life * m.lifeMul * (bit.path === 'lob' ? 0.35 : 0.85);
+  // the flight THIS draw buys, right now: shotFlight is emitBit's own
+  // envelope, so the line grows out of the bow as the string comes back and
+  // its cap sits exactly where a shot loosed this instant would end
+  const fl = shotFlight(bit, m, drawPow(player));
+  const range = fl.spd * fl.life * (bit.path === 'lob' ? 0.35 : 1);
   const x0 = player.x, y0 = player.y - BOW_Y; // exactly emitBit()'s origin and direction
   const dx = mouseWX() - x0, dy = mouseWY() - y0;
   const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;

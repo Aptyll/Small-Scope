@@ -32,7 +32,7 @@ declare victory. The three affordances:
   Two things a staged scene walks into: `warp` moves a slot but **not the camera**, which lerps
   after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
   cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
-  player will quietly shoot it dead mid-capture, so empty its quiver with `setQuiver(0, p)` first.
+  player will quietly shoot it dead mid-capture, so park its bow with `setNock(1e9, p)` first.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
