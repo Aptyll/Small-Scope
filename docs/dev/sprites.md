@@ -7,13 +7,11 @@ Sprites are literal ASCII grids paired with a palette object mapping character �
 for transparent), baked by `bake()` at load. Left-facing variants are `flipH()` of the right ones.
 Character sprites are 16×16; the raider set (`SPRITES.raider`, `RDPAL`) is baked from the exact
 same grids as the player, so a player pose edit changes both. The tiered structures use the same
-trick: one grid each (`wall`, `turret`, `generator` at 16×16, the **Keep** at 32×28 for its 2×2
-footprint) baked with `WPAL` /
+trick: one grid each (`wall`, `turret`, `generator`, all 16×16) baked with `WPAL` /
 `WPAL_STONE` / `WPAL_GOLD` — a grid edit changes all three
 tiers, and the palettes share the extra `k`/`K` (iron fitting) and `e` (glow) chars, which is also
-what a building's team paint rides on (see below). The Keep's sprite is too big for a 16×16 wheel
-wedge, so it gets the same escape hatch as the turret and the bay: a dedicated `keepIcon` grid,
-baked into `teamBuild[team].icon.keep`. The
+what a building's team paint rides on (see below). A sprite too tall for a 16×16 wheel wedge gets
+a dedicated icon grid baked into `teamBuild[team].icon` (the turret's and the bay's). The
 **bot bay** (`spawner`) is the one big sprite: a single-tier 48×38 grid (`bay`, `BAYPAL`) on a 3×2
 tile footprint — steel plates under a flat two-row snow cap, a team-painted lintel band (`L`/`T`/`t`
 via `bayTeamPal`), riveted flanks with a grille and hazard stripe, and a 20-px dark doorway (cols
@@ -56,8 +54,20 @@ the bird already has and the silhouette is untouched (`eagleFlash` is the same t
 white, for the downed objective's hit flash):
 `playerTeam[team]` (coat/hat/trim swapped — `SPRITES.player` *is* `playerTeam[0]`),
 `teamBuild[team][type][tier]` (the tier material with the `k`/`K`/`e` accents repainted, so tier
-still reads as tier), and `robotTeam[team]`. A new character or building sprite has to be added to
-those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's colour. The swing
+still reads as tier), `robotTeam[team]`, and `merchant[team]` — the eagle's driver
+([the merchant](gameplay.md#the-merchant)): its **own grids**, `merchDown`/`merchUp`/`merchSide`
+plus `merchFeet` — **16 × 18**, two rows taller than a slot — an old trader in a wide flat
+**fur hat** (`f`/`F`, twelve wide, the silhouette) with a **team-cloth crown** (`y`/`Y`, the one
+team ink and all of it), a white **beard** (`w`/`W`) down the chest, a khaki wool coat
+(`r`/`R`/`d`) hanging straight to the hem, boots under it, three frames a direction (the boots
+walk, the coat hangs; the side grid faces right and flips), under `merchantPal`. It is look **D**
+off the concept sheet in `docs/media/concepts/merchant-concepts-2.png` (the `concept-art` skill
+in `.claude/skills/` is how a sheet is made and picked — two rounds of hoods and hats came
+before this one). Nothing on it is a slot's coat or hat, so the side reads off the crown, the
+nameplate and the bar (no prone poses — it never lies down). A new character or building sprite has to
+be added to those bakes, not just to the flat `SPRITES` entry, or it will not wear a team's
+colour — and every read of one of them indexes by `skin(team)` (js/player.js), never the bare
+team, so your side is painted blue whichever index it was dealt. The swing
 tool icons (`itemBow`/`itemAxe`/`itemPick`) are 8×8 grids sharing `AXPAL`, drawn at **1×** by
 `drawHeldTool()` (inside a translate/rotate, resolved through `SPRITES[t.icon]` from the
 `SWING_TOOLS` table) and by `drawRobot()` for a bot's swing — E picks the tool, there is no tool

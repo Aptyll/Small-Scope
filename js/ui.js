@@ -33,13 +33,10 @@ function wheelOptions() {
   // straight up - picking one IS the roll (or the ring), so neither carries
   // a separate go wedge
   if (w.kind === 'pkdie' || w.kind === 'agbell') return [{ id: 'easy' }, { id: 'medium' }, { id: 'hard' }];
-  const o = structOf(objAt(w.tx, w.ty));
   // upgrade is always the wedge straight up and demolish always the last one,
-  // so a type's extra option lands between them instead of displacing either
-  const opts = [{ id: 'upgrade' }];
-  if (o && o.type === 'keep' && !o.building) opts.push({ id: 'craft' });
-  opts.push({ id: 'demolish' });
-  return opts;
+  // so a type's extra option would land between them instead of displacing
+  // either (none has one today; the Keep's card craft did)
+  return [{ id: 'upgrade' }, { id: 'demolish' }];
 }
 
 // The whole geometry, in two lines: every wedge is span wide, and wedge i is
@@ -101,7 +98,6 @@ function runCmd(p, c) {
   if (Math.hypot(c.tx * TILE + 8 - p.x, c.ty * TILE + 8 - p.y) > 60) return;
   if (c.kind === 'upgrade') startUpgrade(o, p);
   else if (c.kind === 'demolish') demolishStruct(o, p);
-  else if (c.kind === 'craft') startCraft(o, p);
 }
 
 // ------------------------------------------------------------ selection, hints & wheel
@@ -253,7 +249,7 @@ function drawMouseIcon(x, y, pressed) {
   ctx.fillRect(x + 1, y + 5, 7, 4); ctx.fillRect(x + 2, y + 9, 5, 1); // body
   ctx.fillRect(x + 5, y + 1, 3, 3); // right button: body colour, nothing to notice
   ctx.fillStyle = '#dce9f5'; ctx.fillRect(x + 1, y + 5, 7, 1); // body highlight under the seam
-  ctx.fillStyle = pressed ? '#ff9440' : '#ffd95c'; ctx.fillRect(x + 1, y + 1, 3, 3); // left button
+  ctx.fillStyle = pressed ? DRAW_FULL_COL : DRAW_COL; ctx.fillRect(x + 1, y + 1, 3, 3); // left button: the draw meter's golds
   ctx.fillStyle = '#fff3b0'; ctx.fillRect(x + 1, y + 1, 1, 1); // button glint
 }
 
@@ -354,7 +350,7 @@ function renderWheel(now) {
     const iy = L.cy + Math.sin(opt.ang) * WHEEL_RING;
     if (w.kind === 'build') {
       const affordable = canAfford(STRUCTS[opt.id].tiers[0].cost);
-      const tb = SPRITES.teamBuild[player.team];
+      const tb = SPRITES.teamBuild[skin(player.team)];
       const spr = (tb.icon && tb.icon[opt.id]) || tb[opt.id][0];
       ctx.globalAlpha = affordable ? 1 : 0.55;
       ctx.drawImage(spr, Math.round(ix - 8), Math.round(iy - 8));
@@ -436,13 +432,6 @@ function renderWheel(now) {
       }
     } else if (opt.id === 'demolish') {
       label = 'DEMOLISH'; color = '#ff8a7a';
-    } else if (opt.id === 'craft') {
-      if (o && o.craftT > 0) { label = 'CRAFTING...'; color = '#9fb6d8'; }
-      else {
-        const t = STRUCTS.keep.tiers[o ? o.tier : 0];
-        label = 'QUEUE CARD : ' + costText({ gold: t.craftCost });
-        color = canAfford({ gold: t.craftCost }) ? '#ffd95c' : '#ff8a7a';
-      }
     }
   }
   // centred under the wheel, but never off the edge: the wheel sits where the
@@ -589,7 +578,7 @@ function renderMinimap(now) {
     if (Math.hypot(dx, dy) > MM_R - 1) continue;
     ctx.fillStyle = '#0f1632';
     ctx.fillRect(Math.round(MM_CX + dx) - 2, Math.round(MM_CY + dy) - 2, 4, 4);
-    ctx.fillStyle = TEAMS[p.team].mark;
+    ctx.fillStyle = TEAMS[skin(p.team)].mark;
     ctx.fillRect(Math.round(MM_CX + dx) - 1, Math.round(MM_CY + dy) - 1, 2, 2);
   }
   // worker flags on your side, as the same pennant the chart draws: where the
@@ -598,7 +587,7 @@ function renderMinimap(now) {
     if (!q.active || q.team !== vp.team || !q.flag) continue;
     const dx = (q.flag.tx + 0.5 - ptx) * s, dy = (q.flag.ty + 0.5 - pty) * s;
     if (Math.hypot(dx, dy) > MM_R - 2) continue;
-    drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[q.team].mark);
+    drawFlagPennant(ctx, MM_CX + dx, MM_CY + dy + 3, TEAMS[skin(q.team)].mark);
   }
   // the downed eagles: both objectives, always on the disc - keeping yours
   // alive (and finding theirs) is the match
@@ -609,7 +598,7 @@ function renderMinimap(now) {
     const gx = Math.round(MM_CX + dx), gy = Math.round(MM_CY + dy);
     ctx.fillStyle = '#0f1632';
     ctx.fillRect(gx - 3, gy - 1, 7, 3); ctx.fillRect(gx - 1, gy - 3, 3, 7);
-    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillStyle = TEAMS[skin(e.team)].mark;
     ctx.fillRect(gx - 2, gy, 5, 1); ctx.fillRect(gx, gy - 2, 1, 5);
   }
   // named places, glyph only - a name would not fit inside the disc (the
@@ -622,7 +611,7 @@ function renderMinimap(now) {
   // the centre dot: white for you, the team colour for a slot you are watching
   ctx.fillStyle = '#0f1632';
   ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
-  ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[vp.team].mark;
+  ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[skin(vp.team)].mark;
   ctx.fillRect(MM_CX - 1, MM_CY - 1, 2, 2);
 
   // day/night cycle ring: a 3 px band of pixels, the elapsed part painted
@@ -1058,7 +1047,7 @@ function drawCharPanel(now) {
   // and hero level beside it in quiet ink
   const head = player.name;
   const sub = CLASSES[player.cls].name + ' ' + player.level;
-  drawPixelTextShadow(ctx, head, panel.x + 8, panel.y + 6, TEAMS[player.team].mark, '#0a0e23');
+  drawPixelTextShadow(ctx, head, panel.x + 8, panel.y + 6, TEAMS[skin(player.team)].mark, '#0a0e23');
   drawPixelTextShadow(ctx, sub, panel.x + 8 + pixelTextWidth(head) + 8, panel.y + 6, '#7a8bb8', '#0a0e23');
   // the body, live: walking in place with its bought bands in their level
   // materials and the held weapon beside it
@@ -1071,7 +1060,7 @@ function drawCharPanel(now) {
   const sx = pr.x + 12, sy = pr.y + 7;
   ctx.fillStyle = 'rgba(4,6,18,0.6)';
   ctx.beginPath(); ctx.ellipse(sx + 32, pr.y + pr.h - 6, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
-  const spr = SPRITES.champ[player.cls][0].down[1 + (Math.floor(now * 3) % 2)];
+  const spr = SPRITES.champ[player.cls][skin(0)].down[1 + (Math.floor(now * 3) % 2)];
   ctx.drawImage(spr, sx, sy, 64, 64);
   drawGearMarks(player, sx, sy, 4);
   const held = heldTool(player);
@@ -1265,8 +1254,8 @@ function drawBag(now) {
 // bar sits at the BOTTOM so the strip's top edge is open screen: that is
 // where an affordable ability level floats its buy plate (abBuyRect below),
 // and a plate bobbing through the bar was the reason the bar moved.
-// The quiver count and dodge pips the old rail carried are gone: the reticle
-// and the overhead bar already say both.
+// The dodge pips the old rail carried are gone: the reticle and the overhead
+// bar already say it.
 //
 // A tool cell says three things without a word on it. The PLATE behind the
 // icon is the tool's tier colour, the same colour it wears in every other
@@ -1719,7 +1708,7 @@ function drawToolCell(i, now, hov) {
   const sel = p.toolSel === i;
   const r = toolCellRect(i);
   const y = r.y - (sel ? 1 : 0);
-  const dry = sel && (p.quiver <= 0 || !toolReady(p));
+  const dry = sel && !toolReady(p);
   const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
   // "it does not fit in here": a red band all the way round the well and the
   // pack's own 1px shake, so the two containers refuse in one language
@@ -1747,7 +1736,7 @@ function drawToolCell(i, now, hov) {
     }
     // the wipe IS the rate of fire: a slow tool covers its well for longer
     if (p.nockT > 0 && sel) {
-      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolRof(p, cell))) * (r.h - 2));
+      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolCycle(p))) * (r.h - 2));
       if (cov > 0) {
         ctx.fillStyle = AB_COVER;
         ctx.fillRect(r.x + 1, y + 1, r.w - 2, cov);
@@ -2095,7 +2084,6 @@ function tipBit(id, cell) {
     // the flags, only when they are true: an absent line is the default, and
     // four rows of NO would drown the three that matter
     if (b.solid === false) d.notes.push(['PASSES THROUGH WALLS', '#8fd8ff']);
-    if (b.stick) d.notes.push(['STICKS IN THE SNOW TO REUSE', '#e8dcb4']);
     if (b.ff) d.notes.push(['HITS YOUR OWN TEAM TOO', '#e0637a']);
     if (b.lit) d.notes.push(['LIGHTS THE GROUND IT PASSES', '#ffd95c']);
   } else {

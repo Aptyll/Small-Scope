@@ -52,15 +52,16 @@ function moveEntity(e, dx, dy, r, strict) {
 // that component is handed to the other unit as knockback, and a lighter
 // unit gets a small bounce off a heavier one. Two relaxation passes settle
 // piles. Deterministic: fixed iteration order, no rng.
-const UNIT_MASS = { player: 3, deer: 2.2, wolf: 2, rabbit: 0.5, robot: 0.7 };
+const UNIT_MASS = { player: 3, deer: 2.2, wolf: 2, rabbit: 0.5, robot: 0.7, merchant: 3 };
 const UNIT_BOUNCE = 0.3; // restitution for the lighter side of a contact
-function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : e.kind === 'wolf' ? 4.5 : 3; }
+// the merchant (robots.js) is a player-sized body in the robots list, so it takes a player's radius
+function unitRadius(e) { return e instanceof Player ? PLAYER_R : e.kind === 'rabbit' ? 2.5 : e.kind === 'deer' ? 5 : e.kind === 'wolf' ? 4.5 : e.kind === 'merchant' ? PLAYER_R : 3; }
 function separateUnits() {
   const us = [];
   for (const p of players) if (p.active && !p.dead && !inAir(p)) us.push({ e: p, r: PLAYER_R, m: UNIT_MASS.player, vel: true, small: true, roll: p.dodgeT > 0 });
   // birds fly: they are the one unit nothing collides with
   for (const a of animals) if (!a.dead && a.kind !== 'bird') us.push({ e: a, r: unitRadius(a), m: UNIT_MASS[a.kind], vel: false, small: a.kind !== 'deer' });
-  for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS.robot, vel: false, small: true });
+  for (const b of robots) if (!b.dead) us.push({ e: b, r: unitRadius(b), m: UNIT_MASS[b.kind] || UNIT_MASS.robot, vel: false, small: true });
   // velocity a unit carries into a contact: players their momentum, the
   // rest their knockback (their walk is direction-only and re-chosen each tick)
   const vx = (u) => u.vel ? u.e.vx + u.e.kbx : u.e.kbx;
@@ -262,7 +263,10 @@ function navSmooth(path, x, y, r) {
 }
 
 function navClear(e) { if (e.nav) { e.nav.path = null; e.nav.fail = false; e.nav.stallT = 0; } }
-function navTo(e, gx, gy, r, reach, dt) {
+// budget (optional) is findPath's expansion budget for THIS goal - a walk
+// into a corner's forest asks for more than NAV_BUDGET, which is sized for
+// a detour in the open
+function navTo(e, gx, gy, r, reach, dt, budget) {
   reach = reach || 0;
   const nav = e.nav || (e.nav = { path: null, i: 0, gtx: -1, gty: -1, replanT: 0, fail: false, stallT: 0, lx: 0, ly: 0, reach: 0 });
   const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE);
@@ -276,7 +280,7 @@ function navTo(e, gx, gy, r, reach, dt) {
     if (navLineClear(e.x, e.y, gx, gy, r)) {
       nav.path = [[gx, gy]];
     } else {
-      const p = findPath(e.x, e.y, gx, gy, reach);
+      const p = findPath(e.x, e.y, gx, gy, reach, budget);
       nav.path = p ? navSmooth(p, e.x, e.y, r) : null;
       if (nav.path && !nav.path.length) nav.path = [[gx, gy]]; // already within reach
     }

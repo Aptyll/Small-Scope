@@ -1,19 +1,19 @@
 # CLAUDE.md
 
 Softfall: a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map — ten
-slots, two teams, last side standing. **Read [docs/dev/game.md](docs/dev/game.md) before proposing
+slots, two teams, drive off the rival eagle to win. **Read [docs/dev/game.md](docs/dev/game.md) before proposing
 a feature or judging whether one fits**: that is the design in one page, and this file is only the
 rules.
 
 ## Commands
 
 ```
-node tools/serve.js          # static server + screenshot sink on http://localhost:8471
-node tools/bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after changing a clip
+node app/server.js          # static server + screenshot sink on http://localhost:8471
+node app/bake-sfx.js       # audio/sfx/*.mp3 -> js/sfxdata.js; rerun after changing a clip
 ```
 
 **Double-clicking [index.html](index.html) has to work** — nothing may depend on being served. A
-`file://` page cannot `fetch` its own folder, which is why `tools/bake-sfx.js` inlines the sound
+`file://` page cannot `fetch` its own folder, which is why `app/bake-sfx.js` inlines the sound
 effects (its output is committed); an asset loaded any other way is silently dead off the disk.
 No package manager, dependencies, tests or linter: edit a `js/*.js` file and reload.
 
@@ -31,11 +31,12 @@ Read the relevant one **before** working in that area — they carry the detail 
 | what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
-| movement, tools and bits, the class abilities, the quiver, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| movement, tools and bits, the draw and the cycle, the class abilities, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
+| a **new look** for anything drawn — concept sheets Noah picks from before a grid ships | the `concept-art` skill ([.claude/skills/concept-art/SKILL.md](.claude/skills/concept-art/SKILL.md)); past sheets in `docs/media/concepts/` |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
-| the file layout, load order, what each file exposes, `tools/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
+| the file layout, load order, what each file exposes, `app/` | [docs/dev/architecture.md](docs/dev/architecture.md) |
 | which banner / function in which js file owns a thing | [docs/dev/code-map.md](docs/dev/code-map.md) |
 
 ## Architecture
@@ -149,6 +150,10 @@ lives in `docs/dev/*.md` beside the code it protects.
   bits](docs/dev/gameplay.md#tools-and-bits).
 - **Anything deciding it can see a player asks `seenAt(p, range)`**, never a bare range — that one
   function is where GHOSTSTEP and burial live (both maps gate on `concealOf(p)`).
+- **Anything painting a team's colour indexes by `skin(team)`** — `TEAMS[skin(p.team)]`,
+  `SPRITES.champ[c][skin(t)]`, every per-team sprite set — never by the bare index: your side is
+  always BLUE on your screen (`settings.teamBlue`), and a bare `TEAMS[p.team]` is the one thing
+  on it painted the wrong colour. Rules (`p.team`, `enemyOf`) never call it.
 - **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).

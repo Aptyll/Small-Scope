@@ -23,8 +23,8 @@ const events = [];        // {txt, bg, fg, t}; updateFx ages and expires them
 function logEvent(txt, p) {
   events.push({
     txt: String(txt).toUpperCase(), t: 0,
-    bg: p ? TEAMS[p.team].coatD : '#2a3358',
-    edge: p ? TEAMS[p.team].mark : '#6d7ea6',
+    bg: p ? TEAMS[skin(p.team)].coatD : '#2a3358',
+    edge: p ? TEAMS[skin(p.team)].mark : '#6d7ea6',
     fg: p ? playerTint(p) : '#e6ecfa',
   });
   while (events.length > EVENT_MAX * 3) events.shift();
@@ -119,7 +119,7 @@ function renderScoreboard() {
 
   let ry = y + 28;
   for (const g of groups) {
-    const tm = TEAMS[g[0].team];
+    const tm = TEAMS[skin(g[0].team)];
     ctx.fillStyle = tm.mark;
     ctx.fillRect(x + 4, ry, 2, g.length * SB_ROW - 2); // one stripe down the whole team
     for (const p of g) {
@@ -331,7 +331,7 @@ function renderWorldMap(now) {
   if (state.drop) for (const e of state.drop.eagles) {
     if (e.state === 'fly' || e.state === 'dive') {
       ctx.save();
-      ctx.strokeStyle = TEAMS[e.team].mark;
+      ctx.strokeStyle = TEAMS[skin(e.team)].mark;
       ctx.setLineDash([3, 2]);
       ctx.beginPath();
       ctx.moveTo(MAP_X + (e.x0 / TILE) * MAP_S, MAP_Y + (e.y0 / TILE) * MAP_S);
@@ -343,7 +343,7 @@ function renderWorldMap(now) {
     const ly = MAP_Y + Math.round((e.y / TILE) * MAP_S);
     ctx.fillStyle = '#241a10';
     ctx.fillRect(lx - 3, ly - 1, 7, 3); ctx.fillRect(lx - 1, ly - 3, 3, 7);
-    ctx.fillStyle = TEAMS[e.team].mark;
+    ctx.fillStyle = TEAMS[skin(e.team)].mark;
     ctx.fillRect(lx - 2, ly, 5, 1); ctx.fillRect(lx, ly - 2, 1, 5);
   }
 
@@ -355,7 +355,7 @@ function renderWorldMap(now) {
     const oy2 = MAP_Y + Math.round((p.y / TILE) * MAP_S);
     ctx.fillStyle = '#241a10';
     ctx.fillRect(ox2 - 2, oy2 - 2, 5, 5);
-    ctx.fillStyle = TEAMS[p.team].mark;
+    ctx.fillStyle = TEAMS[skin(p.team)].mark;
     ctx.fillRect(ox2 - 1, oy2 - 1, 3, 3);
   }
 
@@ -366,8 +366,8 @@ function renderWorldMap(now) {
     if (!q.active || q.team !== player.team || !q.flag) continue;
     const lx = MAP_X + Math.round((q.flag.tx + 0.5) * MAP_S);
     const ly = MAP_Y + Math.round((q.flag.ty + 0.5) * MAP_S);
-    drawFlagIcon(ctx, q.flag.job, lx + 3, ly - 10, TEAMS[q.team].mark, '#241a10');
-    drawFlagPennant(ctx, lx, ly, TEAMS[q.team].mark, '#241a10');
+    drawFlagIcon(ctx, q.flag.job, lx + 3, ly - 10, TEAMS[skin(q.team)].mark, '#241a10');
+    drawFlagPennant(ctx, lx, ly, TEAMS[skin(q.team)].mark, '#241a10');
   }
   // the tile the pointer would plant on - only while the middle button is
   // held, exactly as in the world (state.flagAim)
@@ -472,6 +472,7 @@ const SET_TABS = [
     { id: 'shake', label: 'SCREEN SHAKE', kind: 'toggle' },
     { id: 'info', label: 'INFO DISPLAY', kind: 'toggle' },
     { id: 'cursor', label: 'CURSOR', kind: 'toggle' },
+    { id: 'teamBlue', label: 'MY TEAM', kind: 'toggle' }, // BLUE always, or the roster's colour (skin, player.js)
   ] },
   { id: 'video', label: 'VIDEO', rows: [
     { id: 'quality', label: 'QUALITY', kind: 'choice',
@@ -563,7 +564,7 @@ controlsCv.width = SET_W; controlsCv.height = 84;
 (function bakeControls() {
   const g = controlsCv.getContext('2d');
   const cols = [
-    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['CTRL', 'SNEAK'], ['CLICK', 'FIRE'], ['1-4', 'ABILITIES'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
+    [['WASD', 'MOVE'], ['SPACE', 'DODGE'], ['SHIFT', 'SLIDE'], ['CLICK', 'FIRE'], ['1-4', 'ABILITIES'], ['E', 'HARVEST'], ['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['B', 'BACKPACK']],
     [['G', 'CHARACTER'], ['M', 'WORLD MAP'], ['MMB', 'ORDER CREW'], ['N', 'MUTE'], ['P', 'PAUSE'], ['ESC', 'SETTINGS'], ['SCROLL', 'ZOOM'], ['F3', 'INFO'], ['.', 'HITBOX']],
   ];
   for (let c = 0; c < 2; c++) {
@@ -748,7 +749,9 @@ function renderSettings(now, opts) {
       if (y < L.clipY0 - 12 || y > L.clipY1 + 4) continue;
       drawPixelText(ctx, r.label, SET_X + 14, y, '#cfe0ff');
       if (r.kind === 'slider') drawSliderById(r.id, y, r.id === 'vol' || r.id === 'music' || r.id === 'sfx' ? off : false);
-      else if (r.kind === 'toggle') drawToggleRow(y, toggleVal(r.id), r.id === 'cursor' ? 'PIXEL' : undefined, r.id === 'cursor' ? 'BROWSER' : undefined);
+      else if (r.kind === 'toggle') drawToggleRow(y, toggleVal(r.id),
+        r.id === 'cursor' ? 'PIXEL' : r.id === 'teamBlue' ? 'ALWAYS BLUE' : undefined,
+        r.id === 'cursor' ? 'BROWSER' : r.id === 'teamBlue' ? 'AS DEALT' : undefined);
       else if (r.kind === 'choice') for (const o of r.opts) {
         const col = preset === o.id ? '#ffd95c' : hit === 'q:' + o.id ? '#f4f7ff' : '#7a8bb8';
         drawPixelTextShadow(ctx, o.label, o.x, y, col, 'rgba(8,12,28,0.9)');
@@ -836,9 +839,8 @@ function buildNamePanel() {
 // and this is the only other place it changes
 function applyProfileName() { player.name = PROFILE.name(); }
 
-function openNamePanel(first) {
+function openNamePanel() {
   const m = state.menu;
-  m.nameFirst = !!first;      // a first launch offers SKIP; an edit offers CANCEL
   m.nameBuf = PROFILE.get().name || '';
   m.nameShake = 0;
   m.nameHover = [0, 0];
@@ -855,11 +857,11 @@ function nameCommit() {
   SFX.unlock();
   closeMenuPanel();
 }
-// ESC, or the right-hand plank. On a first launch this is the SKIP the prompt
-// promises - the default name stands until it is edited - and afterwards it is
-// a plain cancel that leaves the stored name alone.
+// ESC, or the right-hand plank: a plain cancel that leaves the stored name
+// alone. There is no first-launch prompt any more - a fresh profile rolls a
+// random name at load (PROFILE, js/profile.js) and this panel only ever
+// opens from the name tag or the PLAYER planks, when the player wants it.
 function nameDismiss() {
-  if (state.menu.nameFirst) { PROFILE.skipName(); applyProfileName(); }
   SFX.pickup();
   closeMenuPanel();
 }
@@ -971,7 +973,7 @@ function renderNamePanel(now, slide) {
     ok ? m.nameHover[0] : 0, now, ok && pressed && m.nameHover[0] > 0.5);
   ctx.globalAlpha = 1;
   drawMenuButton({ x: r[1].x, y: r[1].y + slide, w: r[1].w, h: r[1].h },
-    m.nameFirst ? 'SKIP' : 'CANCEL', m.nameHover[1], now, pressed && m.nameHover[1] > 0.5);
+    'CANCEL', m.nameHover[1], now, pressed && m.nameHover[1] > 0.5);
 }
 
 // The name bottom-left of the title screen, mirroring the patch tag on the

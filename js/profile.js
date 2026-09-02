@@ -13,7 +13,22 @@
   const KEY = 'softfall.profile';
   const OLD_SETTINGS = 'softfall.settings'; // pre-profile saves; migrated once
   const NAME_MAX = 16;
-  const DEFAULT_NAME = 'WANDERER'; // what SKIP takes, and what a corrupt save falls back to
+  const DEFAULT_NAME = 'WANDERER'; // what a corrupt save falls back to mid-session
+
+  // A fresh profile is NAMED, not asked: the first-launch prompt was friction
+  // where a new player wanted the game, so load() rolls one of these winter
+  // words instead and the name panel waits behind the title's name tag for
+  // whenever they care. Every word passes validate() (A-Z, under NAME_MAX,
+  // clean), and none is a class name.
+  const NAME_POOL = [
+    'JUNIPER', 'ROWAN', 'ASPEN', 'BIRCH', 'ALDER', 'BRAMBLE', 'SORREL', 'THISTLE',
+    'FROST', 'DRIFT', 'FLURRY', 'EMBER', 'FLINT', 'TINDER', 'GLACIER', 'AURORA',
+    'MARTEN', 'ERMINE', 'SABLE', 'VIXEN', 'LYNX', 'STOAT', 'OTTER', 'BADGER',
+    'HERON', 'MAGPIE', 'STARLING', 'PLOVER', 'SISKIN', 'KESTREL', 'REDPOLL', 'BRANT',
+  ];
+  function randomName() {
+    return NAME_POOL[Math.floor(Math.random() * NAME_POOL.length)];
+  }
 
   // A basic filter, deliberately: it normalises the obvious letter-for-digit
   // swaps and then looks for any of these ANYWHERE in the name, so a handful of
@@ -36,8 +51,7 @@
   function blank() {
     return {
       v: 1,
-      name: '',        // '' until the first-launch prompt is answered
-      named: false,    // has that prompt been answered at all (SKIP counts)
+      name: '',        // '' only until load() rolls a random one; edited from the name panel
       dropped: false,  // has this profile ever jumped off the eagle - gates the first-flight countdown
       practice: false, // has the PRACTICE TOOL plank been knocked open (3 knocks; stays open)
       bestLap: 0,      // the ice parkour's all-time best lap in seconds (0 = never lapped)
@@ -118,7 +132,6 @@
       profile = blank();
       if (s && typeof s === 'object') {
         if (typeof s.name === 'string') profile.name = s.name;
-        profile.named = !!s.named;
         profile.dropped = !!s.dropped;
         profile.practice = !!s.practice;
         if (typeof s.bestLap === 'number' && isFinite(s.bestLap) && s.bestLap > 0) profile.bestLap = s.bestLap;
@@ -155,17 +168,17 @@
         saveNow();
       }
       // a stored name that no longer passes (the filter grew, a hand-edited
-      // save) is dropped rather than shown - the prompt comes back for it
-      if (profile.name && !validate(profile.name).ok) { profile.name = ''; profile.named = false; }
+      // save) is dropped rather than shown, and an empty name - a fresh
+      // profile, an old SKIP, or that repair - rolls a random one and keeps
+      // it, so a player always has a name and never has to stop for one
+      if (profile.name && !validate(profile.name).ok) profile.name = '';
+      if (!profile.name) { profile.name = randomName(); saveNow(); }
       return profile;
     },
 
     get() { return profile; },
-    // the name to print: the default stands in for a skipped prompt
+    // the name to print: load() guarantees one, the default is a last resort
     name() { return profile.name || DEFAULT_NAME; },
-    // has the first-launch prompt been answered - the ONLY thing that decides
-    // whether the menu opens it unasked
-    named() { return !!profile.named; },
     validate,
 
     // Set the name, validated. Returns validate()'s result; on failure nothing
@@ -174,15 +187,8 @@
       const r = validate(raw);
       if (!r.ok) return r;
       profile.name = r.name;
-      profile.named = true;
       saveNow();
       return r;
-    },
-    // answer the prompt without a name: the default sticks until it is edited
-    skipName() {
-      profile.name = '';
-      profile.named = true;
-      saveNow();
     },
 
     // ---- first flight -------------------------------------------------------

@@ -143,7 +143,7 @@ which reads as ghosting on high-refresh displays. New entity draw code must use 
 everything that walks) → footprints (walking prints,
 slide grooves, skate scratches and belly-crawl furrows all share the one `footprints` array,
 branching on `f.k`) → flat objects
-(stumps, and **fish nets** via `drawNet`) → spent arrows (`drawShafts`) → item drops → **y-sorted
+(stumps, and **fish nets** via `drawNet`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
 slots draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
@@ -161,7 +161,9 @@ everything below draws in screen space; see [World zoom](#world-zoom-and-the-two
 `renderVignettes` → **`replayTick`** (banks the frame just finished into the replay ring — it
 sits here, not at the end of `render()`, so the strip holds no HUD, no dim and no picture of
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
-the flight bar, the first-flight countdown, keybind indicators) → `renderWheel` (radial menu, above the UI) →
+the flight bar, keybind indicators) → `drawDropBrief` (mode `play`,
+only while [the drop brief](#the-drop-brief) holds a roost) or `drawHopPrompt` (mode `play`, the
+local slot still seated on its roost: the E - HOP OFF key cap) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays (the M map also in mode `drop`) → `renderTitle` (the main menu, also during the play intro) → the end-of-match
 overlay (`renderDead`: the death dim and its planks, or `renderVictory` / `renderDefeat` — see
 [The end screens](#the-end-screens)) →
@@ -392,8 +394,7 @@ plate, and is **notched into `AB_SEGS` segments** WoW-fashion — a tick cuts da
 the fill and sits faint on the empty track, so progress through a level is countable either way.
 It sits at the *bottom* so the strip's top edge stays open screen for the ability wells'
 **floating buy plates** (below). The plate swallows clicks so nothing fires through it. There is
-no rail: the quiver count and dodge pips it once carried are said by the reticle, the overhead
-bar.
+no rail: the dodge pips it once carried are said by the overhead stamina bar.
 
 The tool well (`drawToolCell`) says three things and carries no words. The **plate** behind the icon
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
@@ -402,7 +403,9 @@ highlight across the top tier's plate); the 12px tool art is drawn doubled, so t
 weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
 weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
 tell. And the **cooldown wipe** covers the whole well for exactly
-`toolRof`, so the rate of fire is the shape of the wipe rather than a number. What is loaded
+`toolCycle`, so the rate of fire is the shape of the wipe rather than a number — and the wipe
+clearing IS the bow being ready, since nothing else gates the draw
+([the cycle](gameplay.md#the-cycle)). What is loaded
 stays out of the resting well — the hover-raised bit column is where the build is read and
 edited.
 
@@ -549,8 +552,8 @@ disagree).
 ## Overhead health bars
 
 Beside the bar sits the other thing drawn on every body alike: **`drawUnitStates(e, px, py, w, h,
-now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the snare's sprung jaws,
-the fire and the falcon's mark over whatever sprite is wearing them, taking the sprite's own box so
+now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the root's sprung jaws,
+the fire and the mark's gold chevrons over whatever sprite is wearing them, taking the sprite's own box so
 a rabbit, a worker bot and a player slot get the same four tells at their own size. `drawPlayer`
 reaches it through `drawAbilityOnPlayer` (which adds the two a slot alone can show — a raised
 shield, the juggernaut's rim); `drawAnimal`, `drawBird` and `drawRobot` call it directly. **The
@@ -559,21 +562,33 @@ burning rival still has to read as the rival it is; the embers themselves are pa
 `updateBurn` rather than drawn here. What each state *does* is
 [gameplay.md](gameplay.md#status-effects-one-set-for-every-unit).
 
-`drawHealthBar()` draws a small color-coded bar (green → amber → red by hp fraction) above every
-unit, always visible: every player (in `drawPlayer`), animals (in `drawAnimal`),
-and robots (in `drawRobot`). **Birds are the one exception** — 3 hp means every hit is a kill, and
+**The three bars over a body are three colours, never three shades of one**: health in the side's
+paint, stamina white, the draw meter gold (the palette is one block above `drawHealthBar` in
+[js/draw-world.js](../../js/draw-world.js); the cursor's bow ring, the aim line and the mouse icon
+read the same two golds, so "full draw" is one colour everywhere).
+`drawHealthBar(cxp, topY, hp, maxHp, w, team)` draws a small bar above every unit, always visible
+— every player (in `drawPlayer`), animals (in `drawAnimal`), robots (in `drawRobot`), a hurt
+building — **painted by side** (`barCol`): the team's `mark` through `skin()`, so it is blue over
+you and your allies and red over rivals on your screen, and neutral gold (`BAR_NEUTRAL`, the WoW
+grammar) over wildlife, the practice dummy and anything handed no team. How full it is carries the
+health. The old green → amber → red drain spent the rival's colour on "hurt", so a hurt ally
+read as an enemy at a glance. **Birds are the one exception** — 3 hp means every hit is a kill, and
 a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow
 by `a.alt` instead, which is the only read on how high one is.
 The overhead bar is the **only** player health display — the old top-left Minecraft-style hearts
 were removed in the HUD redesign (their sprites are still baked, unreferenced). Above it sits one
 more small meter — **the slot the hands report to**, and it carries three states that can never
-overlap, since a meal puts the bow down and blocks the draw for its whole length: yellow while
-charging, turning hot orange at full draw (two discrete states — a gradient is unreadable at
-14 px); slate while the renock runs, white the instant it comes back; and **heal green** filling
+overlap, since a meal puts the bow down and blocks the draw for its whole length: gold while
+charging (`DRAW_COL`), one white blink (`DRAW_FULL_FLASH`, 0.12 s) and then pale gold
+(`DRAW_FULL_COL`) at full draw — brighter, never a new hue: two discrete states, since a gradient
+is unreadable at 14 px, and the hot orange it used to turn sat beside a red rival's bar as two warm
+bars; slate while the renock runs, pale gold the instant it comes back (the bow's own ready colour
+— white is the stamina bar's); and **heal green** filling
 left to right while a meal is being chewed (`FOOD_EAT`, [Food](gameplay.md#food-the-meal-is-a-channel)).
 All three are drawn for **everyone**, because each is a tell somebody can act on — a shot is
 coming, a shot is not coming, a heal is coming and hitting them takes it away. The overhead stack
-floats clear of the sprite: stamina plate at `py - 4` (every slot, since the level badge spans both
+floats clear of the sprite: stamina plate at `py - 4` (white, `STAM_COL`, on every side — the one
+bar with no side to it; every slot, since the level badge spans both
 bars), health at `py - 7`, that meter at
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
 the stamina bar), and the slot's name tag in team colour at `py - 18`, a clear row above the meter's
@@ -953,18 +968,18 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
   the object under the pointer (`workTarget()` is non-null: tree, rock, berried bush),
   dimmed when it is beyond `WORK_REACH`; **ice** the same lock in pale blue over bare ice;
   **hunt** amber breathing ring over an animal; **fish** water-blue ring over a fish; **bow** — while charging the ring closes as
-  the draw fills and turns orange at full, like the meter. `dim` (50% alpha) also means tools
+  the draw fills and turns pale gold at full, like the meter. `dim` (50% alpha) also means tools
   are blocked right now: floundering in a hole, or mid-roll.
 - Every reticle in play also carries the **selected tool's own state**, whatever the pointer is
-  over, since the crosshair is where the eye already is: `nock` (0→1 over that tool's own
-  `toolRof`) draws four gold corner marks falling inward onto the ring, and `dry` — an empty
-  quiver, an empty slot, **or** a tool with no bit light enough to throw — drops the centre
+  over, since the crosshair is where the eye already is: `nock` (0→1 over `toolCycle`) draws
+  four gold corner marks falling inward onto the ring, and `dry` — an empty slot **or** a tool
+  with no bit light enough to throw — drops the centre
   pixel and greys the ticks, a hollow crosshair. `amb` (buried, settled: the next shot is worth
   `AMBUSH_MUL`) grows a second segment out along each of the crosshair's **own axes** and warms the
   centre pixel to gold — deliberately on the cross, where the renock's marks are on the diagonals,
   so a bow that is both reloading and buried says two separate things at once. All three come from
   the one `ret()` helper inside `cursorInfo`, so no return site can forget them. See
-  [the quiver](gameplay.md#the-quiver) and [Prone](gameplay.md#prone-under-the-snow).
+  [the cycle](gameplay.md#the-cycle) and [Prone](gameplay.md#prone-under-the-snow).
 - Sprites live in `SPRITES.cursor.{arrow,hand,grab,hammer}` (`CUPAL`, lit top-left, icy
   bevel) with one-colour `SPRITES.cursorShadow` twins drawn 1 px offset beneath; hotspots are
   in `CUR_HOT`. Reticles are procedural via `drawOutlinedRects()` (dark rim pass, then fill),
@@ -1050,7 +1065,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   iron rail, gilt thumb, ice nubs) — wheel, Up/Down, the nubs (step) and the track (page) move it.
   PLAYER is `namePanelCv` (the `player profile` banner), opened by clicking the profile name
   bottom-left (`nameTagRect` / `overNameTag`, the mirror of the patch tag, with a quill glyph that
-  gilds beside it) and once by itself on a first launch. It is the one panel that **owns the
+  gilds beside it). **It never opens itself**: a fresh profile rolls a random name at load
+  (`PROFILE`, [architecture.md](architecture.md#profilejs)) instead of being stopped by a prompt,
+  and the quill is the whole affordance for changing it. It is the one panel that **owns the
   keyboard**: the `keydown` handler routes to `nameKey()` before its own shortcuts while it is
   up, so letters are text rather than hotkeys. A character the name may not hold is simply never
   drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
@@ -1058,32 +1075,46 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   ledger — icon, labelled row (WINS / GOLD EARNED / DAYS PLAYED, a deliberate text carve-out),
   dotted leader, number right-aligned with a thousands comma. WINS is matches the local slot
   was standing for when `endMatch('won')` fired; DAYS PLAYED is days begun (takeoff plus each
-  dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The first-launch variant is modal
-  (an outside click does nothing) and its second plank reads SKIP — the default name — where an
-  edit reads CANCEL.
+  dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The second plank is a
+  plain CANCEL that leaves the stored name alone.
   Any open panel ducks the logo to zero alpha.
-- **Class select** (`menu.screen = 'select'`, entered by PLAY via `beginSelect`): ONE screen on
-  its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora ribbons, a
-  vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock, the
-  cinematic band; fully opaque at rest, so the live ambient world is never this screen's
-  backdrop). The **roster** runs down the top-left as symbolic class emblems
-  (`drawSelectPortrait`) — one 36px well per `CLASSES` entry wearing its 32×32 `CLASS32` mark
-  (the hunter's drawn bow, the warrior's gauntlet; baked on `AB32_PAL` like every big icon), a
-  column of `SEL_P_PER` (4) wrapping into further columns as the roster grows, so a new class
-  costs this screen nothing but its emblem — and the **stage** holds the chosen class alone in
-  full glory (`drawSelectStage`): walking in place at 6× under a warm pool of light with a gold
-  ring turning on the snow, the class weapon's own tool art at the hand, the name below, and its
-  four ability icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as
-  it will be worn, and **hovering a well raises the ability tooltip** (`selectAbilHit` →
-  `tipClassAb(i, csel)`, the strip's own panel minus the in-play rows, so the kit is *readable*
-  before it is ever locked). The chosen emblem wears the gold rim; the others sit dim and warm on hover
-  (`menu.chover` — seeded as a pair in core.js and grown with `|| 0` for any roster size).
-  `selectLayout()`/`selectHit()` are the rect source for both drawing and the mouse; a portrait
-  click or the arrows move `menu.csel` (`menu.cswapT` pops the stage), Enter or the **LOCK IN**
-  plank call `lockIn()` — `setClass`, `menu.lockT`, then straight to `beginDrop()` (the eagle
-  ride, below) — and Esc/Backspace go back to the menu. Beside the plank sits the **collapsed
-  gear widget** (the four picked variant icons); clicking it opens the gear pop-up. No
-  instructional text anywhere on the screen.
+- **Class select** (`menu.screen = 'select'`, entered by SINGLEPLAYER via `beginSelect`): ONE
+  screen on its **own painted night** (`drawSelectBackdrop` — starfield, two additive aurora
+  ribbons, a vnoise ridge over a pine line, a lit snow floor, stateless snowfall off the clock,
+  the cinematic band; fully opaque at rest, so the live ambient world is never this screen's
+  backdrop), laid out **the way a League lobby is**. `selectLayout()`/`selectHit()` are the rect
+  source for both drawing and the mouse. Down the **left** run your side's five **roster cards**
+  and down the **right** the rivals' (`drawSelectRosters`/`drawSelectCard`, `SEL_ROST_X` from
+  centre, one `SEL_CARD` well per slot in slot order under a rule in the side's paint): the
+  slot's 16×16 class sprite in `skin(team)` paint with its name beside it — names are text's
+  job — yours gold-rimmed and wearing the class on stage before it is locked, a rival's
+  **face-down** (the body as one flat shade through the scratch canvas) until the countdown turns
+  it. Over the rivals' column sits their **difficulty meter**: three notches filled up to
+  `settings.aiLevel` in the rivals' paint, the hovered one lifting (`menu.dhover`), the level's
+  name (`AI_LEVELS`, js/ai.js — NORMAL / HARD / IMPOSSIBLE) printed once under them, gold and
+  naming the notch under the pointer while one is hovered; a click is `setAiLevel`, which saves
+  the profile's settings. **PLAY** wears the title's first plank in its exact place (`MENU_Y0`,
+  `MENU_BW`×`MENU_BH`); the **stage** under it holds the chosen class alone (`drawSelectStage`):
+  walking in place at 4× in your side's paint under a warm pool of light with a gold ring turning
+  on the snow, the class weapon's own tool art at the hand, the name below, and its four ability
+  icons in the strip's own wells (`classAbIcon`) — the kit is read here exactly as it will be
+  worn, and **hovering a well raises the ability tooltip** (`selectAbilHit` →
+  `tipClassAb(i, csel)`). The **class emblems** flank the figure's left (`drawSelectPortrait`,
+  one 36px well per `CLASSES` entry wearing its 32×32 `CLASS32` mark, `SEL_P_PER` (2) to a
+  column with further columns growing leftward, so a new class costs this screen nothing but its
+  emblem), the chosen one gold-rimmed and the others dim and warm on hover (`menu.chover`); the
+  **collapsed gear widget** (the four picked variant icons in a column) flanks its right, and
+  clicking it opens the gear pop-up. A portrait click or the arrows move `menu.csel`
+  (`menu.cswapT` pops the stage). Enter or the plank call `pressPlay()` — `setClass` locks the
+  class and the **countdown** starts: `menu.countT` runs `COUNT_T` (5) seconds, the whole second
+  left drawn in 4× gold digits over the plank (`drawSelectCount`, white the instant it changes,
+  sinking through its second), `SFX.nock` ticking each one, the plank sunk throughout, and
+  **one rival card turning face-up per tick** (`selectRevealed()`: the first on the press, the
+  last on ONE, all of them once it has run out, and none at rest — a white flash as each turns).
+  Gear stays open through the count (the widget still opens its pop-up, which shuts itself at
+  zero); a class swap is refused with `SFX.deny`; Esc/Backspace call it off (`cancelCount`)
+  and, at rest, go back to the menu. At zero `lockIn()` — `menu.lockT`, then straight to
+  `beginDrop()` (the eagle ride, below). No instructional text anywhere on the screen.
 - **Gear pop-up** (`menu.screen = 'gear'`, easing over the still-lit select screen on
   `menu.gearT`): a dim, then a floating panel in two columns (`gearLayout()`/`gearScreenHit()`).
   LEFT is the **live preview** (`drawGearPreview`): the chosen class walking in place at 4×
@@ -1100,7 +1131,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   too). **Picking plays on the preview body** (`pickGear` → `menu.gearFxT`/`gearFxSlot`): a
   white flash through the scratch canvas, gold sparks, the changed piece's band lit. ESC,
   Enter, the **X** in the corner, or a click anywhere off the panel close it back to select
-  (`leaveGear`) — lock-in stays on the select screen behind it. The ledger's labelled rows are
+  (`leaveGear`) — PLAY (and a running count) stays on the select screen behind it. The ledger's labelled rows are
   the PLAYER-panel text carve-out: comparing numbers is this panel's whole job. See
   [gameplay.md](gameplay.md#gear).
 - **Entrance**: `menu.t` staggers the logo and items in at boot.
@@ -1116,64 +1147,139 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   up from the bottom) while the camera settles onto the play framing.
   The DAY 1 headline fires when that intro ends.
 
-`DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro` and
-`layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
+`DBG` exposes `menu`, `menuHit`, `menuClick`, `menuKey`, `settingsHit`, `beginIntro`, `beginSelect`,
+`selectLayout`, `selectHit`, `pressPlay`, `cancelCount`, `setAiLevel`, `lockIn` and `layout()` (the live `SET_*`/`ROW_*`/`MM_*` anchors) for driving all of this headlessly.
 
 ## Eagle drop (mode `drop`)
 
 Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGame`/`DBG.beginDrop`)
 puts every active slot aboard **its team's bird** (`p.aboard`) and builds
 `state.drop = { eagles: [red, blue] }` via `makeEagles()`: one base line from `makeEagleRoute()` —
-two points on a ring `EAGLE_R` (`WORLD/2 - 40`) tiles from the centre, roughly opposite, both from
-`hash2` so the line is the seed's — flown in **opposite directions**, each bird shifted
-`EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass is a fly-by,
-~5 tiles apart, never a collision. `beginDrop` sets mode `drop`, snaps the world zoom to
-`DROP_ZOOM` around its centre and starts the menu exit. Every rider gets a **wing seat**
-(`p.seat`, dealt per team in `beginDrop`; `seatPos`
+**the map's diagonal, fixed for every match and seed**: RED (team 0) flies it from the top-right
+corner down to roost in the **bottom-left** woods, BLUE the reverse to the **top-right**. Each end
+is `diagEnd()`, the point `EAGLE_END` (2) tiles inside that corner's treeline as the seed grew it
+on the diagonal — the **last wooded tile** out from the corner, so a bay in the border short of it
+is still forest on the corner side (pure reads of `borderDepth` — no `rng()`, no `hash2`) — so the
+dive past it always has forest to land in; both corners are guaranteed woods anyway by the
+[roost disc](world.md#the-tile-world). `diagEnd` also returns the corner's **mouth** — the first
+open tile past that last pine, the middle of the corner's tree edge — which `makeEagles` hands each
+bird as `e.mouth`: the point its lane aims at. The two birds fly it in **opposite directions**, each shifted
+`EAGLE_LANE` (2.5 tiles) along its own right-hand perpendicular so the mid-route pass over the
+map's centre is a fly-by, ~5 tiles apart, never a collision. `beginDrop` sets mode `drop`, snaps
+the world zoom to `DROP_ZOOM` around its centre and starts the menu exit. Every rider gets a
+**wing seat** (`p.seat`, dealt per team in `beginDrop`; `seatPos`
 rotates the `EAGLE_SEATS` offsets — one on the back, two inner wings, two out on the primaries —
-by the heading, and the human sits seat 0 of their own bird). Every flight takes exactly
+by the heading, and the human sits seat 0 of their own bird); the team's **merchant** rides the
+neck (`MERCH_SEAT`, drawn by `drawEagle` ahead of the riders — see
+[the merchant](gameplay.md#the-merchant)). Every flight takes exactly
 `EAGLE_FLIGHT_T` (10 s) — each bird derives `e.spd` from its own line's length — and jumping is
 **locked until the line's last `DROP_LOCK_T` (4 s)**: `dropJump` refuses (and `SFX.deny`s) an
 unforced jump before then. The window's far end is `e.jumpEnd` from `lastOpenU` — the last point
 on the line still over open ground (`borderDepth` + `DROP_EDGE_MARGIN` tiles clear), so **a forced
 drop never lands in the treeline**; `e.jumpOpen` is the lock's fraction, clamped under it.
 `updateDrop` (called from `updatePlay`, so pause stops it) runs
-`updateEagle` per bird, keeps every rider glued to its seat, and force-drops each slot at its
-`p.dropU`: AI slots at a hashed fraction of the jump window (scattered ±4 tiles off the line), the
-human at `jumpEnd` if they never pressed Space/Enter/E/click (`dropJump` — the fall starts **from
-the seat**, so the leap visibly leaves the wing). A profile that has **never jumped**
-(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) instead
-auto-drops at `TUT_DROP_T` (8 s, near the tree edge and clear of the mid-route pass) behind a
-`TUT_COUNT` (5 s) `PREPARE TO DROP` countdown — first-run onboarding; any real jump
-(`PROFILE.markDropped`) retires it for good. A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
+`updateEagle` per bird, keeps every rider glued to its seat (`seatPos` at `eagleScale(e)`, the
+bird's drawn size — 3× in flight, 2× on the ground), and force-drops each **AI** slot at its
+`p.dropU`, a hashed fraction of the jump window (scattered ±4 tiles off the line). **A human is
+never force-dropped**: press Space/Enter/E/click inside the window and you jump (`dropJump` —
+the fall starts **from the seat**, so the leap visibly leaves the wing); never press it and you
+**ride the landing** — `beginDive` throws only bots, the dive comes down with you on its back
+(`drawEagle` draws the seated riders through the dive and at rest), and `eagleCrash` calls
+`landAboard`: `handOver` flips mode `drop` → `play` (the zoom, the camera, the HUD slide-in a
+jump's `landPlayer` does), the ride's song is interrupted the way a jump interrupts it, and the
+[drop brief](#the-drop-brief) opens with you still seated. When it hands back, the bird wears
+the flight's gold landing ring again and `drawHopPrompt` raises the **E - HOP OFF** keybind
+indicator (a key cap bobbing over the bird, one word under it); `p.input.work` while seated on a
+`down` bird calls `hopOff` — a short low step off the wing (`HOP_FALL_T`, `HOP_ALT` — every
+faller's arc reads `p.dropAlt`), steerable like any fall, landing on the nearest open tile beside
+the roost. A profile that has **never jumped**
+(`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) gets exactly
+that ride with the jump refused — `dropJump` denies the local slot's manual leap outright, so a
+new player's first ground is the roost, beside the merchant and the gate, and the brief is always
+the lesson. The first hop or any real jump (`PROFILE.markDropped`) retires the refusal for good.
+A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
 `DRIFT_SPD` (130 px/s, ~10 tiles over the fall) — `sampleHumanInput` keeps the movement axis alive in mode `drop` while zeroing
 everything else; `landPlayer` then spirals out (up to 80 tiles) to the nearest tile with no object
-and no water hole, which becomes `p.spawn` — the respawn point — with 2 s of i-frames and a snow
+and no water hole, which becomes `p.spawn` — the bot brain's home tile (a respawn moves it to the
+roost) — with 2 s of i-frames and a snow
 burst. Only the human's landing changes mode: `play` (closing the M map if it was up),
 `applyZoom(0, true)` back to the player's own zoom centred on the landing, `shake`, and the
 landing intro above.
 
+### The drop brief
+
+A local slot that **rode the landing** — the scripted first flight always, or a veteran who
+never jumped (a real jump is the opt-out) — sits through a camera tour of the two objectives
+before the hop. `landAboard` (from `eagleCrash`) sets `state.dropBrief` (`{ ph, t, total }`),
+and `updateDrop` runs the phases, rival first and your own last so the final word lands where
+you are sitting: **`wait`** holds the crash you are in for `BRIEF_WAIT` (1 s); **`theirs-go`**
+glides the camera across the map to the rival bird — the sim camera (js/sim.js) follows
+`dropBriefTarget()` with the driven-off ceremony's own lerp, so a bird still finishing its dive
+is *tracked* and the crash lands on screen — and holds until it is down; **`theirs`** holds
+`BRIEF_HOLD` (3 s) under a two-line headline (`drawDropBrief`, baked opaque and faded as a
+canvas, the dayPop grammar, on a **dark plate** — `BAG_BG` at `BRIEF_PLATE_A` 0.82 with the
+team's colour as a 1 px rule top and bottom, because the roost is pines edge to edge and an
+outline alone smeared into the needles) across the **top** of the view (`VIEW_H * 0.08`): `THEIR EAGLE` in
+the rival's paint at **three times** the drop HUD's text scale over `DRIVE IT OFF TO WIN` at one
+— the once the win condition is ever written down, the headline carve-out, and deliberately no
+third line; **`ours-go`**/**`ours`** glide home and finish on your own roost for
+`BRIEF_HOLD_OURS` (4 s) under `YOUR EAGLE` / `LOSE IT, LOSE THE MATCH`, then clear through
+`endBrief()`, which also pops the `DAY 1` headline the landing owes (the camera banner in sim.js
+holds it back while the brief has the top of the screen) — and from there the E - HOP OFF
+indicator (above) is the way down. While it runs
+`sampleHumanInput`
+zeroes the controls exactly as the ceremony does, the M toggle is refused, `player.invuln` is
+held up so nobody dies watching the lesson, and the match runs on underneath — the world is the
+backdrop, not paused. `BRIEF_MAX_T` (24 s) is the safety rail, and `state.eagleCine` (or leaving
+mode `play`) outranks and clears it.
+
 **`state.drop` now outlives the whole match** — it never goes null, because the roosts are the
 objectives. A bird's life is `fly → dive → down → flee → gone` (`e.state`): at the end of its line
-`beginDive` throws any remaining rider, `findCrashPoint` walks 8–44 tiles further along the
-heading for the first spot whose 7×7 holds ≥`MIN_CRASH_TREES` (20) trees — the roost sits properly
-**inside** the woods, with the densest spot seen as the fallback (pure reads — no `rng()`, no
-`hash2` — so a seed always buries its birds in the same trees) — and the stoop runs `EAGLE_DIVE_T` (1.4 s,
+`beginDive` throws any remaining rider, `findCrashPoint` walks 4–60 tiles further along the
+heading for the first tile that sits ≥`CRASH_DEPTH` (14) tiles inside the treeline by the border's
+own measure (`forestDepth` = `borderDepth` − edge distance; inside the
+[roost disc](world.md#the-tile-world) that is tiles in from the arc) **and** whose 7×7 still holds
+≥`MIN_CRASH_TREES` (40 of 49 — the border is solid, so fewer means an edge or a bay) — the roost
+sits a proper way **inside** the woods with trees all round it, never on the tree edge, with the
+deepest, densest spot seen as the fallback (pure reads — no `rng()`, no `hash2` — so a seed always
+buries its birds in the same trees) — and the stoop runs `EAGLE_DIVE_T` (1.4 s,
 `u²`-eased, wingbeats quickening, speed motes streaming). `eagleCrash` then clears every tree
-within `BOOM_R` (2.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (3.6) to stumps —
+within `BOOM_R` (3.6 tiles) outright, snaps the ring out to `BOOM_STUMP_R` (4.6) to stumps —
 **paying no gold**, a crater of free fells would warp the economy at minute one — plants the
 **roost hitbox** (`eagle` objects on the open tiles within `EAGLE_TILE_R`, solid to walkers and a
-rival-only E target; `eagleFlee` clears them again at liftoff) and fires `eagleBoomFx` (snow + team-colour
+rival-only E target; `eagleFlee` clears them again at liftoff), plans the **lane** and drops off
+the **merchant** (below), and fires `eagleBoomFx` (snow + team-colour
 bursts, hanging feathers, a radial dust ring, two shockwave rings squashed flat over `BOOM_LIFE`
 so they read as a blast wave along the ground, never a halo), distance-scaled `state.shake`,
 `SFX.boom()` (the timber sample dropped low under a synth blast, layered on purpose) and a
 `HAS LANDED` feed headline — the landing is a landing, not a wound: the bird takes **no damage**
-from its own dive. The grounded bird is the team's **objective**, and its hp pool is its
-**nerve**: `EAGLE_HP` (320), spooked down by rival arrows through `hurtEagle` (the sim.js arrow
+from its own dive. **The lane** (`planLane`/`laneStep`, `e.lane = { t, ev, next }`): from the
+crater along `e.laneDir` — set by `eagleCrash` as the unit vector from the crash to `e.mouth`, the
+**middle of the corner's tree edge** (`diagEnd`), back the way the bird came only if the mouth is
+somehow under it — to the open snow, every pine (and rock: `laneFells`) within `LANE_R`
+(0.8 tiles — a diagonal band two tiles across) of the centreline becomes two events timed by its
+distance along the lane, so a **felling front** walks out from the roost at `LANE_SPD` (3.5
+tiles/s) starting `LANE_DELAY` after the impact: each pine **shudders `LANE_WARN` (0.5 s) ahead
+of the front** (`o.shake`, the parkour roll's own tell, decayed by sim.js's object-timer loop),
+then goes down in needles and snow with a throttled `SFX.treeFall` (a rock shatters to
+`SFX.break_`). It is the parkour's
+`pkAnimStep` grammar without the ice — a watched transition, never a blink — and it pays nothing
+and leaves no stumps: a road is a road. The lane is **out** only when the last `LANE_CLEAR` (6)
+tiles held nothing to fell *and* `forestDepth` says open — a clearing inside the border used to
+end it early and leave the roost walled in behind a bay — capped at `LANE_MAX` (90) tiles. Pure
+reads, so a seed's lane is always the same lane; the merchant's gate and post read `e.laneDir`
+too, so the gate flanks the road that was actually cut.
+`laneStep` runs from `updateEagle`'s `down` branch and drops `e.lane` when the last event is
+spent. The grounded bird is the team's **objective**, and its hp pool is its
+**nerve**: `EAGLE_HP` (2000, sized as a siege since 2.61, when the bots learned to go for it),
+spooked down a flat `EAGLE_ARROW_DMG` (12) per rival arrow through `hurtEagle` (the sim.js arrow
 loop tests the roost tiles themselves — *before* tile solidity, which would eat the shot — so the
-arrow hitbox is exactly the collision box, corners included) and by rival E swings
-(`EAGLE_WORK_DMG` via `hitObject`'s eagle branch). It is not helpless: a rival inside `GUST_R`
-(resolved through `seenAt`, like every watcher) makes it rear — wings thrown open for
+arrow hitbox is exactly the collision box, corners included) and `EAGLE_WORK_DMG` (20) per rival
+E swing (via `hitObject`'s eagle branch) — a lone warrior's E drives it off in about a minute under
+the gust (2.63: a hundred swings, twelve gusts, 53 s), a pair in half that, but arrows alone take
+minutes. It is not helpless: a rival inside `GUST_R` (64 — wide enough to cover a swing from the
+next tile out past the roost's 3×3, which 44 was not; resolved through `seenAt`, like every
+watcher) makes it rear — wings thrown open for
 `GUST_WIND_T`, the whole telegraph — then `eagleGust` throws every rival in `GUST_BLAST_R` back at
 `GUST_KB` with a `GUST_STUN` tumble and `risePlayer` (wind strips the snow off a buried body), on
 a `GUST_CD` cooldown, dealing **no damage** — the objective punishes face-tanking, it never earns
@@ -1201,12 +1307,29 @@ in gold that brightens and pulses once the lock opens — then runs `drawEagle` 
 `DROP_ALT` 56 px in flight, converging to 0 down the dive so shadow and bird meet at the crash
 point), the bird itself in its team's armour (`SPRITES.eagleTeam[team]` cycling spread → mid →
 back → mid, rotated to its heading, at `EAGLE_SCALE` 3× walking down to `EAGLE_REST_SCALE` 2×
-through the dive, bobbing 3 px in level flight), **every rider on its wing seat** (unrotated so
-the faces read, at `RIDER_SCALE` 2×, the local slot drawn last), and a pulsing gold landing ring
+through the dive, bobbing 3 px in level flight), under it the **wind trail** (`drawEagleTrail`,
+drawn before the bird's own cull because it hangs behind a bird already off the frame): **one
+continuous ribbon off each wingtip**, sampled every `TRAIL_STEP` (6) px back along the flown
+line for `TRAIL_T` (1.1 s) of flight, each sample where the tip actually *was* on that beat —
+the wing's reach and set follow the flap continuously (`TRAIL_TIP`±`TRAIL_TIP_AMP`,
+`TRAIL_BACK`±`TRAIL_BACK_AMP`) and the body's bob — so the ribbon waves with the wingbeat and
+hangs where it was torn while the bird flies on and the snow rushes away under it. It is solid
+at the tip and fades to nothing at its tail: one linear gradient along the ribbon, a 3 px white
+over a 5 px `TRAIL_RIM` dark line so white air reads over snow, the whole thing fading through
+the stoop. Pure reads of the flight clock (`e.t`, `e.spd`, `e.flap`) — no particles, no sim step,
+the same trail at any dt. Then **every rider seated on its wing** (`drawSeated`:
+the pose set's direction picked by the heading's dominant axis — `riderDir`, so a crew flying
+down-left shows its profiles — the bottom three rows tucked into the plumage so a body sits
+rather than stands, the hem meeting the feathers at the seat point, lifted a pixel on the
+downstroke; **world-sized** — `riderScale(e)` is the bird's own perspective, `eagleScale / 2`:
+1× on the roosting bird, 1.5× in flight because the bird itself is 1.5× bigger up there, so a
+body never changes size against the feathers under it; the merchant on the neck the same way; the
+local slot drawn last), and a pulsing gold landing ring
 under the human's own bird — only while the jump window is open, so the ring never promises a jump
 the lock refuses — then every faller: a `sin` **hop** off the wing
-over the first quarter of the fall, then the shrink from `RIDER_SCALE` to 1× along
-`alt = DROP_ALT·(1 − q²)` with a widening shadow. The faller cull is against `WV_*`, the world
+over the first quarter of the fall, then the shrink from `p.dropSc` (the seat's size as it left)
+to 1× along
+`alt = p.dropAlt·(1 − q²)` with a widening shadow. The faller cull is against `WV_*`, the world
 pass rule — it was `VIEW_*` once, which is exactly why fallers in the far half of the zoomed-out
 frame used to vanish mid-air. A `down` bird casts **no shadow** — it is on the ground, and a dark
 copy under it read as a second bird — and folds its wings over `EAGLE_SETTLE_T` (the three
@@ -1215,7 +1338,8 @@ every 3.5–7 s (`RUFFLE_T`, mid frame only with a puff of settling snow — the
 the gust's telegraph, so the idle can never cry wolf), flashing via the baked
 all-white `SPRITES.eagleFlash` when hit (it is taller than the 64×64 `drawSpriteFlash` scratch),
 with its team-colour hp bar up **from the moment it roosts** — the bar is the objective's
-introduction, anchored to the bird's rotated extent. A gust windup draws wings thrown open
+introduction, anchored to the bird's rotated extent, under a `PERCH` nameplate in the same paint (its
+driver wears `MERCH`: the side's two named bodies, named the same way). A gust windup draws wings thrown open
 (frame 0) lifted 2 px: the spread IS the telegraph, no text. A `flee` bird climbs back out —
 scale and `alt` walk from the roost's numbers to the flight's over `FLEE_LIFT_T`, the shadow
 returning and diverging as the ground falls away, wingbeats at full panic — and fades over the
@@ -1223,8 +1347,7 @@ last 1.4 s of `FLEE_T`; `gone` draws nothing. `renderDropUI` (mode `drop` only) 
 **flight bar**, top centre: the whole line as one track, the flown part filled in team colour
 under the chart-style bird diamond, the **jump window as a gold stretch** (dim while locked,
 pulsing bright once open — the lock is taught by the bar's shape, no sentence), seconds left as a
-number beside it (gold once open); the `PREPARE TO DROP` countdown over the bird on a profile's
-first flight; `WASD - DRIFT` while falling; and an `M - MAP` keybind indicator bottom right —
+number beside it (gold once open); `WASD - DRIFT` while falling; and an `M - MAP` keybind indicator bottom right —
 the ride's wider read is the **M map** now (`renderWorldMap` also runs in mode `drop`, where it
 draws each flying bird's line dashed in team colour with the bird diamond riding it; M/Esc are
 handled in input.js's drop branch, the map swallows the jump click, and the sim keeps running

@@ -231,10 +231,9 @@ function render() {
     }
   }
 
-  // what the abilities left flat on the snow - craters, set traps, volley
-  // warnings - then spent arrows, then drops (all under entities)
+  // what the abilities left flat on the snow - craters, and the piercing
+  // shot's telegraph line - then drops (all under entities)
   drawAbilityGround(ex, ey, now);
-  drawShafts(ex, ey, now);
   for (const d of drops) {
     const spr = SPRITES[ITEMS[d.type] ? ITEMS[d.type].icon : 'itemGold'];
     const h = spr.width >> 1; // a tool's icon is 12x12, everything else 8x8
@@ -277,7 +276,7 @@ function render() {
     draws.push({ y: p.y + 8, p, ghost: !p.active }); // empty slots stand as silhouettes
   }
   for (const a of animals) draws.push({ y: a.y + 4, a });
-  for (const b of robots) draws.push({ y: b.y + 4, r: b });
+  for (const b of robots) draws.push({ y: b.y + (b.merchant ? 8 : 4), r: b }); // a merchant stands on player feet (robots.js)
   // the training grounds' archery targets: entities, never tile objects (a
   // slider crosses tiles every frame), sorted by their base like everything
   if (PRACTICE) for (const t of ptargets) draws.push({ y: t.y + 1, pt: t });
@@ -483,7 +482,7 @@ function render() {
         // bar holding still over a wall that is rocking is a bar centred on
         // nothing. drawBayOverlay is handed `sx + sh` and has always done this.
         if (o.type !== 'spawner' && o.hp < o.maxHp) {
-          drawHealthBar(sx + sh + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)));
+          drawHealthBar(sx + sh + (spr.width >> 1), sy - 5, o.hp, o.maxHp, Math.max(12, Math.min(24, spr.width - 4)), o.team);
         }
       }
     }
@@ -499,22 +498,18 @@ function render() {
   // the hit-ring flash snapping over whatever face just broke (drawAgRings)
   if (PRACTICE) { drawParkour(ex, ey, now); drawAgame(ex, ey, now); drawAgRings(ex, ey); }
 
-  // construction AND card-crafting progress bars - same bar, same "over the
-  // roof" placement for a big building; a craft in flight (a finished Keep,
-  // o.craftT > 0) draws in an icy blue instead of construction's gold so
-  // the two read as different things at a glance
+  // construction progress bars - "over the roof" for a big building
   for (const o of structures) {
-    const crafting = !o.building && o.type === 'keep' && o.craftT > 0;
-    if (!o.building && !crafting) continue;
+    if (!o.building) continue;
     const px = o.tx * TILE - ox, py = o.ty * TILE - oy;
     if (px < -20 || px > WV_W + 4 || py < -20 || py > WV_H + 4) continue;
-    const p = crafting ? Math.min(1, 1 - o.craftT / o.craftTotal) : Math.min(1, o.buildT / o.buildTotal);
+    const p = Math.min(1, o.buildT / o.buildTotal);
     const big = structW(o.type) > 1;
     const bw = big ? 24 : 12, bx = big ? px + structW(o.type) * 8 - 12 : px + 2;
     const by = big ? (o.ty + structH(o.type)) * TILE - oy - structSprite(o).height - 12 : py - 7;
     ctx.fillStyle = 'rgba(15,22,50,0.8)';
     ctx.fillRect(bx, by, bw, 4);
-    ctx.fillStyle = crafting ? '#8fd8ff' : '#ffd95c';
+    ctx.fillStyle = '#ffd95c';
     ctx.fillRect(bx + 1, by + 1, Math.round((bw - 2) * p), 2);
   }
 
@@ -550,12 +545,12 @@ function render() {
     if (a.path === 'orbit') { drawMote(a, hx, hy, now); continue; }
     ARROW_PX.length = 0;
     arrowBodyPx(ARROW_PX, a.x - ex, a.y - ey, nx, ny, 0, ARROW_LEN,
-      TEAMS[a.team].mark, TEAMS[a.team].coatD, a.col || ARROW_INK.G, 0);
+      TEAMS[skin(a.team)].mark, TEAMS[skin(a.team)].coatD, a.col || ARROW_INK.G, 0);
     paintArrowPx(ARROW_PX);
   }
 
-  // airborne ability bodies: the spinning net, the falcon and its shadow,
-  // the volley's shafts coming down - with the arrows, over the entities
+  // airborne ability bodies: the spinning net, and the grapple's rope
+  // between a reeling body and its anchor - with the arrows, over the entities
   drawAbilityAir(ex, ey, now);
 
   drawTurretFx(ex, ey, now);
@@ -633,6 +628,9 @@ function render() {
   // plate, the final score (drawAgameUI, js/draw-world.js)
   if (PRACTICE && state.mode === 'play') drawAgameUI(now);
   if (state.mode === 'drop') renderDropUI(now);
+  // the drop brief's roost headlines (updateDrop's tour, js/boot.js)
+  if (state.mode === 'play' && state.dropBrief) drawDropBrief();
+  else if (state.mode === 'play' && player.aboard) drawHopPrompt(now); // still seated on the roost: E - HOP OFF
   // the flag order riding the pointer (its target tile is bracketed back in
   // the world pass); only up while the middle button is held
   if (state.mode === 'play') drawFlagCursor();
@@ -896,10 +894,9 @@ function drawHitboxes(ox, oy, ex, ey) {
   // that point that is tested against every circle above
   for (const a of arrows) hbDot(a.x - ex, a.y - ey, HB_SHOT);
 
-  // walk-over and click targets. A drop is claimed from its own centre, a
-  // shaft from 2px below its own - both are what the sim measures to.
+  // walk-over and click targets, claimed from their own centres - what the
+  // sim measures to
   for (const d of drops) hbRing(d.x - ex, d.y - ey, 7, HB_PICK);
-  for (const s of shafts) hbRing(s.x - ex, s.y + 2 - ey, SHAFT_R, HB_PICK);
   for (const f of fish) hbRing(f.x - ex, f.y - ey, 7, HB_PICK); // hoverFish
 }
 
@@ -1000,15 +997,12 @@ function cursorInfo() {
 
   // Every reticle in play carries the tool's state, whatever it is hovering:
   // `nock` is how much of the cycle between shots has elapsed (1 = ready) and
-  // `dry` says the button has nothing to answer with - an empty quiver, an
-  // empty slot, or a tool with no bit light enough to throw. drawCursor turns
-  // them into the ring's own behaviour, so the crosshair the eye is already on
-  // is where the cooldown is read.
-  const nockK = kitOf(player);
-  const held = heldTool(player);
-  const nockSpan = held ? toolRof(player, held) : nockK.nock;
-  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, nockSpan) : 1;
-  const dry = player.quiver <= 0 || !toolReady(player);
+  // `dry` says the button has nothing to answer with - an empty slot, or a
+  // tool with no bit light enough to throw. drawCursor turns them into the
+  // ring's own behaviour, so the crosshair the eye is already on is where the
+  // cooldown is read.
+  const nockF = player.nockT > 0 ? 1 - player.nockT / Math.max(0.01, toolCycle(player)) : 1;
+  const dry = !toolReady(player);
   // `amb` rides along the same way: buried, settled, and the next arrow off
   // this string is the one worth AMBUSH_MUL
   const ret = (mode, dim, extra) =>
@@ -1024,7 +1018,7 @@ function cursorInfo() {
     return { kind: 'hammer', dim: far };
   }
   if (player.charging) {
-    return ret('bow', false, { frac: Math.min(1, player.chargeT / nockK.bowCharge) });
+    return ret('bow', false, { frac: drawPow(player) });
   }
   // a living thing under the pointer: hunting reticle
   for (const q of players) {
@@ -1106,9 +1100,9 @@ function drawCursor(info, now) {
   const R = RETICLE[info.mode];
   let gap = R.gap, col = R.col;
   if (info.mode === 'bow') {
-    // the ring closes as the draw fills and goes hot at full, like the meter
+    // the ring closes as the draw fills and goes pale gold at full, like the meter
     gap = Math.round(6 - 3 * info.frac);
-    if (info.frac >= 1) col = '#ff9440';
+    if (info.frac >= 1) col = DRAW_FULL_COL;
   } else if (info.mode === 'hunt') {
     gap = 4 + (((now * 3) | 0) % 2); // slow breathing
   }
@@ -1121,8 +1115,8 @@ function drawCursor(info, now) {
     const g = gap + 1;
     rects.push([mx - g, my - g, 1, 1], [mx + g, my - g, 1, 1], [mx - g, my + g, 1, 1], [mx + g, my + g, 1, 1]);
   }
-  // The bow's own state, on top of whatever the pointer is over. An empty
-  // quiver hollows the reticle out - the centre pixel, the one thing that says
+  // The bow's own state, on top of whatever the pointer is over. A dry tool
+  // hollows the reticle out - the centre pixel, the one thing that says
   // "this shot happens here", is simply gone, and the ticks go slate. While the
   // renock runs, four corner marks fall inward from far out and land on the
   // ring at the moment the bow is ready; there is nothing left of them at rest,
@@ -1168,8 +1162,8 @@ function drawCursor(info, now) {
 // its flight, up to where it starts falling away from the bearing.
 function drawAimLine(ex, ey, now) {
   if (!player.charging || state.mode !== 'play') return;
-  const full = player.chargeT >= kitOf(player).bowCharge;
-  const col = full ? '#ff9440' : '#ffd95c';
+  const full = drawPow(player) >= 1;
+  const col = full ? DRAW_FULL_COL : DRAW_COL; // the meter's own two golds (draw-world.js)
   const ftx = Math.floor(player.x / TILE), fty = Math.floor((player.y + 4) / TILE);
   if (inWorld(ftx, fty) && ground[idx(ftx, fty)] === 1) {
     let best = null, bd = FISH_CATCH_R;
@@ -1196,7 +1190,11 @@ function drawAimLine(ex, ey, now) {
   const bit = BITS[cell.bits[bi]];
   if (bit.path === 'boomer' || bit.path === 'orbit') return;
   const m = toolMods(cell);
-  const range = bit.speed * m.spdMul * bit.life * m.lifeMul * (bit.path === 'lob' ? 0.35 : 0.85);
+  // the flight THIS draw buys, right now: shotFlight is emitBit's own
+  // envelope, so the line grows out of the bow as the string comes back and
+  // its cap sits exactly where a shot loosed this instant would end
+  const fl = shotFlight(bit, m, drawPow(player));
+  const range = fl.spd * fl.life * (bit.path === 'lob' ? 0.35 : 1);
   const x0 = player.x, y0 = player.y - BOW_Y; // exactly emitBit()'s origin and direction
   const dx = mouseWX() - x0, dy = mouseWY() - y0;
   const d = Math.hypot(dx, dy) || 1, nx = dx / d, ny = dy / d;

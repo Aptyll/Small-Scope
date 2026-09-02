@@ -135,6 +135,14 @@ function update(dt) {
       : state.drop.eagles.find((q) => q.state === 'flee');
     camX += (ec.x - WV_W / 2 - camX) * Math.min(1, dt * 3.5);
     camY += (ec.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
+  } else if (state.drop && state.dropBrief) {
+    // the drop brief (updateDrop, js/boot.js): a forced landing's roost tour.
+    // The same glide the driven-off ceremony uses, aimed by the brief's phase
+    // - out to your own bird (tracking its dive if it is still falling), the
+    // rival's, then home to your boots, where the play camera takes over.
+    const bt = dropBriefTarget();
+    camX += (bt.x - WV_W / 2 - camX) * Math.min(1, dt * 3.5);
+    camY += (bt.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
   } else {
     const vp = viewPlayer();
     const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre
@@ -152,8 +160,10 @@ function update(dt) {
       camX = state.introFrom.x + (tx - state.introFrom.x) * q;
       camY = state.introFrom.y + (ty - state.introFrom.y) * q;
       // the landing anchors the calendar: DAY 1, the same headline every
-      // dawn after it re-raises (practice is a training room, not a day)
-      if (state.intro === 0 && !PRACTICE) state.dayPop = { day: state.day, t: 0 };
+      // dawn after it re-raises (practice is a training room, not a day). A
+      // drop brief owns the top of the screen until it hands back, so it
+      // pops the day itself (endBrief, js/boot.js)
+      if (state.intro === 0 && !PRACTICE && !state.dropBrief) state.dayPop = { day: state.day, t: 0 };
     } else {
       camX += (tx - camX) * Math.min(1, dt * 7);
       camY += (ty - camY) * Math.min(1, dt * 7);
@@ -182,6 +192,23 @@ function update(dt) {
   updateFx(dt);
 }
 
+// A shot's reach into a body: the disc round a slot's centre an arrow lands
+// in, wider than the 4.5 px body a walker collides with. A walking target
+// crosses its own width twice in the quarter second a full-draw arrow takes
+// to fly 80 px, so at the body's own radius almost nothing lands on a moving
+// rival (2.47's playtest: 24 shots at a circling bot, none hit) - and the
+// same disc on every side keeps it a fact of arrows, not a hidden handicap.
+const ARROW_HIT_R = 10;
+// ------------------------------------------------------------ passive income
+// The clock pays: every slot on the ground draws TRICKLE_GOLD into its
+// wallet every TRICKLE_T s, through gainGold so it levels too - the League
+// trickle. A floor under everyone's purse, so a player who never swings an
+// axe still buys gear and still reaches the mid levels, and a farmer pulls
+// ahead only by the fells, never by the clock. Silent on purpose: no floater,
+// no blip - the bag strip's number and the xp bar are the tell. The practice
+// arena has no clock and gets none; the dead and the airborne earn nothing.
+const TRICKLE_GOLD = 1;
+const TRICKLE_T = 4;      // s per coin: 15 gold a minute, ~225 over a fifteen-minute match
 function updatePlay(dt) {
   state.tick++; // with SEED and the player id, this decides contested orders
 
@@ -191,9 +218,13 @@ function updatePlay(dt) {
     if (!p.active || inAir(p)) continue;
     if (p.control === 'ai') updateAI(p, dt);
     updatePlayer(p, dt);
+    if (!p.dead && !PRACTICE) {
+      p.trickleT += dt;
+      if (p.trickleT >= TRICKLE_T) { p.trickleT -= TRICKLE_T; gainGold(p, TRICKLE_GOLD); }
+    }
   }
   resolveContests(); // this step's work swings, build orders and fish claims
-  updateAbilityWorld(dt); // traps, craters, falcons, nets and called volleys
+  updateAbilityWorld(dt); // craters and nets in flight
   if (state.drop) updateDrop(dt);
 
   // Shots in flight. Everything a tool fires rides this one array, whatever
@@ -229,7 +260,7 @@ function updatePlay(dt) {
         life: ARROW_TRAIL_LIFE, maxLife: ARROW_TRAIL_LIFE,
         // the trail says WHOSE shot it is, which is what it is for - except a
         // burning one, where the fire is the more urgent fact about it
-        color: a.burn > 0 ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[a.team].mark,
+        color: a.burn > 0 ? (((a.trailD * 3) | 0) % 2 ? '#ff9440' : '#ffd95c') : TEAMS[skin(a.team)].mark,
         size: 1, grav: 0, alpha: ARROW_TRAIL_A,
       });
     }
@@ -239,12 +270,12 @@ function updatePlay(dt) {
       // ARE the hit test, so anywhere a walker collides, an arrow damages -
       // a radius around the bird's centre missed the block's corners. Tested
       // BEFORE tile solidity, which would eat the shot; a friendly arrow
-      // falls through to it and sticks (shafts pass to no one for free).
+      // falls through to it and dies on the tile like any other miss.
       const atx = Math.floor(a.x / TILE), aty = Math.floor(a.y / TILE);
       if (inWorld(atx, aty)) {
         const o = objects[idx(atx, aty)];
         if (o && o.type === 'eagle' && o.team !== a.team) {
-          hurtEagle(state.drop.eagles[o.team], a.dmg, players[a.owner], a.x, a.y);
+          hurtEagle(state.drop.eagles[o.team], EAGLE_ARROW_DMG, players[a.owner], a.x, a.y); // a flat spook, not the body damage
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
         }
@@ -260,10 +291,11 @@ function updatePlay(dt) {
         const o = objAt(atx, aty + dd);
         if (o && o.type === 'dummy') dm = o;
       }
-      if (dm) {
+      if (dm && !(a.pierce && a.pierceHit.includes(dm))) {
         hitDummy(dm, a.dmg, a.x, a.y);
         if (a.ambush) ambushFx(a.x, a.y);
-        dead = true;
+        if (a.pierce) a.pierceHit.push(dm); // the pierce keeps flying
+        else dead = true;
       }
       // ...and the archery targets: the shot meets the FACE, wherever its
       // habit has carried it - ptFace is the same geometry the draw uses,
@@ -272,7 +304,7 @@ function updatePlay(dt) {
         if (!ptLive(t)) continue;
         const f = ptFace(t);
         if (Math.hypot(f.x - a.x, f.y - a.y) < ptHitR(t)) {
-          hitPTarget(t, a.x, a.y, a); // the arrow hands over its bearing: it sticks in the face
+          hitPTarget(t); // the face explodes on contact
           a.ptHit = true; // this shot keeps the consecutive-hit run alive
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
@@ -302,11 +334,15 @@ function updatePlay(dt) {
     if (!dead) {
       // players first: the same shot that drops a deer drops a rival. A bit
       // with friendly fire on skips the team check - but never the shooter,
-      // who is not a target of their own tool at any weight.
+      // who is not a target of their own tool at any weight. A PIERCING shot
+      // (`a.pierce`, js/abilities.js) takes the body and keeps flying -
+      // a.pierceHit is everyone it has already cut, so a slow overlap never
+      // pays twice - and only a raised shield or the world itself stops it.
       for (const t of players) {
         if ((a.team === t.team && !a.ff) || t.id === a.owner ||
             !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
-        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < 7) {
+        if (a.pierce && a.pierceHit.includes(t)) continue;
+        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < ARROW_HIT_R) {
           // a raised tower shield eats any shot flying into its front arc -
           // bolts included - before the body behind it is ever asked
           if (abShieldBlocks(t, nx, ny)) {
@@ -318,6 +354,7 @@ function updatePlay(dt) {
           }
           blow(t);
           burst(a.x, a.y, '#e04a54', 6, 45, 0.4);
+          if (a.pierce) { a.pierceHit.push(t); continue; }
           dead = true;
           break;
         }
@@ -328,8 +365,10 @@ function updatePlay(dt) {
       // team, and the only thing that ever stood outside the arrow pipeline
       for (const b of robots) {
         if ((a.team === b.team && !a.ff) || b.dead) continue;
+        if (a.pierce && a.pierceHit.includes(b)) continue;
         if (robotHit(b, a.x, a.y)) {
           blow(b, 40);
+          if (a.pierce) { a.pierceHit.push(b); continue; }
           dead = true;
           break;
         }
@@ -338,8 +377,10 @@ function updatePlay(dt) {
     if (!dead) {
       for (const an of animals) {
         if (an.dead) continue;
+        if (a.pierce && a.pierceHit.includes(an)) continue;
         if (animalHit(an, a.x, a.y)) {
           blow(an, 25 + 45 * a.pow);
+          if (a.pierce) { a.pierceHit.push(an); continue; }
           dead = true;
           break;
         }
@@ -362,11 +403,7 @@ function updatePlay(dt) {
       // range's consecutive-hit run (agStreak, js/world.js) - minigame or not
       if (PRACTICE && !a.ptHit) agStreak = 0;
       // A shot that ends - a miss, a wall, a body, or the end of its life -
-      // leaves a shaft where it stopped IF the bit that fired it is one that
-      // comes back (BITS[...].stick, the plain arrow and the barb). That is
-      // what keeps "arrows come back" true while a thrown log or a conjured
-      // wisp plainly does not. Turret bolts carry no bit and leave nothing.
-      if (!a.kind && a.stick) stickArrow(a, nx, ny);
+      // just vanishes: nothing is ever lying in the snow to walk back over.
       arrows.splice(i, 1);
     }
   }
@@ -395,27 +432,6 @@ function updatePlay(dt) {
 
   // everyone has stepped: push overlapping units apart (players, animals, robots)
   separateUnits();
-
-  // spent arrows in the snow. Neutral like drops - the fletching says whose
-  // shot it was, but anyone short of a full quiver can pull it out, so losing
-  // a firefight on someone else's ground also means shooting them their ammo.
-  for (let i = shafts.length - 1; i >= 0; i--) {
-    const s = shafts[i];
-    s.t += dt;
-    if (s.t > SHAFT_LIFE) { shafts.splice(i, 1); continue; }
-    if (s.t < SHAFT_ARM) continue;
-    for (const p of players) {
-      if (!p.active || p.dead || inAir(p) || p.quiver >= QUIVER_MAX) continue;
-      if (Math.hypot(s.x - p.x, s.y - p.y + 2) >= SHAFT_R) continue;
-      contest('shaft:' + i, p, () => {
-        const j = shafts.indexOf(s);
-        if (j < 0 || !gainArrow(p, 1)) return; // someone else got there, or the quiver filled
-        shafts.splice(j, 1);
-        burst(s.x, s.y, TEAMS[s.team].mark, 4, 30, 0.3, true);
-        if (p === player) SFX.shaftPull();
-      });
-    }
-  }
 
   // drops
   for (let i = drops.length - 1; i >= 0; i--) {
@@ -486,7 +502,7 @@ function updatePlayer(p, dt) {
   const inp = p.input;
 
   if (p.dead) { // out of the match: nothing it wants gets through
-    inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.dodge = inp.eatBerry = inp.eatFish = false;
     inp.ability = -1;
     inp.cmd = null;
     return;
@@ -499,7 +515,7 @@ function updatePlayer(p, dt) {
   // you, and the surface spends it like any other momentum.
   if (p.stunT > 0) {
     p.stunT = Math.max(0, p.stunT - dt);
-    inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.dodge = inp.eatBerry = inp.eatFish = false;
     inp.work = inp.fire = inp.slide = false;
     inp.ability = -1;
     inp.cmd = null;
@@ -507,8 +523,8 @@ function updatePlayer(p, dt) {
   }
 
   // edge-triggered intents, consumed here so a controller only has to set them
+  // (the burrow lost its own key: SNOW COVER, hunter key 4, is the door in now)
   if (inp.dodge) { inp.dodge = false; tryDodge(p); }
-  if (inp.prone) { inp.prone = false; tryProne(p); }
   if (inp.eatBerry) { inp.eatBerry = false; eatBerry(p); }
   if (inp.eatFish) { inp.eatFish = false; eatFish(p); }
   if (inp.ability >= 0) { const i = inp.ability; inp.ability = -1; tryAbility(p, i); }
@@ -609,6 +625,24 @@ function updatePlayer(p, dt) {
     p.vy = p.rushNY * RUSH_SPD;
     const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
     rushStep(p, mv, dt);
+  } else if (p.grapT > 0) {
+    // GRAPPLE: the rope owns the velocity while the key is held - hauled
+    // straight at the anchor at GRAP_REEL. Letting go of the key, arriving,
+    // a wall, or the safety timer all end in grapEnd (js/abilities.js), which
+    // KEEPS the velocity - so the reel's speed rides out into the surface
+    // model, and shift turns it into a slide.
+    p.grapT -= dt;
+    const gdx = p.grapX - p.x, gdy = p.grapY - p.y;
+    const gd = Math.hypot(gdx, gdy) || 1;
+    p.vx = gdx / gd * GRAP_REEL;
+    p.vy = gdy / gd * GRAP_REEL;
+    const mv = moveEntity(p, p.vx * dt, p.vy * dt, PLAYER_R);
+    p.grapDustT = (p.grapDustT || 0) - dt;
+    if (p.grapDustT <= 0) {
+      p.grapDustT = 0.06;
+      burst(p.x, p.y + 5, '#dfe8f4', 1, 20, 0.3, true);
+    }
+    if (!inp.grapple || gd <= GRAP_ARRIVE || mv.blockedX || mv.blockedY || p.grapT <= 0) grapEnd(p);
   } else {
     const chargeMul = p.charging ? kit.chargeMul : 1; // drawn bow slows you
     // every cap an ability may drag on (root, net, crater, cast, shield) or
@@ -683,6 +717,7 @@ function updatePlayer(p, dt) {
       p.sliding = false;
       p.slideT = 0;
       if (p.rushT > 0) { p.rushT = 0; p.rushVictim = null; } // the charge ends in the water
+      if (p.grapT > 0) grapEnd(p);                          // the rope goes slack with you
       p.castT = 0; p.castAb = -1; p.shieldT = 0;           // and so does whatever was being cast
       breakEat(p);                                         // the meal goes in the water with you
       p.prone = false; p.hide = 0; p.riseT = 0; // crawled off the edge: no cover in the water
@@ -833,29 +868,25 @@ function updatePlayer(p, dt) {
   if (p.swingT <= 0 && p.swingCd <= 0) p.swing = SWING_BOW;
   if (inp.work) tryWork(p);
 
-  // the quiver: the renock cooldown counts down, and a short quiver fletches
-  // one arrow back at a time. Both run for every slot, dead or alive is
-  // already filtered above, so a bot recovers on exactly the human's clock.
+  // the cycle: the cooldown a shot starts (toolCycle, js/tools.js) counts
+  // down, and its end is the ONE gate between presses. It runs for every
+  // slot - dead or alive is already filtered above - so a bot recovers on
+  // exactly the human's clock.
   if (p.nockT > 0) {
     p.nockT = Math.max(0, p.nockT - dt);
     if (p.nockT === 0) { p.readyFlash = 0.16; if (p === player) SFX.nock(); }
   }
-  if (p.quiver < QUIVER_MAX) {
-    p.fletchT += dt;
-    if (p.fletchT >= kit.fletch) { p.fletchT = 0; gainArrow(p, 1); }
-  } else p.fletchT = 0;
-  p.quiverFlash = Math.max(0, p.quiverFlash - dt);
   p.readyFlash = Math.max(0, p.readyFlash - dt);
   p.dryT = Math.max(0, p.dryT - dt);
 
   // The tool: pressing arms the shot, releasing fires it. The press does not
   // have to land on a ready tool - it stays armed, so holding through the
-  // cycle (or through an empty quiver) draws the moment the next shot is
-  // there. Without that, a controller that holds fire down - every AI slot
-  // does - would fire once and then wait forever for an edge it already spent.
-  // `toolReady` is the second half of the old quiver gate: a slot with no tool
-  // in it, or a tool with no bit light enough to throw, is just as dry.
-  const armed = p.quiver > 0 && toolReady(p);
+  // cycle draws the moment the wipe clears. Without that, a controller that
+  // holds fire down - every AI slot does - would fire once and then wait
+  // forever for an edge it already spent. `toolReady` is the only other
+  // refusal: a slot with no tool in it, or a tool with no bit light enough to
+  // throw, is dry.
+  const armed = toolReady(p);
   if (inp.fire && !p.firePrev) {
     // THE BUTTON IS THE CANCEL. A meal must never trap the hands: deciding
     // mid-chew that the fight matters more drops it on the spot and the draw
@@ -882,9 +913,12 @@ function updatePlayer(p, dt) {
   }
   p.firePrev = inp.fire;
 
-  // bow draw: charge up and keep facing the aim point
+  // bow draw: charge up and keep facing the aim point. chargeT is the raw
+  // seconds held, never clamped - every reader takes drawPow() (0..1) off it,
+  // and the meter's white blink at the peak (DRAW_FULL_FLASH) needs to see
+  // the hold run PAST the full draw
   if (p.charging) {
-    p.chargeT = Math.min(kitOf(p).bowCharge, p.chargeT + dt);
+    p.chargeT += dt;
     const adx = inp.aimX - p.x, ady = inp.aimY - p.y;
     if (Math.abs(adx) > Math.abs(ady)) p.dir = adx > 0 ? 'right' : 'left';
     else p.dir = ady > 0 ? 'down' : 'up';

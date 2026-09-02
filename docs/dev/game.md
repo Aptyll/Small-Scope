@@ -12,9 +12,19 @@ nine other people are on it.
 
 Ten slots in `players` — **slot 0 is you, the rest are AI** — across **two teams of five, RED vs
 BLUE** (slots alternate). Everyone picks one of **two classes** (the ranged HUNTER, the melee
-WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the one line in
-opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of its line each
-eagle dives into the treeline and becomes its team's **objective**. **Last team standing wins.**
+WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the map's one
+diagonal in opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of
+its line each eagle dives into its **corner's** treeline — RED always bottom-left, BLUE always
+top-right — and becomes its team's **objective**; its **merchant** climbs down to raise a gate and
+clear the rim, and a **lane** of pines falls open back to the snow. **Drive off the rival eagle
+and the match is won** — nothing else ends one: a player who goes down waits, and is set back
+down at their own bird.
+
+**Your side is always blue.** Whatever team index the roster dealt you, your allies are painted
+BLUE and your enemies RED — nameplates, arrows, armour, buildings, map marks, bot names, all of
+it — through one function (`skin`, js/player.js) the paint goes through and the rules never do.
+A settings toggle (MY TEAM) shows the roster's real colours instead.
+[Teams and colours](multiplayer.md#teams-and-colours).
 
 The world is 232 tiles of 16 px — a 3712×3712 px snowfield with a forest border and an open
 interior threaded by frozen lakes and rivers. See [world.md](world.md#the-tile-world).
@@ -36,8 +46,9 @@ in broken rocks, in felled trees, and at the top tier in the treeline's chests �
 finish a match with is one the map handed you a piece at a time. Hover the weapon well and its bit
 column rises out of it to be rebuilt mid-fight. [Tools and bits](gameplay.md#tools-and-bits).
 
-**Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's traps, net,
-falcon and volley; the WARRIOR's shield, rush, stomp and juggernaut — each with a cooldown, a
+**Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's piercing
+shot, net, grapple and snow cover; the WARRIOR's shield, rush, stomp and juggernaut — each with a
+cooldown, a
 cast the body visibly performs, and effects drawn plainly for both sides: the game is readable
 first, sneaky second. [Class abilities](gameplay.md#class-abilities-keys-1-4),
 [Classes](multiplayer.md#classes).
@@ -48,19 +59,22 @@ drop is exactly what your first one may drop, so a new player and a veteran play
 a find is a find because of what it *is*, never because of what you have ground out.
 [The tech tree](gameplay.md#the-tech-tree).
 
-**Arrows are finite whatever is firing them.** Every projectile bit spends one from the same small
-quiver, and the plain shafts stick in the snow where they land for **anyone** to pick up — so a
-firefight leaves ammunition on the ground for whoever is still standing, and the exotic bits that
-leave nothing behind cost more than their damage says. [The quiver](gameplay.md#the-quiver).
+**The draw is the ammunition.** There is no quiver: what a shot is worth — how far, how fast, how
+hard — is how long the string was held, and the tool's own cycle is all that sits between one
+press and the next. Spamming the button is punished by the shots themselves, short and weak, never
+by a counter, so what the meter shows is exactly what you get.
+[The draw](gameplay.md#the-draw).
 
 **Momentum is the movement.** Ice is mechanically slippery, dodges chain, and **a roll is a hit** —
 the dodge is an attack, which is why a player mid-roll passes through small units instead of
 colliding with them. [Momentum movement](gameplay.md#momentum-movement-players-only),
 [the roll is a hit](gameplay.md#the-roll-is-a-hit).
 
-**Ctrl goes prone and the snow covers you.** Concealment is a real state the world reads, not a
+**Snow cover goes prone and the snow covers you — and it is the hunter's.** Concealment is a real
+state the world reads, not a
 visual effect: everything that decides it can see a player goes through one function, and burial
-lives inside it. [Prone](gameplay.md#prone-under-the-snow).
+lives inside it. It is a class ability now (the hunter's key 4), not a universal key.
+[Prone](gameplay.md#prone-under-the-snow).
 
 **E is the one verb for the world.** The same key harvests a tree, mines a rock, breaks an
 enemy building, and strikes a rival's grounded eagle — and the axe and pick it swings are never
@@ -79,18 +93,23 @@ out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 **Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
 gear pop-up is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
 
-**Your eagle is your life.** The bird that carried the team in crashes into a patch of trees at
-the end of its line and roosts there, armoured in team colour. Its hp pool is its **nerve**:
+**Your eagle is your life.** The bird that carried the team in crashes into its corner's trees at
+the end of its line and roosts there, armoured in team colour — the crater it blows, the lane its
+landing cuts to the open snow and the gate its merchant raises are the team's starting base, an
+easier opening for a new player who can help fortify before walking out. Its hp pool is its **nerve**:
 hits spook it, it calms back down between scares, it defends its own ground with a wing gust —
 and when its nerve breaks it is **driven off**, not killed: every camera pans to watch it fly
-away, and its whole side falls with it as it goes. The second, symmetric way to win a match, and the reason both teams
-always have somewhere worth walking to. [Eagle drop](rendering.md#eagle-drop-mode-drop),
-[Death is final](gameplay.md#death-is-final).
+away, and its whole side falls with it as it goes. **It is also the way back**: a player who
+goes down waits out a timer and is set down again at the roost — no Keep, no permadeath; death
+costs the wallet, the bag and the walk. The bird is the **only objective** and the one way a
+match ends, which is why both teams always have somewhere worth walking to — and why every bot
+on the map knows where both birds are and what is happening at them, and answers a hit on its
+own from anywhere. [Eagle drop](rendering.md#eagle-drop-mode-drop),
+[Death and respawn](gameplay.md#death-and-respawn), [AI slots](multiplayer.md#ai-slots).
 
-**A team's Keep is its way back.** No living Keep means **permadeath**, which is what makes a base
-worth defending and worth attacking. The Keep also crafts **rarity-rolled roguelike cards**, drafted
-three-at-a-time from a bag cell without pausing the sim. [The Keep](multiplayer.md#the-keep),
-[Death is final](gameplay.md#death-is-final), [Roguelike cards](gameplay.md#roguelike-cards).
+**Roguelike cards come out of the treeline's chests.** A sprung chest drops a **rarity-rolled
+card**, drafted three-at-a-time from a bag cell without pausing the sim, and a picked card is
+baked into the kit for the rest of the match. [Roguelike cards](gameplay.md#roguelike-cards).
 
 **An ice hole is a build site.** Break the ice twice and the hole it leaves takes the one `water`
 building — a **fish net**, laid flat and walked *on* rather than into — over a live fish population
@@ -108,14 +127,16 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
 
 - **Not a resource tree.** One currency, deliberately. A proposal that adds a second resource is
   proposing a different game.
-- **Not a respawn shooter.** Death is final while your Keep is dead; that is the stake everything
-  else borrows from.
+- **Not a deathmatch.** Kills never win a match and never end one — only the bird does. Death
+  still costs everything you carried and the walk back from your roost; that is the stake
+  everything else borrows from, and the objective is the only place it is ever permanent.
 - **Not a solo survival game.** Every mechanic runs per slot off `p.input`, and `player` is only
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.
 - **Not an account.** The player profile is a display name, a few lifetime numbers and a record of
-  which kinds you have held, in the browser, and it is skippable. No passwords, no sign-in, nothing
+  which kinds you have held, in the browser, and it names itself — a fresh profile rolls a random
+  name rather than stopping a new player at a prompt. No passwords, no sign-in, nothing
   to log into. A match reads **nothing** back out of it — everything about a match is decided
   inside that match, and the arsenal is unlocked for everybody alike. See
   [architecture.md](architecture.md#profilejs). If a server ever holds it, it holds the same

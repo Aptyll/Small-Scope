@@ -176,7 +176,7 @@
     return u.buffer;
   }
 
-  // Where a clip's bytes come from. js/sfxdata.js (baked by tools/bake-sfx.js) is
+  // Where a clip's bytes come from. js/sfxdata.js (baked by app/bake-sfx.js) is
   // preferred and is what makes opening index.html off the disk work at all - a
   // file:// page is allowed neither fetch nor XHR against its own folder, so
   // without it every sampled cue silently falls back to synth. fetch stays as
@@ -210,7 +210,7 @@
                 + 'which is what "the new sounds do nothing" sounds like. '
                 + (window.SFXDATA ? 'js/sfxdata.js is loaded but does not carry this clip: rerun '
                   : 'js/sfxdata.js did not load - index.html must include it, and it is built by ')
-                + '`node tools/bake-sfx.js`. First failure:', bankStat.err[0]);
+                + '`node app/bake-sfx.js`. First failure:', bankStat.err[0]);
             }
           });
       }
@@ -482,10 +482,8 @@
     // the shot rhythm: a dry wooden tick the moment the next arrow is nocked and
     // the bow can be drawn again. Quiet on purpose - it plays after every shot.
     nock() { tone(880, 0.03, 'square', 0.035); tone(1240, 0.03, 'square', 0.025, 0, 0.03); },
-    // pressing the bow with an empty quiver: a slack string and nothing behind it
+    // pressing a tool that cannot answer (an empty slot, nothing light enough to throw): a slack string and nothing behind it
     dryFire() { noise(0.05, 0.07, 260); tone(120, 0.09, 'triangle', 0.06, -40); },
-    // pulling a spent shaft back out of the snow
-    shaftPull() { noise(0.05, 0.1, 1400); tone(520, 0.06, 'triangle', 0.05, 240); },
     // going to ground: a body dropping into deep snow, all low crunch and no pitch
     bury() { noise(0.22, 0.2, 380); tone(96, 0.16, 'triangle', 0.06, -26); },
     // the cover finishes settling. Barely there on purpose - it is the sound of

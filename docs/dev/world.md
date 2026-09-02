@@ -9,7 +9,15 @@ anything that must stay stable per tile.
 - `WORLD = 232` tiles of `TILE = 16` px → a 3712×3712 px world (under `PRACTICE` the const is
   76 instead — see [the practice arena](#the-practice-arena)). The forest border keeps its
   original depth (`BORDER_MIN`/`BORDER_MAX` 30–70, avg ~50), so the growth all went into the
-  open interior (~132 tiles across, double the old ~92²'s area); interior feature counts
+  open interior (~132 tiles across, double the old ~92²'s area). The two **roost corners** —
+  bottom-left and top-right, where the eagles always come down
+  ([eagle drop](rendering.md#eagle-drop-mode-drop)) — are forested to `ROOST_R` (68 tiles from the
+  corner, ~48 along the diagonal) outright: `borderDepth` is the seed's own `borderNoise` **or**
+  a quarter-disc whose arc wobbles ±`ROOST_WOBBLE` (3) on the fine noise, so whatever the seed grew
+  there the corner holds one solid block of woods and the treeline the lane cuts to is at least
+  the arc. The union only adds pines, and `genWorld` rolls its per-tree `rng()` only under
+  `borderNoise`, so a seed's interior is exactly what it was before the corners were guaranteed
+  (the seed-42 ground hash and landmarks are unchanged); not under `PRACTICE`. Interior feature counts
   (ponds, rock clusters, bushes, wildlife) were doubled to hold density. `ringPts` is `RING_N`
   (6) points, evenly spaced on a ring `SPAWN_D` (`WORLD / 2 - 55`) tiles from the centre at
   the treeline — the old spawn camps. Nobody starts there any more (players land from the eagles,
@@ -281,14 +289,12 @@ every break snaps a quick shock ring out from the hit, sized to the face it came
 and a milestone run (every fifth consecutive hit) flares at the face. **A mover
 about to run into anything parked — or rolling slower — on its rail hops to the free lane and
 keeps going** (`laneU` eases the hop, and `agBlocked` refuses a hop into an occupied stretch),
-which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`, and **the arrow
-sticks in the face first**: the mechanical hit — points, popup, the run — lands on impact (the
-round clock can never eat a landed shot), the face recoils around the standing shaft (drawn out
-of the impact point along the bearing it flew in on), and `AG_STICK_T` later `agShatter` breaks
-it — chips, straw, splinters and the shock ring — after which a **stock** target (the
-free-practice roster, `agStock`) stands bare `PT_RESPAWN` seconds and springs a fresh face,
-while a round target is spent for good. A face carrying a stuck arrow is not live (`ptLive`),
-so one shaft resolves at a time. **Every arrow into a face also extends a consecutive-hit run** (`agStreak`),
+which is what lets a crowded round keep flowing. A hit lands in `hitPTarget`, and **the face
+explodes on contact**: points, popup, the run and the shatter (`agShatter` — chips, straw,
+splinters and the shock ring) all land the same frame, so the feedback is instant and the round
+clock can never eat a landed shot. After the break a **stock** target (the free-practice roster,
+`agStock`) stands bare `PT_RESPAWN` seconds and springs a fresh face, while a round target is
+spent for good. **Every arrow into a face also extends a consecutive-hit run** (`agStreak`),
 minigame or not: the hit popup carries it from the second hit on (`X3` alone in free practice —
 white, gold from five, hot orange from ten — appended to the points during a round), any
 practice arrow that ends without striking a face breaks it (the arrow loop, js/sim.js — the
@@ -363,7 +369,8 @@ in `title` mode the main menu prints the seed instead, next to the reroll die.
 - `hash2(x, y)` mixes `SEED` in, and `vnoise(x, y)` is built on it. Both are still pure functions
   of position *within a run* — use them for anything that must stay stable per tile no matter when
   it is asked (ground texture, forest boundary, tree rare-drops, panel mottling, map dithering).
-  `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map.
+  `borderDepth()` rides on `vnoise`, so the seed reshapes the forest and with it the whole map
+  (everywhere but inside the two roost discs, which every seed grows alike).
 - Two exceptions to the single stream, both for the same reason — nothing outside worldgen may
   perturb the main `rng`'s worldgen prefix. `fxRng` (`SEED ^ 0x9e3779b9`) feeds resize-driven
   snowflake top-ups in `fitFlakes()`, so window size / resolution changes cannot move the world
@@ -455,7 +462,7 @@ sits beside `STRUCTS` in [js/structures.js](../../js/structures.js) with the net
   [contested](multiplayer.md#contested-orders), so two players can't land the same fish. Hovering a fish (`hoverFish()`, a 7 px disc) switches the
   cursor to the water-blue **fish** reticle and `drawFishHint()` (overlay pass, after the E
   prompt) frames it with the same pulsing white brackets stumps get plus a click prompt — a
-  pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, hot orange while
+  pixel mouse icon (`drawMouseIcon`: only the left button is coloured — gold, pale gold while
   pressed/charging — so nothing hints at right-click) reading
   **SPEAR** when `fishInRange()` holds, or a dimmed **GET CLOSE** otherwise, because the
   mechanic is proximity, not aim. Fish are food: **F** eats one for +50 HP over a 1.5 s channel a

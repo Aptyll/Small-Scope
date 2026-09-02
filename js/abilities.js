@@ -1,7 +1,7 @@
 'use strict';
 // The class abilities: keys 1-4, four unique actives per class, each with a
 // cooldown, a cast the body visibly performs, and world entities of its own
-// (traps, nets, a falcon, a volley, a shield, a rush, a crater, a fury).
+// (a piercing shot, nets, a grapple line, a shield, a rush, a crater, a fury).
 // Everything here runs per slot off p.input.ability, so a bot casts through
 // exactly the key a human presses. Loaded after tools.js (it shares the
 // world's fx helpers at runtime and nothing at load time - and it must draw
@@ -14,33 +14,30 @@ const AB_KEYS = 4;          // keys 1-4
 // level 1; each level past 1 costs ONE SKILL POINT - the only thing a point
 // buys, one per hero level, so the 12 points a capped hero earns max the
 // four keys' 12 levels exactly. Each level shaves AB_LV_CD off that
-// ability's cooldown - one lever, universally meaningful (more traps out,
-// the wall up more often), read back through abCdOf so every
+// ability's cooldown - one lever, universally meaningful (more nets in the
+// air, the wall up more often), read back through abCdOf so every
 // cooldown-setting site scales alike.
 const AB_LV_MAX = 4;
 const AB_LV_CD = 0.12;
 // hunter
-const TRAP_RANGE = 44;      // px from the feet a trap can be set
-const TRAP_ARM = 1.0;       // s before a fresh trap bites
-const TRAP_LIFE = 25;       // s a set trap waits before rusting away
-const TRAP_R = 9;           // px: step this close and it goes
-const TRAP_DMG = 8;
-const TRAP_ROOT = 1.2;      // s the victim is pinned
-const TRAP_MAX = 2;         // per owner; a third replaces the oldest
+const PIERCE_WIND = 0.7;    // s the draw is LOCKED before the shot looses itself
+const PIERCE_MUL = 1.5;     // over a fully drawn plain arrow's damage
+const PIERCE_SPD = 380;     // px/s (a plain arrow flies 320)
+const PIERCE_RANGE = 260;   // px of flight - the telegraph line draws this far
+const PIERCE_SLOW = 0.15;   // walk multiplier while the draw is locked: commitment
 const NET_SPD = 300;
 const NET_RANGE = 130;
 const NET_DMG = 4;
 const NET_SLOW = 0.4;       // speed multiplier under the net...
 const NET_SLOW_T = 2;       // ...for this long
 const NET_KICK = 150;       // px/s of recoil the hunter takes backward
-const FALCON_SPD = 240;
-const FALCON_RANGE = 340;
-const MARK_T = 4;           // s a swept rival stays revealed
-const VOLLEY_RANGE = 150;   // px from the feet the circle can be called
-const VOLLEY_R = 26;        // px radius of the strike
-const VOLLEY_T = 0.8;       // s of telegraph before the arrows land
-const VOLLEY_DMG = 14;
-const VOLLEY_SHAFTS = 3;    // plain shafts the rain leaves for anyone
+const GRAP_RANGE = 170;     // px a thrown hook can reach
+const GRAP_ASSIST = 12;     // px either side of the aim ray a trunk still catches
+const GRAP_REEL = 260;      // px/s of reel - over SLIDE_MIN, so a release carves
+const GRAP_ARRIVE = 12;     // px from the anchor the line lets itself go
+const GRAP_MAX_T = 1.5;     // s of reel before the hook slips (safety rail)
+const GRAP_MISS_CD = 1;     // s a hook that caught nothing costs
+// (snow cover has no numbers of its own: the burrow it opens is PRONE_*, js/actions.js)
 // warrior
 const SHIELD_T = 2.2;       // s the shield can be held up
 const SHIELD_ARC = 0.35;    // cos-margin of the front arc that blocks
@@ -66,26 +63,28 @@ const JUG_STUN = 0.5;
 // what an ability IS lives here, never in an `if` somewhere else. `cast` is
 // the seconds the body spends performing it (the pose is abilityPose below).
 const CLASS_AB = [
-  [ // HUNTER - bow, traps, distance control
+  [ // HUNTER - bow, distance control, the ground between
     {
-      id: 'trap', name: 'SNARE TRAP', cd: 10, cast: 0.32,
-      blurb: 'SET AN IRON JAW IN THE SNOW. IT BITES THE FIRST RIVAL ON IT.',
-      use: (p) => abSetTrap(p),
+      id: 'pierce', name: 'PIERCING SHOT', cd: 12, cast: PIERCE_WIND,
+      blurb: 'LOCK A FULL DRAW, THEN LOOSE. THE SHOT GOES THROUGH EVERYONE ON THE LINE.',
+      use: (p) => abPierce(p),
     },
     {
-      id: 'net', name: 'NET SHOT', cd: 11, cast: 0.18,
+      id: 'net', name: 'NET SHOT', cd: 15, cast: 0.18,
       blurb: 'A WEIGHTED NET THAT TANGLES. THE RECOIL KICKS YOU BACKWARD.',
       use: (p) => abNetShot(p),
     },
     {
-      id: 'falcon', name: 'FALCON SWEEP', cd: 18, cast: 0.28,
-      blurb: 'SEND THE BIRD DOWN A LINE. RIVALS UNDER IT ARE REVEALED.',
-      use: (p) => abFalcon(p),
+      id: 'grap', name: 'GRAPPLE', cd: 8, cast: 0.12,
+      blurb: 'HOOK A TREE OR A ROCK. HOLD TO REEL IN, LET GO TO KEEP THE SPEED.',
+      use: (p) => abGrapple(p),
     },
     {
-      id: 'volley', name: 'VOLLEY', cd: 16, cast: 0.35,
-      blurb: 'CALL A RAIN OF ARROWS ON A CIRCLE. SOME STICK FOR ANYONE.',
-      use: (p) => abVolley(p),
+      id: 'snow', name: 'SNOW COVER', cd: 60, cast: 0.22,
+      blurb: 'LIE DOWN AND PULL THE SNOW OVER YOU. THE KEY AGAIN STANDS YOU UP.',
+      use: (p) => abSnowCover(p),
+      // the strip's active tell: how deep under the snow the body is
+      acol: '#f4f7ff', activeF: (p) => (p.prone ? Math.max(0.15, p.hide) : 0),
     },
   ],
   [ // WARRIOR - close pressure, blocking, momentum
@@ -116,12 +115,8 @@ const CLASS_AB = [
 ];
 
 // the world the abilities put things into
-const traps = [];    // {x, y, owner, team, t}
 const craters = [];  // {x, y, team, t}
-const falcons = [];  // {x, y, nx, ny, d, owner, team, seen:[]}
 const nets = [];     // {x, y, nx, ny, d, owner, team, spin}
-const volleys = [];  // {x, y, owner, team, t}
-const volleyFx = []; // falling shafts, visual only: {x, y, delay, t}
 
 // ---- levelling -----------------------------------------------------------
 // can-buy or not (a point in hand, room on the key), the one entry point a
@@ -141,15 +136,23 @@ function buyAbilityLv(p, i) {
 
 // ---- casting -------------------------------------------------------------
 // The press. Refused flat while the body is otherwise occupied; the shield's
-// own key is the one toggle - pressing it again lowers the shield early.
+// own key is the one toggle - pressing it again lowers the shield early - and
+// snow cover's is the other: pressing it again stands the body up, free.
 function tryAbility(p, i) {
   if (i < 0 || i >= AB_KEYS || p.dead || p.stunT > 0 || p.fallT > 0 ||
-    p.dodgeT > 0 || p.rushT > 0 || p.castT > 0 || p.eatT > 0 || inAir(p)) return; // a meal occupies the hands the same way a cast does
+    p.dodgeT > 0 || p.rushT > 0 || p.grapT > 0 || p.castT > 0 || p.eatT > 0 || inAir(p)) return; // a meal occupies the hands the same way a cast does
   const ab = CLASS_AB[p.cls][i];
   if (!ab) return;
   if (ab.id === 'shield' && p.shieldT > 0) { abShieldDown(p, true); return; }
+  if (ab.id === 'snow' && p.prone) { risePlayer(p); return; } // rising is free; only going under pays
   if (p.abCd[i] > 0) { if (p === player) SFX.deny(); return; }
   if (ab.id === 'rush' && p.rootT > 0) { if (p === player) SFX.deny(); return; } // pinned: nothing that moves you
+  if (ab.id === 'snow') {
+    // no snow underfoot is a flat no before the kneel even starts - the speed
+    // check waits for the cast to land (tryProne, called by abSnowCover)
+    const tx = Math.floor(p.x / TILE), ty = Math.floor((p.y + 4) / TILE);
+    if (!inWorld(tx, ty) || ground[idx(tx, ty)] !== 0) { if (p === player) SFX.deny(); return; }
+  }
   risePlayer(p); // a cast breaks cover the way the shot does
   if (p.charging) { p.charging = false; p.chargeT = 0; }
   p.fireArmed = false;
@@ -220,8 +223,12 @@ function updateAbilities(p, dt) {
   if (p.castT > 0) {
     p.castT -= dt;
     const ab = CLASS_AB[p.cls][p.castAb];
-    if (ab && ab.id === 'trap' && Math.random() < dt * 30) {
-      burst(p.x + rand(-4, 4), p.y + 5, '#eef4fb', 1, 18, 0.3, true); // kneeling, digging the set in
+    // the locked draw keeps facing the aim the whole windup, so the telegraph
+    // line and the body agree about where this is going
+    if (ab && ab.id === 'pierce') {
+      const dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
+      if (Math.abs(dx) > Math.abs(dy)) p.dir = dx > 0 ? 'right' : 'left';
+      else p.dir = dy > 0 ? 'down' : 'up';
     }
     if (p.castT <= 0) {
       const i = p.castAb;
@@ -239,7 +246,12 @@ function updateAbilities(p, dt) {
 function abilityMoveMul(p) {
   if (p.rootT > 0) return 0;
   let m = 1;
-  if (p.castT > 0) m *= 0.5;
+  // a cast halves the walk - except the locked draw, which all but plants the
+  // feet: the pierce's cost is standing still where everyone can see the line
+  if (p.castT > 0) {
+    const ab = CLASS_AB[p.cls][p.castAb];
+    m *= ab && ab.id === 'pierce' ? PIERCE_SLOW : 0.5;
+  }
   if (p.shieldT > 0) m *= 0.4;
   if (p.slowT > 0) m *= p.slowMul;
   if (p.jugT > 0) m *= 1 + JUG_SPD * (1 - p.jugT / JUG_T);
@@ -247,28 +259,35 @@ function abilityMoveMul(p) {
 }
 
 // ---- hunter: the four effects --------------------------------------------
-function abSetTrap(p) {
-  // at the aim, clamped to arm's reach, snapped to the tile - a trap is a
-  // TILE fact, plainly visible to both sides: the play is around it, not
-  // under it. Somewhere a trap cannot sit (a wall, open water) sets at the
-  // feet instead.
-  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
-  const d = Math.hypot(dx, dy) || 1;
-  const r = Math.min(TRAP_RANGE, d);
-  let tx = Math.floor((p.x + dx / d * r) / TILE), ty = Math.floor((p.y + dy / d * r) / TILE);
-  if (!inWorld(tx, ty) || isSolidTile(tx, ty) || ground[idx(tx, ty)] === 2) {
-    tx = Math.floor(p.x / TILE); ty = Math.floor((p.y + 4) / TILE);
-    if (!inWorld(tx, ty) || isSolidTile(tx, ty) || ground[idx(tx, ty)] === 2) { if (p === player) SFX.deny(); return; }
-  }
-  // the cap: a third trap springs the oldest still out
-  const mine = traps.filter((t) => t.owner === p.id);
-  if (mine.length >= TRAP_MAX) {
-    const old = mine[0];
-    burst(old.x, old.y, '#8b93a8', 5, 30, 0.3, true);
-    traps.splice(traps.indexOf(old), 1);
-  }
-  traps.push({ x: tx * TILE + 8, y: ty * TILE + 8, owner: p.id, team: p.team, t: 0 });
-  if (nearPlayer(p.x, p.y)) SFX.place();
+// The windup was the telegraph; the loose is the payoff. One enhanced arrow,
+// already at full draw, that goes THROUGH every body on the line instead of
+// dying on the first - the pierce flag is read by the arrow loop (js/sim.js),
+// which keeps the shot alive past a hit and remembers who it has already cut.
+// The cue that the lock released is hard and unmissable: the nock snap, a
+// white flash on the arrowhead, and the shot itself already gone.
+function abPierce(p) {
+  const kit = kitOf(p);
+  const b = BITS.arrow;
+  const dx = p.input.aimX - p.x, dy = p.input.aimY - (p.y - BOW_Y);
+  const a = Math.atan2(dy, dx);
+  // a fully drawn plain arrow's own damage math (emitBit at pw = 1, no
+  // modifiers), then the pierce multiplier over the top
+  const dmg = Math.round(((b.dmg + kit.dmgPow * 0.5) + kit.dmgBase + LVL_DMG * (p.level - 1)) * PIERCE_MUL);
+  arrows.push({
+    x: p.x, y: p.y - BOW_Y,
+    vx: Math.cos(a) * PIERCE_SPD, vy: Math.sin(a) * PIERCE_SPD,
+    t: 0, life: PIERCE_RANGE / PIERCE_SPD, dmg, pow: 1,
+    owner: p.id, team: p.team, ambush: false, trailD: 0,
+    bit: 'arrow', path: 'line', solid: true, ff: false,
+    lit: 0, col: '#f4f7ff',
+    pierce: true, pierceHit: [],
+    ang: a, spd: PIERCE_SPD, ox: p.x, oy: p.y - BOW_Y,
+  });
+  // the snap: arrowhead flash at the bow, and the sound of the lock letting go
+  burst(p.x + Math.cos(a) * 7, p.y - BOW_Y + Math.sin(a) * 7, '#f4f7ff', 8, 55, 0.3, true);
+  burst(p.x + Math.cos(a) * 9, p.y - BOW_Y + Math.sin(a) * 9, '#ffd95c', 5, 45, 0.25, true);
+  if (p === player) state.shake = Math.max(state.shake, 2);
+  if (nearPlayer(p.x, p.y)) { SFX.nock(); SFX.arrow(); }
 }
 
 function abNetShot(p) {
@@ -284,28 +303,73 @@ function abNetShot(p) {
   if (nearPlayer(p.x, p.y)) SFX.arrow();
 }
 
-function abFalcon(p) {
+// The hook: thrown down the aim ray, it catches the first tree or rock near
+// the line (GRAP_ASSIST px either side - the assist, so a trunk half a tile
+// off the cursor still takes it) and starts the reel. The reel itself is a
+// movement branch in updatePlayer, held as long as the key is held; grapEnd
+// is every way it lets go, and where the cooldown starts - so a long ride and
+// an instant release cost the same. A hook that catches nothing costs
+// GRAP_MISS_CD instead of the full clock.
+function abGrapple(p) {
   const dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
   const d = Math.hypot(dx, dy) || 1;
-  falcons.push({ x: p.x, y: p.y - 10, nx: dx / d, ny: dy / d, d: 0, owner: p.id, team: p.team, seen: [], t: 0 });
-  burst(p.x, p.y - 12, '#d9ad72', 5, 35, 0.4, true);
-  if (nearPlayer(p.x, p.y)) SFX.rise();
+  const nx = dx / d, ny = dy / d;
+  let ax = 0, ay = 0, found = false;
+  for (let s = 12; s < GRAP_RANGE && !found; s += 6) {
+    const sx = p.x + nx * s, sy = p.y + ny * s;
+    const ctx2 = Math.floor(sx / TILE), cty = Math.floor(sy / TILE);
+    for (let oy = -1; oy <= 1 && !found; oy++) for (let ox = -1; ox <= 1 && !found; ox++) {
+      const tx = ctx2 + ox, ty = cty + oy;
+      if (!inWorld(tx, ty)) continue;
+      const o = objects[idx(tx, ty)];
+      if (!o || (o.type !== 'tree' && o.type !== 'deadTree' && o.type !== 'rock')) continue;
+      const cx2 = tx * TILE + 8, cy2 = ty * TILE + 8;
+      // the assist: perpendicular distance of the trunk to the aim ray
+      const along = (cx2 - p.x) * nx + (cy2 - p.y) * ny;
+      if (along < 10 || along > GRAP_RANGE) continue;
+      const perp = Math.abs((cx2 - p.x) * ny - (cy2 - p.y) * nx);
+      if (perp > GRAP_ASSIST + 8) continue;
+      ax = cx2; ay = cy2; found = true;
+    }
+  }
+  if (!found) {
+    // nothing to bite: the throw whiffs, and only a beat is paid for it
+    const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'grap');
+    if (i >= 0) p.abCd[i] = GRAP_MISS_CD;
+    burst(p.x + nx * 14, p.y + ny * 14, '#8b93a8', 3, 25, 0.25, true);
+    if (p === player) SFX.deny();
+    return;
+  }
+  p.grapX = ax; p.grapY = ay;
+  p.grapT = GRAP_MAX_T;
+  p.sliding = false;
+  burst(ax, ay - 4, '#c8d2e4', 6, 40, 0.35, true);
+  if (nearPlayer(p.x, p.y)) SFX.place();
+}
+// every way the line lets go: the key released, the anchor reached, a wall, a
+// stun, the water, or the hook slipping on the safety timer. The momentum is
+// KEPT - the reel speed rides out over SLIDE_MIN, so releasing into shift
+// carves straight into a slide.
+function grapEnd(p) {
+  if (p.grapT <= 0) return;
+  p.grapT = 0;
+  const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'grap');
+  if (i >= 0) p.abCd[i] = abCdOf(p, i);
+  burst(p.x, p.y - 2, '#c8d2e4', 4, 30, 0.3, true);
+  if (nearPlayer(p.x, p.y)) SFX.pickup();
 }
 
-function abVolley(p) {
-  let dx = p.input.aimX - p.x, dy = p.input.aimY - p.y;
-  const d = Math.hypot(dx, dy) || 1;
-  const r = Math.min(VOLLEY_RANGE, d);
-  const x = p.x + dx / d * r, y = p.y + dy / d * r;
-  volleys.push({ x, y, owner: p.id, team: p.team, t: VOLLEY_T });
-  // the rain, staged now so the fall is already stacked when the ring closes
-  for (let i = 0; i < 8; i++) {
-    volleyFx.push({
-      x: x + rand(-VOLLEY_R + 4, VOLLEY_R - 4), y: y + rand(-VOLLEY_R + 6, VOLLEY_R - 6),
-      delay: VOLLEY_T + i * 0.03, t: 0, team: p.team,
-    });
+// Snow cover: the burrow, moved onto the kit. The whole state is still prone
+// (tryProne/risePlayer and PRONE_*, js/actions.js) - this is just the one door
+// in, and the 60 s clock is paid HERE, on the way under; every way back up is
+// free. A kneel that lands somewhere the snow refuses (still moving, sliding)
+// gives the clock back.
+function abSnowCover(p) {
+  tryProne(p);
+  if (!p.prone) {
+    const i = CLASS_AB[p.cls].findIndex((a) => a.id === 'snow');
+    if (i >= 0) p.abCd[i] = 0; // the snow refused: nothing is paid
   }
-  if (nearPlayer(p.x, p.y)) SFX.arrow();
 }
 
 // ---- warrior: the four effects -------------------------------------------
@@ -448,8 +512,9 @@ function abHitDummies(x, y, r, dmg) {
 
 // ---- the world tick ------------------------------------------------------
 // Everything the abilities left lying in the world, stepped once per sim
-// step from updatePlay: traps wait and bite, craters drag, the falcon flies
-// its line, nets fly theirs, and a called volley lands when its ring closes.
+// step from updatePlay: craters drag, and nets fly their lines. (The piercing
+// shot rides the arrows array, js/sim.js, and the grapple lives on its
+// caster's body - neither leaves a thing behind to tick here.)
 
 // Each of them is asked about through `sideOf` (js/actions.js), which hands
 // unitsNear/unitsHit the side a thing in the world is on rather than a living
@@ -460,24 +525,6 @@ function abHitDummies(x, y, r, dmg) {
 function abCredit(w) { const o = players[w.owner]; return o && !o.dead ? o : null; }
 
 function updateAbilityWorld(dt) {
-  for (let i = traps.length - 1; i >= 0; i--) {
-    const t = traps[i];
-    t.t += dt;
-    if (t.t > TRAP_LIFE) { burst(t.x, t.y, '#8b93a8', 4, 25, 0.3, true); traps.splice(i, 1); continue; }
-    if (t.t < TRAP_ARM) continue;
-    // iron does not ask what stood on it: the first body over the pan is
-    // bitten, rival, rabbit or worker bot alike
-    for (const q of unitsHit(sideOf(t), t.x, t.y - 4, TRAP_R)) {
-      // the bite: pinned on the spot, and the jaws show on the body (rootT)
-      hurtUnit(q, TRAP_DMG, 0, -0.2, abCredit(t), { kb: 0 });
-      if (!q.dead) rootUnit(q, TRAP_ROOT);
-      burst(t.x, t.y - 2, '#f2cc6a', 10, 55, 0.5, true);
-      burst(t.x, t.y - 4, '#8b93a8', 8, 45, 0.45, true);
-      if (nearPlayer(t.x, t.y)) SFX.hit();
-      traps.splice(i, 1);
-      break;
-    }
-  }
   for (let i = craters.length - 1; i >= 0; i--) {
     const z = craters[i];
     z.t += dt;
@@ -485,24 +532,6 @@ function updateAbilityWorld(dt) {
     // deep snow is deep snow for everything that has to cross it, refreshed
     // every step spent inside
     for (const q of unitsNear(sideOf(z), z.x, z.y - 4, CRATER_R)) slowUnit(q, 0.15, CRATER_SLOW);
-  }
-  for (let i = falcons.length - 1; i >= 0; i--) {
-    const f = falcons[i];
-    f.t += dt;
-    f.x += f.nx * FALCON_SPD * dt;
-    f.y += f.ny * FALCON_SPD * dt;
-    f.d += FALCON_SPD * dt;
-    // the bird's eye is not a blow, so nothing dodges it: everything alive
-    // under the line is marked, a deer and a worker bot included
-    for (const q of unitsNear(sideOf(f), f.x, f.y, 18)) {
-      markUnit(q, MARK_T);
-      if (!f.seen.includes(q)) {
-        f.seen.push(q);
-        burst(q.x, unitMidY(q) - 4, '#f2cc6a', 8, 45, 0.5, true);
-        if (nearPlayer(q.x, q.y)) SFX.ambush();
-      }
-    }
-    if (f.d >= FALCON_RANGE) { burst(f.x, f.y, '#d9ad72', 4, 30, 0.35, true); falcons.splice(i, 1); }
   }
   for (let i = nets.length - 1; i >= 0; i--) {
     const n = nets[i];
@@ -528,45 +557,41 @@ function updateAbilityWorld(dt) {
     }
     if (dead) nets.splice(i, 1);
   }
-  for (let i = volleys.length - 1; i >= 0; i--) {
-    const v = volleys[i];
-    v.t -= dt;
-    if (v.t > 0) continue;
-    const src = players[v.owner];
-    const by = src && !src.dead ? src : null;
-    // the rain does not check what it is falling on: everything alive under
-    // the ring takes it, a bird crossing it included
-    for (const q of unitsHit(sideOf(v), v.x, v.y, VOLLEY_R + 4)) {
-      const d = Math.hypot(q.x - v.x, q.y - v.y) || 1;
-      hurtUnit(q, VOLLEY_DMG, (q.x - v.x) / d * 0.3, 0.4, by, { kb: 30 });
-    }
-    if (PRACTICE) abHitDummies(v.x, v.y, VOLLEY_R, VOLLEY_DMG);
-    // the pillar holds even for a called strike: some of the rain sticks in
-    // the snow as plain shafts, free for anyone who walks in after it
-    for (let k = 0; k < VOLLEY_SHAFTS; k++) {
-      const a = rng() * Math.PI * 2, r = rand(4, VOLLEY_R - 6);
-      stickArrow({ x: v.x + Math.cos(a) * r, y: v.y + Math.sin(a) * r, team: v.team }, 0, 0.9);
-    }
-    burst(v.x, v.y, '#eef4fb', 12, 55, 0.5, true);
-    if (nearPlayer(v.x, v.y)) SFX.hit();
-    volleys.splice(i, 1);
-  }
-  for (let i = volleyFx.length - 1; i >= 0; i--) {
-    const f = volleyFx[i];
-    if (f.delay > 0) { f.delay -= dt; continue; }
-    f.t += dt;
-    if (f.t > 0.16) {
-      burst(f.x, f.y, '#eef4fb', 3, 30, 0.3, true);
-      volleyFx.splice(i, 1);
-    }
-  }
 }
 
 // ---- drawing: the world layer --------------------------------------------
-// Flat things on the snow, drawn after the shafts and before the entities:
-// a trap is as plainly visible as a shaft is, to BOTH sides - the game is
-// readable first, sneaky second.
+// Flat things on the snow, drawn before the drops and the entities: the
+// pierce telegraph is as plainly visible as the shot will be, to BOTH sides -
+// the game is readable first, sneaky second.
 function drawAbilityGround(ex, ey, now) {
+  // the piercing shot's ground telegraph: a thin line from every locked draw
+  // out along its live aim, brightening as the loose gets near - it teaches
+  // the caster what "through everyone on the line" means, and it gives
+  // whoever is standing on it the whole windup to not be
+  for (const p of players) {
+    if (!p.active || p.dead || inAir(p) || p.castT <= 0) continue;
+    const ab = CLASS_AB[p.cls][p.castAb];
+    if (!ab || ab.id !== 'pierce') continue;
+    const dx = p.input.aimX - p.x, dy = p.input.aimY - (p.y - BOW_Y);
+    const d = Math.hypot(dx, dy) || 1;
+    const nx = dx / d, ny = dy / d;
+    const closing = 1 - p.castT / PIERCE_WIND; // 0 -> 1 over the windup
+    let len = PIERCE_RANGE;
+    for (let s = 10; s < PIERCE_RANGE; s += 4) {
+      if (isSolidTile(Math.floor((p.x + nx * s) / TILE), Math.floor((p.y - BOW_Y + ny * s) / TILE))) { len = s; break; }
+    }
+    const march = (now * 60) % 4; // dashes crawl toward the loose
+    for (let s = 10 + march; s < len; s += 4) {
+      const px = Math.round(p.x + nx * s - ex), py = Math.round(p.y - BOW_Y + ny * s - ey);
+      if (px < -2 || py < -2 || px > WV_W + 2 || py > WV_H + 2) continue;
+      ctx.globalAlpha = 0.5 + 0.45 * closing;
+      ctx.fillStyle = '#0a0e23';
+      ctx.fillRect(px, py + 1, 1, 1);
+      ctx.fillStyle = closing > 0.75 ? '#ffd95c' : '#e0637a';
+      ctx.fillRect(px, py, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+  }
   for (const z of craters) {
     const px = Math.round(z.x - ex), py = Math.round(z.y - ey);
     if (px < -40 || py < -40 || px > WV_W + 40 || py > WV_H + 40) continue;
@@ -590,52 +615,35 @@ function drawAbilityGround(ex, ey, now) {
       ctx.fillRect(px + Math.round(Math.cos(an) * CRATER_R * 0.9), py + Math.round(Math.sin(an) * CRATER_R * 0.55), 2, 1);
     }
   }
-  for (const t of traps) {
-    const px = Math.round(t.x - ex), py = Math.round(t.y - ey);
-    if (px < -16 || py < -16 || px > WV_W + 16 || py > WV_H + 16) continue;
-    const armed = t.t >= TRAP_ARM;
-    // opening: the jaws spread over the arm time, so "not yet live" is visible
-    const open = Math.min(1, t.t / TRAP_ARM);
-    const spread = 2 + Math.round(open * 2);
-    // base plate + pin chain
-    ctx.fillStyle = '#3c4356';
-    ctx.fillRect(px - 4, py - 1, 8, 3);
-    ctx.fillStyle = '#242a3a';
-    ctx.fillRect(px - 4, py + 1, 8, 1);
-    ctx.fillRect(px + 4, py, 2, 1);
-    // the two toothed jaws
-    ctx.fillStyle = armed && Math.sin(now * 6 + t.x) > 0.6 ? '#c8d2e4' : '#8b93a8';
-    for (let k = -3; k <= 3; k += 2) {
-      ctx.fillRect(px + k, py - spread, 1, 1);
-      ctx.fillRect(px + k, py + spread - 1, 1, 1);
-    }
-    ctx.fillRect(px - 4, py - spread + 1, 1, spread * 2 - 2);
-    ctx.fillRect(px + 3, py - spread + 1, 1, spread * 2 - 2);
-  }
-  for (const v of volleys) {
-    const px = Math.round(v.x - ex), py = Math.round(v.y - ey);
-    if (px < -40 || py < -40 || px > WV_W + 40 || py > WV_H + 40) continue;
-    // the warning: a dashed danger ring, and an inner ring closing on the
-    // centre as the rain gets near - the time left IS the picture
-    const closing = Math.max(0, v.t / VOLLEY_T);
-    for (let i = 0; i < 26; i++) {
-      if ((i + ((now * 10) | 0)) % 2) continue;
-      const a = (i / 26) * Math.PI * 2;
-      ctx.fillStyle = 'rgba(224,99,122,0.85)';
-      ctx.fillRect(px + Math.round(Math.cos(a) * VOLLEY_R), py + Math.round(Math.sin(a) * VOLLEY_R * 0.72), 1, 1);
-    }
-    const ir = VOLLEY_R * closing;
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2;
-      ctx.fillStyle = 'rgba(255,217,92,0.8)';
-      ctx.fillRect(px + Math.round(Math.cos(a) * ir), py + Math.round(Math.sin(a) * ir * 0.72), 1, 1);
-    }
-  }
 }
 
-// airborne ability bodies, drawn with the arrows: the net spinning open, the
-// falcon and its shadow racing the snow, the volley's shafts coming down
+// airborne ability bodies, drawn with the arrows: the net spinning open, and
+// the grapple's taut rope between a reeling body and its anchor
 function drawAbilityAir(ex, ey, now) {
+  for (const p of players) {
+    if (!p.active || p.dead || inAir(p) || p.grapT <= 0) continue;
+    // the rope: dark-seated tan dots every couple of px from chest to anchor,
+    // and the steel hook biting where it caught
+    const x0 = p.x, y0 = p.y - 4;
+    const dx = p.grapX - x0, dy = p.grapY - 4 - y0;
+    const d = Math.hypot(dx, dy) || 1;
+    const nx = dx / d, ny = dy / d;
+    for (let s = 3; s < d - 2; s += 2) {
+      const px = Math.round(x0 + nx * s - ex), py = Math.round(y0 + ny * s - ey);
+      if (px < -2 || py < -2 || px > WV_W + 2 || py > WV_H + 2) continue;
+      ctx.fillStyle = '#0d1226';
+      ctx.fillRect(px, py + 1, 1, 1);
+      ctx.fillStyle = '#a89263';
+      ctx.fillRect(px, py, 1, 1);
+    }
+    const hx = Math.round(p.grapX - ex), hy = Math.round(p.grapY - 4 - ey);
+    ctx.fillStyle = '#0d1226';
+    ctx.fillRect(hx - 2, hy - 1, 5, 3);
+    ctx.fillStyle = '#c8d2e4';
+    ctx.fillRect(hx - 1, hy - 1, 3, 1);
+    ctx.fillRect(hx - 2, hy, 1, 2);
+    ctx.fillRect(hx + 2, hy, 1, 2);
+  }
   for (const n of nets) {
     const px = Math.round(n.x - ex), py = Math.round(n.y - ey);
     if (px < -12 || py < -12 || px > WV_W + 12 || py > WV_H + 12) continue;
@@ -650,38 +658,6 @@ function drawAbilityAir(ex, ey, now) {
     ctx.fillRect(-4, -4, 2, 2); ctx.fillRect(3, -4, 2, 2);
     ctx.fillRect(-4, 3, 2, 2); ctx.fillRect(3, 3, 2, 2);
     ctx.restore();
-  }
-  for (const f of falcons) {
-    const px = Math.round(f.x - ex), py = Math.round(f.y - ey);
-    if (px < -16 || py < -16 || px > WV_W + 16 || py > WV_H + 16) continue;
-    // the shadow on the snow says where the sweep IS; the bird rides above it
-    ctx.fillStyle = 'rgba(60,72,100,0.4)';
-    ctx.fillRect(px - 3, py + 10, 6, 2);
-    const flap = Math.sin(f.t * 18) > 0;
-    ctx.fillStyle = '#0d1226';
-    ctx.fillRect(px - 4, py - 1, 9, 3);
-    ctx.fillStyle = '#6b5a48';
-    ctx.fillRect(px - 3, py, 7, 1);
-    ctx.fillStyle = '#d9ad72';
-    ctx.fillRect(px - 1, py, 3, 1);
-    ctx.fillStyle = '#6b5a48'; // wings beat above and below the body line
-    if (flap) { ctx.fillRect(px - 4, py - 2, 3, 1); ctx.fillRect(px + 2, py - 2, 3, 1); }
-    else { ctx.fillRect(px - 4, py + 1, 3, 1); ctx.fillRect(px + 2, py + 1, 3, 1); }
-    ctx.fillStyle = '#f4f7ff';
-    ctx.fillRect(px + 4, py, 1, 1); // the head
-  }
-  // the rain wears the shared arrow body, falling tip-first (the tail
-  // stretches up ARROW_LEN px, which is why the top cull bound is deep)
-  for (const f of volleyFx) {
-    if (f.delay > 0) continue;
-    const drop = Math.min(1, f.t / 0.14);
-    const px = Math.round(f.x - ex), py = Math.round(f.y - ey - 34 * (1 - drop));
-    if (px < -12 || py < -70 || px > WV_W + 12 || py > WV_H + 12) continue;
-    const tm = TEAMS[f.team || 0];
-    ARROW_PX.length = 0;
-    arrowBodyPx(ARROW_PX, f.x - ex, f.y - ey - 34 * (1 - drop), 0, 1,
-      0, ARROW_LEN, tm.mark, tm.coatD, ARROW_INK.G, 0);
-    paintArrowPx(ARROW_PX);
   }
 }
 
@@ -700,10 +676,12 @@ function abilityPose(p) {
   const ab = CLASS_AB[p.cls][p.castAb];
   const prog = 1 - p.castT / ab.cast;
   switch (ab.id) {
-    case 'trap': return { dx: 0, dy: 2, rot: 0 };                                   // kneel to set it
+    // the locked draw: leant back off the aim, planted, and it does not move
+    // again until the loose - the body itself is part of the telegraph
+    case 'pierce': return { dx: p.dir === 'left' ? 1 : p.dir === 'right' ? -1 : 0, dy: 1, rot: 0 };
     case 'net': return { dx: p.dir === 'left' ? 1 : p.dir === 'right' ? -1 : 0, dy: 0, rot: 0 }; // braced back
-    case 'falcon': return { dx: 0, dy: -1, rot: 0 };                                // arm up
-    case 'volley': return { dx: 0, dy: -1, rot: p.dir === 'left' ? -0.12 : 0.12 };  // loosed skyward
+    case 'grap': return { dx: 0, dy: -1, rot: 0.1 * (p.dir === 'left' ? -1 : 1) };  // arm slung forward
+    case 'snow': return { dx: 0, dy: 2, rot: 0 };                                   // the kneel down
     case 'shield': return { dx: 0, dy: 1, rot: 0 };                                 // planted
     case 'rush': return { dx: 0, dy: 0, rot: 0.14 * (p.dir === 'left' ? -1 : 1) };  // head down
     case 'stomp': return { dx: 0, dy: -Math.round(6 * Math.sin(Math.PI * prog)), rot: 0 }; // the leap
@@ -714,7 +692,10 @@ function abilityPose(p) {
 
 // Everything a STATUS leaves on a body, drawn over whatever sprite is
 // wearing it: the net drape, the sprung jaws at rooted feet, the flames, and
-// the falcon's mark. Takes the sprite's own box, so a rabbit, a worker bot
+// the gold mark chevrons (root and mark currently have no caster in the
+// game, but the tells stay with the universal status set - see Known drift,
+// docs/dev/checklists.md). Takes the sprite's
+// own box, so a rabbit, a worker bot
 // and a player slot wear the same four tells at their own size - a state you
 // cannot see is a rule you cannot play around, and that is as true of a deer
 // as of a rival. Called by drawAbilityOnPlayer below and by drawAnimal /
@@ -760,7 +741,7 @@ function drawUnitStates(e, px, py, w, h, now) {
     ctx.globalAlpha = 1;
   }
   if (e.markT > 0) {
-    // the falcon's mark: gold chevrons falling toward the head, for everyone
+    // the mark: gold chevrons falling toward the head, for everyone
     const ph = (now * 2.2) % 1;
     ctx.globalAlpha = e.markT < 0.6 ? e.markT / 0.6 : 1;
     const mx = px + (w >> 1) - 3;
@@ -789,7 +770,7 @@ function drawAbilityOnPlayer(p, px, py, now) {
     ctx.fillRect(-1, -6, 3, 12);
     ctx.fillStyle = '#c8d2e4';
     ctx.fillRect(-1, -6, 1, 12);
-    ctx.fillStyle = TEAMS[p.team].mark; // the trim carries the side
+    ctx.fillStyle = TEAMS[skin(p.team)].mark; // the trim carries the side
     ctx.fillRect(0, -2, 1, 4);
     ctx.restore();
   }
@@ -811,8 +792,8 @@ function drawAbilityOnPlayer(p, px, py, now) {
 // AB32[cls][key] in CLASS_AB's own order, baked lazily onto their own
 // canvases. Drawn by the strip's ability wells and the ability tooltip
 // (drawClassAbCell / tipClassAb, js/ui.js). Each icon repeats the ability's
-// in-world look - the trap's jaws, the net's corner weights, the volley's
-// danger ring - so the well and the snow speak the same picture.
+// in-world look - the pierce's gold line, the net's corner weights, the
+// grapple's sagging rope - so the well and the snow speak the same picture.
 const AB32_PAL = {
   o: '#141a2c', k: '#0f1632',
   W: '#f4f7ff', b: '#cfe0f2', B: '#9fb6d8',
@@ -825,38 +806,38 @@ const AB32_PAL = {
 };
 const AB32 = [
   [ // HUNTER
-    [ // SNARE TRAP: the iron jaw head-on - two toothed arcs open around the
-      // gold trigger pan, the base bar and its rivets below
+    [ // PIERCING SHOT: the shaft already loosed down the thin gold telegraph
+      // line, the flash still on the arrowhead
       '................................',
       '................................',
-      '.....oooooo..........oooooo.....',
-      '....oCCCCCo..........oCCCCCo....',
-      '...oCCssoo............oossCCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSCCCo..........oCCCSsCo...',
-      '...oCsSCCo............oCCSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSCCCo..........oCCCSsCo...',
-      '...oCsSCCo............oCCSsCo...',
-      '...oCsSo.....oooooo.....oSsCo...',
-      '...oCsSo....ogggggGo....oSsCo...',
-      '...oCsSCCCo.oggggGGo.oCCCSsCo...',
-      '...oCsSCCo..ogggGGGo..oCCSsCo...',
-      '...oCsSo.....oooooo.....oSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSCCCo..........oCCCSsCo...',
-      '...oCsSCCo............oCCSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsSo................oSsCo...',
-      '...oCsso................ossCo...',
-      '....oCsso..............ossCo....',
-      '.....ooSso............osSoo.....',
-      '......oooooooooooooooooooo......',
-      '......oDDkDDDDkDDDDkDDDDDo......',
-      '......oSSSSSSSSSSSSSSSSSSo......',
-      '.......oooooooooooooooooo.......',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '..b.............................',
+      '......rr....................g...',
+      '......rrrr....................W.',
+      '.bbb...rrrr....................g',
+      '.....ooooooooooooooooooooooooo..',
+      '.....ottttttttttttttttsssSSWWo.W',
+      'g.g.goddddddddddddddddsssSSWWg.g',
+      '.....ooooooooooooooooooooooooo.W',
+      '.bbb...rrrr....................g',
+      '......rrrr....................W.',
+      '......rr....................g...',
+      '..b.............................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
+      '................................',
       '................................',
       '................................',
     ],
@@ -895,73 +876,73 @@ const AB32 = [
       '................................',
       '................................',
     ],
-    [ // FALCON SWEEP: the bird in its stoop, head-first down the line, the
-      // gold mark chevron already falling where it swept
-      '................................',
-      '................................',
-      '................................',
-      '...bb...........................',
-      '....bb..........................',
-      '.....oo.........................',
-      '.....onoo....oo.................',
-      '.....onnoo...onno...............',
-      '......onnnoo..onnho.............',
-      '.......onnnnoo.onnhho...........',
-      '........onnnnnooonnhhho.........',
-      '.........onnnnnnnnhhHhho........',
-      '..........onnnnhhhhHHhho........',
-      '...........onnhhhhHHHHho........',
-      '............onhhhHHHHHHoo.......',
-      '.............onhhHHHHHHHo.......',
-      '..............onhHHHHHHHHo......',
-      '...............onhHHHHWWHo......',
-      '................onnHHWWWWno.....',
-      '.................onnHWWnnnno....',
-      '..................onnnnngnno....',
-      '...................onnnnnnnoo...',
-      '....gg....gg........onnnnnoGGo..',
-      '.....gg..gg..........onnnnoGo...',
-      '......gggg............oonnoo....',
-      '........................oo......',
-      '................................',
-      '................................',
-      '................................',
-      '................................',
-      '................................',
+    [ // GRAPPLE: the steel hook bitten into a trunk top-right, the rope
+      // sagging home toward the reeling hand
+      '......................oooooooooo',
+      '......................ouwwwwwwww',
+      '......................ouwwwwwwuw',
+      '......................ouwwuwwwww',
+      '......................ouwwwwwwww',
+      '......................ouwwwwwuww',
+      '......................ouwwwwwwww',
+      '......................ouwwwwwwww',
+      '......................Cuwuwwwwww',
+      '......................oCswwwwwww',
+      '.....................oCuwwwwuwww',
+      '....................oCsuwwwwwwww',
+      '...................oCsCCswwuwwww',
+      '...................d..oooooooooo',
+      '..................dk............',
+      '..................d.............',
+      '.................dk.............',
+      '................dk..............',
+      '................d...............',
+      '...............dk...............',
+      '..............dk................',
+      '..............d.................',
+      '.............dk.................',
+      '............dk..................',
+      '...........dk...................',
+      '.........ddk....................',
+      '........ddk.....................',
+      '..b..dddkk......................',
+      '....ddkk........................',
+      '....kk..........................',
+      '.b...b..........................',
       '................................',
     ],
-    [ // VOLLEY: three shafts raining onto the dashed danger ring, the gold
-      // inner ring already closing
-      '................................',
-      '......orro..........orro........',
-      '......orto..........orto........',
-      '......otro..........otro........',
-      '.......oto...orro....oto........',
-      '.......odo...orto....odo........',
-      '.......oto...otro....oto........',
-      '.......odo....oto....odo........',
-      '.......oto....odo....oto........',
-      '.......odo....oto....odo........',
-      '.......oto....odo....oto........',
-      '......oWWo....oto....oWWo.......',
-      '......oWWo...oWWo....oWWo.......',
-      '.......oo....oWWo.....oo........',
-      '..............oo................',
+    [ // SNOW COVER: the mound holding perfectly still, and the breath in the
+      // cold air that is the one tell it still gives
       '................................',
       '................................',
       '................................',
       '................................',
+      '........W.................W.....',
+      '.........................bb.....',
       '................................',
-      '............rr....rr............',
-      '........rr..........rr..........',
-      '......r....gggggggg....r........',
-      '.....r....g........g....r.......',
-      '....r....g..........g....r......',
-      '....r....g..........g....r......',
-      '.....r....g........g....r.......',
-      '......r....gggggggg....r........',
-      '........rr..........rr..........',
-      '............rr....rr............',
+      '................................',
+      '....b...........................',
+      '......................bWb.......',
+      '......................bbB.......',
+      '................................',
+      '................................',
+      '......W.............bW..........',
+      '....................bb..........',
+      '............................b...',
+      '................................',
+      '...........oWWWWWWWo............',
+      '........oWWWWWWWWWWWWWo.........',
+      '......oWWWWWWWWWWWWWWWWWo.......',
+      '.....obbbbbbbbBBbbbbbbbbbo......',
+      '.....obbbbbbbbbbbbbbbbbbbo......',
+      '....obbbbbbbbbbbbbbbbbbbbbo.....',
+      '.....obbbbbbbbbbbbbbbbbbbo......',
+      '.....oBBBBBBBBBBBBBBBBBBBo......',
+      '......oBBBBBBBBBBBBBBBBBo.......',
+      '........oBBBBBBBBBBBBBo.........',
+      '...........ooooooooo............',
+      '................................',
+      '................................',
       '................................',
       '................................',
     ],

@@ -24,9 +24,29 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.44'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.64'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.64', 'THE KEEP IS GONE AND NOBODY DIES FOR GOOD - YOU COME BACK AT YOUR OWN BIRD AFTER A WAIT, THE EAGLE IS THE ONLY OBJECTIVE, AND EVERY BOT KNOWS WHERE BOTH BIRDS ARE AND WHAT IS HAPPENING AT THEM, SO A HIT ON A ROOST IS ANSWERED FROM ANYWHERE ON THE MAP.'],
+  ['2.63', 'THE ECONOMY IS FLATTENED - A PINE FALLS IN THREE SWINGS FOR ONE GOLD, EVERYONE DRAWS A COIN FROM THE CLOCK EVERY FOUR SECONDS, A LEVEL IS FOUR TIMES THE GOLD FOR HALF AGAIN THE HEALTH AND TWICE THE DAMAGE, AND THE ROOSTING EAGLE IS A MINUTE\'S SIEGE UNDER A GUST THAT NOW REACHES THE AXE.'],
+  ['2.62', 'ARROWS LAND ON A WIDER DISC ROUND A BODY, AND A NORMAL RIVAL PLANTS ITS FEET TO SHOOT - THE MOMENT IT STOPS IS THE MOMENT IT IS ABOUT TO FIRE, AND THE MOMENT TO HIT IT.'],
+  ['2.61', 'THE BOTS PLAY THE OBJECTIVE NOW, AND HOW WELL IS THE DIFFICULTY - RIVALS AT NORMAL, HARD OR IMPOSSIBLE, YOUR ALLIES ONE NOTCH BETTER AND AT YOUR SIDE, PUSHES THROUGH THE LANES AND GUARDS AT THE ROOSTS, AND THE GROUNDED EAGLE IS A SIEGE THAT ARROWS ONLY SPOOK.'],
+  ['2.60', 'CLASS SELECT IS A LOBBY NOW - YOUR FIVE DOWN THE LEFT, THE RIVALS DOWN THE RIGHT UNDER THEIR DIFFICULTY NOTCHES, PLAY IN THE TITLE PLANK\'S PLACE, AND A FIVE-SECOND COUNT TO THE EAGLE THAT TURNS THE RIVALS FACE-UP ONE PER TICK.'],
+  ['2.59', 'THE QUIVER IS GONE - THE WEAPON WELL\'S WIPE IS THE ONLY THING BETWEEN SHOTS, AND HOW LONG YOU HOLD THE DRAW NOW SETS HOW FAR, HOW FAST AND HOW HARD THE ARROW FLIES, WITH THE AIM LINE GROWING TO MATCH.'],
+  ['2.58', 'HEALTH BARS ARE PAINTED BY SIDE - BLUE OVER YOU AND YOUR ALLIES, RED OVER RIVALS, GOLD OVER WILDLIFE - STAMINA IS WHITE, THE DRAW METER GOES PALE GOLD AT FULL, AND THE MERCHANT AND EAGLE WEAR MERCH AND PERCH.'],
+  ['2.57', 'THE LANDING TOUR\'S HEADLINES SIT ON A DARK PLATE SO THEY READ OVER THE PINES.'],
+  ['2.56', 'EACH EAGLE WINGTIP NOW STREAMS ONE CONTINUOUS RIBBON OF WIND THAT FADES OUT AT ITS TAIL, IN PLACE OF THE LOOSE STREAKS.'],
+  ['2.55', 'THE EAGLES\' WIND TRAILS ARE LONGER AND BRIGHTER.'],
+  ['2.54', 'THE EAGLES ALWAYS BURY THEMSELVES DEEP IN A CORNER THAT IS ALWAYS FORESTED, THEIR LANE CUTS OUT TO THE MIDDLE OF THE TREE EDGE AND NEVER STOPS SHORT IN A CLEARING, AND THEY TEAR WIND TRAILS THROUGH THE AIR IN FLIGHT.'],
+  ['2.53', 'THE MERCHANT IS AN OLD TRADER IN A WIDE FUR HAT WITH A TEAM-CLOTH CROWN AND A WHITE BEARD - PICKED OFF A CONCEPT SHEET, AND THE SHEETS NOW LIVE IN THE REPO.'],
+  ['2.52', 'THE MERCHANT IS A PLAIN HOODED FIGURE NOW - THE HOOD IN ITS TEAM COLOUR OVER A DARK ROBE, NO TRIM, A LITTLE THINNER - SO ITS SILHOUETTE READS AT A GLANCE.'],
+  ['2.51', 'THE MERCHANT IS A TALLER HOODED FIGURE IN A GOLD-TRIMMED ROBE, RIDERS SIT ON THE EAGLE AT THEIR OWN SIZE FACING THE WAY IT FLIES, AND THE LANDING TOUR NOW WAITS A BEAT, SHOWS THE RIVAL EAGLE FIRST AND FINISHES ON YOURS.'],
+  ['2.50', 'A RIDER WHO NEVER JUMPS NOW RIDES THE LANDING - THE EAGLE COMES DOWN WITH YOU ON ITS BACK, THE ROOST TOUR PLAYS, THEN E HOPS YOU OFF UNDER A KEY PROMPT - AND THE MERCHANT WEARS A WIDE-BRIMMED HAT AND A PLUM COAT WITH A NAMEPLATE, SO IT NEVER PASSES FOR A PLAYER.'],
+  ['2.49', 'THE EAGLES NOW ALWAYS ROOST IN THE CORNERS - RED BOTTOM-LEFT, BLUE TOP-RIGHT - EACH DRIVEN BY A MERCHANT WHO HOPS OFF TO CLEAR THE RIM AND RAISE A GATE WHILE A LANE OF PINES FALLS OPEN TO THE SNOW, AND YOUR OWN SIDE IS ALWAYS PAINTED BLUE (A SETTING TURNS IT OFF).'],
+  ['2.48', 'A HANDS-ON PLAYTEST REPORT NOW LIVES IN THE REPO FOR REFERENCE - NOTHING IN THE GAME CHANGED.'],
+  ['2.47', 'THE HUNTER HAS A NEW KIT - A TELEGRAPHED PIERCING SHOT THAT GOES THROUGH EVERYONE ON ITS LINE, A GRAPPLE THAT REELS YOU TO TREES AND ROCKS, AND THE SNOW BURROW IS NOW ITS KEY 4 - CTRL DOES NOTHING AND ONLY HUNTERS HIDE.'],
+  ['2.46', 'A FORCED DROP NOW LANDS INTO A GUIDED TOUR - THE CAMERA GLIDES TO YOUR ROOSTING EAGLE AND THE RIVAL ONE, STATES HOW THE MATCH IS LOST AND WON, THEN HANDS BACK - AND A FRESH PROFILE GETS A RANDOM NAME INSTEAD OF THE FIRST-LAUNCH PROMPT.'],
+  ['2.45', 'SPENT ARROWS ARE GONE THE MOMENT THEY LAND - NO MORE SHAFTS TO PICK BACK UP, FLETCHING IS THE ONLY REFILL - AND A PRACTICE TARGET NOW EXPLODES THE INSTANT AN ARROW TOUCHES IT.'],
   ['2.44', 'THE README NOW PLAYS FOUR LOOPING CLIPS UNDER THE HERO - THE PRACTICE TOOL BREAKING OPEN, THE EAGLE DROP, A DEER HUNT AND WORKERS CHOPPING PINES - AND THE GALLERY IS A VERTICAL STRIP OF 16:9 SHOTS.'],
   ['2.43', 'THE HUD NOW DEFAULTS TO SIZE 80 FOR NEW PLAYERS - A SAVED SLIDER STILL WINS.'],
   ['2.42', 'THE HUD STRIP CARRIES TWO MEAL BUTTONS ON ITS RIGHT END - CLICK OR Q/F TO EAT - AND THE SETTINGS PANEL GAINED A HUD SIZE SLIDER THAT SCALES THE STRIP.'],
@@ -373,11 +393,11 @@ function menuClick() {
     if (!menuPanelReady()) return;
     if (m.panel === 'settings' && overMenuPanel()) { mouse.down = true; settingsMouseDown(); return; }
     if (m.panel === 'patch' && overMenuPanel()) { patchPanelClick(mouse.x - SET_X, mouse.y - SET_Y); return; }
-    if (m.panel === 'name') { if (overMenuPanel()) namePanelClick(); else if (!m.nameFirst) nameDismiss(); return; } // the first-launch prompt is modal: it wants an answer, not a stray click
+    if (m.panel === 'name') { if (overMenuPanel()) namePanelClick(); else nameDismiss(); return; } // a stray click outside the panel closes it, like any edit
     if (!overMenuPanel()) closeMenuPanel();
     return;
   }
-  if (overNameTag()) { openNamePanel(false); return; }
+  if (overNameTag()) { openNamePanel(); return; }
   if (overPatchTag()) { openMenuPanel('patch'); return; }
   const h = menuHit();
   if (h < 0) return;
@@ -444,9 +464,8 @@ function updateTitle(dt) {
     const h = menuHit();
     if (h >= 0 && !menuFrozen(h) && h !== m.sel) m.sel = h;
   }
-  // the first launch asks for a name once the title has finished arriving;
-  // PROFILE.named() is what stops it coming back, and SKIP sets it too
-  if (!PROFILE.named() && !m.panel && m.screen === 'menu' && m.t > 1.4 && !state.intro && !state.fade) openNamePanel(true);
+  // (no first-launch name prompt: a fresh profile rolls a random name at load
+  // - PROFILE, js/profile.js - and the panel opens only from the name tag)
   // the name field's refusal rattle, and the PLAYER planks' hover eases
   if (m.nameShake > 0) m.nameShake = Math.max(0, m.nameShake - dt);
   if (m.panel === 'name') {
@@ -484,6 +503,18 @@ function updateTitle(dt) {
     // extra portraits start their hover ease from nothing, not from NaN
     const target = (m.csel === i || sh === i) ? 1 : 0;
     m.chover[i] = (m.chover[i] || 0) + (target - (m.chover[i] || 0)) * Math.min(1, dt * 14);
+  }
+  // the difficulty notches' hover eases, and PLAY's countdown: a tick per
+  // whole second, the eagle at zero (the gear pop-up shuts on the way)
+  for (let k = 0; k < 3; k++) {
+    const target = sh === CLASSES.length + 2 + k ? 1 : 0;
+    m.dhover[k] = (m.dhover[k] || 0) + (target - (m.dhover[k] || 0)) * Math.min(1, dt * 14);
+  }
+  if (m.countT > 0) {
+    m.countT -= dt;
+    const n = Math.max(0, Math.ceil(m.countT));
+    if (n < m.countN) { m.countN = n; if (n > 0) SFX.nock(); }
+    if (m.countT <= 0) { m.countT = 0; if (m.screen === 'gear') leaveGear(); lockIn(); }
   }
   if (m.lockT > 0) {
     m.lockT -= dt;
@@ -799,7 +830,7 @@ function buildHelpPanel() {
   const g = helpPanelCv.getContext('2d');
   bakeFrostSlab(g, SET_W, SET_H, 'TUTORIAL');
   const cols = [
-    [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['CTRL', 'HIDE IN SNOW'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
+    [['WASD', 'MOVE'], ['SPACE', 'DODGE ROLL'], ['SHIFT', 'SLIDE'], ['1-4', 'CLASS ABILITIES'], ['CLICK', 'DRAW THE BOW'], ['E', 'CHOP MINE PICK'], ['RCLICK', 'BUILD ON STUMP']],
     [['Q', 'EAT BERRY'], ['F', 'EAT FISH'], ['M', 'WORLD MAP'], ['TAB', 'SCOREBOARD'], ['SCROLL', 'ZOOM'], ['N', 'MUTE'], ['P', 'PAUSE']],
   ];
   for (let c = 0; c < 2; c++) {
@@ -929,38 +960,64 @@ function drawPatchBar(ox, oy) {
 }
 
 // ---- class select --------------------------------------------------------
-// PLAY goes here (menu.screen = 'select'): ONE screen with its own painted
-// night - never the live world. The ROSTER runs down the top-left as sprite
-// portraits - one well per CLASSES entry, a column of SEL_P_PER wrapping
-// into further columns as the roster grows, so the screen never has to be
-// redrawn for a new class - and the STAGE holds the chosen class alone in
-// full glory: walking in place under its warm light and gold ring, the
-// class weapon at its hand, its name, and its four ability icons in the
-// strip's own wells (classAbIcon, js/abilities.js). Click a portrait (or
-// the arrows) to put a class on stage; LOCK IN flies straight to the eagle
-// (lockIn -> lockT -> beginDrop). The small plaque beside the plank is the
-// COLLAPSED GEAR WIDGET - the four picked variants - and clicking it opens
-// the gear pop-up over this screen (beginGear; ESC, the X, or a click
-// outside close it). Nothing on the screen is instructions: the shapes
-// carry it.
-const SEL_P_CELL = 36, SEL_P_GAP = 4; // a portrait well and its gap
-const SEL_P_PER = 4;                  // portraits per column before wrapping right
+// SINGLEPLAYER goes here (menu.screen = 'select'): ONE screen on its own
+// painted night - never the live world - laid out the way a League lobby is.
+// Down the LEFT run your side's five cards, down the RIGHT the rivals' (a
+// well each wearing the slot's class sprite in its team paint, the name
+// beside it; yours gold-rimmed and showing the class on stage before it is
+// locked), with the rivals' DIFFICULTY meter at the head of their column -
+// three notches filled up to settings.aiLevel (AI_LEVELS, js/ai.js) and
+// remembered with the profile. PLAY wears the title's first plank in its
+// place; the STAGE below it holds the chosen class alone, walking in place
+// at 4x under its warm light with the class weapon at hand, its name, and
+// its four ability icons in the strip's own wells (classAbIcon,
+// js/abilities.js), flanked by the class EMBLEMS on its left (SEL_P_PER
+// wells a column, further columns growing leftward) and the COLLAPSED GEAR
+// WIDGET on its right (the four picked variants; clicking it opens the gear
+// pop-up - beginGear; ESC, the X, or a click outside close it). PLAY locks
+// the class and starts the COUNTDOWN (pressPlay): COUNT_T seconds in big
+// digits over the plank, one rival card turning face-up per tick, gear
+// still open through it, ESC calling it off (cancelCount) - and at zero
+// lockIn() flies to the eagle (lockT -> beginDrop). Nothing on the screen
+// is instructions: the shapes carry it.
+const SEL_P_CELL = 36, SEL_P_GAP = 4;  // a portrait well and its gap
+const SEL_P_PER = 2;                   // emblems per column before wrapping left
+const SEL_CARD = 20, SEL_CARD_GAP = 4; // a roster card's well and its gap
+const SEL_ROST_X = 200;                // px from centre to a roster column's outer edge
+const SEL_ROST_W = 64;                 // the column head rule's width
+const COUNT_T = 5;                     // s: PLAY's countdown to the eagle
 function selectLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
+  // PLAY wears the title's first plank, in its place
+  const play = { x: Math.round((VIEW_W - MENU_BW) / 2), y: toy + MENU_Y0, w: MENU_BW, h: MENU_BH };
+  const body = { x: cx - 32, y: toy + 126, w: 64, h: 64 }; // the stage figure at 4x
+  // the class emblems, a column at the figure's left; more classes wrap left
   const ports = CLASSES.map((_, i) => ({
-    x: 24 + Math.floor(i / SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
-    y: toy + 52 + (i % SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
+    x: body.x - 12 - SEL_P_CELL - Math.floor(i / SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
+    y: toy + 120 + (i % SEL_P_PER) * (SEL_P_CELL + SEL_P_GAP),
     w: SEL_P_CELL, h: SEL_P_CELL,
   }));
-  const lock = { x: cx - 56, y: toy + 232, w: 112, h: 20 };
-  // the collapsed gear widget, riding beside LOCK IN
-  const loadout = { x: cx + 78, y: toy + 234, w: 4 * 17 - 3, h: 16 };
+  // the collapsed gear widget, a column at the figure's right hand
+  const loadout = { x: body.x + body.w + 12, y: toy + 126, w: 14, h: 4 * 17 - 3 };
   // the stage's four ability wells - one rect source for the draw, the hover
   // and the tooltip (tipAt asks selectAbilHit, ui.js), so they cannot disagree
   const abils = [];
-  for (let k = 0; k < 4; k++) abils.push({ x: cx - 72 + k * 37, y: toy + 184, w: 34, h: 34 });
-  return { toy, cx, ports, lock, loadout, abils };
+  for (let k = 0; k < 4; k++) abils.push({ x: cx - 72 + k * 37, y: toy + 212, w: 34, h: 34 });
+  // the two rosters: your side's cards down the left, the rivals' down the
+  // right, in slot order; each carries its slot as `p`
+  const cards = [[], []];
+  const mineTeam = player ? player.team : 0;
+  for (const p of players) {
+    const mine = p.team === mineTeam ? 1 : 0;
+    const y = toy + 100 + cards[mine].length * (SEL_CARD + SEL_CARD_GAP);
+    cards[mine].push({ x: mine ? cx - SEL_ROST_X : cx + SEL_ROST_X - SEL_CARD, y, w: SEL_CARD, h: SEL_CARD, p });
+  }
+  // the rivals' difficulty meter: three notches at the head of their column
+  const diff = [];
+  const dx0 = cx + SEL_ROST_X - (3 * 12 + 2 * 4);
+  for (let k = 0; k < 3; k++) diff.push({ x: dx0 + k * 16, y: toy + 80, w: 12, h: 6 });
+  return { toy, cx, play, body, ports, loadout, abils, cards, diff };
 }
 // which of the stage's ability wells (mx, my) is on, or -1
 function selectAbilHit(mx, my) {
@@ -1058,7 +1115,7 @@ function drawSelectBackdrop(now, a) {
 // its stat deltas into the ledger in green/better or red/worse. Clicking a
 // well picks it (pickGear writes straight to player.gear) and the equip
 // plays ON the preview body - a white flash, sparks, the piece's band lit.
-// ESC, Enter, the X, or a click outside the panel closes it; lock-in stays
+// ESC, Enter, the X, or a click outside the panel closes it; PLAY stays
 // on the select screen behind it. The ledger's labelled rows are the
 // PLAYER-panel text carve-out: comparing numbers is this panel's whole job.
 const GEARP_W = 38, GEARP_G = 4; // a variant well, and the grid gap
@@ -1094,7 +1151,6 @@ const GS_INT = (v) => String(Math.round(v));
 const GS_SEC = (v) => (Math.round(v * 100) / 100).toFixed(2) + 'S';
 const GS_PCT = (v) => Math.round(v * 100) + '%';
 const GS_NUM = (v) => String(Math.round(v * 10) / 10);
-const GS_ADD = (v) => '+' + Math.round(v);
 const GEAR_STATS = [
   ['HEALTH', (k) => k.maxHp, GS_INT, 1],
   ['DAMAGE', (k) => k.dmgBase, GS_INT, 1],
@@ -1107,7 +1163,7 @@ const GEAR_STATS = [
   ['FATIGUE', (k) => k.fatigue, GS_PCT, -1],
   ['DODGE', (k) => k.dodgeCd, GS_SEC, -1],
   ['HUNTS', (k) => k.huntMul, GS_PCT, 1],
-  ['FELLS', (k) => k.harvest, GS_ADD, 1],
+  ['FELLS', (k) => k.harvestMul, GS_PCT, 1],
   ['FOOD', (k) => k.foodMul, GS_PCT, 1],
   ['SEEN AT', (k) => k.stealth, GS_PCT, -1],
 ];
@@ -1616,16 +1672,16 @@ function gearClick() {
   pickGear(h.row, h.v);
 }
 
-// what the pointer is over: portrait index, CLASSES.length for LOCK IN,
-// CLASSES.length + 1 for the collapsed gear widget, -1 for nothing
+// what the pointer is over: portrait index, CLASSES.length for PLAY,
+// CLASSES.length + 1 for the collapsed gear widget, CLASSES.length + 2 + k
+// for difficulty notch k, -1 for nothing
 function selectHit() {
-  const { ports, lock, loadout } = selectLayout();
-  for (let i = 0; i < ports.length; i++) {
-    const r = ports[i];
-    if (mouse.x >= r.x - 2 && mouse.x < r.x + r.w + 2 && mouse.y >= r.y - 2 && mouse.y < r.y + r.h + 2) return i;
-  }
-  if (mouse.x >= lock.x - 2 && mouse.x < lock.x + lock.w + 2 && mouse.y >= lock.y - 3 && mouse.y < lock.y + lock.h + 3) return ports.length;
-  if (mouse.x >= loadout.x - 2 && mouse.x < loadout.x + loadout.w + 2 && mouse.y >= loadout.y - 3 && mouse.y < loadout.y + loadout.h + 3) return ports.length + 1;
+  const { ports, play, loadout, diff } = selectLayout();
+  const over = (r, px, py) => mouse.x >= r.x - px && mouse.x < r.x + r.w + px && mouse.y >= r.y - py && mouse.y < r.y + r.h + py;
+  for (let i = 0; i < ports.length; i++) if (over(ports[i], 2, 2)) return i;
+  if (over(play, 2, 3)) return ports.length;
+  if (over(loadout, 3, 2)) return ports.length + 1;
+  for (let k = 0; k < diff.length; k++) if (over(diff[k], 2, 3)) return ports.length + 2 + k;
   return -1;
 }
 
@@ -1633,22 +1689,50 @@ function beginSelect() {
   const m = state.menu;
   m.screen = 'select';
   m.cswapT = 1;
+  m.countT = 0; m.countN = -1; // every rival card face-down again
   SFX.place();
   SFX.music.play('select');
 }
 function leaveSelect() {
   state.menu.screen = 'menu';
+  state.menu.countT = 0;
   SFX.pickup();
   SFX.music.play('intro');
 }
 function selectClass(i) {
   const m = state.menu;
+  if (m.countT > 0) { SFX.deny(); return; } // locked the moment PLAY was pressed
   const n = ((i % CLASSES.length) + CLASSES.length) % CLASSES.length;
   if (n === m.csel) return;
   m.csel = n;
   m.cswapT = 0;
   SFX.pickup();
 }
+// PLAY: the class is locked here and the countdown starts. Gear stays open
+// through it (the widget still opens its pop-up), ESC calls it off, and the
+// eagle comes at zero (updateTitle -> lockIn).
+function pressPlay() {
+  const m = state.menu;
+  if (m.countT > 0 || m.lockT > 0) return;
+  setClass(player, m.csel);
+  m.countT = COUNT_T; m.countN = COUNT_T;
+  m.pressT = 0.12;
+  SFX.place();
+}
+function cancelCount() {
+  const m = state.menu;
+  if (m.countT <= 0) return;
+  m.countT = 0; m.countN = -1;
+  SFX.deny();
+}
+// how many rival cards are face-up: one per tick of the count (the first on
+// the press, the last on ONE), all of them once it has run out, none at rest
+function selectRevealed() {
+  const m = state.menu;
+  if (m.countT > 0) return COUNT_T + 1 - Math.ceil(m.countT);
+  return m.countN === 0 ? MAX_PLAYER_SLOTS : 0;
+}
+// the count's end: the short hold, then the eagle (updateTitle: lockT -> beginDrop)
 function lockIn() {
   const m = state.menu;
   if (m.lockT > 0) return;
@@ -1656,14 +1740,21 @@ function lockIn() {
   setClass(player, m.csel);
   SFX.place();
 }
+// the rivals' difficulty: one of AI_LEVELS, remembered with the profile
+function setAiLevel(k) {
+  if (settings.aiLevel === k) return;
+  settings.aiLevel = k;
+  saveSettings();
+  SFX.pickup();
+}
 
 function selectKey(k) {
   const m = state.menu;
   if (m.lockT > 0) return;
-  if (k === 'escape' || k === 'backspace') leaveSelect();
+  if (k === 'escape' || k === 'backspace') { if (m.countT > 0) cancelCount(); else leaveSelect(); }
   else if (k === 'arrowleft' || k === 'a' || k === 'arrowup' || k === 'w') selectClass(m.csel - 1);
   else if (k === 'arrowright' || k === 'd' || k === 'arrowdown' || k === 's') selectClass(m.csel + 1);
-  else if (k === 'enter' || k === ' ') { m.pressT = 0.12; lockIn(); } // locked: straight to the eagle
+  else if (k === 'enter' || k === ' ') pressPlay();
 }
 
 function selectClick() {
@@ -1671,8 +1762,9 @@ function selectClick() {
   if (m.lockT > 0 || m.screenT < 1 || m.gearT > 0) return;
   const h = selectHit();
   if (h < 0) return;
-  if (h === CLASSES.length) { m.pressT = 0.12; lockIn(); }        // LOCK IN: straight to the eagle
+  if (h === CLASSES.length) pressPlay();                              // PLAY: lock the class, start the count
   else if (h === CLASSES.length + 1) { m.pressT = 0.12; beginGear(); } // the gear widget opens its pop-up
+  else if (h >= CLASSES.length + 2) setAiLevel(h - CLASSES.length - 2); // a difficulty notch
   else selectClass(h);
 }
 
@@ -1793,40 +1885,41 @@ function drawSelectPortrait(i, r, hv, chosen, now) {
   ctx.globalAlpha = a0;
 }
 
-// The stage: the chosen class alone in full glory - walking in place inside
-// a warm pool of light with a gold ring turning on the snow, the class
-// weapon's own art at the hand, the name, and the kit as four ability icons
-// in the same wells the strip wears in play. sw is the swap-pop ease.
+// The stage: the chosen class alone in full glory - walking in place at 4x
+// inside a warm pool of light with a gold ring turning on the snow, the
+// class weapon's own art at the hand, the name, and the kit as four ability
+// icons in the same wells the strip wears in play. It wears your side's
+// paint, like your roster card. sw is the swap-pop ease.
 function drawSelectStage(now, a, sw) {
   const m = state.menu;
-  const { toy, cx } = selectLayout();
-  const feet = toy + 158;
+  const { cx, body } = selectLayout();
+  const feet = body.y + body.h;
   ctx.globalAlpha = a * 0.4;
   ctx.fillStyle = '#04060f';
-  ctx.beginPath(); ctx.ellipse(cx, feet, 34, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(cx, feet, 24, 5, 0, 0, Math.PI * 2); ctx.fill();
   // the pick's light, and the gold ring turning on the snow
   ctx.globalCompositeOperation = 'lighter';
-  const g = ctx.createRadialGradient(cx, feet - 40, 4, cx, feet - 40, 78);
+  const g = ctx.createRadialGradient(cx, feet - 28, 3, cx, feet - 28, 56);
   g.addColorStop(0, 'rgba(255,170,80,' + (0.14 * a * sw).toFixed(3) + ')');
   g.addColorStop(1, 'rgba(255,140,60,0)');
-  ctx.fillStyle = g; ctx.fillRect(cx - 80, feet - 120, 160, 160);
+  ctx.fillStyle = g; ctx.fillRect(cx - 58, feet - 86, 116, 116);
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = a * sw;
   ctx.fillStyle = '#c89a3c';
   for (let k = 0; k < 24; k += 2) {
     const an = (k / 24) * Math.PI * 2 + now * 0.5;
-    ctx.fillRect(cx + Math.round(Math.cos(an) * 40), feet + Math.round(Math.sin(an) * 8), 2, 1);
+    ctx.fillRect(cx + Math.round(Math.cos(an) * 30), feet + Math.round(Math.sin(an) * 6), 2, 1);
   }
   // the body, walking toward you; a swap pops it up through the light
   const rise = Math.round((1 - sw) * 8);
   ctx.globalAlpha = a;
-  ctx.drawImage(SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 4) % 2)], cx - 48, toy + 62 + rise, 96, 96);
+  ctx.drawImage(SPRITES.champ[m.csel][skin(player.team)].down[1 + (Math.floor(now * 4) % 2)], body.x, body.y + rise, body.w, body.h);
   // the weapon at the hand: the class tool's own art, big enough to read
   const L = CLASS_LOADOUT[m.csel] || CLASS_LOADOUT[0];
   const im = SPRITES[ITEMS[toolType(L.tool)].icon];
-  ctx.drawImage(im, cx + 26, toy + 104 + rise + Math.round(Math.sin(now * 2.2) * 2), 36, 36);
+  ctx.drawImage(im, cx + 18, body.y + 28 + rise + Math.round(Math.sin(now * 2.2) * 2), 24, 24);
   const nm = CLASSES[m.csel].name;
-  drawPixelTextShadow(ctx, nm, cx - Math.round(pixelTextWidth(nm, 2) / 2), toy + 166, '#ffd95c', '#0a0e23', 2);
+  drawPixelTextShadow(ctx, nm, cx - Math.round(pixelTextWidth(nm, 2) / 2), feet + 6, '#ffd95c', '#0a0e23', 2);
   // the kit, said in the strip's own wells; hovering one lightens its rim
   // and raises the ability tooltip (tipClassAb via tipAt, ui.js)
   const { abils } = selectLayout();
@@ -1841,18 +1934,106 @@ function drawSelectStage(now, a, sw) {
   }
 }
 
+// One roster card: the slot's class sprite in its team paint on a small
+// well, its name beside it (names are text's job). Yours wears the gold rim
+// and shows the class on stage before it is locked; a rival's is face-down -
+// a flat shade of a body, no class to read - until the count turns it, and
+// it flashes white as it does.
+function drawSelectCard(r, mine, hidden, flash) {
+  const p = r.p, side = skin(p.team), me = p === player;
+  const cls = me ? state.menu.csel : p.cls;
+  ctx.fillStyle = 'rgba(4,6,18,0.55)';
+  ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
+  ctx.fillStyle = flash ? '#f4f7ff' : me ? '#c89a3c' : '#2c3560';
+  ctx.fillRect(r.x, r.y, r.w, r.h);
+  ctx.fillStyle = me ? '#1a2142' : '#0f1632';
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  const spr = SPRITES.champ[cls][side].down[0];
+  if (hidden) {
+    sctx.clearRect(0, 0, 16, 16);
+    sctx.globalCompositeOperation = 'source-over';
+    sctx.drawImage(spr, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = '#35426e';
+    sctx.fillRect(0, 0, 16, 16);
+    sctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(scratch, 0, 0, 16, 16, r.x + 2, r.y + 2, 16, 16);
+  } else ctx.drawImage(spr, r.x + 2, r.y + 2);
+  const nm = p.name, col = me ? '#ffd95c' : TEAMS[side].mark;
+  const nx = mine ? r.x + r.w + 4 : r.x - 4 - pixelTextWidth(nm);
+  drawPixelTextShadow(ctx, nm, nx, r.y + 7, col, '#0a0e23');
+}
+
+// The two rosters under their side's rule, and the rivals' difficulty meter
+// over theirs: notches filled up to the level in the rivals' paint, the
+// hovered one lifting, the level's name under them (gold while a notch is
+// hovered, naming the one under the pointer). Rival k turns face-up when
+// selectRevealed() passes it. slide is the entrance: each column rides in
+// from its own edge.
+function drawSelectRosters(now, a, slide) {
+  const m = state.menu;
+  const { toy, cx, cards, diff } = selectLayout();
+  const shown = selectRevealed();
+  for (let mine = 1; mine >= 0; mine--) {
+    const col = cards[mine];
+    if (!col.length) continue;
+    const dx = mine ? -slide : slide;
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = TEAMS[skin(col[0].p.team)].mark;
+    ctx.fillRect((mine ? cx - SEL_ROST_X : cx + SEL_ROST_X - SEL_ROST_W) + dx, toy + 96, SEL_ROST_W, 1);
+    ctx.globalAlpha = a;
+    for (let k = 0; k < col.length; k++) {
+      const r = col[k];
+      const hidden = !mine && k >= shown;
+      const flash = !mine && !hidden && m.countT > 0 && (COUNT_T - k) - m.countT < 0.15;
+      drawSelectCard({ x: r.x + dx, y: r.y, w: r.w, h: r.h, p: r.p }, mine, hidden, flash);
+    }
+  }
+  const lv = settings.aiLevel | 0;
+  const rc = TEAMS[skin(1 - (player ? player.team : 0))].mark;
+  const hover = m.screenT >= 1 && m.gearT <= 0 ? selectHit() : -1;
+  const hk = hover >= CLASSES.length + 2 ? hover - CLASSES.length - 2 : -1;
+  for (let k = 0; k < diff.length; k++) {
+    const r = diff[k], hv = m.dhover[k] || 0, lift = Math.round(hv);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(r.x + slide + 1, r.y + 1, r.w, r.h);
+    ctx.fillStyle = hv > 0.5 ? '#8fa0c8' : '#2c3560'; ctx.fillRect(r.x + slide, r.y - lift, r.w, r.h);
+    ctx.fillStyle = k <= lv ? rc : '#0f1632'; ctx.fillRect(r.x + slide + 1, r.y + 1 - lift, r.w - 2, r.h - 2);
+  }
+  const nm = AI_LEVELS[hk >= 0 ? hk : lv].name;
+  ctx.globalAlpha = a * (hk >= 0 ? 1 : 0.8);
+  drawPixelTextShadow(ctx, nm, cx + SEL_ROST_X + slide - pixelTextWidth(nm), toy + 88, hk >= 0 ? '#ffd95c' : rc, '#0a0e23');
+  ctx.globalAlpha = a;
+}
+
+// The countdown over the plank: the whole second left in big gold digits,
+// white the instant it changes, sinking in alpha through its second.
+function drawSelectCount(a) {
+  const m = state.menu;
+  if (m.countT <= 0) return;
+  const { toy, cx } = selectLayout();
+  const n = Math.ceil(m.countT), frac = m.countT - (n - 1); // 1 fresh -> 0 about to change
+  const s = String(n);
+  ctx.globalAlpha = a * (0.6 + 0.4 * frac);
+  drawPixelTextShadow(ctx, s, cx - Math.round(pixelTextWidth(s, 4) / 2), toy + 40, frac > 0.85 ? '#f4f7ff' : '#ffd95c', '#0a0e23', 4);
+  ctx.globalAlpha = a;
+}
+
 // a (0..1) is the screen's own visibility; the whole surface rides it
 function renderSelect(now, a) {
   const m = state.menu;
-  const { toy, cx, ports, lock, loadout } = selectLayout();
+  const { toy, cx, ports, play, loadout } = selectLayout();
   drawSelectBackdrop(now, a);
   ctx.globalAlpha = a;
   const t0 = 'CLASS SELECT';
-  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 22, '#ffd95c', '#3c2a1e', 2);
-  drawGoldRule(cx, toy + 37, Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-  // the roster, sliding in from the left; then the stage under its light
+  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 14, '#ffd95c', '#3c2a1e', 2);
+  drawGoldRule(cx, toy + 29, Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+  drawSelectCount(a);
+  // the rosters slide in from their edges, the emblems from the left; then
+  // the stage under its light
   const sw = easeOut(m.cswapT);
   const slide = Math.round((1 - a) * 26);
+  drawSelectRosters(now, a, slide);
   for (let i = 0; i < ports.length; i++) {
     ctx.globalAlpha = a;
     drawSelectPortrait(i, { x: ports[i].x - slide, y: ports[i].y, w: ports[i].w, h: ports[i].h },
@@ -1860,18 +2041,19 @@ function renderSelect(now, a) {
   }
   ctx.globalAlpha = a;
   drawSelectStage(now, a, sw);
-  // LOCK IN - the plank is the whole ask, and it flies straight to the eagle
+  // PLAY - the plank is the whole ask; it stays sunk while the count runs
   const hover = m.screenT >= 1 && m.gearT <= 0 ? selectHit() : -1;
-  const pressed = m.pressT > 0 || m.lockT > 0;
+  const pressed = m.pressT > 0 || m.lockT > 0 || m.countT > 0;
   ctx.globalAlpha = a;
-  drawMenuButton(lock, 'LOCK IN', hover === CLASSES.length ? 1 : 0.7, now, pressed);
-  // the collapsed gear widget: the four picked variants; its pop-up opens off
-  // a click (beginGear). Hover lifts it - the this-is-a-button grammar.
+  drawMenuButton(play, 'PLAY', hover === CLASSES.length ? 1 : 0.7, now, pressed);
+  // the collapsed gear widget: the four picked variants in a column at the
+  // figure's hand; its pop-up opens off a click (beginGear). Hover lifts it -
+  // the this-is-a-button grammar.
   const lolift = hover === CLASSES.length + 1 ? 1 : 0;
   for (let i = 0; i < GEAR_SLOTS.length; i++) {
-    const x = loadout.x + i * 17, y = loadout.y - lolift;
+    const x = loadout.x, y = loadout.y + i * 17 - lolift;
     ctx.fillStyle = 'rgba(4,6,18,0.55)';
-    ctx.fillRect(x + 1, loadout.y + 2, 14, 16);
+    ctx.fillRect(x + 1, loadout.y + i * 17 + 2, 14, 16);
     ctx.fillStyle = lolift ? '#8fa0c8' : '#35426e';
     ctx.fillRect(x, y, 14, 16);
     ctx.fillStyle = '#0f1632';
@@ -1920,7 +2102,7 @@ function drawGearPreview(r, now) {
   const sx = r.x + 12, sy = r.y + 7, s = 4; // the 16x16 body at 4x
   ctx.fillStyle = 'rgba(4,6,18,0.6)';
   ctx.beginPath(); ctx.ellipse(sx + 32, r.y + r.h - 6, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
-  const spr = SPRITES.champ[m.csel][0].down[1 + (Math.floor(now * 3) % 2)];
+  const spr = SPRITES.champ[m.csel][skin(player.team)].down[1 + (Math.floor(now * 3) % 2)];
   ctx.drawImage(spr, sx, sy, 64, 64);
   for (let i = 0; i < GEAR_MARKS.length; i++) { // the leather the picks ride
     const mk = GEAR_MARKS[i];

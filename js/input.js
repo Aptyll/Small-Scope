@@ -36,10 +36,6 @@ window.addEventListener('keydown', (e) => {
   // edge-triggered intents go into the local player's input struct; the sim
   // reads and clears them, exactly as it does for an AI slot
   if (e.key === ' ') player.input.dodge = true;
-  // Ctrl TAPS the burrow on and off rather than being held: a held modifier
-  // plus W is Ctrl+W, which closes the tab and which no page can preventDefault
-  // its way out of. Modifiers auto-repeat while down, so the repeat is dropped.
-  if (e.key === 'Control' && !e.repeat) player.input.prone = true;
   if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
   if (e.key.toLowerCase() === 'f') player.input.eatFish = true;
   // E at the practice rack: the press opens the armory wheel over it, the
@@ -81,7 +77,7 @@ window.addEventListener('keydown', (e) => {
   // Edge-triggered like the dodge; the sim consumes it (tryAbility,
   // js/abilities.js). The bit column rises on HOVER over the weapon well.
   if (e.key >= '1' && e.key <= '4' && !e.repeat) { SFX.unlock(); player.input.ability = e.key.charCodeAt(0) - 49; }
-  if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft) { state.wheel = null; state.mapOpen = !state.mapOpen; }
+  if (e.key.toLowerCase() === 'm' && !state.settingsOpen && !state.draft && !state.dropBrief) { state.wheel = null; state.mapOpen = !state.mapOpen; }
   if (e.key.toLowerCase() === 'escape') {
     // a carried item goes back first, then the flag aim: both are gestures
     // half-finished, and Escape is how either is thought better of
@@ -282,6 +278,7 @@ function sampleHumanInput(p) {
   if (state.mode === 'play' && state.mapOpen && !state.paused && !state.settingsOpen) {
     inp.mx = mx; inp.my = my;
     inp.slide = !!keys['shift'];
+    inp.grapple = !!keys['3']; // a reel in progress keeps answering the held key
     inp.fire = inp.work = false;
     inp.eatBerry = inp.eatFish = false;
     inp.ability = -1;
@@ -291,12 +288,12 @@ function sampleHumanInput(p) {
     p.fireArmed = false;
     return;
   }
-  // state.eagleCine: the driven-off ceremony has the camera - hands off the
-  // controls until the screens come up, exactly as pause zeroes them
-  if (state.mode !== 'play' || state.paused || state.settingsOpen || state.eagleCine) {
+  // state.eagleCine / state.dropBrief: a ceremony has the camera - hands off
+  // the controls until it hands back, exactly as pause zeroes them
+  if (state.mode !== 'play' || state.paused || state.settingsOpen || state.eagleCine || state.dropBrief) {
     inp.mx = inp.my = 0;
-    inp.fire = inp.work = inp.slide = false;
-    inp.dodge = inp.prone = inp.eatBerry = inp.eatFish = false;
+    inp.fire = inp.work = inp.slide = inp.grapple = false;
+    inp.dodge = inp.eatBerry = inp.eatFish = false;
     inp.ability = -1;
     inp.cmd = null;
     if (p.charging) { p.charging = false; p.chargeT = 0; }
@@ -308,6 +305,9 @@ function sampleHumanInput(p) {
   }
   inp.mx = mx; inp.my = my;
   inp.slide = !!keys['shift'];
+  // the grapple reels only while its own key is held - the one HELD ability
+  // input, read by updatePlayer's grapple branch; releasing it lets go early
+  inp.grapple = !!keys['3'];
   inp.work = !!keys['e'] && !state.wheel;
   if (state.wheel) { inp.fire = false; inp.dodge = false; inp.ability = -1; } // the wheel swallows the shot
 }

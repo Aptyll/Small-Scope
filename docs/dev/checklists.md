@@ -3,6 +3,17 @@
 Step-by-step lists for the changes that touch many places at once, plus the intentionally dead
 code you should not "clean up".
 
+## Concepting a new look
+
+A new sprite — a character, an NPC, a creature, a building — is **picked off a concept sheet
+before its grid goes into `js/sprites.js`**: three candidate looks in the game's own ASCII grid
+language, rendered at 6× in both team colours and every facing beside a player for scale, saved
+under `docs/media/concepts/` and handed to Noah to choose from. The whole procedure, the sheet
+template and the grid lint are the `concept-art` skill in
+[.claude/skills/concept-art/](../../.claude/skills/concept-art/SKILL.md); the merchant's two
+rounds (`merchant-concepts-1`, hoods, rejected; `merchant-concepts-2`, D picked) are the worked
+example.
+
 ## Verifying a change
 
 The rule is in [CLAUDE.md](../../CLAUDE.md): look at the running game, don't re-read the code and
@@ -21,7 +32,7 @@ declare victory. The three affordances:
   Two things a staged scene walks into: `warp` moves a slot but **not the camera**, which lerps
   after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
   cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
-  player will quietly shoot it dead mid-capture, so empty its quiver with `setQuiver(0, p)` first.
+  player will quietly shoot it dead mid-capture, so park its bow with `setNock(1e9, p)` first.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
@@ -36,16 +47,17 @@ declare victory. The three affordances:
   boundary and being three pixels out is invisible without it.
   It draws in every mode, `settings.hitbox` sets it from `DBG` without the keypress, and
   `DBG.showPaths` still forces the routes on by itself.
-- **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the display-name
-  prompt only opens itself while `PROFILE.named()` is false, so a machine that has answered it
-  once will never show it again. `DBG.PROFILE` is the store and `DBG.openNamePanel(first)` opens
-  the panel either way (`true` = the SKIP variant). See
+- **`localStorage.removeItem('softfall.profile')`** re-stages a first launch: the fresh profile
+  rolls a random display name at load (there is no first-launch prompt) and its `dropped` flag
+  comes back false, so the next ride runs the scripted first flight and its
+  [drop brief](rendering.md#eagle-drop-mode-drop). `DBG.PROFILE` is the store and
+  `DBG.openNamePanel()` opens the name editor. See
   [architecture.md](architecture.md#profilejs).
 - **The [tech tree](gameplay.md#the-tech-tree) needs no staging** — every kind is unlocked for
   every profile, so `DBG.LOOT_POOL` is the same on a fresh install as on a played-in one, and
   reading it back is how you prove what a match may drop. `DBG.wipeTech()` still forgets which
   kinds this profile has *held*, which is all the page's blue pips are.
-- **`POST /shot`** in [tools/serve.js](../../tools/serve.js#L14) writes a base64 PNG body to `shot.png` in the
+- **`POST /shot`** in [app/server.js](../../app/server.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
 
@@ -53,7 +65,7 @@ The server itself needs no configuration: `PORT` overrides the default 8471, `.c
 sets `autoPort` so a second session previews alongside an already-running one, and it sends
 `Cache-Control: no-store`, so a plain refresh always picks up an edit.
 
-**Test off `file://`, not just off the server.** `node tools/serve.js` hides a whole class of bug: the
+**Test off `file://`, not just off the server.** `node app/server.js` hides a whole class of bug: the
 game is played by double-clicking [index.html](../../index.html), where `fetch` and XHR are
 blocked against the page's own folder. Point the driver at the repo's own
 `file:///.../index.html?seed=N` for anything that loads an asset — the sampled sound layer was dead
@@ -78,7 +90,7 @@ there for two rounds while every served check passed.
 - `SFX.music.current` names the track the state machine thinks should be sounding, and
   `SFX.music.el(key)` hands out the live `<audio>` element: seek it to `duration - 0.6` to prove
   the `jump → foxglove → silence` chain in seconds instead of nine minutes. `duration` is only
-  finite because [tools/serve.js](../../tools/serve.js) answers Range requests — a plain 200 makes an element
+  finite because [app/server.js](../../app/server.js) answers Range requests — a plain 200 makes an element
   treat a multi-MB mp3 as an unbounded stream.
 - For the ESC panel, `DBG.settingsRows` gives the open page's row anchors (already scrolled -
   a row's `y` is where it is on screen), the navbar cells and the scroll state;
@@ -148,7 +160,7 @@ one: it is a wallet number with no ceiling. See
 pack and weapon, and the loot pools all pick it up
 with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` key — reuse one of
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
-**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`stick`/`col` and an
+**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`col` and an
 8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
 envelope in `toolMods` — and, because cells fold in whatever order they sit in, that `mod` must
 write order-independent values (a max or a set, never a multiply of what is already there), or two
@@ -257,7 +269,7 @@ What it must do to get them:
 
 **Adding a stump-built structure** — add a `STRUCTS` entry (3 tiers) and its wheel slot in
 `STRUCT_ORDER` (the **build** wheel draws the local team's `SPRITES.teamBuild[team][type][0]` or,
-for a sprite too big to be its own 16×16 icon — see the Keep, the bay, the turret — a dedicated
+for a sprite too big to be its own 16×16 icon — see the bay, the turret — a dedicated
 entry in `teamBuild[team].icon`, and sizes itself: a sixth entry is six even wedges, no layout to
 touch), a grid baked into the per-team `teamBuild` sets (see [sprites.md](sprites.md)), and both
 map colour tables (`updateMinimap`/`buildWorldMapImg` — both resolve a multi-tile footprint's
@@ -268,12 +280,12 @@ draws as a bare stump). `isSolidTile()` is now generic (`!!STRUCTS[o.type] || ..
 type needs a line there. `hitObject()`, the draws pass (via `structSprite`), construction,
 ownership and refunds already dispatch on `STRUCTS[o.type]` too — no per-type work there, and
 nothing to add unless the type does something once built (a functional tick branch in
-`updateStructures()`, e.g. the generator's payout timer or the Keep's craft queue).
+`updateStructures()`, e.g. the generator's payout timer or the bay's roll-out).
 **The manage wheel is a separate, hand-built list, not generic over `STRUCT_ORDER`** — this bit
-the Keep's "queue card" order and is worth remembering for the next one: `wheelOptions()` only
-ever returns `[upgrade, (a spawner's mode / a keep's craft), demolish]`, so a structure with its
-own extra manage-wheel order needs a line there (and a matching `runCmd()` branch), regardless of
-how automatic the *build* wheel's sizing is.
+the old Keep's "queue card" order and is worth remembering for the next one: `wheelOptions()` only
+ever returns `[upgrade, demolish]`, so a structure with its own extra manage-wheel order needs a
+line there, between the two (and a matching `runCmd()` branch), regardless of how automatic the
+*build* wheel's sizing is.
 
 **Adding a landmark** — a `LANDMARKS` entry plus its `gen`, and its key in `LANDMARK_ORDER`; that
 is the whole feature (see [world.md](world.md#landmarks) for the fields). The entry's shape:
@@ -301,7 +313,7 @@ remember `genWorld()`'s `free()` helper treats "ground must be 0" as the placeme
 `tryProne` (snow to dig into) and the footprint emitter. Check `fishWater()` too: it names the
 swimmable grounds outright.
 
-**Adding a sound** — drop the file in `audio/sfx/`, **run `node tools/bake-sfx.js`** (this is not
+**Adding a sound** — drop the file in `audio/sfx/`, **run `node app/bake-sfx.js`** (this is not
 optional: without it the clip works when served and is silently dead when `index.html` is opened
 off the disk, which is how the game is actually played), add it to `SAMPLES` in
 [js/audio.js](../../js/audio.js) (a key may list several files; one is picked per shot), and write
@@ -322,11 +334,17 @@ transition that owns it. Nothing polls for the right track: `play()` no-ops when
 already current, so it is safe to call from a state change that repeats.
 
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
-range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint, the Keep's
-`craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
-cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
-timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
-draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the chest
+range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint; the roll-out
+cadence is inline in `updateStructures()`'s spawner branch), `CHEST_ODDS` (a chest's card rarity
+roll, js/actions.js), `RESPAWN_TIME`/`RESPAWN_LV`/`RESPAWN_MIN`/`RESPAWN_MAX` (the wait for the
+bird, beside `die()`, js/player.js), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
+draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the trickle
+(`TRICKLE_GOLD`/`TRICKLE_T`, js/sim.js) and `TREE_HP` (js/world.js) beside it, the hero-level table
+(`LEVEL_XP`/`LVL_HP`/`LVL_DMG`, js/player.js — sized against the harness, see
+[multiplayer.md](multiplayer.md#ai-slots)), the eagle's siege (`EAGLE_HP`/`EAGLE_WORK_DMG`/
+`EAGLE_ARROW_DMG`/`GUST_R`/`PREEN_RATE`, js/boot.js) and the bots' objective clocks (`AI_LEVELS`'
+`push`/`guard`, `AI_ALLY_PUSH`, `AI_ESCALATE`, `AI_JOIN_HP`, `AI_ALARM_HP`, `AI_ROOST_R`,
+js/ai.js), the chest
 count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 `WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
@@ -363,13 +381,31 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 
 ## Known drift
 
+- **`rootUnit`/`markUnit` currently have no caster** (intentional dead code since the hunter's
+  2.47 rework retired the snare trap and the falcon): the two setters, their `drawUnitStates`
+  tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are
+  part of the [universal status set](gameplay.md#status-effects-one-set-for-every-unit) a future
+  ability or bit lands on for free.
+- **A bot push could stall mid-map with nothing in its way** (2.63, seed 2 on NORMAL, twice in
+  five runs): from `AI_ALLY_PUSH` on, every ally read `aiWantsPush` true, `pushCd` 0, and stood
+  at one spot ~2700 px from the rival roost for eight minutes, hp bleeding a few points a
+  minute. 2.64's blocked-line rule in the fight rung (a bot with no line routes or gives ground
+  instead of walking into the corner) removed the one such stall it reproduced — ten bodies
+  jammed at a lane's bend, seed 99 — and none of 2.64's runs stalled, but seed 2 itself was not
+  re-run; if a push stands still again, the harness's per-minute rows (own/rival roost distance
+  per slot) and `settings.hitbox = 1` on the stalled bots' routes are the way in.
+- **A player's whole wallet still goes to the killer** (2.63): with the fells cut, kill transfers
+  are the biggest single swing left in the harness buckets (400–590 gold to one bot in a
+  20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
+  the stake pillar, not a bug, but it is the next snowball to weigh: a bounty cap, or a hoarder's
+  sink.
 - [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + three gameplay
   loops + mechanic shots in `docs/media/`), not a tech guide. It carries the one-line "double-click
   `index.html`" and links into [game.md](game.md) / [architecture.md](architecture.md); the controls
   list and the code layout stay in the root [CLAUDE.md](../../CLAUDE.md) and these dev docs.
 - **The six gallery stills in `docs/media/` predate the free-for-all** — they are solo-survival
   captures from the original storefront, resized to 1920×1080 16:9, so there is still no still of a
-  Keep, a fish net or a landmark. Current loops under the hero: `practice-tool.webp` (the title
+  roosting eagle, a fish net or a landmark. Current loops under the hero: `practice-tool.webp` (the title
   menu knocking PRACTICE TOOL open onto the training field), `eagles.webp` (the two team birds
   passing, then the drop), `hunt-deer.webp` (a bow taking a deer), `robots.webp` (workers chopping
   pines at a bay). The README copy was rewritten in `PATCH 1.54` to describe the current game
@@ -404,7 +440,7 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 - `audio/music/` is now exactly the six files `TRACKS` names — the alternate takes and album art
   that sat beside them (34 MB, nothing loading them) were deleted in `PATCH 1.53`; recover one with
   `git show ee284a0:"audio/music/<name>"` if a cue ever wants it. A track is live only once it is in
-  `TRACKS`. `tools/serve.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
+  `TRACKS`. `app/server.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
   is an mp3.
 - The `tracers` pass is kept working but has no trigger — it went idle with the raiders. The
   **turret is live** (it shoots enemy players and worker bots) but it does not use `tracers`: it

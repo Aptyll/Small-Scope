@@ -23,9 +23,12 @@ const STRUCTS = {
     { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65, traverse: 3.8, aim: 0.35 },
   ]},
   generator: { name: 'GENERATOR', mm: [120, 180, 196], map: [96, 130, 150], tiers: [
-    { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 10 },
-    { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 2, period: 10 },
-    { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 4, period: 10 },
+    // 4 / 6 / 10 gold a minute against the clock's own 15 (TRICKLE_*, js/sim.js):
+    // a top generator is two thirds of a second trickle for 82 gold, paid back
+    // in eight minutes - an early build, and something worth walking over to wreck
+    { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 15 },
+    { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 1, period: 10 },
+    { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 2, period: 12 },
   ]},
   // the bot bay is the one big build: a single tier on a 3x2 tile footprint
   // (w/h - see footprint()/findSite()), its three bots rolling out one by one
@@ -41,21 +44,8 @@ const STRUCTS = {
   net: { name: 'FISH NET', water: true, mm: [150, 186, 200], map: [118, 156, 176], tiers: [
     { cost: { gold: 8 }, hp: 45, buildT: 5 },
   ]},
-  // the team's Keep: a 2x2 singleton (see teamHasLivingKeep) that a downed
-  // teammate respawns at (see updateRespawns) and that crafts roguelike
-  // cards (see startCraft/updateStructures' keep branch) - "queue card" pays
-  // craftCost and runs craftT, independent of the buildT/upgrade timer.
-  // odds is the rarity table a completed craft rolls against (see CARDS).
-  keep: { name: 'KEEP', w: 2, h: 2, mm: [224, 96, 96], map: [196, 70, 70], tiers: [
-    { cost: { gold: 60 },  hp: 260, buildT: 22, craftCost: 40, craftT: 20,
-      odds: { white: .55, green: .28, blue: .13, purple: .035, gold: .005 } },
-    { cost: { gold: 130 }, hp: 400, buildT: 13, craftCost: 40, craftT: 20,
-      odds: { white: .35, green: .32, blue: .22, purple: .09,  gold: .02  } },
-    { cost: { gold: 220 }, hp: 560, buildT: 13, craftCost: 40, craftT: 20,
-      odds: { white: .18, green: .27, blue: .30, purple: .18,  gold: .07  } },
-  ]},
 };
-const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner', 'keep']; // stump wheel: 5 even wedges
+const STRUCT_ORDER = ['wall', 'turret', 'generator', 'spawner']; // stump wheel: 4 even wedges
 const WATER_STRUCT_ORDER = ['net']; // open-hole wheel: one wedge, the whole circle
 
 // fish nets: a building laid over an open hole that fishes it on its own
@@ -96,7 +86,6 @@ function placeStruct(tx, ty, type, p) {
     deny('STEP OFF THE STUMP FIRST', 1.6);
     return;
   }
-  if (type === 'keep' && teamHasLivingKeep(p.team)) { deny('ALREADY HAVE A KEEP', 1.6); return; }
   const t0 = STRUCTS[type].tiers[0];
   if (!canAfford(t0.cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
   let anchor = { tx, ty };
@@ -108,12 +97,6 @@ function placeStruct(tx, ty, type, p) {
     const s = objAt(tx, ty);
     if (water ? (s || ground[idx(tx, ty)] !== 2) : (!s || s.type !== 'stump')) return;
     if (!canAfford(t0.cost, p)) return;
-    // re-checked inside the contest callback (not just at the pre-contest
-    // deny above): two teammates ordering a keep on two different stumps in
-    // the same tick each pass the early check, but resolveContests() runs
-    // every winning callback synchronously, so whichever key resolves first
-    // creates the keep and the second sees it here and backs off
-    if (type === 'keep' && teamHasLivingKeep(p.team)) return;
     if (big) { anchor = findSite(type, tx, ty); if (!anchor) return; }
     pay(t0.cost, p);
     createStruct(anchor.tx, anchor.ty, type, 0, p, true);
@@ -139,7 +122,6 @@ function createStruct(tx, ty, type, tier, p, building) {
   if (type === 'turret') { o.cd = 0; o.ang = -Math.PI / 2; o.tgt = null; o.chg = 0; o.rec = 0; o.mz = 0; o.scan = 0; }
   if (type === 'generator') o.payT = 0;
   if (type === 'spawner') { o.bots = []; o.respawnT = o.respawnTotal = 1; o.door = 1; }
-  if (type === 'keep') { o.craftT = 0; o.craftTotal = 0; }
   // fish: what the net is holding. catchT/takeT are the two clocks that let
   // it fill and empty a fish at a time instead of all at once
   if (type === 'net') { o.fish = 0; o.catchT = NET_CATCH_T; o.takeT = 0; }
@@ -151,37 +133,10 @@ function createStruct(tx, ty, type, tier, p, building) {
 // only the owning side may upgrade or demolish
 function ownsStruct(o, p) { return o.team === undefined || o.team === p.team; }
 
-// a team may have at most one Keep at a time - a Keep still under
-// construction doesn't count (same reason updateStructures refuses to run a
-// generator's payout or a spawner's roll-out on an unfinished building: a
-// team shouldn't dodge permadeath the instant the stump is claimed). Used to
-// gate a second build order, and as the "does this team still have a way
-// back" read for respawns and the win condition.
-function teamHasLivingKeep(team) {
-  return structures.some((o) => o.type === 'keep' && o.team === team && !o.building);
-}
-
-// one gold-paid card craft at a time per Keep. o.craftT/craftTotal live on
-// the structure object; ticked in updateStructures' keep branch, exactly
-// like a generator's payT countdown. Starting an upgrade freezes it for
-// free (the whole per-type branch is skipped while o.building), and
-// destroying the Keep mid-craft forfeits the gold and the card in progress -
-// no refund path, same as a turret's charge or a spawner's mid-roll bot.
-function startCraft(o, p) {
-  p = p || player;
-  const deny = (msg, t) => { if (p === player) { SFX.deny(); if (msg) showMsg(msg, t); } };
-  if (o.building || !ownsStruct(o, p)) { deny(); return; }
-  if (o.craftT > 0) { deny('ALREADY CRAFTING', 1.4); return; }
-  const t = STRUCTS.keep.tiers[o.tier];
-  const cost = { gold: t.craftCost };
-  if (!canAfford(cost, p)) { deny('NOT ENOUGH RESOURCES', 1.6); return; }
-  pay(cost, p);
-  o.craftT = o.craftTotal = t.craftT;
-  if (nearPlayer(o.tx * TILE + 16, o.ty * TILE + 16)) SFX.hammer();
-}
-
-// rolls a rarity against tier.odds using the shared runtime rng() - never
-// called from genWorld, so this never perturbs a seed's terrain
+// rolls a card rarity against an odds table (CHEST_ODDS - a sprung chest is
+// where a card comes from, hitObject in js/actions.js) using the shared
+// runtime rng() - never called from genWorld, so this never perturbs a
+// seed's terrain
 function rollCardRarity(odds) {
   let r = rng(), acc = 0;
   for (const rarity of CARD_RARITIES) {
@@ -308,7 +263,7 @@ function fireBolt(o, t, pv) {
     t: 0, life: BOLT_LIFE, dmg: t.dmg, pow: 1,
     owner: o.owner === undefined ? 0 : o.owner, team: team, trailD: 0,
   });
-  burst(m.x, m.y, TEAMS[team].mark, 4, 60, 0.22, true);
+  burst(m.x, m.y, TEAMS[skin(team)].mark, 4, 60, 0.22, true);
   if (nearPlayer(pv.x, pv.y)) SFX.turretFire();
 }
 
@@ -466,20 +421,6 @@ function updateStructures(dt) {
             if (p === player) SFX.stash();
           });
         }
-      }
-    } else if (o.type === 'keep' && o.craftT > 0) {
-      // mirrors the generator's payT countdown; freezes for free while
-      // o.building (an upgrade), since this whole branch is skipped above
-      o.craftT -= dt;
-      if (o.craftT <= 0) {
-        o.craftT = 0;
-        const rarity = rollCardRarity(t.odds);
-        const key = cardKey(rarity);
-        const m = structMouth(o);
-        spawnDrop(m.x, m.y, key, 1);
-        addFloater(m.x, m.y - 12, rarity.toUpperCase() + ' CARD', RES_COLORS[key]);
-        burst(m.x, m.y - 4, RES_COLORS[key], 10, 50, 0.5, true);
-        if (nearPlayer(m.x, m.y)) SFX.stash();
       }
     }
   }

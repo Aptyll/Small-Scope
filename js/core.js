@@ -24,12 +24,16 @@ const CYCLE = DAY_LEN + NIGHT_LEN;
 const FISH_SPAWN_T = 11;   // seconds between new fish while the shoal is healthy
 
 // One currency, many sources. Every source pays gold with a different yield profile
-// (per-hit trickle vs. burst on completion); this table is the whole economy.
+// (burst on completion, or per kill); this table is the whole economy, with one
+// source outside it: the clock, which pays every slot on the ground a coin every
+// TRICKLE_T s (the passive income banner, js/sim.js). The per-swing rows are 0 -
+// a swing is work, the fell is the pay - because a per-swing coin on a one-second
+// pine was the firehose that had every bot at the level cap by two minutes.
 const YIELD = {
-  treeHit: 1,   treeFall: 1,            // 4 hp tree  -> 5 gold, slow and safe
-  treeRare: 6,                          // rare-tree jackpot on top of the fall payout
-  rockHit: 1,   rockBreak: 4,           // 5 hp rock  -> 9 gold, a bit more than a tree
-  deadTreeHit: 1, deadTreeFall: 2,      // 3 hp snag  -> 5 gold, the rookery's cover; leaves a stump
+  treeHit: 0,   treeFall: 1,            // 3 hp tree  -> 1 gold, slow and safe (TREE_HP, js/world.js)
+  treeRare: 3,                          // rare-tree jackpot on top of the fall payout (1 pine in 12: four trees' worth)
+  rockHit: 0,   rockBreak: 3,           // 5 hp rock  -> 3 gold, better per swing than a pine, and a find 1 in 5
+  deadTreeHit: 0, deadTreeFall: 1,      // 3 hp snag  -> 1 gold, the rookery's cover; leaves a stump
   rabbit: { coins: 2, each: 5 },        // 10 gold + a berry, but it bolts
   deer:   { coins: 3, each: 6 },        // 18 gold, the big mobile target
   wolf:   { coins: 3, each: 8 },        // 24 gold, the biggest kill in the game - and it bites back
@@ -124,9 +128,8 @@ const state = {
   menu: { sel: 0, hover: [0, 0, 0, 0, 0, 0], t: 0,
     panel: null, panelT: 0, closing: false, patchScroll: 0, // patchScroll: px the notes are scrolled
     // the PLAYER panel (the `player profile` banner): the name being typed,
-    // whether this is the first-launch prompt (SKIP) or an edit (CANCEL),
     // the refusal rattle and the two planks' hover eases
-    nameBuf: '', nameFirst: false, nameShake: 0, nameHover: [0, 0],
+    nameBuf: '', nameShake: 0, nameHover: [0, 0],
     moved: false, dieT: 0, rolling: 0, camT: 0, pressT: 0,
     // frozen planks: refusal shudder timer, which plank was struck (menu index),
     // per-knock crack seed, the struck point (plank-local) and the ice chips it sprays (screen-space).
@@ -142,11 +145,22 @@ const state = {
     // gearFxT/gearFxSlot the equip flash); the tech tree is a surface of its
     // own on techT, with tsel the keyboard cursor into its flat node list.
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
+    // countT: seconds left of PLAY's countdown to the eagle (0 = not counting),
+    // countN the last whole second it ticked on (-1 = never pressed, 0 = it
+    // ran out); dhover the three difficulty notches' hover eases (menu.js
+    // `class select`)
+    countT: 0, countN: -1, dhover: [0, 0, 0],
     gearT: 0, grow: 0, gearFxT: 0, gearFxSlot: 0, techT: 0, tsel: 0 },
   intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from
   drop: null,          // the eagle while it is in the air: see makeEagleRoute() / beginDrop()
+  // the DROP BRIEF: a local slot that never jumped rides the landing, and the
+  // crash pans the camera to both roosts and states the objective before
+  // handing the controls (and the E hop off the bird) back -
+  // { ph: 'wait'|'theirs-go'|'theirs'|'ours-go'|'ours', t, total }, run by
+  // updateDrop (js/boot.js), camera in js/sim.js, text in drawDropBrief.
+  dropBrief: null,
   fade: null,          // screen fade: { a, to, spd, color, then }
 };
 
@@ -154,6 +168,12 @@ const state = {
 // setMusicVolume / setSfxVolume). A save written before the split simply has
 // neither key and keeps the defaults - no version bump needed.
 const settings = { v: 2, volume: 0.5, musicVol: 0.7, sfxVol: 1, mmR: 24, mmZoom: 5, hudScale: 0.8, shake: true, muted: false, info: false, pixelCursor: true, hitbox: 0,
+  // your side is painted BLUE and the rival side RED whatever team the roster
+  // dealt you (skin(), js/player.js); off = the roster's real colours
+  teamBlue: true,
+  // the rival bots' difficulty: an index into AI_LEVELS (js/ai.js), picked on
+  // class select's notches and remembered; 0 (NORMAL) until someone moves it
+  aiLevel: 0,
   // the VIDEO page's dressing toggles, all cosmetic-only passes a weak GPU
   // can shed (the ESC panel's QUALITY row presets them; panels.js)
   vidClouds: true, vidRays: true, vidStars: true, vidSnow: true, vidVig: true };

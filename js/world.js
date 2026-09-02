@@ -63,8 +63,8 @@ const OBJECTS = {
   // reads the `team` an object carries. Drawn by drawEagle, never the object
   // pass; the swing itself lands in hitObject's eagle branch (hurtEagle).
   eagle:    { solid: true,  tool: 'axe',  needs: null,   verb: 'STRIKE', lift: 16,
-              mm: (o) => o.team ? MM_EAGLE_BLUE : MM_EAGLE_RED,
-              map: (o) => o.team ? MAP_EAGLE_BLUE : MAP_EAGLE_RED },
+              mm: (o) => skin(o.team) ? MM_EAGLE_BLUE : MM_EAGLE_RED,
+              map: (o) => skin(o.team) ? MAP_EAGLE_BLUE : MAP_EAGLE_RED },
   // a multi-tile building's filler tiles: solid, and structOf() has resolved
   // them to their anchor long before either map sees one
   part:     { solid: true },
@@ -207,15 +207,47 @@ for (let i = 0; i < RING_N; i++) {
 }
 
 const BORDER_MIN = 30, BORDER_MAX = 70; // forest boundary depth range (avg ~50)
+// The two ROOST corners - bottom-left and top-right, where the eagles always
+// come down (makeEagleRoute, boot.js) - are forested to ROOST_R outright: a
+// quarter-disc of woods UNIONED with the noise border, so whatever the seed
+// grew there the corner holds one solid block for the bird to bury itself in,
+// and the treeline its lane cuts to is at least the disc's arc (ROOST_R along
+// the diagonal is ROOST_R / sqrt 2 ~ 48 tiles in). The union only ever ADDS
+// trees: past the disc the border keeps every seed's own noise, and the arc
+// itself wobbles ROOST_WOBBLE on the fine noise so it never reads as a compass
+// stroke. Not under PRACTICE - the training field is its own collar.
+const ROOST_R = 68;      // tiles from the corner
+const ROOST_WOBBLE = 3;  // +- tiles the arc wanders
 
 // depth of the forest boundary at a given tile: smooth irregular inner edge,
-// always solid from the world edge inward (variation eats into the interior)
-function borderDepth(tx, ty) {
+// always solid from the world edge inward (variation eats into the interior).
+// borderNoise is the seed's own border alone; borderDepth is that OR the roost
+// disc, and is what everything reads - genWorld's tree rule, the landmarks'
+// edge scan, the eagles' line, the lane. genWorld spends its per-tree rng()
+// only under borderNoise (the disc's extra pines roll nothing), so a seed's
+// interior is exactly what it was before the corners were guaranteed.
+function borderNoise(tx, ty) {
   let n = vnoise(tx / 22, ty / 22) * 0.65 + vnoise(tx / 9 + 40, ty / 9 + 40) * 0.35;
   n = Math.max(0, Math.min(1, (n - 0.5) * 1.6 + 0.5)); // stretch toward full range
   return BORDER_MIN + (BORDER_MAX - BORDER_MIN) * n;
 }
+function borderDepth(tx, ty) {
+  const d = borderNoise(tx, ty);
+  if (PRACTICE) return d;
+  const c = Math.min(Math.hypot(tx, WORLD - 1 - ty), Math.hypot(WORLD - 1 - tx, ty)); // to the nearer roost corner
+  if (c >= ROOST_R + ROOST_WOBBLE) return d;
+  const R = ROOST_R + (vnoise(tx / 9 + 40, ty / 9 + 40) - 0.5) * 2 * ROOST_WOBBLE;
+  if (c >= R) return d;
+  // inside the disc: deeper than this tile's own edge distance by the tile's
+  // depth into the disc, so genWorld's `edge < borderDepth` plants it and
+  // forestDepth (boot.js) reads how far inside the arc it sits
+  return Math.max(d, Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty) + R - c);
+}
 
+// swings to fell a pine, everywhere one is planted (the border, the practice
+// arena's forest, the regrown treeline): three at 0.34 s is a one-second tree,
+// and what it pays is YIELD.treeFall (js/core.js)
+const TREE_HP = 3;
 // per-tile jackpot roll for trees: hash-based, so it stays stable for a tile
 // regardless of generation order, and reshuffles with the run seed
 const TREE_RARE_CHANCE = 0.08;
@@ -231,8 +263,11 @@ function genWorld() {
       // `variant` picks no art any more - there is one pine in sixteen wind
       // frames and treeFrame() reads the tile's own hash for the one it rests
       // on - but the ROLL stays: dropping an rng() call here reshuffles every
-      // existing seed (the hard rule in CLAUDE.md).
-      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+      // existing seed (the hard rule in CLAUDE.md). It is rolled exactly where
+      // the seed's own border (borderNoise) plants a pine; the roost discs'
+      // extra pines (borderDepth) take variant 0 and roll nothing, so the
+      // stream past this loop is what it always was.
+      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: d < borderNoise(tx, ty) ? randi(0, 1) : 0, rare: treeRare(tx, ty) });
     }
   }
 
@@ -595,7 +630,6 @@ const practiceDummies = [];  // every dummy standing, for updatePractice's mend 
 //          (a round's targets are one-shot - hit means gone and scored)
 const PT_HIT_R = 11;         // px around a LARGE face's centre an arrow scores on
 const PT_RESPAWN = 2.6;      // s a broken stock face stays gone
-const AG_STICK_T = 0.25;     // s a landed arrow stands in the face before the shatter
 const PT_POP = { hide: 1.4, rise: 0.22, hold: 2.4, sink: 0.22 }; // the stock pop cycle
 const AG_SPD = [26, 46, 70]; // the stock roster's mover speeds (a round rolls its difficulty's own table, AG_DIFF)
 const AG_SIZE = [0.625, 1];  // small / large, as a scale on the 32px face
@@ -640,11 +674,6 @@ function addPTarget(kind, s, opts) {
     // hopping arms the lane-swap landing puff, warned/prevUp edge a pop-up's
     // pre-rise rattle fleck and its lock-up bounce once per cycle
     dustD: 0, hopping: false, warned: -1, prevUp: 0,
-    // the stuck arrow: stuck counts down to the shatter, stickX/Y is the
-    // impact point relative to the face centre (it rides a mover), stickA
-    // the shaft's flight bearing (the tail stands out the way it came),
-    // stickTeam whose feathers it wears
-    stuck: 0, stickX: 0, stickY: 0, stickA: 0, stickTeam: 0,
   }, opts || {});
   if (t.kind === 'pop') { t.up = 0; if (!t.pop) t.pop = PT_POP; }
   t.laneU = t.lane;
@@ -665,28 +694,17 @@ function ptFace(t) {
 }
 // the face's hit disc, scaled with its size
 function ptHitR(t) { return PT_HIT_R * AG_SIZE[t.size]; }
-// can an arrow score on it this frame (one shaft at a time: a face already
-// carrying a stuck arrow is spoken for until its shatter resolves)
-function ptLive(t) { return !t.gone && t.broken <= 0 && t.stuck <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
+// can an arrow score on it this frame
+function ptLive(t) { return !t.gone && t.broken <= 0 && (t.kind !== 'pop' || t.up > 0.6); }
 
-// one arrow into the face: the shaft STICKS first. The mechanical hit lands
-// on impact - points, popup and the run owe nothing to the show, so the
-// round clock can never eat a landed shot - the face recoils around the
-// shaft, and AG_STICK_T later the shatter follows (agShatter, from
-// updatePractice's stuck countdown): then a STOCK target's mast stands bare
-// until the respawn springs a fresh face, while a ROUND target is spent for
-// good. Points: small, fast and pop-up all pay extra, so the shot that was
-// harder to make is worth more.
-function hitPTarget(t, hx, hy, a) {
+// one arrow into the face and it EXPLODES, that frame - points, popup, the
+// run and the shatter all land on impact, so the feedback is instant and the
+// round clock can never eat a landed shot. Then a STOCK target's mast stands
+// bare until the respawn springs a fresh face, while a ROUND target is spent
+// for good. Points: small, fast and pop-up all pay extra, so the shot that
+// was harder to make is worth more.
+function hitPTarget(t) {
   const f = ptFace(t);
-  t.stuck = AG_STICK_T;
-  const rr = ptHitR(t) * 0.6; // the shaft plants inside the rings, never the rim
-  t.stickX = Math.max(-rr, Math.min(rr, hx - f.x));
-  t.stickY = Math.max(-rr, Math.min(rr, hy - f.y));
-  t.stickA = a ? Math.atan2(a.vy, a.vx) : Math.PI / 2;
-  t.stickTeam = a ? a.team : 0;
-  t.wob = 0.35; // the impact recoil
-  burst(hx, hy, '#efe6d0', 3, 35, 0.35, true); // straw off the punch
   agStreak++;
   // a milestone run flares at the face: gold at every fifth in a row, hot
   // orange from ten - the popup says the number, this says the moment
@@ -708,12 +726,12 @@ function hitPTarget(t, hx, hy, a) {
     addFloater(f.x, f.y - 6, 'X' + agStreak,
       agStreak >= 10 ? '#ff9440' : agStreak >= 5 ? '#ffd95c' : '#f4f7ff');
   }
-  if (nearPlayer(f.x, f.y)) SFX.hit();
+  agShatter(t); // the break IS the hit feedback - no beat between them
 }
 
-// the shatter itself, a beat after the arrow landed: chips, straw,
-// splinters and the shock ring, and the face is gone - back on a respawn
-// clock if it was stock, for good if it was a round target
+// the shatter: chips, straw, splinters and the shock ring, and the face is
+// gone - back on a respawn clock if it was stock, for good if it was a
+// round target
 function agShatter(t) {
   const f = ptFace(t);
   const sc = AG_SIZE[t.size];
@@ -721,7 +739,6 @@ function agShatter(t) {
   burst(f.x, f.y, '#efe6d0', Math.round(8 * sc), 55, 0.5, true);    // straw backing
   burst(f.x, f.y, '#a3794f', 5, 45, 0.45, true);                    // splinters
   agRings.push({ x: f.x, y: f.y, t: 0, max: ptHitR(t) + 5 });       // the shock ring
-  t.stuck = 0;
   if (t.stock) { t.broken = PT_RESPAWN; t.wob = 0; }
   else t.gone = true;  // updatePractice sweeps it out of the array
   if (nearPlayer(f.x, f.y)) SFX.break_();
@@ -778,7 +795,7 @@ let agFurniture = [];    // the dummy + rack + bell objects the round sinks away
 // on - hotter-coloured as the run grows - and a fresh round starts it over.
 let agStreak = 0;
 // the hit-ring flash: every face break snaps one quick shock ring out from
-// the hit, sized to the face it came off (hitPTarget pushes, updatePractice
+// the hit, sized to the face it came off (agShatter pushes, updatePractice
 // ages, drawAgRings in js/draw-world.js draws)
 const AG_RING_T = 0.22;  // s a ring lives
 const agRings = [];      // { x, y, t, max }
@@ -1067,7 +1084,7 @@ function genPracticeWorld() {
     for (let tx = 0; tx < WORLD; tx++) {
       const inX = tx >= ax && tx < ax + PR_W, inY = ty >= ay && ty < ay + PR_H;
       if (inX && inY) continue;
-      placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+      placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
   // ---- the dummy in the open snow, the armory rack squared under it ------
@@ -1345,7 +1362,7 @@ function pkAnimStep(dt) {
       const inWalk = tx >= PK_WALK.x0 && tx <= PK_WALK.x1 && ty >= PK_WALK.y0 && ty <= PK_WALK.y1;
       const onMe = Math.abs(player.x / TILE - (tx + 0.5)) < 1.5 && Math.abs(player.y / TILE - (ty + 0.5)) < 1.5;
       if (!inField && !inWalk && !onMe && !objects[e.i]) {
-        const t = placeObj(tx, ty, 'tree', { hp: 4, variant: hash2(tx * 3 + 1, ty * 3 + 2) > 0.5 ? 1 : 0, rare: treeRare(tx, ty) });
+        const t = placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: hash2(tx * 3 + 1, ty * 3 + 2) > 0.5 ? 1 : 0, rare: treeRare(tx, ty) });
         t.flash = 0.2;
         if (rng() < 0.5) burst(px, py - 10, '#f4f7ff', 3, 40, 0.45, true);
       }
@@ -1423,11 +1440,6 @@ function updatePractice(dt) {
     t.t += dt;
     if (t.wob > 0) t.wob = Math.max(0, t.wob - dt);
     if (t.swapT > 0) t.swapT -= dt;
-    // a stuck arrow's beat runs out: the face shatters around it
-    if (t.stuck > 0) {
-      t.stuck -= dt;
-      if (t.stuck <= 0) agShatter(t);
-    }
     if (t.broken > 0) {
       t.broken -= dt;
       if (t.broken <= 0) { // a fresh face springs onto the bare post

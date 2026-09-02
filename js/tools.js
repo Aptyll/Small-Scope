@@ -11,7 +11,7 @@
 // per bit so the bag, the drop pickup, the death spill and the refusal flash
 // are all generic over the new items exactly as they are over a berry. It
 // loads after js/actions.js because the shot it spawns is the arrow pipeline's
-// and it reads that file's tuning (BOW_Y, QUIVER_MAX, AMBUSH_MUL) at runtime.
+// and it reads that file's tuning (BOW_Y, AMBUSH_MUL) at runtime.
 
 // ---- tiers ---------------------------------------------------------------
 // A tier is a colour and nothing else in the sim: what a tier BUYS you is
@@ -33,9 +33,10 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // enough to throw (a bit heavier than the tool's tensile is dead weight and is
 // skipped), `path` is how it flies, `solid` whether a wall stops it, `ff`
 // whether it will hurt your own side, and life/speed/dmg are the baselines the
-// tool, the champion kit, the hero level and any modifier bits scale.
-// `stick` is whether the spent shot lands as a shaft anyone can pull back out
-// - the quiver economy, which every projectile bit spends one of.
+// tool, the champion kit, the hero level and any modifier bits scale - and
+// the DRAW scales all three again (`the draw` below). A spent shot is gone:
+// nothing lands in the snow to be picked back up, and the tool's own cycle
+// is the only thing between one press and the next.
 // UNITS: `life` is seconds and `speed` px/s, because that is what the sim runs
 // in and what every hit test downstream reads. A tool's `rof` is the one
 // number counted in game STEPS, since it is a cadence rather than a physical
@@ -58,39 +59,39 @@ const TIER_SHINE = 2; // the tier whose plate animates
 const BITS = {
   // -- projectiles ---------------------------------------------------------
   arrow: {
-    name: 'ARROW', blurb: 'THE PLAIN SHAFT. COMES BACK.', tier: 0, proj: true,
+    name: 'ARROW', blurb: 'THE PLAIN SHAFT. LIGHT AND TRUE.', tier: 0, proj: true,
     weight: 2, path: 'line', solid: true, ff: false,
-    life: 0.85, speed: 320, dmg: 8, stick: true, col: '#e8dcb4',
+    life: 0.85, speed: 320, dmg: 8, col: '#e8dcb4',
   },
   barb: {
     name: 'BARBED SHOT', blurb: 'WEAVES. HITS HARDER.', tier: 0, proj: true,
     weight: 5, path: 'zig', solid: true, ff: false,
-    life: 1, speed: 250, dmg: 12, stick: true, col: '#cfd8e8',
+    life: 1, speed: 250, dmg: 12, col: '#cfd8e8',
   },
   hook: {
     name: 'HOOKSHOT', blurb: 'FLIES OUT AND COMES BACK.', tier: 0, proj: true,
     weight: 3, path: 'boomer', solid: false, ff: false,
-    life: 1.5, speed: 260, dmg: 7, stick: false, col: '#9fc4dd',
+    life: 1.5, speed: 260, dmg: 7, col: '#9fc4dd',
   },
   care: {
     name: 'CARE ARROW', blurb: 'FAST, PASSES WALLS, LIGHTS THE SNOW.', tier: 1, proj: true,
     weight: 4, path: 'line', solid: false, ff: false,
-    life: 0.7, speed: 430, dmg: 13, stick: false, col: '#ffe6a8', lit: 34,
+    life: 0.7, speed: 430, dmg: 13, col: '#ffe6a8', lit: 34,
   },
   wisp: {
     name: 'WISP', blurb: 'CIRCLES YOU, LIGHTING THE DARK.', tier: 1, proj: true,
     weight: 3, path: 'orbit', solid: false, ff: false,
-    life: 3, speed: 250, dmg: 6, stick: false, col: '#8fd8ff', lit: 40,
+    life: 3, speed: 250, dmg: 6, col: '#8fd8ff', lit: 40,
   },
   log: {
     name: 'THROWING LOG', blurb: 'SLOW, ARCS DOWN, FLATTENS ANYONE.', tier: 1, proj: true,
     weight: 8, path: 'lob', solid: true, ff: true,
-    life: 2.2, speed: 155, dmg: 34, stick: false, col: '#a3794f',
+    life: 2.2, speed: 155, dmg: 34, col: '#a3794f',
   },
   lance: {
     name: 'ICE LANCE', blurb: 'HEAVY, FLAT AND VERY FAST.', tier: 2, proj: true,
     weight: 7, path: 'line', solid: true, ff: false,
-    life: 1.1, speed: 380, dmg: 26, stick: false, col: '#bfe6ff',
+    life: 1.1, speed: 380, dmg: 26, col: '#bfe6ff',
   },
   // -- modifiers -----------------------------------------------------------
   speedup: {
@@ -249,17 +250,53 @@ function peekBit(cell) {
   return -1;
 }
 // seconds between shots: the tool's own rate, quickened by everything that
-// already quickens a renock (QUICKDRAW, the LOOSE ability, QUICK HANDS)
+// already quickens a renock (QUICKDRAW, QUICK HANDS, the renock cards)
 function toolRof(p, cell) {
   return TOOLS[toolIdOf(cell.type)].rof * TOOL_ROF_STEP * (kitOf(p).nock / BOW_NOCK);
 }
+// The cycle a press starts, for THIS player right now: the held tool's rate,
+// or bare hands' (`kit.nock`) with no tool up. The one number every readout of
+// the cooldown divides `p.nockT` by - the well's wipe, the reticle's marks and
+// the overhead slate bar - and the one number every press sets it to, so no
+// meter can ever show a cooldown a different length from the one running.
+function toolCycle(p) {
+  const cell = heldTool(p);
+  return cell ? toolRof(p, cell) : kitOf(p).nock;
+}
 
 // Can the button do anything at all right now? A slot with no tool in it and a
-// tool with no bit light enough to throw are both as dry as an empty quiver,
-// and updatePlayer gates the draw on all three the same way.
+// tool with no bit light enough to throw are both dry, and updatePlayer
+// refuses the draw on both the same way. The cycle (`nockT`) is the ONLY other
+// gate: the moment the well's wipe clears, the draw can begin.
 function toolReady(p) {
   const cell = heldTool(p);
   return !!cell && peekBit(cell) >= 0;
+}
+
+// ---- the draw ------------------------------------------------------------
+// How far back the string is: `chargeT` over the kit's full draw, 0..1. It
+// scales the shot three ways at once - how far it flies, how fast, and how
+// hard it lands - on straight lines from a floor to the bit's own numbers, so
+// the meter over the head, the ring closing on the cursor and the aim line
+// growing out of the bow all read the same quantity. A tap still fires, at
+// every floor; that is the whole punishment for spamming the button - short,
+// slow and weak, with the tool's cycle still to run before the next - and it
+// is dealt by the shot itself rather than by a counter. `shotFlight` is the
+// envelope emitBit fires through AND the one drawAimLine measures, so the line
+// on the ground is the flight, never an estimate of it.
+const DRAW_RANGE_MIN = 0.22; // a tap flies this fraction of the bit's full flight
+const DRAW_SPEED_MIN = 0.6;  // at this fraction of its speed
+const DRAW_DMG_MIN = 0.3;    // for this fraction of its damage (the whole sum: bit, kit, level)
+function drawPow(p) { return Math.min(1, Math.max(0, p.chargeT / kitOf(p).bowCharge)); }
+function drawSpeedMul(pw) { return DRAW_SPEED_MIN + (1 - DRAW_SPEED_MIN) * pw; }
+function drawRangeMul(pw) { return DRAW_RANGE_MIN + (1 - DRAW_RANGE_MIN) * pw; }
+function drawDmgMul(pw) { return DRAW_DMG_MIN + (1 - DRAW_DMG_MIN) * pw; }
+// speed (px/s) and life (s) a bit leaves this tool with at this draw - the
+// modifiers' envelope `m` folded in, the range curve applied through the life
+// so a slow tap also stops short instead of just arriving late
+function shotFlight(b, m, pw) {
+  const sm = drawSpeedMul(pw);
+  return { spd: b.speed * m.spdMul * sm, life: b.life * m.lifeMul * drawRangeMul(pw) / sm };
 }
 // Whether the weapon's bit column is up: HOVER over the weapon well raises
 // it, and it stays up while the pointer is on the risen column itself (or
@@ -304,11 +341,10 @@ function bitPut(cell, i, id) {
 }
 
 // ---- what a tool fires ---------------------------------------------------
-// One press = one activation of the selected tool. A projectile bit spends an
-// arrow from the quiver (the pillar holds: shots are finite, and a bit that
-// leaves a shaft is one you can walk over and get back), the tool's rate of
-// fire sets the gap to the next press, and DUPLICATE is the one modifier that
-// changes how many bits an activation consumes rather than what they do.
+// One press = one activation of the selected tool. The tool's rate of fire
+// sets the gap to the next press (toolRof), the draw sets what the shot is
+// worth (`the draw` above), and DUPLICATE is the one modifier that changes
+// how many bits an activation consumes rather than what they do.
 function fireTool(p) {
   // the cover is read before anything below can break it - the ambush shot is
   // what the crawl in was for, whatever bit is loaded
@@ -323,10 +359,8 @@ function fireTool(p) {
   const shots = m.twin ? 2 : 1;
   let fired = 0;
   for (let s = 0; s < shots; s++) {
-    if (p.quiver <= 0) break;
     const nb = nextBit(cell);
     if (!nb) break;                            // no bit this tool can throw
-    p.quiver = Math.max(0, p.quiver - 1);
     emitBit(p, BITS[nb.id], nb.id, m, amb, s);
     fired++;
   }
@@ -343,21 +377,21 @@ function fireTool(p) {
 // inside the first.
 function emitBit(p, b, id, m, amb, seq) {
   const kit = kitOf(p);
-  const pw = Math.min(1, Math.max(0.18, p.chargeT / kit.bowCharge));
+  const pw = drawPow(p);
   const spdBonus = kit.spdDmg * Math.min(1, Math.hypot(p.vx, p.vy) / 200);
   // aim from the spawn point (BOW_Y above the feet), not the feet: otherwise
   // the flight runs parallel to the aim line and never meets it
   const dx = p.input.aimX - p.x, dy = p.input.aimY - (p.y - BOW_Y);
   const base = Math.atan2(dy, dx);
-  // the draw still matters, but the bit is what is being thrown: its own
-  // numbers lead, and the champion kit, the hero level and the modifiers are
-  // what the player brought to it
-  const pwScale = 0.55 + 0.45 * pw;
-  let dmg = (b.dmg + kit.dmgPow * pw * 0.5) * pwScale + kit.dmgBase + spdBonus + LVL_DMG * (p.level - 1);
+  // the bit is what is being thrown: its own numbers lead, and the champion
+  // kit, the hero level and the modifiers are what the player brought to it.
+  // Then the draw scales the whole sum (drawDmgMul): a full draw is worth
+  // every point of it, a tap DRAW_DMG_MIN of it - the flat kit and level
+  // bonuses included, so a spammed level-twelve bow is still a weak one
+  let dmg = (b.dmg + kit.dmgPow * pw * 0.5 + kit.dmgBase + spdBonus + LVL_DMG * (p.level - 1)) * drawDmgMul(pw);
   dmg = Math.round(dmg * m.dmgMul + m.dmgAdd);
   if (amb) dmg = Math.round(dmg * kit.ambushMul);
-  const spd = b.speed * m.spdMul;
-  const life = b.life * m.lifeMul;
+  const { spd, life } = shotFlight(b, m, pw);
   const lit = Math.max(b.lit || 0, m.lit);
   // SPLITTER turns one bit into a fan; every other shot is a single arm of it
   const arms = m.fan;
@@ -374,7 +408,7 @@ function emitBit(p, b, id, m, amb, seq) {
       // what makes this a bit rather than the old arrow: how it flies, what
       // stops it, who it is allowed to hurt, and what it leaves behind
       bit: id, path: b.path, solid: b.solid !== false, ff: !!b.ff,
-      stick: !!b.stick, lit, col: b.col,
+      lit, col: b.col,
       // what it does when it lands: the damage type, the fire it leaves in
       // the body, and the ring it sets alight where it ends
       type: m.type, burn: m.burn, burnDps: m.burnDps, cinder: m.cinder,
@@ -403,7 +437,7 @@ function spearFish(p) {
   // the motion is spent, and the fish stays under the ice
   if (bagRoom(p, 'fish') <= 0) {
     if (p === player) bagDenied();
-    p.nockT = kitOf(p).nock;
+    p.nockT = toolCycle(p);
     return true;
   }
   const f = fish[bi];
@@ -417,7 +451,7 @@ function spearFish(p) {
     burst(f.x, f.y, '#ddf1f8', 5, 35, 0.4, true);
     if (nearPlayer(f.x, f.y)) { SFX.splash(); SFX.stash(); }
   });
-  p.nockT = kitOf(p).nock;
+  p.nockT = toolCycle(p);
   return true;
 }
 

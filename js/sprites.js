@@ -1906,60 +1906,6 @@
     '................',
   ];
 
-  // The keep: a 2x2 fortified tower (see STRUCTS.keep w/h), one grid rebaked
-  // per tier material like wall/turret/generator (WPAL/WPAL_STONE/WPAL_GOLD)
-  // and team-painted through the same k/K/e override teamBuildPal already
-  // gives those three - crenellated top, a team banner band, a dark doorway.
-  // keepIcon is the 16x16 wheel glyph (the live sprite is too tall for a wedge).
-  const keep = [
-    'oUUo....oUUo....oUUo....oUUo....',
-    'oUUo....oUUo....oUUo....oUUo....',
-    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
-    'oUUUUUUooUUUUUUooUUUUUUooUUUUUUo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
-    'oKKeeeeeeeeeeeeeeeeeeeeeeeeeeKKo',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'okkkkkkkkkkkkkkkkkkkkkkkkkkkkkko',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'ouuuuuuuuuuuuuuuuuuuuuuuuuuuuuuo',
-    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
-    'oUUUUUUUUUUUUUUUUUUUUUUUUUUUUUUo',
-    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
-    'ovvvvvvvvvvvvvvvvvvvvvvvvvvvvvvo',
-    'ouuuuuuuuuuuvvvvvvvvuuuuuuuuuuuo',
-    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
-    'ouuuuuuuuuvvvvvvvvvvvvuuuuuuuuuo',
-    'ssssssssssssssssssssssssssssssss',
-  ];
-  const keepIcon = [
-    '................',
-    '....oUUUUUUo....',
-    '....oUUUUUUo....',
-    '...oUUUUUUUUo...',
-    '...ouuuuuuuuo...',
-    '...ouuKKKKuuo...',
-    '...ouuKKKKuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuuuuuuuo...',
-    '...ouuvvvvuuo...',
-    '...ouuvvvvuuo...',
-    '...ouuvvvvuuo...',
-    '...oooooooooo...',
-    '...ssssssssss...',
-  ];
-
   // Worker bot: a boxy chassis sitting straight on one full-width tread, stub
   // arms at the sides, no face. One 12x10 grid, two frames (the tread notches
   // shift so it rolls); drawRobot() bobs the whole sprite so body and tread
@@ -2669,14 +2615,97 @@
     generator: TIER_PALS.map((b) => bake(generator, teamBuildPal(b, t))),
     spawner: [bake(bay, bayTeamPal(t))],
     net: [bake(net, teamBuildPal(NETPAL, t))],
-    keep: TIER_PALS.map((b) => bake(keep, teamBuildPal(b, t))),
     // wheel glyphs for sprites too big to be their own icon
     icon: {
       spawner: bake(bayIcon, bayTeamPal(t)), turret: bake(turretIcon, teamBuildPal(WPAL, t)),
-      keep: bake(keepIcon, teamBuildPal(WPAL, t)),
     },
   }));
   const teamRobots = TEAM_SKINS.map((t) => [bake(botA, teamRobotPal(t)), bake(botB, teamRobotPal(t))]);
+  // the MERCHANT who drives each team's eagle and works its roost (the
+  // `merchant` banner, js/robots.js): the player body plan in a trader's tan
+  // coat, with the hat and the trim in the team's colour so the side reads
+  // Not another player: its own grids, 16 x 18 - two rows taller than a slot
+  // - picked off a concept sheet (docs/media/concepts/merchant-concepts-2,
+  // look D; the `concept-art` skill is how such a sheet is made): an old
+  // trader in a wide flat FUR HAT with a team-cloth crown (the one team ink,
+  // and all of it), a white beard down the chest, a khaki wool coat hanging
+  // straight to the hem, boots under it. Three directions like a slot (the
+  // side grid faces right and flips), three frames each: the feet walk, the
+  // coat hangs. Chars: y/Y the team crown, f/F fur, w/W beard, r/R/d coat,
+  // k/K skin, e eye, b boots, o outline.
+  const merchDown = [
+    '.....oyyyyo.....',
+    '....oyyYYyyo....',
+    '..offffffffffo..',
+    '..oFFffffffFFo..',
+    '..offffffffffo..',
+    '....okkkkkko....',
+    '....okekkeko....',
+    '....owkKKkwo....',
+    '....owwwwwwo....',
+    '...orwwwwwwro...',
+    '...orrrwwrrro...',
+    '...orrrrrrrro...',
+    '...orRrrrrRro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+  ];
+  const merchUp = [
+    '.....oyyyyo.....',
+    '....oyyYYyyo....',
+    '..offffffffffo..',
+    '..oFFffffffFFo..',
+    '..offffffffffo..',
+    '....offffffo....',
+    '....offffffo....',
+    '....oFFFFFFo....',
+    '....orrrrrro....',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orRrrrrRro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...orrrrrrrro...',
+    '...oddddddddo...',
+  ];
+  const merchSide = [ // facing right: the hat's flap covers the back of the head, the beard hangs at the front
+    '....oyyyyo......',
+    '....oyyYyyo.....',
+    '...offffffffo...',
+    '...oFFffffffo...',
+    '...offffffffo...',
+    '....offkkkko....',
+    '....offkkeko....',
+    '....offkKwwo....',
+    '....oFFwwwwo....',
+    '...orrrrrwwo....',
+    '...orrrrrrwo....',
+    '...orrrrrrro....',
+    '...orRrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...orrrrrrro....',
+    '...odddddddo....',
+  ];
+  const merchFeet = { // the walk is the boots under the hem: planted, the far foot up, the near foot up
+    front: [['.....bb..bb.....'], ['.....bb.........'], ['.........bb.....']],
+    side:  [['.....bb.bb......'], ['....bb...bb.....'], ['......bbbb......']],
+  };
+  const merchantPal = (t) => Object.assign({}, PPAL, {
+    y: t.coat, Y: t.coatL, f: '#4a3626', F: '#5e4836', w: '#d8d2c4', W: '#b8b0a0',
+    r: '#6a5a48', R: '#857460', d: '#473a2d', b: '#4a3324',
+  });
+  const merchantSet = (pal) => {
+    const f = (body, feet) => [0, 1, 2].map((i) => bake(body.concat(feet[i]), pal));
+    return {
+      down: f(merchDown, merchFeet.front), up: f(merchUp, merchFeet.front),
+      right: f(merchSide, merchFeet.side), left: f(merchSide, merchFeet.side).map(flipH),
+    };
+  };
+  const teamMerchants = TEAM_SKINS.map((t) => merchantSet(merchantPal(t)));
 
   // ---------------------------------------------------------------- eagle
   // The drop eagle, seen from above, flying along +x (the game rotates it to
@@ -3036,6 +3065,7 @@
     champ: champPlayers,
     teamBuild: teamBuild,
     robotTeam: teamRobots,
+    merchant: teamMerchants, // merchant[team] - the eagle's driver, a full walking pose set per team colour
     player: teamPlayers[0],
     raider: {
       down: [bake(playerDownIdle, RDPAL), bake(playerDownA, RDPAL), bake(playerDownB, RDPAL)],

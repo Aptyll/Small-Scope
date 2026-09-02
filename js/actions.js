@@ -1,6 +1,6 @@
 'use strict';
 // What a player does: click/E/space resolved - the swing tools and what they
-// harvest, the quiver and its spent shafts, the roll as a hit, prone, and one
+// harvest, the empty-press tell, the roll as a hit, prone, and one
 // blow against anything built, each with its own tuning above it. What the
 // LEFT button fires is a tool on one of the four slots: js/tools.js.
 // ------------------------------------------------------------ actions
@@ -22,20 +22,6 @@ const SWING_TOOLS = [
 ];
 const SWING_BOW = 0, SWING_AXE = 1, SWING_PICK = 2;
 const BOW_Y = 6;          // arrows spawn (and are aimed from) this far above the player's feet
-// The quiver: arrows are a resource, not an infinite stream. A shot spends one
-// and starts the nock cooldown (the kit's `nock`, so a champion's draw speed
-// sets its own rhythm); an empty quiver fletches one back every QUIVER_REGEN,
-// and every arrow that ends its flight sticks in the snow to be pulled out
-// again. Fletching alone is the floor - retrieval is how a good shot stays armed.
-const QUIVER_MAX = 6;     // arrows carried
-const QUIVER_REGEN = 2.4; // seconds to fletch one arrow back (only ticks below max)
-const SHAFT_LIFE = 30;    // seconds a spent arrow stays stuck in the snow
-const SHAFT_R = 10;       // px: walk this close to pull one out
-const SHAFT_ARM = 0.3;    // s before a fresh shaft can be picked up (never your own muzzle)
-const SHAFT_NEAR = 34;    // px: inside this the shaft brightens and grows its chevron
-const SHAFT_MAX = 90;     // oldest shafts drop off past this many in the world
-const SHAFT_BURY = 6;     // body pixels 0..this-1 (head, collar, some shaft) are under the snow
-const SHAFT_MID = 10;     // stickArrow stores the shaft at this body pixel - the visible middle
 const ARROW_TRAIL_STEP = 4;    // px of flight between trail motes (distance, not time, so a
 const ARROW_TRAIL_LIFE = 0.22; // slow arrow streaks as evenly as a fast one); motes fade over
 const ARROW_TRAIL_A = 0.7;     // their whole life from this alpha, so the tail thins out behind
@@ -44,8 +30,8 @@ const ARROW_RIM = '#0d1226';  // 1px dark rim under the shaft, so it reads over 
 // the flight, j -3..+3 across it. W the white tip, F the flint head, B the
 // loaded bit's colour (the collar behind the head - the shaft itself never
 // recolours), G the shaft's one gold, T the team feather (TEAMS mark), D the
-// feather's dark edge (TEAMS coatD). The flying arrow, the spent shaft, the
-// arrow standing in a target face and the volley's rain all draw THIS body
+// feather's dark edge (TEAMS coatD). Every arrow in flight - the piercing
+// shot included - draws THIS body
 // through arrowBodyPx/paintArrowPx (js/draw-world.js) - change it here and
 // every shaft in the game follows. 16 long by 7 deep, so the whole arrow
 // lives in one 16x16 sprite cell - the scale everything else in the world
@@ -95,10 +81,12 @@ const TACKLE_MIN = 120;    // px/s driven into the blocked axis before a wall is
 const ROLL_KB = 90;        // px/s shove out of a roll hit
 
 // Prone: lie down in the snow, pull it over yourself, and be almost - not
-// quite - invisible. Free, and paid for entirely in speed: the burrow only
-// builds while you are lying perfectly still, and the crawl that carries you
-// anywhere is under a third of a walk. `p.hide` (0..1) is the whole state,
-// and every watcher in the game reads it through seenAt().
+// quite - invisible. The hunter's alone now: SNOW COVER (key 4,
+// js/abilities.js) is the one door in and pays the cooldown, while every way
+// back up is free. Once under, the state is paid for entirely in speed: the
+// burrow only builds while you are lying perfectly still, and the crawl that
+// carries you anywhere is under a third of a walk. `p.hide` (0..1) is the
+// whole state, and every watcher in the game reads it through seenAt().
 const PRONE_SPEED = 20;   // px/s belly crawl (a walk is PLAYER_SPEED, 72)
 const PRONE_BURY = 1.5;   // s of lying still to go from flat on the snow to under it
 const PRONE_RISE = 0.34;  // s of getting back up: 45% walk speed, and no cover left
@@ -188,6 +176,7 @@ function tryDodge(p) {
     p.rootT > 0 || p.rushT > 0) return; // a trap pins the roll too, and a charge is already a dash
   risePlayer(p); // a roll is the fast way out of the snow, and it costs a charge
   breakEat(p);   // ...and out of a meal: the roll is the one way YOU end your own channel
+  if (p.grapT > 0) grapEnd(p); // rolling off the rope: the reel's speed feeds the dash below
   let dx = p.input.mx, dy = p.input.my;
   if (!dx && !dy) {
     dx = p.dir === 'left' ? -1 : p.dir === 'right' ? 1 : 0;
@@ -321,7 +310,8 @@ function rollSweep(p) {
 }
 
 // ---- prone ---------------------------------------------------------------
-// Ctrl: go to ground, or get back up. Dropping needs both feet still and snow
+// Go to ground, or get back up. The way in is the hunter's SNOW COVER cast
+// (abSnowCover, js/abilities.js); dropping needs both feet still and snow
 // underfoot - you cannot dive at speed, and a river has nothing to dig into.
 // Everything else about the state is one number, `p.hide`, which updatePlayer
 // ramps and every watcher reads back through seenAt().
@@ -343,7 +333,7 @@ function tryProne(p) {
 }
 
 // Back on your feet, whatever put you there - the ambush shot, a hit, an E
-// swing, a roll, or Ctrl again. The cover goes with the body and is not
+// swing, a roll, or the snow cover key again. The cover goes with the body and is not
 // allowed to linger: a slot that is visibly standing must be visibly findable,
 // so `hide` is zeroed here and the snow it stood for is spent as particles.
 function risePlayer(p) {
@@ -358,37 +348,10 @@ function risePlayer(p) {
   }
 }
 
-// ---- the quiver ---------------------------------------------------------
-// Three ways an arrow moves: out of the quiver when a shot is loosed, into
-// the snow where that shot ended (stickArrow), and back into a quiver when
-// anyone walks over it. Fletching is the slow floor under all of it, so a
-// player who never retrieves anything is throttled rather than disarmed.
-function gainArrow(p, n) {
-  if (p.quiver >= QUIVER_MAX) return false;
-  p.quiver = Math.min(QUIVER_MAX, p.quiver + (n || 1));
-  p.quiverFlash = 0.35;
-  return true;
-}
-// a spent arrow, left where its flight ended. Open water swallows it; a
-// solid tile keeps it on the near side so it never sits inside a wall.
-function stickArrow(a, nx, ny) {
-  // stored at the middle of the VISIBLE body (head and collar sink in the
-  // snow), so the pickup circle, the hover chevron and the drawn shaft all
-  // share one centre instead of measuring to a buried point
-  const x = a.x - nx * SHAFT_MID, y = a.y - ny * SHAFT_MID;
-  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
-  if (!inWorld(tx, ty)) return;
-  if (ground[idx(tx, ty)] === 2) { // straight into the water: gone
-    burst(x, y, '#9fc4dd', 4, 30, 0.35, true);
-    if (nearPlayer(x, y)) SFX.splash();
-    return;
-  }
-  shafts.push({ x, y, nx, ny, team: a.team, t: 0 });
-  while (shafts.length > SHAFT_MAX) shafts.shift();
-}
-// pressing a tool that cannot answer - an empty quiver, an empty slot, or a
-// tool with no bit light enough to throw: the tell, rate-limited to the press.
-// What the press WOULD have fired lives in fireTool (js/tools.js).
+// ---- the empty press ----------------------------------------------------
+// pressing a tool that cannot answer - an empty slot, or a tool with no bit
+// light enough to throw: the tell, rate-limited to the press. What the press
+// WOULD have fired lives in fireTool (js/tools.js).
 function dryFire(p) {
   p.dryT = 0.45;
   burst(p.x, p.y - BOW_Y, '#8a97bd', 3, 22, 0.3, true);
@@ -481,7 +444,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2.5);
-      awardGold(p, YIELD.treeFall + kitOf(p).harvest, ox, oy - 6); // PACKMULE fattens the fell
+      awardGold(p, Math.round(YIELD.treeFall * kitOf(p).harvestMul), ox, oy - 6); // PACKMULE / FORAGER fatten the fell
       burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
       burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
       dropLoot(ox, oy - 6, 0, TREE_DROP); // the rare one: something was living in it
@@ -504,7 +467,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      awardGold(p, YIELD.deadTreeFall + kitOf(p).harvest, ox, oy - 6);
+      awardGold(p, Math.round(YIELD.deadTreeFall * kitOf(p).harvestMul), ox, oy - 6);
       burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
       burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
       flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
@@ -518,7 +481,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = null;
       if (near) SFX.break_();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      awardGold(p, YIELD.rockBreak + kitOf(p).harvest, ox, oy - 6);
+      awardGold(p, Math.round(YIELD.rockBreak * kitOf(p).harvestMul), ox, oy - 6);
       burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
       // the common source: a rock is where a bottom-tier tool or bit was
       // buried, and it is what makes mining worth doing after the gold stops
@@ -628,10 +591,6 @@ function destroyStructure(o, refund, p) {
     const c = cumulativeCost(o.type, o.tier);
     awardGold(p, Math.floor((c.gold || 0) / 2), ox, oy);
   }
-  // a Keep falling can itself be the elimination blow for a team that
-  // already has zero living players waiting on its respawn timer - only
-  // die() calls checkLastStanding() otherwise, and nothing else would notice
-  if (o.type === 'keep') checkLastStanding();
 }
 
 // ------------------------------------------------------------ status effects
@@ -761,6 +720,7 @@ function stunUnit(e, t) {
     breakEat(e);                                   // ...and so is the meal (js/core.js)
     if (e.shieldT > 0) abShieldDown(e, false);     // ...and the shield, at its full cooldown
     if (e.rushT > 0) { e.rushT = 0; e.rushVictim = null; }
+    if (e.grapT > 0) grapEnd(e);                   // the rope is knocked loose too, at its cooldown
   }
   burst(e.x, unitMidY(e) - 3, '#ffe9a8', 4, 26, 0.4, true);
 }

@@ -28,9 +28,9 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/wildlife.js](../../js/wildlife.js) | ~600 | shared scope, no `window.*` export | prey, the fish shoal, the wolf pack and the rookery flock |
 | [js/structures.js](../../js/structures.js) | ~500 | shared scope, no `window.*` export | the `STRUCTS` table, building/upgrading/wrecking, and the per-type building sim |
 | [js/robots.js](../../js/robots.js) | ~520 | shared scope, no `window.*` export | the worker bots a bay rolls out, and the one flag per player whose tile is their standing order |
-| [js/actions.js](../../js/actions.js) | ~830 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone, the quiver — and, under its own banner, the damage types and status effects **every** kind of unit shares |
+| [js/actions.js](../../js/actions.js) | ~830 | shared scope, no `window.*` export | what a player does: the swing tools and harvesting, the roll as a hit, prone — and, under its own banner, the damage types and status effects **every** kind of unit shares |
 | [js/tools.js](../../js/tools.js) | ~760 | shared scope, no `window.*` export | the weapon: the `TOOLS` and `BITS` tables, what a press fires, how each bit flies, the loot rolls, the tech tree, and the icons for both |
-| [js/abilities.js](../../js/abilities.js) | ~640 | shared scope, no `window.*` export | the class abilities on keys 1-4: the `CLASS_AB` table, casting, the trap/net/falcon/volley/shield/rush/crater/juggernaut sim, and their draw passes |
+| [js/abilities.js](../../js/abilities.js) | ~640 | shared scope, no `window.*` export | the class abilities on keys 1-4: the `CLASS_AB` table, casting, the pierce/net/grapple/snow-cover/shield/rush/crater/juggernaut sim, and their draw passes |
 | [js/ai.js](../../js/ai.js) | ~380 | shared scope, no `window.*` export | the bot brain — a priority ladder writing the same input struct a human fills |
 | [js/sim.js](../../js/sim.js) | ~810 | shared scope, no `window.*` export | `update`/`updatePlay`/`updatePlayer`, the camera (`camX`/`camY`), fx aging, the snow |
 | [js/draw-world.js](../../js/draw-world.js) | ~1160 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, the flag and landmark glyphs, lighting/weather/vignettes |
@@ -39,7 +39,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
 | [js/menu.js](../../js/menu.js) | ~1450 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, class select, the gear pop-up, the tech tree screen, `PATCH_TXT` |
 | [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |
-| [js/boot.js](../../js/boot.js) | ~490 | `DBG` + shared scope | the last file to load: the eagle drop, the boot order, `window.DBG`, the rAF loop |
+| [js/boot.js](../../js/boot.js) | ~1330 | `DBG` + shared scope | the last file to load: the eagle drop (the corner roosts, the lane, the drop brief), the boot order, `window.DBG`, the rAF loop |
 
 Line counts are approximate on purpose; they are here for a sense of scale, not to be maintained.
 
@@ -65,7 +65,7 @@ split is complete; the tag `pre-split` keeps the one-file history.
 
 The local player profile — display name, lifetime stats (`wins`, `gold`, `days`), the
 one-shot `dropped` flag (`hasDropped()`/`markDropped()`: has this profile ever jumped off the
-eagle, gating the ride's first-flight countdown), the one-shot `practice` flag
+eagle, gating the scripted first flight that rides the landing), the one-shot `practice` flag
 (`practiceOpen()`/`markPractice()`: has the PRACTICE TOOL plank's ice been broken — three
 knocks at the title, after which the plank stays a live menu item), `bestLap`
 (`bestLap()`/`setBestLap()`: the ice parkour's all-time record, the one thing the practice
@@ -83,8 +83,10 @@ file is a save file.
   it). Boot calls it **before `loadSettings()`**, which now reads `PROFILE.settings()`.
 - **`PROFILE.validate(raw)`** is the one name validator: trimmed, uppercased, `A-Z0-9` only, 16
   characters, and a basic profanity list matched after the obvious digit-for-letter swaps are
-  folded out. It returns `{ ok, name }` or `{ ok: false, why }`. A stored name that no longer
-  passes is dropped at load and the first-launch prompt comes back for it.
+  folded out. It returns `{ ok, name }` or `{ ok: false, why }`. **A profile always has a name**:
+  a fresh install (and a stored name that no longer passes) rolls one from `NAME_POOL` at load —
+  winter words, every one clean under the validator — so there is no first-launch prompt, and the
+  name panel only opens when the player asks for it.
 - **The stat calls coalesce.** `addGold` fires on every payout, `addWin` once per
   `endMatch('won')`, `addDay` at eagle takeoff and at each dawn the local slot is still in, so
   writes are batched behind an 800 ms timer and flushed on `pagehide` / `visibilitychange`;
@@ -129,7 +131,7 @@ Anything drawn through `drawSpriteFlash()` must fit in **64×64** — it recolou
 
 ### sfxdata.js
 
-Generated by `node tools/bake-sfx.js`, which reads `audio/sfx/*.mp3` and writes each clip into
+Generated by `node app/bake-sfx.js`, which reads `audio/sfx/*.mp3` and writes each clip into
 this file as base64. **The output is committed.** It exists because a `file://` page may not
 `fetch` its own folder, so without the inlined bytes every sound effect falls back to the synth
 when the game is opened off the disk — which sounds exactly as it did before samples existed, and
@@ -195,13 +197,13 @@ All game state lives in top-level singletons shared across the game files — `s
 Plus the flat arrays every pass iterates: `animals`, `arrows`, `drops`, `particles`, `floaters`,
 `footprints`, `structures`, `robots`, `fish`, `landmarks`.
 
-## tools/
+## app/
 
 Neither script is part of the game, and nothing in `js/` may depend on either having run — except
 `sfxdata.js`, which one of them writes.
 
-- **`tools/serve.js`** — a static server on `http://localhost:8471` with a `POST /shot` sink that
+- **`app/server.js`** — a static server on `http://localhost:8471` with a `POST /shot` sink that
   writes the canvas to `shot.png`. It answers **Range requests**, which is why music seeks work
   when served; a plain 200 makes an `<audio>` element treat a multi-MB mp3 as an unbounded stream.
   Its single `ROOT` const carries the static root, the traversal guard and the shot sink alike.
-- **`tools/bake-sfx.js`** — reads `audio/sfx/`, writes `js/sfxdata.js`.
+- **`app/bake-sfx.js`** — reads `audio/sfx/`, writes `js/sfxdata.js`.

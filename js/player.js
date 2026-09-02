@@ -11,6 +11,16 @@
 // Sim code takes a `p` argument; `player` (the local slot) is for the camera,
 // HUD, cursor and audio only.
 const TEAMS = SPRITES.teams; // the 2 colour presets (RED, BLUE), baked into the sprites
+// Which PRESET a team wears on this screen. With settings.teamBlue (the
+// default) the local slot's side is always the BLUE one and the rival side
+// always RED, whatever team index the roster dealt - so allies read blue and
+// enemies red from the first match to the last, and a future second human
+// sees the mirror. The match itself never asks this: team indices, enemyOf,
+// PVP and every rule read p.team; only the PAINT goes through here - every
+// TEAMS[...] lookup, the per-team sprite sets (champ, eagleTeam, teamBuild,
+// robotTeam, merchant) and the two maps' eagle colours. Bot names are
+// computed from it live (Player.name), so RED-3 turns BLUE-3 with the toggle.
+function skin(team) { return settings.teamBlue && player && player.team === 0 ? 1 - team : team; }
 
 // Player slots. Every combatant in the match - the local human, the AI fills,
 // and (later) network peers - is a Player in `players`, so anything written
@@ -32,14 +42,20 @@ const TRAIL_MIN = 110;    // sliding faster than this carves the snow trail
 const SNOW_TRAIL_LIFE = 3.5; // snow groove lifetime (ice scratches keep the 9s footprint life)
 const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
 
-// Hero levels (League-style, max 9). XP is lifetime gold earned (gainGold), never spent
-// or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
-// the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
-// every arrow, applied on top of the champion kit.
+// Hero levels (League-style, max 12). XP is lifetime gold earned (gainGold), never spent
+// or lost on death; LEVEL_XP[n-1] is the total needed to reach level n, the gap growing
+// by 20 a level. Sized against what a bot chaining pines all match earns (about a gold
+// a second on the fells, plus the clock's 15 a minute - TRICKLE_*, js/sim.js): that
+// bot is level 9 or 10 at fifteen minutes and capped past twenty, a player who fights
+// and farms by halves is two or three levels behind it, and the trickle alone is level
+// 3 by seven minutes - a level is news all match, not a sprint over by 2:00. Each
+// level past the first is the same flat growth: +LVL_HP max hp (healed on the spot)
+// and +LVL_DMG on every arrow, applied on top of the class kit - a level-8 hero of
+// this table is about the capped hero of the old one.
 const LEVEL_MAX = 12;
-const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220, 270, 325, 385];
-const LVL_HP = 6;
-const LVL_DMG = 1;
+const LEVEL_XP = [0, 40, 100, 180, 280, 400, 540, 700, 880, 1080, 1300, 1540];
+const LVL_HP = 9;
+const LVL_DMG = 2;
 
 // The dodge roll as an ability: how long it lasts, how hard it throws you,
 // and how many charges refill how fast. What a roll HITS on the way through
@@ -51,7 +67,7 @@ const DODGE_CD = 3.5;     // seconds to refill one charge
 
 // The two bow numbers a class kit is expressed against - CLASSES below
 // reads both at load time, which is why they sit here and the rest of the
-// bow (the quiver, the shafts, the trail) is in js/actions.js.
+// bow (the draw curve and the cycle: js/tools.js; the trail: js/actions.js).
 const BOW_CHARGE = 0.9;   // seconds to a full draw
 const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
@@ -117,12 +133,12 @@ function levelUp(p) {
   if (!inAir(p)) floaters.push({ x: p.x, y: p.y - 22, txt: 'LEVEL ' + p.level, color: '#f2cc6a', t: 0, vx: 0, scale: 2, rise: 20 });
   if (p === player) SFX.levelUp();
 }
-function classSet(p) { return SPRITES.champ[p.cls][p.team]; }
+function classSet(p) { return SPRITES.champ[p.cls][skin(p.team)]; }
 // Five slots share each team colour, so text that names one player (the
 // scoreboard, the event log) also needs a per-slot shade of that team's
 // palette - the team colour stays the background, this is the ink.
 function playerTint(p) {
-  const t = TEAMS[p.team];
+  const t = TEAMS[skin(p.team)];
   return [t.trim, t.hatL, t.trimD, t.hat][Math.floor(p.id / TEAM_COUNT) % 4];
 }
 
@@ -246,7 +262,7 @@ const GEAR = [
   [ // legs: how you cross snow
     { name: 'STRIDER', blurb: 'WALK FASTER', mod: (k, L) => { k.walkMul += 0.04 * L; } },
     { name: 'SLIDEWORN', blurb: 'LONGER, EARLIER SLIDES', mod: (k, L) => { k.fatigue *= 1 - 0.12 * L; k.slideMin -= 5 * L; } },
-    { name: 'PACKMULE', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k, L) => { k.harvest += L; } },
+    { name: 'PACKMULE', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k, L) => { k.harvestMul += 0.25 * L; } },
   ],
   [ // boots: how you skate and dodge
     { name: 'SKATES', blurb: 'FASTER, SHARPER ON ICE', mod: (k, L) => { k.iceMax *= 1 + 0.08 * L; k.iceSteer += 0.15 * L; } },
@@ -255,8 +271,9 @@ const GEAR = [
   ],
 ];
 // ---- roguelike cards ------------------------------------------------------
-// Picked from the Keep's craft drops (see STRUCTS.keep, updateStructures'
-// keep branch) via a pick-1-of-3 draft (state.draft, opened from bagClick).
+// Dropped by a sprung chest in the treeline (hitObject's chest branch,
+// js/actions.js, rolled against CHEST_ODDS) and picked via a pick-1-of-3
+// draft (state.draft, opened from bagClick).
 // Same shape as a GEAR variant's mod(k, L) minus the level - a card is a
 // one-shot pick, not a leveled buy - folded into the kit cumulatively by
 // refreshKit below, so every kit-reading site in the sim picks them up for
@@ -267,7 +284,7 @@ const CARDS = {
     { name: 'QUICK HANDS', blurb: 'FASTER RENOCK', mod: (k) => { k.nock *= 0.92; } },
     { name: 'THICK SOLES', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.03; } },
     { name: 'SOFT LANDING', blurb: 'DODGES COME BACK SOONER', mod: (k) => { k.dodgeCd -= 0.25; } },
-    { name: 'FORAGER', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k) => { k.harvest += 1; } },
+    { name: 'FORAGER', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k) => { k.harvestMul += 0.5; } },
     { name: 'STEADY HAND', blurb: 'FASTER FULL DRAW', mod: (k) => { k.bowCharge *= 0.96; } },
   ],
   green: [
@@ -275,7 +292,7 @@ const CARDS = {
     { name: 'PADDED VEST', blurb: 'MORE HEALTH', mod: (k) => { k.maxHp += 12; } },
     { name: 'LIGHT FEET', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.06; } },
     { name: 'CAMOUFLAGE', blurb: 'FOES SPOT YOU FROM CLOSER', mod: (k) => { k.stealth -= 0.08; } },
-    { name: "FLETCHER'S TOUCH", blurb: 'ARROWS REGROW FASTER', mod: (k) => { k.fletch *= 0.85; } },
+    { name: "FLETCHER'S TOUCH", blurb: 'FASTER RENOCK', mod: (k) => { k.nock *= 0.85; } },
   ],
   blue: [
     { name: 'HEAVY DRAW', blurb: 'HITS HARDER, SLOWER DRAW', mod: (k) => { k.dmgBase += 2; k.bowCharge *= 1.05; } },
@@ -289,7 +306,7 @@ const CARDS = {
     { name: 'STONE SKIN', blurb: 'MUCH LESS DAMAGE TAKEN', mod: (k) => { k.dr += 3; } },
     { name: 'GHOST', blurb: 'SEEN FROM MUCH CLOSER', mod: (k) => { k.stealth -= 0.18; } },
     { name: 'BLOODLUST', blurb: 'HEAL ON A KILL', mod: (k) => { k.killHeal = (k.killHeal || 0) + 12; } },
-    { name: 'RELENTLESS', blurb: 'FASTER DODGES AND ARROWS', mod: (k) => { k.dodgeCd -= 0.7; k.fletch *= 0.75; } },
+    { name: 'RELENTLESS', blurb: 'FASTER DODGES AND ARROWS', mod: (k) => { k.dodgeCd -= 0.7; k.nock *= 0.8; } },
   ],
   gold: [
     { name: "BERSERKER'S HEART", blurb: 'HITS HARDER, LESS HEALTH', mod: (k) => { k.dmgBase += 5; k.maxHp -= 15; } },
@@ -316,8 +333,8 @@ function pick3Distinct(rarity) {
 function baseKit(cls) {
   return Object.assign({}, CLASSES[cls].kit, {
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
-    harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
-    ambushMul: AMBUSH_MUL, bury: PRONE_BURY, fletch: QUIVER_REGEN,
+    harvestMul: 1, dodgeCd: DODGE_CD, stealth: 1,
+    ambushMul: AMBUSH_MUL, bury: PRONE_BURY,
     killHeal: 0,
   });
 }
@@ -356,9 +373,9 @@ function makeInput() {
     work: false,         // E held
     slide: false,        // shift held
     dodge: false,        // edge-triggered, cleared once the sim reads it
-    prone: false,        // edge-triggered: toggles the burrow (Ctrl). NOT a held
-                         // level - holding a modifier while tapping W closes the
-                         // browser tab, and preventDefault cannot stop it
+    grapple: false,      // held: the grapple reels only while this is down
+                         // (key 3 for the human; the burrow itself is now the
+                         // hunter's SNOW COVER cast, key 4, not an input)
     eatBerry: false, eatFish: false, // edge-triggered
     ability: -1,         // edge-triggered: cast the class ability on this key (1-4), js/abilities.js
     cmd: null,           // one-shot: {kind:'build'|'upgrade'|'demolish'|'craft', tx, ty, id} or {kind:'gear', piece} or {kind:'ability', i}
@@ -371,8 +388,10 @@ class Player {
     this.team = slot % TEAM_COUNT;
     this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
     // the local slot wears the profile's display name; every other slot is
-    // named off its team. Editing the name at the menu calls applyProfileName().
-    this.name = control === 'human' ? PROFILE.name() : TEAMS[this.team].name + '-' + (slot + 1);
+    // named off its team - live, through the `name` getter below, so the name
+    // follows the paint (skin) when the team-colour setting flips. Editing the
+    // name at the menu calls applyProfileName().
+    this._name = control === 'human' ? PROFILE.name() : null;
     this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
     this.inv = { gold: 0 };             // the wallet is currency only - carried goods are in the bag
     this.bagCap = BAG_CAP;              // slots; one starting backpack
@@ -386,17 +405,20 @@ class Player {
     // see the `worker flags` banner in js/robots.js): null, or { tx, ty, job, unit }. NOT
     // cleared by reset() - an order outlives the hand that gave it.
     this.flag = null;
-    this.eliminated = false;            // no keep, no coming back - see die()/updateRespawns
+    this.eliminated = false;            // its bird was driven off: no coming back - see die()/eagleFleeResolve
     // who put this slot down last, for the defeat screen's one line: a
     // killer's name and team, or null with a DEATH_CAUSE key when the world
     // did it. die() writes them, endSnapshot() freezes them, nothing else looks.
     this.downedBy = null; this.downedTeam = 0; this.downedCause = null;
     this.respawnT = 0;                  // seconds left on an active respawn countdown
     this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
+    this.trickleT = 0;                  // s toward the next passive coin (TRICKLE_T, js/sim.js)
     this.kills = 0;                     // rivals downed; scoreboard only, survives death
     refreshKit(this);                   // builds this.kit and this.maxHp from class + gear + skill
     this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)
     this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
+    this.dropAlt = 0;                   // px the fall started from: the flight's DROP_ALT, or a hop's HOP_ALT off the roost
+    this.dropSc = 1;                    // the body's drawn scale as it left the seat (riderScale), shrinking to 1 as it falls
     this.dropU = 1;                     // route fraction at which an AI slot jumps
     // bot brain (unused by a human slot): current job, give-up timers and the
     // short blacklists that keep a bot from re-picking work it cannot reach
@@ -406,12 +428,21 @@ class Player {
       lootT: 0, spendT: 0, buildT: 0, fitT: 0,
       hideT: 0, hideCd: 0,
       wx: 0, wy: 0, roam: 0,
+      // the difficulty profile's clocks (ai.js): prof overrides the side's
+      // profile (DBG / the harness), seeT is how long a rival has been
+      // noticed, aox/aoy the current aim scatter, abilOk this tick's ability
+      // roll, pushCd a roost it could not reach
+      prof: null, seeT: 0, aimT: 0, aox: 0, aoy: 0, abilT: 0, abilOk: true, pushCd: 0,
     };
     this.reset(true);
   }
   get active() { return this.control !== 'none'; }
+  // a named slot (the human, via applyProfileName) keeps its name; every other
+  // slot is called after the colour it is WEARING right now
+  get name() { return this._name !== null ? this._name : TEAMS[skin(this.team)].name + '-' + (this.id + 1); }
+  set name(v) { this._name = v; }
   // spawn placement + every transient cleared; boot calls it with first=true,
-  // respawnPlayer() (a team's Keep bringing a slot back) with first=false
+  // respawnPlayer() (the team's bird setting a slot back down) with first=false
   reset(first) {
     this.x = (this.spawn.tx + 0.5) * TILE;
     this.y = (this.spawn.ty + 0.5) * TILE;
@@ -422,10 +453,9 @@ class Player {
     this.charging = false; this.chargeT = 0;      // bow draw state
     // the meal being chewed and the clock BOTH meals share (js/core.js)
     this.eatT = 0; this.eatType = null; this.eatFxT = 0; this.foodCd = 0;
-    // the quiver: what is left, the renock cooldown, and the fletching timer
-    this.quiver = QUIVER_MAX; this.nockT = 0; this.fletchT = 0;
+    this.nockT = 0;                                // the cycle: seconds until the next press (toolCycle, js/tools.js)
     this.fireArmed = false;                        // the bow button has been pressed since the last loose
-    this.quiverFlash = 0; this.readyFlash = 0; this.dryT = 0; // HUD tells: gained / renocked / pressed empty
+    this.readyFlash = 0; this.dryT = 0;            // HUD tells: renocked / pressed empty
     this.dodgeT = 0; this.dodgeVX = 0; this.dodgeVY = 0; this.dodgeDustT = 0;
     this.dodgeCharges = DODGE_CHARGES; this.dodgeRegenT = 0;
     this.rollHit = [];                             // what this roll has already swiped (once each)
@@ -439,25 +469,26 @@ class Player {
     this.swing = SWING_BOW;                        // held SWING_TOOLS index (bow at rest)
     // the class abilities (keys 1-4, js/abilities.js): per-key cooldowns, the
     // cast in progress, and every timed state one can leave on a body -
-    // rooted by a trap, slowed under a net or a crater, revealed by the
-    // falcon, shielded, mid-rush, or five seconds of juggernaut
+    // slowed under a net or a crater, mid-reel on the grapple, shielded,
+    // mid-rush, or five seconds of juggernaut
     this.abCd = [0, 0, 0, 0];
     this.abLv = [1, 1, 1, 1];                      // ability levels, 1..AB_LV_MAX - gold buys, fresh every match (js/abilities.js)
     this.castAb = -1; this.castT = 0;
-    // Every state ANY unit can be under - stun, root (a snare's jaws), slow
-    // and its net drape, the falcon's mark, and fire - is written and cleared
-    // in one place for all three kinds of unit (`status effects`, js/actions.js),
-    // so a slot, a deer and a worker bot wear the identical set.
+    // Every state ANY unit can be under - stun, root, slow and its net
+    // drape, the mark, and fire - is written and cleared in one place for
+    // all three kinds of unit (`status effects`, js/actions.js), so a slot,
+    // a deer and a worker bot wear the identical set.
     clearUnitStatus(this);
     this.shieldT = 0; this.shieldA = 0;            // the tower shield, and where it faces
     this.rushT = 0; this.rushNX = 0; this.rushNY = 0; this.rushVictim = null;
     this.jugT = 0; this.jugHit = []; this.jugFxT = 0;
     this.hopT = 0;                                 // the net shot's recoil hop, on the body
+    this.grapT = 0; this.grapX = 0; this.grapY = 0; // the grapple: reel time left, and the anchor it hauls toward
     // The one weapon slot the button fires. It holds a tool CELL - the same
     // object a bag cell is, bits and all - so moving one between the bag and
     // the slot is a reference move and a tool never loses what is loaded
     // into it. Regranted here rather than kept, because death spills the
-    // build where you fell (spillInventory) and the Keep hands your class's
+    // build where you fell (spillInventory) and the bird hands your class's
     // own loadout back. js/tools.js owns all of it.
     giveLoadout(this);
     this.workTx = -1; this.workTy = -1;            // tile the current E swing is aimed at
@@ -547,7 +578,6 @@ const structures = []; // every stump-built tiered building (walls included)
 const robots = []; // spawner-owned worker bots
 const tracers = []; // turret shot lines: {x0,y0,x1,y1,t}
 const arrows = []; // live bow shots: {x,y,vx,vy,t,life,dmg,pow}
-const shafts = []; // spent arrows stuck in the snow, free for anyone: {x,y,nx,ny,team,t}
 const ARROW_PX = []; // scratch x,y,colour triples for one rasterised arrow body (render only)
 const drops = [];
 const particles = []; // {x,y,vx,vy,life,color,size,grav} + optional `alpha` fade ceiling
@@ -637,13 +667,23 @@ function spillInventory(p, killer) {
   }
 }
 
-const RESPAWN_TIME = 8; // flat, gold-free - "the respawn from a keep is timer-only"
+// The wait for the bird to set a downed slot back down: gold-free, a flat
+// base plus a little per hero level and per minute of the match (League-
+// style - a late death costs more of the match than an early one, which is
+// what makes a wiped side late a real window on a roost its defenders
+// otherwise come back to sixty pixels from the bird every few seconds)
+const RESPAWN_TIME = 8;   // s at level 1, at the start
+const RESPAWN_LV = 1.5;   // s more per level past 1
+const RESPAWN_MIN = 1;    // s more per minute on the match clock
+const RESPAWN_MAX = 45;   // s, the ceiling (level 12 at 25 minutes would be 49.5)
+function respawnTime(p) { return Math.min(RESPAWN_MAX, RESPAWN_TIME + RESPAWN_LV * (p.level - 1) + RESPAWN_MIN * state.elapsed / 60); }
 
-// A slot can go down two ways now. With a living team Keep it is temporary:
-// p.dead is set (out of the world right now, same as always) but
-// p.eliminated stays false and a flat respawnT counts down to a return at
-// the Keep (see updateRespawns/respawnPlayer). With no Keep it is exactly
-// today's permanent death: p.eliminated = true, no way back. Only the local
+// A slot goes down two ways. While its team's bird still roosts (or is
+// still flying in) it is temporary: p.dead is set (out of the world right
+// now) but p.eliminated stays false and respawnT counts down to a return AT
+// THE BIRD (see updateRespawns/respawnPlayer). Once the bird has been driven
+// off it is permanent: p.eliminated = true, no way back - the eagle is the
+// only thing that takes a slot out of a match for good. Only the local
 // slot's ELIMINATION takes the screen with it (the death overlay); a
 // respawn-pending local death gets the lighter 'respawning' overlay instead
 // (see endMatch/DEAD_ITEMS/renderDead).
@@ -665,9 +705,9 @@ function die(p, src, cause) {
   p.eatT = 0; p.eatType = null;
   p.castT = 0; p.castAb = -1;
   p.shieldT = 0; p.rushT = 0; p.rushVictim = null;
-  p.jugT = 0; p.hopT = 0;
+  p.jugT = 0; p.hopT = 0; p.grapT = 0;
   clearUnitStatus(p); // root, slow, net, mark and the fire go out with the body
-  burst(p.x, p.y - 6, TEAMS[p.team].mark, 12, 55, 0.6);
+  burst(p.x, p.y - 6, TEAMS[skin(p.team)].mark, 12, 55, 0.6);
   // kill credit and the feed line: the killer's colours if there is one,
   // otherwise the victim's, since the victim is who the line is about
   const killer = src && src !== p ? src : null;
@@ -678,14 +718,6 @@ function die(p, src, cause) {
   p.downedTeam = killer ? killer.team : p.team;
   p.downedCause = cause;
   spillInventory(p, killer);
-  // the quiver spills where the body fell, same as the wallet: whatever was
-  // still in it sticks in the snow for whoever cleans up the fight
-  const left = p.quiver; p.quiver = 0;
-  for (let i = 0; i < left; i++) {
-    const a = rng() * Math.PI * 2, r = rand(4, 14);
-    stickArrow({ x: p.x + Math.cos(a) * r, y: p.y - 2 + Math.sin(a) * r, team: p.team },
-      Math.cos(a), Math.sin(a));
-  }
   if (killer) {
     killer.kills++;
     // BLOODLUST/VAMPIRE: a flat heal on a confirmed kill, the one card
@@ -699,13 +731,13 @@ function die(p, src, cause) {
   }
   logEvent(killer ? killer.name + ' ' + (KILL_VERB[cause] || 'SHOT') + ' ' + p.name
     : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
-  // a Keep is only a way back while the team's eagle still breathes - a side
-  // whose objective has fallen is out, however its slots go down after that
-  if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) p.respawnT = RESPAWN_TIME;
+  // the bird is the way back - a side whose objective has fallen is out,
+  // however its slots go down after that
+  if (!teamEagleDown(p.team)) p.respawnT = respawnTime(p);
   else p.eliminated = true;
   if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
   else {
-    addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[p.team].mark);
+    addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[skin(p.team)].mark);
     if (state.spec === p.id) specNext(1); // the slot being watched went down: follow another
   }
   checkLastStanding();
@@ -717,26 +749,32 @@ function die(p, src, cause) {
 function updateRespawns(dt) {
   for (const p of players) {
     if (!p.active || !p.dead || p.eliminated) continue;
+    // the bird left mid-timer: eagleFleeResolve puts the whole side out at
+    // the end of the ceremony, so the timer simply stops meaning anything
+    if (teamEagleDown(p.team)) continue;
     p.respawnT -= dt;
     if (p.respawnT > 0) continue;
-    // the Keep may have fallen mid-timer - re-check rather than cutting the
-    // wait short the instant it dies, so a rival can't get credit for
-    // eliminating a team faster than the timer promises
-    if (teamHasLivingKeep(p.team) && !teamEagleDown(p.team)) respawnPlayer(p);
-    else {
-      p.eliminated = true;
-      if (p === player) endMatch('lost');
-      checkLastStanding(); // this fallback can itself be the match-ending blow
-    }
+    // a bird still in the air has nowhere to set anyone down: hold at zero
+    // until it roosts (a slot shot in the seconds between its own landing
+    // and the bird's)
+    const e = state.drop && state.drop.eagles[p.team];
+    if (!e || e.state !== 'down') { p.respawnT = 0; continue; }
+    respawnPlayer(p);
   }
 }
 
-// brings a downed slot back at its team's Keep: p.reset(false) is the exact
-// full-clear a fresh eagle landing gets (same 3s i-frames), just anchored on
-// the Keep's mouth instead of a landing tile.
+// brings a downed slot back at its team's bird: p.reset(false) is the exact
+// full-clear a fresh eagle landing gets (same 3 s i-frames), anchored
+// RESPAWN_OUT px down the lane from the roost - the nearest tile a body can
+// stand on there - so the way back into the match is the road everyone
+// else walked out on.
+const RESPAWN_OUT = 40;
 function respawnPlayer(p) {
-  const kp = structures.find((o) => o.type === 'keep' && o.team === p.team && !o.building);
-  if (kp) { const m = structMouth(kp); p.spawn = nearestDryTile(m.x, m.y, p); }
+  const e = state.drop && state.drop.eagles[p.team];
+  if (e && e.state === 'down') {
+    const d = e.laneDir || { x: 0, y: 1 };
+    p.spawn = nearestDryTile(e.x + d.x * RESPAWN_OUT, e.y + d.y * RESPAWN_OUT, p);
+  }
   p.eliminated = false;
   p.respawnT = 0;
   p.reset(false);
@@ -756,13 +794,11 @@ function respawnPlayer(p) {
 // slots still in the match (riding the eagle counts: it is about to land)
 function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
 
-// a team is still "in the match" if it has any active, non-eliminated slot -
-// note !eliminated, not !dead: a teammate mid-respawn-timer hasn't left -
-// OR a living Keep (see teamHasLivingKeep): a wiped team a Keep is still
-// waiting to respawn into hasn't lost either.
+// a team is still "in the match" while its bird has not been driven off and
+// anyone is in one of its slots - note !eliminated, not !dead: a wiped team
+// is waiting on its bird, not out, so the objective is the only way to win
 function teamInMatch(team) {
   if (teamEagleDown(team)) return false; // the objective: a fallen eagle takes its whole side out
-  if (teamHasLivingKeep(team)) return true;
   return players.some((q) => q.active && q.team === team && !q.eliminated);
 }
 
@@ -782,8 +818,8 @@ function rivalTeamsInMatch(p) {
 
 // the local slot not eliminated and every RIVAL team gone: the match is won
 // (only once, and only when there was another side to beat). Teams win
-// together - a Keep still standing, or a teammate mid-respawn-timer, keeps
-// a team in it - so this is the last TEAM standing, not the last player.
+// together - a side is in the match while its bird roosts, whoever is
+// standing - so this is the last BIRD standing, never the last player.
 function checkLastStanding() {
   // practice has no rivals and no ending - an empty roster must not read as a win
   if (PRACTICE) return;
