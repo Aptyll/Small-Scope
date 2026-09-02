@@ -72,6 +72,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the colour a tile's occupant paints on either map, over both tables | `objMapColor`, `treeMapPx`, `MM_UNKNOWN`, `MAP_TREE_*`/`MAP_BUSH_*` | `world` (its two readers: `updateMinimap` ui.js, `buildWorldMapImg` panels.js) |
 | does this tile block a walker | `isSolidTile` | `world` (it reads `STRUCTS` then `OBJECTS`, and names no type) |
 | is this tile a build site, and which menu does it get | `buildSiteAt`, `buildOptionsAt`, `netAt` | `world` (the two `*_ORDER` tables: `stump structures`, structures.js) |
+| what a pine takes to fell, everywhere one is planted (the border, the practice forest, the regrowth) | `TREE_HP` (above `treeRare`) | `world` (what the fell pays: `YIELD`, core.js) |
 | treasure chests: where they take their trees, and what one pays | `placeChests`, `CHEST_COUNT`/`CHEST_SPACING`/`CHEST_GOLD_*`/`CHEST_ODDS` | `world` (opening: `hitObject`'s chest branch, actions.js; sprite: `CHEST_SPR`, draw-world.js) |
 | a named place: its data, where it goes, what lives in it | `LANDMARKS`, `placeLandmarks`, `landmarkAt`, `updateLandmarks` | `landmarks` |
 | the practice arena: its gen, the dummy's numbers, the grounds' clock | `PRACTICE` (core.js, above `WORLD` — practice worlds are 76 tiles), `genPracticeWorld`, `PR_W`/`PR_H`/`PR_SPAWN`, `DUMMY_HP`/`DUMMY_WORK_DMG`/`DUMMY_RESET_T`, `practiceDummies`, `updatePractice` | `practice arena` (the hits: `hitDummy`, actions.js; sprite: `DUMMY_SPR`, draw-world.js) |
@@ -197,6 +198,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | the frame sim: momentum, day/night, timers | `update`, `updatePlay`, `updatePlayer` | `update` |
 | the disc an arrow lands in round a body | `ARROW_HIT_R` (above `updatePlay`) | `update` |
+| the clock paying every slot on the ground a coin, silently | `TRICKLE_GOLD`/`TRICKLE_T` (the tick is in `updatePlay`'s slot loop) | `passive income` |
 | the zoom ease itself (runs first thing in `update`) | `applyZoom` | `update` |
 | particles, floaters, footprints, drops, world-space snow flakes | `updateFx`, `makeFlake`, `fitFlakes` | `fx updates` |
 | the belly-crawl drag furrow: emitted in `updatePlayer`, drawn as the `f.k === 3` branch | `footprints`, `p.trailD` | `update` (the draw branch: `render`, render.js) |

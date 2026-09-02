@@ -444,7 +444,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2.5);
-      awardGold(p, YIELD.treeFall + kitOf(p).harvest, ox, oy - 6); // PACKMULE fattens the fell
+      awardGold(p, Math.round(YIELD.treeFall * kitOf(p).harvestMul), ox, oy - 6); // PACKMULE / FORAGER fatten the fell
       burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
       burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
       dropLoot(ox, oy - 6, 0, TREE_DROP); // the rare one: something was living in it
@@ -467,7 +467,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
       if (near) SFX.treeFall();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      awardGold(p, YIELD.deadTreeFall + kitOf(p).harvest, ox, oy - 6);
+      awardGold(p, Math.round(YIELD.deadTreeFall * kitOf(p).harvestMul), ox, oy - 6);
       burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
       burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
       flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
@@ -481,7 +481,7 @@ function hitObject(o, p) {
       objects[idx(o.tx, o.ty)] = null;
       if (near) SFX.break_();
       if (p === player) state.shake = Math.max(state.shake, 2);
-      awardGold(p, YIELD.rockBreak + kitOf(p).harvest, ox, oy - 6);
+      awardGold(p, Math.round(YIELD.rockBreak * kitOf(p).harvestMul), ox, oy - 6);
       burst(ox, oy - 4, '#8b93a8', 12, 55, 0.6, true);
       // the common source: a rock is where a bottom-tier tool or bit was
       // buried, and it is what makes mining worth doing after the gold stops

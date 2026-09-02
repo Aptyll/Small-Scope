@@ -23,9 +23,12 @@ const STRUCTS = {
     { cost: { gold: 50 }, hp: 140, buildT: 4.8, range: 92, dmg: 14, rate: 0.65, traverse: 3.8, aim: 0.35 },
   ]},
   generator: { name: 'GENERATOR', mm: [120, 180, 196], map: [96, 130, 150], tiers: [
-    { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 10 },
-    { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 2, period: 10 },
-    { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 4, period: 10 },
+    // 4 / 6 / 10 gold a minute against the clock's own 15 (TRICKLE_*, js/sim.js):
+    // a top generator is two thirds of a second trickle for 82 gold, paid back
+    // in eight minutes - an early build, and something worth walking over to wreck
+    { cost: { gold: 12 }, hp: 40,  buildT: 8,   pay: 1, period: 15 },
+    { cost: { gold: 25 }, hp: 70,  buildT: 4.8, pay: 1, period: 10 },
+    { cost: { gold: 45 }, hp: 100, buildT: 4.8, pay: 2, period: 12 },
   ]},
   // the bot bay is the one big build: a single tier on a 3x2 tile footprint
   // (w/h - see footprint()/findSite()), its three bots rolling out one by one

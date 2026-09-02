@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.62'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.63'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.63', 'THE ECONOMY IS FLATTENED - A PINE FALLS IN THREE SWINGS FOR ONE GOLD, EVERYONE DRAWS A COIN FROM THE CLOCK EVERY FOUR SECONDS, A LEVEL IS FOUR TIMES THE GOLD FOR HALF AGAIN THE HEALTH AND TWICE THE DAMAGE, AND THE ROOSTING EAGLE IS A MINUTE\'S SIEGE UNDER A GUST THAT NOW REACHES THE AXE.'],
   ['2.62', 'ARROWS LAND ON A WIDER DISC ROUND A BODY, AND A NORMAL RIVAL PLANTS ITS FEET TO SHOOT - THE MOMENT IT STOPS IS THE MOMENT IT IS ABOUT TO FIRE, AND THE MOMENT TO HIT IT.'],
   ['2.61', 'THE BOTS PLAY THE OBJECTIVE NOW, AND HOW WELL IS THE DIFFICULTY - RIVALS AT NORMAL, HARD OR IMPOSSIBLE, YOUR ALLIES ONE NOTCH BETTER AND AT YOUR SIDE, PUSHES THROUGH THE LANES AND GUARDS AT THE ROOSTS, AND THE GROUNDED EAGLE IS A SIEGE THAT ARROWS ONLY SPOOK.'],
   ['2.60', 'CLASS SELECT IS A LOBBY NOW - YOUR FIVE DOWN THE LEFT, THE RIVALS DOWN THE RIGHT UNDER THEIR DIFFICULTY NOTCHES, PLAY IN THE TITLE PLANK\'S PLACE, AND A FIVE-SECOND COUNT TO THE EAGLE THAT TURNS THE RIVALS FACE-UP ONE PER TICK.'],
@@ -1149,7 +1150,6 @@ const GS_INT = (v) => String(Math.round(v));
 const GS_SEC = (v) => (Math.round(v * 100) / 100).toFixed(2) + 'S';
 const GS_PCT = (v) => Math.round(v * 100) + '%';
 const GS_NUM = (v) => String(Math.round(v * 10) / 10);
-const GS_ADD = (v) => '+' + Math.round(v);
 const GEAR_STATS = [
   ['HEALTH', (k) => k.maxHp, GS_INT, 1],
   ['DAMAGE', (k) => k.dmgBase, GS_INT, 1],
@@ -1162,7 +1162,7 @@ const GEAR_STATS = [
   ['FATIGUE', (k) => k.fatigue, GS_PCT, -1],
   ['DODGE', (k) => k.dodgeCd, GS_SEC, -1],
   ['HUNTS', (k) => k.huntMul, GS_PCT, 1],
-  ['FELLS', (k) => k.harvest, GS_ADD, 1],
+  ['FELLS', (k) => k.harvestMul, GS_PCT, 1],
   ['FOOD', (k) => k.foodMul, GS_PCT, 1],
   ['SEEN AT', (k) => k.stealth, GS_PCT, -1],
 ];

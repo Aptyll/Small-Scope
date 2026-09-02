@@ -125,14 +125,20 @@ js/sprites.js is never rewritten) — same
 League-style: every slot has `p.level` (1–`LEVEL_MAX` = 12) and `p.xp`, which is simply lifetime
 gold earned. **`gainGold(p, n)` is the only way gold enters a wallet** (`awardGold` — the on-the-spot
 payout every source uses — and robot deposits both route through it) — it pays the purse, adds the same `n` to `xp` and calls
-`levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 10, 25, 45, 70, 100, 135, 175,
-220, 270, 325, 385 — the gap grows by 5 each level, ~385 gold to cap). Spending gold and dying never touch
+`levelUp(p)` while `xp >= LEVEL_XP[level]` (cumulative thresholds 40, 100, 180, 280, 400, 540,
+700, 880, 1080, 1300, 1540 — the gap grows by 20 each level, 1540 gold to cap). The table is
+sized against a bot chaining pines all match (about a gold a second on the fells plus the
+[trickle](gameplay.md#economy-one-currency)'s 15 a minute): that bot is level 9 or 10 at fifteen
+minutes and capped past twenty, a player who fights and farms by halves sits two or three levels
+under it, and the trickle alone is level 3 by seven minutes — a level is news all match, where
+2.62's table (385 to cap) had every bot capped by 2:00. Spending gold and dying never touch
 `xp`; level and xp are set in the constructor, not `reset()`, so they would survive a `reset`.
 
-Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (6) to
-`maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (1) to every arrow
-(`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 12 is +66 hp / +11
-damage. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
+Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (9) to
+`maxHp` (via `levelMaxHp(p)`, healed on the spot) and `LVL_DMG` (2) to every arrow
+(`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 12 is +99 hp / +22
+damage, and a level-8 hero of this table is about a capped hero of the old one: rarer, and
+worth more. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
 plays `SFX.levelUp()` for the local slot.
 
 Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1), and a
@@ -220,7 +226,8 @@ js/boot.js): a rival arrow landing on **any roost tile** spooks the bird `EAGLE_
 its `EAGLE_HP` (2000) pool — a flat chip, whatever the arrow would do to a body, so archers
 standing off it take minutes and the side has time to answer — the
 tiles are the one hit test walkers, arrows and E all share, so there is no corner an arrow can
-strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` (60) through `hitObject`'s eagle
+strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` (20: a hundred swings, about a
+minute for a lone warrior under the gust, measured at 53 s) through `hitObject`'s eagle
 branch (the roost tiles are `eagle` objects, a rival-only work target — `workTarget` reads the
 `team` they carry), and at zero the bird is **driven off**: `eagleFlee` lifts it away over the
 treeline while every camera pans to watch (`state.eagleCine`, the driven-off ceremony), and
@@ -378,12 +385,12 @@ The ladder:
 5. **lie low** — prone with nothing in sight: hold still and let the snow finish. Everything below
    this rung walks somewhere, and a bot crawling to a berry bush at 20 px/s has stopped playing.
 6. **defend** — its own bird hit inside the last `AI_DEFEND_T` (8 s) and the bot inside the
-   profile's `defendR` (900 / 1600 / everywhere; allies 2000): walk to it (`aiToRoost`, below)
+   profile's `defendR` (1600 / 2400 / everywhere; allies 2000): walk to it (`aiToRoost`, below)
    and stand 80 px off; the bird anchors rung 3, so the attackers are in sight on arrival.
 7. **guard** — from 0.6 × `push.t` on, the profile's `guard` bots (1 / 2 / 2; allies 1) after
    the pushers in slot order (`aiRank`) stand by their own bird, going on down the ladder to work
    what is near while inside `AI_GUARD_R` of it. The bird is their anchor.
-8. **push (the objective)** — after `push.t` (360 / 240 / 150 s; allies 420 / 300 / 240) the
+8. **push (the objective)** — after `push.t` (360 / 360 / 300 s; allies 720 / 480 / 420) the
    side's `push.n` lowest-ranked bots (2 / 3 / 3), **one more every `AI_ESCALATE`** (120 s) so a
    stalemate always breaks (`aiPushers`), go for the rival bird — and an ally goes whenever
    **the human is already on it** (within 220 px), so a push you start is a push your side joins.
@@ -435,12 +442,19 @@ bot (`player.control = 'ai'`, `players[0].ai.prof = AI_LEVELS[0]` for a middling
 never pushes — `aiRank` skips `player`, so it holds no push or guard slot), stub
 `sampleHumanInput`, `DBG.beginDrop()`, then step `update(1 / 30)` in a loop until
 `teamInMatch` fails for a side (a 15-minute match takes ~10 s; `state.elapsed` pauses while
-the local slot is dead, so bound the loop by steps too). On 2.61's numbers, five seeds a level
-with that passive proxy: NORMAL — the rivals never took the bird (two ally wins past twelve
-minutes, three stalemates the human is there to break); HARD — one win, two losses, one
-stalemate; IMPOSSIBLE — one win, one loss at five minutes, two stalemates. A first game is
-NORMAL with a player who engages, which those numbers put comfortably past the four-in-five
-wins asked for; the gradient above it is what the notches are for.
+the local slot is dead, so write your own clock back into it each step, and only `'won'` /
+`'lost'` in `state.over` end a match — `'respawning'` is the proxy dying). Set `DBG.freeze`
+first so the frame loop stops stepping under you. Two runs of one seed are **not** the same
+match: the title screen's live world spends seed draws for however many frames it was up
+before the harness started, so a seed is a distribution, not a replay. Wrapping `gainGold`
+and bucketing by the caller in `new Error().stack` (`hitObject`, `spillInventory`,
+`animalDies`, `updateStructures`, else the trickle) is how the economy was sized in 2.63.
+The match-length target is a match that ends round fifteen minutes with the human sitting it
+out, ten to twenty at the tails, which is what the ally clocks are set for; on 2.63's numbers
+the NORMAL runs that resolved did so at 9–14 minutes on the ally push, but half the runs
+stalemated to the cap with every ally flagged as pushing and standing still mid-map — a
+navigation trap, recorded in [Known drift](checklists.md#known-drift), and the reason the
+distribution cannot be read off the harness yet.
 
 ## Where players start
 

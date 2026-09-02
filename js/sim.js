@@ -199,6 +199,16 @@ function update(dt) {
 // rival (2.47's playtest: 24 shots at a circling bot, none hit) - and the
 // same disc on every side keeps it a fact of arrows, not a hidden handicap.
 const ARROW_HIT_R = 10;
+// ------------------------------------------------------------ passive income
+// The clock pays: every slot on the ground draws TRICKLE_GOLD into its
+// wallet every TRICKLE_T s, through gainGold so it levels too - the League
+// trickle. A floor under everyone's purse, so a player who never swings an
+// axe still buys gear and still reaches the mid levels, and a farmer pulls
+// ahead only by the fells, never by the clock. Silent on purpose: no floater,
+// no blip - the bag strip's number and the xp bar are the tell. The practice
+// arena has no clock and gets none; the dead and the airborne earn nothing.
+const TRICKLE_GOLD = 1;
+const TRICKLE_T = 4;      // s per coin: 15 gold a minute, ~225 over a fifteen-minute match
 function updatePlay(dt) {
   state.tick++; // with SEED and the player id, this decides contested orders
 
@@ -208,6 +218,10 @@ function updatePlay(dt) {
     if (!p.active || inAir(p)) continue;
     if (p.control === 'ai') updateAI(p, dt);
     updatePlayer(p, dt);
+    if (!p.dead && !PRACTICE) {
+      p.trickleT += dt;
+      if (p.trickleT >= TRICKLE_T) { p.trickleT -= TRICKLE_T; gainGold(p, TRICKLE_GOLD); }
+    }
   }
   resolveContests(); // this step's work swings, build orders and fish claims
   updateAbilityWorld(dt); // craters and nets in flight

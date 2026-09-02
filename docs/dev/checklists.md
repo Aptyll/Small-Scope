@@ -338,7 +338,12 @@ range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint
 `craftCost`/`craftT` and its per-tier rarity `odds`; the roll-out
 cadence is inline in `updateStructures()`'s spawner branch), `RESPAWN_TIME` (the flat respawn
 timer beside `die()`), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
-draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the chest
+draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the trickle
+(`TRICKLE_GOLD`/`TRICKLE_T`, js/sim.js) and `TREE_HP` (js/world.js) beside it, the hero-level table
+(`LEVEL_XP`/`LVL_HP`/`LVL_DMG`, js/player.js — sized against the harness, see
+[multiplayer.md](multiplayer.md#ai-slots)), the eagle's siege (`EAGLE_HP`/`EAGLE_WORK_DMG`/
+`EAGLE_ARROW_DMG`/`GUST_R`/`PREEN_RATE`, js/boot.js) and the bots' objective clocks (`AI_LEVELS`'
+`push`/`defendR`, `AI_ALLY_PUSH`, `AI_ESCALATE`, js/ai.js), the chest
 count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 `WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
@@ -380,6 +385,19 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are
   part of the [universal status set](gameplay.md#status-effects-one-set-for-every-unit) a future
   ability or bit lands on for free.
+- **A bot push can stall mid-map with nothing in its way** (2.63, seed 2 on NORMAL, twice in five
+  runs): from `AI_ALLY_PUSH` on, every ally read `aiWantsPush` true, `pushCd` 0, and stood at one
+  spot ~2700 px from the rival roost for eight minutes, hp bleeding a few points a minute — a
+  lake or a den on the route that `aiToRoost` keeps reporting as walkable, or a wolf fight the
+  ladder never leaves. The same seed resolved at 13:50 in another run. Until it is found the
+  bot-vs-bot match-length distribution in [multiplayer.md](multiplayer.md#ai-slots) cannot be
+  read; reproduce with the harness's per-minute rows (own/rival roost distance per slot) and
+  `settings.hitbox = 1` on the stalled bots' routes.
+- **A player's whole wallet still goes to the killer** (2.63): with the fells cut, kill transfers
+  are the biggest single swing left in the harness buckets (400–590 gold to one bot in a
+  20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
+  the stake pillar, not a bug, but it is the next snowball to weigh: a bounty cap, or a hoarder's
+  sink.
 - **Seed 7's team-0 roost was never reached by a push in calibration** (2.61): at every level the
   rivals' pushers stood in its lane with the bird untouched for ten minutes while the same code
   took the other roost, so something about that lane's cut (a stump or wall across the gap, a

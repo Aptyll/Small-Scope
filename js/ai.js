@@ -45,15 +45,18 @@ const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
 //   defendR px from its own eagle inside which it answers a hit on the bird
 //   support allies only: escort the human and join their fights and pushes
 const AI_LEVELS = [
-  { name: 'NORMAL', sight: 110, react: 0.7, aim: 30, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 900 },
-  { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 240, n: 3 }, guard: 2, defendR: 1600 },
-  { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 150, n: 3 }, guard: 2, defendR: 1e9 },
+  { name: 'NORMAL', sight: 110, react: 0.7, aim: 30, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 1600 },
+  { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 360, n: 3 }, guard: 2, defendR: 2400 },
+  { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 300, n: 3 }, guard: 2, defendR: 1e9 },
 ];
 // your allies at each rival level: the next notch up, supportive, one of
 // them on guard, and on the objective on their own clock - late on NORMAL,
 // so that a player who goes for the bird decides the match and one who
-// never does is still carried to it; earlier as the rivals push earlier
-const AI_ALLY_PUSH = [{ t: 420, n: 2 }, { t: 300, n: 3 }, { t: 240, n: 3 }];
+// never does is still carried to it; earlier as the rivals push earlier.
+// The clocks are set for a match that ends round fifteen minutes when the
+// human sits it out (the harness, multiplayer.md): an ally push takes two
+// to three minutes to drive a bird off, so NORMAL's leaves at twelve
+const AI_ALLY_PUSH = [{ t: 720, n: 2 }, { t: 480, n: 3 }, { t: 420, n: 3 }];
 const AI_ALLIES = AI_LEVELS.map((_, i) => Object.assign({}, AI_LEVELS[Math.min(AI_LEVELS.length - 1, i + 1)],
   { name: 'ALLY', support: true, push: AI_ALLY_PUSH[i], guard: 1, defendR: 2000 }));
 const AI_GUARD_R = 160;   // px a guard lets itself drift from its bird before walking back

@@ -24,12 +24,16 @@ const CYCLE = DAY_LEN + NIGHT_LEN;
 const FISH_SPAWN_T = 11;   // seconds between new fish while the shoal is healthy
 
 // One currency, many sources. Every source pays gold with a different yield profile
-// (per-hit trickle vs. burst on completion); this table is the whole economy.
+// (burst on completion, or per kill); this table is the whole economy, with one
+// source outside it: the clock, which pays every slot on the ground a coin every
+// TRICKLE_T s (the passive income banner, js/sim.js). The per-swing rows are 0 -
+// a swing is work, the fell is the pay - because a per-swing coin on a one-second
+// pine was the firehose that had every bot at the level cap by two minutes.
 const YIELD = {
-  treeHit: 1,   treeFall: 1,            // 4 hp tree  -> 5 gold, slow and safe
-  treeRare: 6,                          // rare-tree jackpot on top of the fall payout
-  rockHit: 1,   rockBreak: 4,           // 5 hp rock  -> 9 gold, a bit more than a tree
-  deadTreeHit: 1, deadTreeFall: 2,      // 3 hp snag  -> 5 gold, the rookery's cover; leaves a stump
+  treeHit: 0,   treeFall: 1,            // 3 hp tree  -> 1 gold, slow and safe (TREE_HP, js/world.js)
+  treeRare: 3,                          // rare-tree jackpot on top of the fall payout (1 pine in 12: four trees' worth)
+  rockHit: 0,   rockBreak: 3,           // 5 hp rock  -> 3 gold, better per swing than a pine, and a find 1 in 5
+  deadTreeHit: 0, deadTreeFall: 1,      // 3 hp snag  -> 1 gold, the rookery's cover; leaves a stump
   rabbit: { coins: 2, each: 5 },        // 10 gold + a berry, but it bolts
   deer:   { coins: 3, each: 6 },        // 18 gold, the big mobile target
   wolf:   { coins: 3, each: 8 },        // 24 gold, the biggest kill in the game - and it bites back

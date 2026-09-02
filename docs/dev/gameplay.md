@@ -988,16 +988,25 @@ rather than a different resource (the League model: one number, many ways to ear
 
 | Source | Pays | Profile |
 | --- | --- | --- |
-| tree (4 hp) | `treeHit` 1 per swing + `treeFall` 1 → 5 | slow, safe, everywhere; leaves a stump, and 1 in 25 leaves a tier-0 [find](#where-tools-and-bits-come-from) |
-| dead tree (3 hp) | `deadTreeHit` 1 per swing + `deadTreeFall` 2 → 5 | a tree in fewer swings, but only at a rookery |
-| rare tree (8%) | + `treeRare` 6 → 11 | jackpot roll, see `treeRare()` |
-| rock (5 hp) | `rockHit` 1 per swing + `rockBreak` 4 → 9 | a bit more than a tree, back-loaded, and 1 in 5 hides a tier-0 tool or bit |
+| the clock | `TRICKLE_GOLD` (1) every `TRICKLE_T` (4 s) — the `passive income` banner, js/sim.js | 15 a minute to every slot on the ground, silently (no floater, no blip); the floor under everyone's purse and the pace a level comes at for a player who never farms |
+| tree (`TREE_HP` 3, js/world.js) | `treeFall` 1 on the fell (`treeHit` is 0 — a swing is work, the fell is the pay) | slow, safe, everywhere — a pine a second chained, so a gold a second is the ceiling of full-time farming; leaves a stump, and 1 in 25 leaves a tier-0 [find](#where-tools-and-bits-come-from) |
+| dead tree (3 hp) | `deadTreeFall` 1 | a tree, but only at a rookery |
+| rare tree (8%) | + `treeRare` 3 → 4 | jackpot roll, see `treeRare()` |
+| rock (5 hp) | `rockBreak` 3 | better per swing than a pine, back-loaded, and 1 in 5 hides a tier-0 tool or bit |
 | rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached |
 | deer | `deer` 3 coins × 6 → 18 | the big mobile target |
 | wolf | `wolf` 3 coins × 8 → 24 | the biggest kill, and it bites back |
 | bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
-| generator | `tiers[tier].pay` (1/2/4) every `period` s | passive income, deposited to its owner |
+| generator | `tiers[tier].pay` every `period` s: 1/15, 1/10, 2/12 — 4 / 6 / 10 a minute | passive income, deposited to its owner; sized under the clock's own 15 so a farm of them never out-trickles the trickle |
 | chest | `CHEST_GOLD_MIN`–`MAX` (8–20) + a card, and 3 in 4 a **top-tier** tool or bit | ~14 caches along the treeline, one free E press — the only source of the best weapons |
+
+The per-swing rows went to zero and the fells to a coin in 2.63, when a pine paying 5 in
+four swings had every bot at the level cap by two minutes: the table is sized so that a
+player chaining pines nonstop earns about a gold a second, the trickle is a quarter of that,
+and the animals, chests, kills and rocks are where the rest comes from ([hero
+levels](multiplayer.md#hero-levels) are sized against the same bot). PACKMULE and the
+FORAGER card multiply the fell (`harvestMul`, +25% a level and +50%; the payout rounds), so
+a farming build is worth more but can never be the old firehose.
 
 **Gold is never a physical drop.** Every source pays the earner on the spot through
 `awardGold(p, n, x, y)` (`players` banner, js/player.js, beside `gainGold` — which it wraps, so
@@ -1174,11 +1183,11 @@ iron → steel → gold at a glance, the same materials the HUD plates wear.
 
 **Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
 `refreshKit(p)` copies the class kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
-`nightHeal`, `walkMul`, `harvest`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
+`nightHeal`, `walkMul`, `harvestMul`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
 returns that cache, so every existing kit read site (movement, `emitBit`, dodge timing, the AI,
 the draw meter) picks gear up without knowing it exists. The sim never reads `p.gear` directly.
 Sites that read the gear-only fields: `damagePlayer` (`dr`), `updateEat`'s landing and the daylight
-regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvest`), `animalDies`
+regen (`foodMul`/`nightHeal`), `hitObject`'s fell/break payouts (`harvestMul`), `animalDies`
 (`huntMul`, paid to `a.lastHit` — stamped by the arrow loop — as one extra coin), **`seenAt()`**
 (`stealth` — see [Prone](#prone-under-the-snow); the wolf pack, both turret checks *and*
 `aiNearestEnemy` all go through it now, so GHOSTSTEP finally does something against another

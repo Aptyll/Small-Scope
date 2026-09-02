@@ -42,14 +42,20 @@ const TRAIL_MIN = 110;    // sliding faster than this carves the snow trail
 const SNOW_TRAIL_LIFE = 3.5; // snow groove lifetime (ice scratches keep the 9s footprint life)
 const SNOW_TRAIL_FADE = 1.4; // fade window at the end of that life: hold crisp, then wipe tail-first
 
-// Hero levels (League-style, max 9). XP is lifetime gold earned (gainGold), never spent
-// or lost on death; LEVEL_XP[n-1] is the total needed to reach level n. Each level past
-// the first is the same flat growth: +LVL_HP max hp (healed on the spot) and +LVL_DMG on
-// every arrow, applied on top of the champion kit.
+// Hero levels (League-style, max 12). XP is lifetime gold earned (gainGold), never spent
+// or lost on death; LEVEL_XP[n-1] is the total needed to reach level n, the gap growing
+// by 20 a level. Sized against what a bot chaining pines all match earns (about a gold
+// a second on the fells, plus the clock's 15 a minute - TRICKLE_*, js/sim.js): that
+// bot is level 9 or 10 at fifteen minutes and capped past twenty, a player who fights
+// and farms by halves is two or three levels behind it, and the trickle alone is level
+// 3 by seven minutes - a level is news all match, not a sprint over by 2:00. Each
+// level past the first is the same flat growth: +LVL_HP max hp (healed on the spot)
+// and +LVL_DMG on every arrow, applied on top of the class kit - a level-8 hero of
+// this table is about the capped hero of the old one.
 const LEVEL_MAX = 12;
-const LEVEL_XP = [0, 10, 25, 45, 70, 100, 135, 175, 220, 270, 325, 385];
-const LVL_HP = 6;
-const LVL_DMG = 1;
+const LEVEL_XP = [0, 40, 100, 180, 280, 400, 540, 700, 880, 1080, 1300, 1540];
+const LVL_HP = 9;
+const LVL_DMG = 2;
 
 // The dodge roll as an ability: how long it lasts, how hard it throws you,
 // and how many charges refill how fast. What a roll HITS on the way through
@@ -256,7 +262,7 @@ const GEAR = [
   [ // legs: how you cross snow
     { name: 'STRIDER', blurb: 'WALK FASTER', mod: (k, L) => { k.walkMul += 0.04 * L; } },
     { name: 'SLIDEWORN', blurb: 'LONGER, EARLIER SLIDES', mod: (k, L) => { k.fatigue *= 1 - 0.12 * L; k.slideMin -= 5 * L; } },
-    { name: 'PACKMULE', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k, L) => { k.harvest += L; } },
+    { name: 'PACKMULE', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k, L) => { k.harvestMul += 0.25 * L; } },
   ],
   [ // boots: how you skate and dodge
     { name: 'SKATES', blurb: 'FASTER, SHARPER ON ICE', mod: (k, L) => { k.iceMax *= 1 + 0.08 * L; k.iceSteer += 0.15 * L; } },
@@ -277,7 +283,7 @@ const CARDS = {
     { name: 'QUICK HANDS', blurb: 'FASTER RENOCK', mod: (k) => { k.nock *= 0.92; } },
     { name: 'THICK SOLES', blurb: 'WALK FASTER', mod: (k) => { k.walkMul += 0.03; } },
     { name: 'SOFT LANDING', blurb: 'DODGES COME BACK SOONER', mod: (k) => { k.dodgeCd -= 0.25; } },
-    { name: 'FORAGER', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k) => { k.harvest += 1; } },
+    { name: 'FORAGER', blurb: 'FELLS AND BREAKS PAY MORE', mod: (k) => { k.harvestMul += 0.5; } },
     { name: 'STEADY HAND', blurb: 'FASTER FULL DRAW', mod: (k) => { k.bowCharge *= 0.96; } },
   ],
   green: [
@@ -326,7 +332,7 @@ function pick3Distinct(rarity) {
 function baseKit(cls) {
   return Object.assign({}, CLASSES[cls].kit, {
     huntMul: 1, dr: 0, foodMul: 1, nightHeal: false, walkMul: 1,
-    harvest: 0, dodgeCd: DODGE_CD, stealth: 1,
+    harvestMul: 1, dodgeCd: DODGE_CD, stealth: 1,
     ambushMul: AMBUSH_MUL, bury: PRONE_BURY,
     killHeal: 0,
   });
@@ -405,6 +411,7 @@ class Player {
     this.downedBy = null; this.downedTeam = 0; this.downedCause = null;
     this.respawnT = 0;                  // seconds left on an active respawn countdown
     this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
+    this.trickleT = 0;                  // s toward the next passive coin (TRICKLE_T, js/sim.js)
     this.kills = 0;                     // rivals downed; scoreboard only, survives death
     refreshKit(this);                   // builds this.kit and this.maxHp from class + gear + skill
     this.aboard = false;                // riding the eagle (beginDrop sets it, dropJump clears it)

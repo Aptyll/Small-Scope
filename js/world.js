@@ -244,6 +244,10 @@ function borderDepth(tx, ty) {
   return Math.max(d, Math.min(tx, ty, WORLD - 1 - tx, WORLD - 1 - ty) + R - c);
 }
 
+// swings to fell a pine, everywhere one is planted (the border, the practice
+// arena's forest, the regrown treeline): three at 0.34 s is a one-second tree,
+// and what it pays is YIELD.treeFall (js/core.js)
+const TREE_HP = 3;
 // per-tile jackpot roll for trees: hash-based, so it stays stable for a tile
 // regardless of generation order, and reshuffles with the run seed
 const TREE_RARE_CHANCE = 0.08;
@@ -263,7 +267,7 @@ function genWorld() {
       // the seed's own border (borderNoise) plants a pine; the roost discs'
       // extra pines (borderDepth) take variant 0 and roll nothing, so the
       // stream past this loop is what it always was.
-      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: 4, variant: d < borderNoise(tx, ty) ? randi(0, 1) : 0, rare: treeRare(tx, ty) });
+      if (d < borderDepth(tx, ty)) placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: d < borderNoise(tx, ty) ? randi(0, 1) : 0, rare: treeRare(tx, ty) });
     }
   }
 
@@ -1080,7 +1084,7 @@ function genPracticeWorld() {
     for (let tx = 0; tx < WORLD; tx++) {
       const inX = tx >= ax && tx < ax + PR_W, inY = ty >= ay && ty < ay + PR_H;
       if (inX && inY) continue;
-      placeObj(tx, ty, 'tree', { hp: 4, variant: randi(0, 1), rare: treeRare(tx, ty) });
+      placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: randi(0, 1), rare: treeRare(tx, ty) });
     }
   }
   // ---- the dummy in the open snow, the armory rack squared under it ------
@@ -1358,7 +1362,7 @@ function pkAnimStep(dt) {
       const inWalk = tx >= PK_WALK.x0 && tx <= PK_WALK.x1 && ty >= PK_WALK.y0 && ty <= PK_WALK.y1;
       const onMe = Math.abs(player.x / TILE - (tx + 0.5)) < 1.5 && Math.abs(player.y / TILE - (ty + 0.5)) < 1.5;
       if (!inField && !inWalk && !onMe && !objects[e.i]) {
-        const t = placeObj(tx, ty, 'tree', { hp: 4, variant: hash2(tx * 3 + 1, ty * 3 + 2) > 0.5 ? 1 : 0, rare: treeRare(tx, ty) });
+        const t = placeObj(tx, ty, 'tree', { hp: TREE_HP, variant: hash2(tx * 3 + 1, ty * 3 + 2) > 0.5 ? 1 : 0, rare: treeRare(tx, ty) });
         t.flash = 0.2;
         if (rng() < 0.5) burst(px, py - 10, '#f4f7ff', 3, 40, 0.45, true);
       }
