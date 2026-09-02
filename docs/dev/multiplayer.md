@@ -213,9 +213,11 @@ raided without ever touching the base; the feed says so, but a worker is never a
 
 **So is a rival's grounded eagle** — tested before tile solidity (its own roost tiles are solid,
 and would otherwise eat the shot), same team rule, through `hurtEagle` (the `eagle drop` banner in
-js/boot.js): a rival arrow landing on **any roost tile** chips the bird's `EAGLE_HP` pool — the
+js/boot.js): a rival arrow landing on **any roost tile** spooks the bird `EAGLE_ARROW_DMG` (12) off
+its `EAGLE_HP` (2000) pool — a flat chip, whatever the arrow would do to a body, so archers
+standing off it take minutes and the side has time to answer — the
 tiles are the one hit test walkers, arrows and E all share, so there is no corner an arrow can
-strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` through `hitObject`'s eagle
+strike without damage — a rival **E swing** chips `EAGLE_WORK_DMG` (60) through `hitObject`'s eagle
 branch (the roost tiles are `eagle` objects, a rival-only work target — `workTarget` reads the
 `team` they carry), and at zero the bird is **driven off**: `eagleFlee` lifts it away over the
 treeline while every camera pans to watch (`state.eagleCine`, the driven-off ceremony), and
@@ -318,12 +320,30 @@ the same way, first-come whichever team gets there).
 ## AI slots
 
 `updateAI(p, dt)` (the `ai` banner) writes `p.input` and nothing else — a bot can never do anything
-a human couldn't. It is a priority ladder re-picked a few times a second:
+a human couldn't. It is a priority ladder re-picked a few times a second, and **a profile says how
+well each rung is played** (the `difficulty` banner at the top of ai.js): the **rivals** run
+`AI_LEVELS[settings.aiLevel]` — NORMAL / HARD / IMPOSSIBLE, class select's notches, remembered
+with the profile — and **your allies** run `AI_ALLIES[level]`, the next notch up (capped at the
+top) plus the support fields, so your side is always the more competent one and the difficulty
+is how good the *other* side is. `aiProfile(p)` is the one place that choice is made
+(`p.ai.prof` overrides it for a staged bot — `DBG`, the calibration harness). Every field is a
+worse or better use of the same input struct: `sight` (110 / 150 / 200 px, through `seenAt` so
+cover still works), `react` (0.7 / 0.3 / 0 s a rival stays noticed before the bot turns on it),
+`aim` (22 / 8 / 0 px of scatter, re-rolled every `AI_AIM_T`), `lead` (0 / 0.5 / 1 of the
+target's motion), `draw` (0.7 / 0.9 / 0.95 of `bowCharge` it looses at — a short draw is a
+weak shot), `dodge` (×0.5 / 1 / 2), `abil` (0.35 / 0.8 / 1 chance per `AI_ABIL_T` that a
+ready ability is spent), `flee` (0.5 / 0.35 / 0.2 hp it hides at), `work` (0.5 / 0.8 / 1 duty
+cycle of the E key while harvesting — its level pace), `strafe` (0.45 / 0.8 / 1 of each 2 s it
+keeps moving in a fight; the rest it stands, which is when a new player hits it), `pick`
+(`'near'`, or IMPOSSIBLE's `'weak'` — the rival with the least hp), `push`, `guard` and
+`defendR` (the objective, below), `support` (allies only).
+
+The ladder:
 
 1. **eat** — fish below 50% hp, berry below 80%.
 2. **burrow** — a hunter bot only, and decided up front, because two rungs below read the answer.
    A bot that has come off
-   worse (under 40% hp) with no rival and no wolf in sight goes [prone](gameplay.md#prone-under-the-snow)
+   worse (under the profile's `flee`) with no rival and no wolf in sight goes [prone](gameplay.md#prone-under-the-snow)
    and waits the fight out for `ai.hideT` (7–12 s); it only ever tries where a player could — on
    snow, on its own feet, and with SNOW COVER's 60 s cooldown in hand. It gets
    straight back up for a wolf, for a rival inside 48 px, or when the spell runs out, and rising
@@ -331,10 +351,16 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    give-up: a spot that will not take burns it four times as fast and ends in the lockout.
    Both directions go through `inp.ability = 3`, exactly the cast key a human presses (rising is
    free — tryAbility's snow toggle).
-3. **fight** — a rival within `AI_SIGHT` (150 px, now filtered through `seenAt()` so a buried one
-   is simply not there): circle at ~70 px, draw and loose near full, dodge when hurt. Only shoots
+3. **fight** — a rival within the profile's `sight` (`aiNearestEnemy`, filtered through `seenAt()`
+   so a buried one is simply not there — plus anyone within `AI_ANCHOR_R` of an **anchor** the bot
+   is minding, noticed from up to `AI_ANCHOR_D`: its own bird under attack, the rival bird it is
+   pushing, the human it escorts — so a defender finds the archer standing off its roost and an
+   ally joins the fight you are in) and **reacted to** (`ai.seeT` past `react`): circle at ~70 px,
+   draw and loose at the profile's `draw`, dodge at its rate, stand for the profile's share of
+   every strafe. The aim point carries the scatter and the lead. Only shoots
    when `aiLineClear()` says the flight path is open. **Class abilities are spent here, off
-   cooldown at the foe** — one per decision tick, through the same edge field a human's key
+   cooldown at the foe** — on the profile's ability roll (`ai.abilOk`), through the same edge
+   field a human's key
    sets (`inp.ability`), each gated by the range it is good at (a warrior rushes the mid-gap,
    stomps at arm's length; a hunter locks the piercing draw on an open lane and nets the gap —
    the grapple alone is skipped, a held key and a terrain read the ladder does not try to fake).
@@ -346,31 +372,70 @@ a human couldn't. It is a priority ladder re-picked a few times a second:
    ground under 64 px, dodge under 30. A bot that wanders into a den has to fight its way out.
 5. **lie low** — prone with nothing in sight: hold still and let the snow finish. Everything below
    this rung walks somewhere, and a bot crawling to a berry bush at 20 px/s has stopped playing.
-6. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
+6. **defend** — its own bird hit inside the last `AI_DEFEND_T` (8 s) and the bot inside the
+   profile's `defendR` (900 / 1600 / everywhere; allies 2000): walk to it (`aiToRoost`, below)
+   and stand 80 px off; the bird anchors rung 3, so the attackers are in sight on arrival.
+7. **guard** — from 0.6 × `push.t` on, the profile's `guard` bots (1 / 2 / 2; allies 1) after
+   the pushers in slot order (`aiRank`) stand by their own bird, going on down the ladder to work
+   what is near while inside `AI_GUARD_R` of it. The bird is their anchor.
+8. **push (the objective)** — after `push.t` (360 / 240 / 150 s; allies 420 / 300 / 240) the
+   side's `push.n` lowest-ranked bots (2 / 3 / 3), **one more every `AI_ESCALATE`** (120 s) so a
+   stalemate always breaks (`aiPushers`), go for the rival bird — and an ally goes whenever
+   **the human is already on it** (within 220 px), so a push you start is a push your side joins.
+   The walk is `aiToRoost`: the roost sits in its corner's forest at the end of its lane and the
+   lane is the only way in, so off it the route is field → `aiLaneGate` (`AI_GATE` px past the
+   mouth on open snow) → mouth → lane → bird, on a bigger pathfinder budget (`AI_ROOST_BUDGET`,
+   `navTo`'s optional last argument); a route straight at the bird runs `NAV_BUDGET` out in
+   the border and leaves a bot wedged in a pocket, which is what this exists to prevent. In the
+   lane, the roost's **gate turrets come down first** (E, `STRUCT_HIT_DMG` a swing — a bot
+   standing off the bird under bolt fire never finishes a draw), then a hunter takes its
+   station `AI_HOLD` (96 px) out **on the lane's axis**, where the gate's gap leaves the line to
+   the roost open (off the axis its walls eat the shot) and outside the gust, and looses at the
+   profile's draw; a warrior walks up to the nearest roost tile (`aiEagleTile`) and swings E on
+   it, gust and all, exactly as a hand does. Defenders in sight are rung 3's business. A roost it
+   cannot route to is left for `ai.pushCd` (10 s).
+9. **escort** (allies only) — the two lowest allied AI slots (`aiEscorts`) keep within
+   `AI_ESCORT` (120 px) of the human while they are on the ground and inside `AI_ESCORT_R`
+   (400 px), going on down the ladder while they are close.
+10. **hunt** — an animal within `AI_HUNT` (120 px), with a 6 s catch timer per animal (prey
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
-7. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
-8. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
+11. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
+12. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
    plus a 15-gold float. Then: with no living or rising team [Keep](gameplay.md#base-building), a
    bot saves for and builds one before anything else (`needKeep` short-circuits the rest of this
    rung until it can afford tier 0 — a team with no Keep is one wipe from permanent elimination
    with no way back) — otherwise, with gold in hand, build a generator (or, 30% of the time and
    only where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work, else queue a card craft on an owned finished Keep; steps off a build site first, since a
-   building is solid. Picking up a dropped card off the ground already falls out of rung 7 below
+   building is solid. Picking up a dropped card off the ground already falls out of the loot rung
    (drops are type-agnostic loot); a bot never opens the pick-1-of-3 draft itself
    (`bagClick` is mouse-only) — the instant one is carried, `resolveCardForBot` resolves it with a
    single random pick, since choosing among three is specifically the human decision point.
-9. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E.
-10. **roam** — wander between its landing site and the map centre.
+13. **harvest** — walk to a tree/rock/berried bush within `AI_FORAGE` (12 tiles) and hold E at
+   the profile's `work` duty cycle.
+14. **roam** — wander between its landing site and the map centre.
 
-Every walk goes through `steerTo(x, y, reach)`, which is `navTo` on the bot's own slot
+Every walk goes through `steerTo(x, y, reach, budget)`, which is `navTo` on the bot's own slot
 ([gameplay.md](gameplay.md#pathfinding)) — it routes around trees, rocks, buildings and water,
 and returns **-1 when there is no route** (or the bot has been pinned for a while). That, not a
 timer, is what makes a bot drop a goal: harvest puts the target on `ai.avoid` for 12 s, hunt on
-`ai.huntAvoid`, loot lets the drop lie, spend backs off for 15 s, roam re-picks. Harvest routes
+`ai.huntAvoid`, loot lets the drop lie, spend backs off for 15 s, a push on `ai.pushCd`, roam
+re-picks. Harvest routes
 with reach `WORK_REACH` (any open tile beside the target), so `aiOpenSides() >= 1` is the only
 prefilter on work; a build site still wants `>= 3` open sides. Keep the -1 branches when you
 extend the ladder — a goal that is never dropped is a bot that stands still forever.
+
+**Calibrating a level** is done bot-vs-bot, headless, in the served page: make the local slot a
+bot (`player.control = 'ai'`, `players[0].ai.prof = AI_LEVELS[0]` for a middling player who
+never pushes — `aiRank` skips `player`, so it holds no push or guard slot), stub
+`sampleHumanInput`, `DBG.beginDrop()`, then step `update(1 / 30)` in a loop until
+`teamInMatch` fails for a side (a 15-minute match takes ~10 s; `state.elapsed` pauses while
+the local slot is dead, so bound the loop by steps too). On 2.61's numbers, five seeds a level
+with that passive proxy: NORMAL — the rivals never took the bird (two ally wins past twelve
+minutes, three stalemates the human is there to break); HARD — one win, two losses, one
+stalemate; IMPOSSIBLE — one win, one loss at five minutes, two stalemates. A first game is
+NORMAL with a player who engages, which those numbers put comfortably past the four-in-five
+wins asked for; the gradient above it is what the notches are for.
 
 ## Where players start
 

@@ -380,11 +380,12 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are
   part of the [universal status set](gameplay.md#status-effects-one-set-for-every-unit) a future
   ability or bit lands on for free.
-- **`settings.aiLevel` / `AI_LEVELS` (js/ai.js) are stored and shown but not yet read** (2.60):
-  class select's notches pick NORMAL / HARD / IMPOSSIBLE for the rival bots and the profile
-  remembers it, but `updateAI` has no skill knob yet. The numbers each level changes (sight,
-  draw accuracy, reaction delay, ability timing, level pace), the allies' support ladder, and
-  tuning NORMAL toward a first-game win for most players are the next patch's work.
+- **Seed 7's team-0 roost was never reached by a push in calibration** (2.61): at every level the
+  rivals' pushers stood in its lane with the bird untouched for ten minutes while the same code
+  took the other roost, so something about that lane's cut (a stump or wall across the gap, a
+  pocket the gate walled in) blocks the route. Reproduce with the harness in
+  [multiplayer.md](multiplayer.md#ai-slots) and `settings.hitbox = 1` at the roost; a human
+  may be walled out of it too.
 - [README.md](../../README.md) is a storefront page (hero + `practice-tool.webp` + three gameplay
   loops + mechanic shots in `docs/media/`), not a tech guide. It carries the one-line "double-click
   `index.html`" and links into [game.md](game.md) / [architecture.md](architecture.md); the controls

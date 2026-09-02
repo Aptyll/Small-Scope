@@ -99,7 +99,8 @@ tile it saw with `path.partial = true`, so a far goal still gets a first leg and
 finishes it; only an enclosed goal (or an unwalkable one with reach 0) returns `null`. Measured:
 ~12 µs per full search, so dozens of units replanning several times a second is noise.
 
-Units do not call `findPath` directly. `navTo(e, gx, gy, r, reach, dt)` keeps a route on
+Units do not call `findPath` directly. `navTo(e, gx, gy, r, reach, dt, budget)` (the last optional: a bigger
+search budget for a walk into a corner's forest — the bots' `AI_ROOST_BUDGET`, ai.js) keeps a route on
 `e.nav` (`{ path, i, gtx, gty, replanT, fail, stallT, … }`, created lazily on any entity) and
 returns `{ dx, dy, d, ok }` — the unit direction to move this frame, the straight-line distance
 to the goal (callers keep their own arrive radius), and `ok`. A plan first tries

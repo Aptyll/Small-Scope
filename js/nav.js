@@ -263,7 +263,10 @@ function navSmooth(path, x, y, r) {
 }
 
 function navClear(e) { if (e.nav) { e.nav.path = null; e.nav.fail = false; e.nav.stallT = 0; } }
-function navTo(e, gx, gy, r, reach, dt) {
+// budget (optional) is findPath's expansion budget for THIS goal - a walk
+// into a corner's forest asks for more than NAV_BUDGET, which is sized for
+// a detour in the open
+function navTo(e, gx, gy, r, reach, dt, budget) {
   reach = reach || 0;
   const nav = e.nav || (e.nav = { path: null, i: 0, gtx: -1, gty: -1, replanT: 0, fail: false, stallT: 0, lx: 0, ly: 0, reach: 0 });
   const gtx = Math.floor(gx / TILE), gty = Math.floor(gy / TILE);
@@ -277,7 +280,7 @@ function navTo(e, gx, gy, r, reach, dt) {
     if (navLineClear(e.x, e.y, gx, gy, r)) {
       nav.path = [[gx, gy]];
     } else {
-      const p = findPath(e.x, e.y, gx, gy, reach);
+      const p = findPath(e.x, e.y, gx, gy, reach, budget);
       nav.path = p ? navSmooth(p, e.x, e.y, r) : null;
       if (nav.path && !nav.path.length) nav.path = [[gx, gy]]; // already within reach
     }

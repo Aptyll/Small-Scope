@@ -420,6 +420,11 @@ class Player {
       lootT: 0, spendT: 0, buildT: 0, fitT: 0,
       hideT: 0, hideCd: 0,
       wx: 0, wy: 0, roam: 0,
+      // the difficulty profile's clocks (ai.js): prof overrides the side's
+      // profile (DBG / the harness), seeT is how long a rival has been
+      // noticed, aox/aoy the current aim scatter, abilOk this tick's ability
+      // roll, pushCd a roost it could not reach
+      prof: null, seeT: 0, aimT: 0, aox: 0, aoy: 0, abilT: 0, abilOk: true, pushCd: 0,
     };
     this.reset(true);
   }

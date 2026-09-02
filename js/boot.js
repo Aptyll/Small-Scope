@@ -80,8 +80,15 @@ const EAGLE_REST_SCALE = 2; // ...settling to 2x once it roosts (the dive walks 
 const EAGLE_LANE = 2.5 * TILE; // each bird keeps this far to its own right of the shared line
 const EAGLE_DIVE_T = 1.4;   // seconds from the end of the line to the treeline impact
 const EAGLE_SETTLE_T = 0.6; // seconds of wing-fold after the impact, into the resting pose
-const EAGLE_HP = 320;       // the grounded objective's nerve: hits spook it, at zero it flees
-const EAGLE_WORK_DMG = 10;  // what one rival E swing chips off the roosting bird
+// The grounded objective's NERVE: hits spook it, at zero it flees. Sized as a
+// siege now that bots go for it (the ai's objective rung): a lone rival's E
+// swings drive it off in ~40 s under its gust, as before (the two grew
+// together), but an arrow only ever spooks it EAGLE_ARROW_DMG whatever the
+// draw, so archers standing off it outside the gust take minutes, not
+// seconds - long enough for the side to answer the hit (defendR, ai.js)
+const EAGLE_HP = 2000;
+const EAGLE_WORK_DMG = 60;  // what one rival E swing chips off the roosting bird
+const EAGLE_ARROW_DMG = 12; // what one rival arrow chips, whatever it would do to a body
 const EAGLE_TILE_R = 1.6;   // tiles around the roost marked solid - the hitbox arrows AND walkers test
 const CRASH_DEPTH = 14;     // tiles inside the treeline (forestDepth) the roost sits at least - never on the edge, and a proper lane of pines past the stump ring
 const MIN_CRASH_TREES = 40; // of the 49 tiles in the crash site's 7x7 that must still hold a pine (the border is solid, so fewer means an edge or a bay)
@@ -96,7 +103,7 @@ const GUST_CD = 4;          // s between gusts
 const GUST_KB = 300;        // knockback impulse (px/s)
 const GUST_STUN = 0.7;      // s of tumble
 const PREEN_DELAY = 6;      // s unhit before the bird starts calming down...
-const PREEN_RATE = 2;       // ...recovering this much nerve per second
+const PREEN_RATE = 8;       // ...recovering this much nerve per second
 const FLEE_LIFT_T = 1.1;    // s of takeoff: turn away, climb, downdraft
 const FLEE_T = 5.5;         // s total from liftoff to gone (fading over the last stretch)
 const FLEE_SPD = 220;       // px/s once airborne - faster than it arrived, it wants out
@@ -1466,7 +1473,7 @@ window.DBG = {
   setSwing: (i, p) => { (p || player).swing = i; },
   getSwing: (p) => (p || player).swing,
   cam: () => ({ x: camX, y: camY }),
-  startGame, beginIntro, beginSelect, lockIn, pressPlay, cancelCount, setAiLevel, selectLayout, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
+  startGame, beginIntro, beginSelect, lockIn, pressPlay, cancelCount, setAiLevel, selectLayout, AI_LEVELS, AI_ALLIES, aiProfile, setClass, CLASSES, menu: state.menu, menuHit, menuClick, menuKey, selectHit,
   // the ESC panel: what the pointer is over, the speaker's plate, the open
   // page's row anchors (already scrolled - a row's y is where it is on
   // screen) and the navbar cells - so a driver can click a dial without

@@ -1270,10 +1270,12 @@ reads, so a seed's lane is always the same lane; the merchant's gate and post re
 too, so the gate flanks the road that was actually cut.
 `laneStep` runs from `updateEagle`'s `down` branch and drops `e.lane` when the last event is
 spent. The grounded bird is the team's **objective**, and its hp pool is its
-**nerve**: `EAGLE_HP` (320), spooked down by rival arrows through `hurtEagle` (the sim.js arrow
+**nerve**: `EAGLE_HP` (2000, sized as a siege since 2.61, when the bots learned to go for it),
+spooked down a flat `EAGLE_ARROW_DMG` (12) per rival arrow through `hurtEagle` (the sim.js arrow
 loop tests the roost tiles themselves — *before* tile solidity, which would eat the shot — so the
-arrow hitbox is exactly the collision box, corners included) and by rival E swings
-(`EAGLE_WORK_DMG` via `hitObject`'s eagle branch). It is not helpless: a rival inside `GUST_R`
+arrow hitbox is exactly the collision box, corners included) and `EAGLE_WORK_DMG` (60) per rival
+E swing (via `hitObject`'s eagle branch) — a lone rival's E drives it off in ~40 s under the gust,
+as it always did, but arrows alone take minutes. It is not helpless: a rival inside `GUST_R`
 (resolved through `seenAt`, like every watcher) makes it rear — wings thrown open for
 `GUST_WIND_T`, the whole telegraph — then `eagleGust` throws every rival in `GUST_BLAST_R` back at
 `GUST_KB` with a `GUST_STUN` tumble and `risePlayer` (wind strips the snow off a buried body), on

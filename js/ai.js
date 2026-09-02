@@ -5,31 +5,178 @@
 // Bot slots. A bot only ever writes the same input struct a human fills in -
 // movement axis, aim point, fire / work / slide / dodge and the odd build
 // order - so it can never do anything a player couldn't. The brain is a small
-// priority ladder, re-picked a few times a second: eat, fight, wolves, hunt,
-// loot, spend, harvest, roam. Every walk goes through steerTo(), which routes
+// priority ladder, re-picked a few times a second: eat, fight, wolves, defend
+// the bird, push the rival bird, escort, hunt, loot, spend, harvest, roam -
+// and a PROFILE (the difficulty banner below) says how well each rung is
+// played. Every walk goes through steerTo(), which routes
 // around obstacles (see pathfinding) and reports an unreachable goal as -1 -
 // that, not a timer, is what makes a bot drop a target.
-const AI_SIGHT = 150;   // px: how far a bot notices a rival
+const AI_SIGHT = 150;   // px: how far a wolf on a bot is still tracked (a rival's reach is the profile's sight)
 const AI_EAT_R = 110;   // px: a rival closer than this will knock the meal out of its hands, so it waits
 const AI_HUNT = 120;    // px: how far it will go after an animal
 const AI_FORAGE = 12;   // tiles: how far from itself it looks for work
-// The RIVAL bots' difficulty, picked on class select's notches
-// (settings.aiLevel indexes this) and remembered with the profile. Names
-// only so far: the ladder does not read the level yet, and the numbers a
-// level changes hang off these entries when it does (checklists.md, Known
-// drift).
-const AI_LEVELS = [{ name: 'NORMAL' }, { name: 'HARD' }, { name: 'IMPOSSIBLE' }];
+// ---- difficulty ----------------------------------------------------------
+// Every bot plays the same ladder; a PROFILE says how well. The RIVALS run
+// AI_LEVELS[settings.aiLevel] (class select's notches, remembered with the
+// profile); your ALLIES run one notch above the rivals (capped at the top)
+// plus the support fields, so your side is always the more competent one
+// and the difficulty is how good the other side is. Nothing in a profile
+// lets a bot do what a hand cannot - every field is a worse or better use
+// of the same input struct:
+//   sight   px it notices a rival from (through seenAt, so cover still works)
+//   react   s a rival stays noticed before the bot turns on it
+//   aim     px of scatter on the aim point, re-rolled every AI_AIM_T
+//   lead    0..1 of the target's motion it aims ahead by (flight time)
+//   draw    fraction of bowCharge it looses at (a short draw is a weak shot)
+//   dodge   x the chance per second it rolls when hurt
+//   abil    chance each AI_ABIL_T tick that a ready ability is spent
+//   flee    hp fraction under which it hides (hunter) / gives ground
+//   work    duty cycle of the E key while harvesting (its level pace)
+//   strafe  fraction of each 2 s it keeps moving in a fight (the rest it
+//           stands, which is when a new player hits it)
+//   pick    'near' the closest rival, 'weak' the one with the least hp
+//   push    { t, n } - after t s, the side's first n bots go for the rival
+//           eagle (the objective rung), one more every AI_ESCALATE s after
+//           that, so a stalemate always breaks
+//   guard   how many of the next bots stand by their own bird from 0.6 t on
+//   defendR px from its own eagle inside which it answers a hit on the bird
+//   support allies only: escort the human and join their fights and pushes
+const AI_LEVELS = [
+  { name: 'NORMAL', sight: 110, react: 0.7, aim: 22, lead: 0, draw: 0.7, dodge: 0.5, abil: 0.35, flee: 0.5, work: 0.5, strafe: 0.45, pick: 'near', push: { t: 360, n: 2 }, guard: 1, defendR: 900 },
+  { name: 'HARD', sight: 150, react: 0.3, aim: 8, lead: 0.5, draw: 0.9, dodge: 1, abil: 0.8, flee: 0.35, work: 0.8, strafe: 0.8, pick: 'near', push: { t: 240, n: 3 }, guard: 2, defendR: 1600 },
+  { name: 'IMPOSSIBLE', sight: 200, react: 0, aim: 0, lead: 1, draw: 0.95, dodge: 2, abil: 1, flee: 0.2, work: 1, strafe: 1, pick: 'weak', push: { t: 150, n: 3 }, guard: 2, defendR: 1e9 },
+];
+// your allies at each rival level: the next notch up, supportive, one of
+// them on guard, and on the objective on their own clock - late on NORMAL,
+// so that a player who goes for the bird decides the match and one who
+// never does is still carried to it; earlier as the rivals push earlier
+const AI_ALLY_PUSH = [{ t: 420, n: 2 }, { t: 300, n: 3 }, { t: 240, n: 3 }];
+const AI_ALLIES = AI_LEVELS.map((_, i) => Object.assign({}, AI_LEVELS[Math.min(AI_LEVELS.length - 1, i + 1)],
+  { name: 'ALLY', support: true, push: AI_ALLY_PUSH[i], guard: 1, defendR: 2000 }));
+const AI_GUARD_R = 160;   // px a guard lets itself drift from its bird before walking back
+const AI_ESCALATE = 120;  // s after push.t per extra pusher a side commits
+// how many of a side push right now: push.n, growing past push.t
+function aiPushers(prof) { return state.elapsed < prof.push.t ? 0 : prof.push.n + Math.floor((state.elapsed - prof.push.t) / AI_ESCALATE); }
+const AI_AIM_T = 0.4;     // s between aim scatter re-rolls
+const AI_ABIL_T = 0.5;    // s between ability rolls
+const AI_DEFEND_T = 8;    // s after a hit on its bird a bot still counts it as under attack
+const AI_ANCHOR_R = 260;  // px round an anchor (its bird, the human) a rival is noticed from
+const AI_ANCHOR_D = 420;  // ...but never from farther than this
+const AI_HOLD = 96;       // px a hunter holds off the rival bird at (outside its gust)
+const AI_GATE = 128;      // px out from a lane's mouth, on the open snow, where a walk to a roost stages
+const AI_ROOST_BUDGET = NAV_BUDGET * 4; // A* expansions a walk into a roost's forest may spend
+const AI_ESCORT = 120;    // px an escort lets the human get away before it follows
+const AI_ESCORT_R = 400;  // px past which the human is too far to escort
+// which profile p plays by: a staged override (DBG, the harness), else by side
+function aiProfile(p) {
+  if (p.ai.prof) return p.ai.prof;
+  const lv = Math.max(0, Math.min(AI_LEVELS.length - 1, settings.aiLevel | 0));
+  return player && p.team === player.team ? AI_ALLIES[lv] : AI_LEVELS[lv];
+}
+// the two objectives as a bot sees them: a roosting bird, or null
+function aiRivalEagle(p) { const e = state.drop && state.drop.eagles[1 - p.team]; return e && e.state === 'down' ? e : null; }
+function aiOwnEagle(p) { const e = state.drop && state.drop.eagles[p.team]; return e && e.state === 'down' ? e : null; }
+// p's place among its side's living AI slots (the human is never counted):
+// the profile's push.n lowest go for the rival bird, the guard next stand by
+// their own, and the rest farm, build and (allies) escort
+function aiRank(p) {
+  let n = 0;
+  for (const q of players) {
+    if (!q.active || q.dead || inAir(q) || q.team !== p.team || q.control !== 'ai' || q === player) continue;
+    if (q === p) return n;
+    n++;
+  }
+  return 99;
+}
+// the objective rung's gate: after push.t the side's push.n lowest bots go
+// for the rival bird; an ally also goes whenever the human is already on
+// it, so a push you start is a push your side joins
+function aiWantsPush(p, prof) {
+  const e = aiRivalEagle(p);
+  if (!e) return null;
+  if (prof.support && !player.dead && !inAir(player) && player !== p &&
+    Math.hypot(player.x - e.x, player.y - e.y) < 220) return e;
+  return aiRank(p) < aiPushers(prof) ? e : null;
+}
+// the guard's gate: from 0.6 push.t on, the prof.guard bots after the
+// pushers stand by their own bird
+function aiOnGuard(p, prof) {
+  const e = aiOwnEagle(p);
+  if (!e || !prof.guard || state.elapsed < prof.push.t * 0.6) return null;
+  const r = aiRank(p), n = aiPushers(prof);
+  return r >= n && r < n + prof.guard ? e : null;
+}
+// the staging point of a roost: AI_GATE px past the lane's mouth on the open
+// snow, so the way in is always field -> gate -> mouth -> lane -> bird
+function aiLaneGate(e) {
+  const dx = e.mouth.x - e.x, dy = e.mouth.y - e.y, d = Math.hypot(dx, dy) || 1;
+  return { x: e.mouth.x + dx / d * AI_GATE, y: e.mouth.y + dy / d * AI_GATE };
+}
+// Walk toward a roost the way its lane allows: from the field to the gate,
+// in through the mouth, then down the lane to the bird (reach tiles off it).
+// Returns steerTo's distance, or -1 for no route this frame. A route straight
+// at a bird from the field runs the pathfinder out in the border's trees and
+// leaves the bot wedged in a pocket - which is what this exists to prevent.
+function aiToRoost(p, e, steerTo, reach) {
+  if (aiInLane(p, e)) return steerTo(e.x, e.y, reach, AI_ROOST_BUDGET);
+  const dm = Math.hypot(e.mouth.x - p.x, e.mouth.y - p.y);
+  if (dm <= 24) return steerTo(e.x, e.y, reach, AI_ROOST_BUDGET);
+  const g = aiLaneGate(e);
+  const dg = Math.hypot(g.x - p.x, g.y - p.y);
+  if (dg > 40 && dm > AI_GATE * 0.75) return steerTo(g.x, g.y, 2, AI_ROOST_BUDGET);
+  return steerTo(e.mouth.x, e.mouth.y, 1, AI_ROOST_BUDGET);
+}
+// is p inside a roost's lane - the band from the bird out to the lane's
+// mouth on the treeline - or at the bird itself? Off it, the way to the
+// roost is the mouth (aiInLane is asked before every walk to a bird).
+function aiInLane(p, e) {
+  const vx = e.mouth.x - e.x, vy = e.mouth.y - e.y, L2 = vx * vx + vy * vy || 1;
+  const px = p.x - e.x, py = p.y - e.y;
+  const t = (px * vx + py * vy) / L2;
+  const perp = Math.abs(px * vy - py * vx) / Math.sqrt(L2);
+  return (t >= -0.1 && t <= 1.08 && perp < 40) || Math.hypot(px, py) < 90;
+}
+// the eagle hitbox tile nearest p (a warrior's E target on a push)
+function aiEagleTile(e, p) {
+  let best = null, bd = 1e9;
+  const cx0 = Math.floor(e.x / TILE), cy0 = Math.floor(e.y / TILE);
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const o = inWorld(cx0 + dx, cy0 + dy) ? objects[idx(cx0 + dx, cy0 + dy)] : null;
+    if (!o || o.type !== 'eagle' || o.team !== e.team) continue;
+    const d = Math.hypot(o.tx * TILE + 8 - p.x, o.ty * TILE + 8 - p.y);
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
 
-function aiNearestEnemy(p) {
-  let best = null, bd = AI_SIGHT;
+// the side's escorts: the two lowest AI slots on the human's team
+function aiEscorts(p) {
+  let n = 0;
+  for (const q of players) {
+    if (!q.active || q.control !== 'ai' || q.team !== player.team || q === player) continue;
+    if (q === p) return n < 2;
+    n++;
+  }
+  return false;
+}
+
+// The rival p goes for: within its profile's sight, plus anyone near an
+// ANCHOR it is minding - its own bird under attack, the human it escorts,
+// the rival bird it is pushing - so a defender finds the archer standing off
+// its roost and an ally joins the fight the human is in. Every candidate
+// still resolves through seenAt: a buried rival is buried for everyone.
+function aiNearestEnemy(p, prof, anchors) {
+  let best = null, bs = Infinity;
   for (const q of players) {
     if (!enemyOf(p, q)) continue;
     const d = Math.hypot(q.x - p.x, q.y - p.y);
-    // seenAt is per-quarry, not per-bot: a rival buried in the snow (or wearing
-    // GHOSTSTEP, which until now did nothing at all against a player) is picked
-    // up from much closer, and one lying still is not picked up until it is
-    // practically underfoot
-    if (d < bd && d < seenAt(q, AI_SIGHT)) { bd = d; best = q; }
+    let range = prof.sight;
+    for (const an of anchors) {
+      if (an && Math.hypot(q.x - an.x, q.y - an.y) < AI_ANCHOR_R) range = AI_ANCHOR_D;
+    }
+    if (d >= range || d >= seenAt(q, range)) continue;
+    const s = prof.pick === 'weak' ? q.hp + d * 0.05 : d;
+    if (s < bs) { bs = s; best = q; }
   }
   return best;
 }
@@ -96,12 +243,13 @@ function updateAI(p, dt) {
   inp.mx = 0; inp.my = 0; inp.work = false; inp.slide = false;
   if (p.dead || p.fallT > 0) { inp.fire = false; return; }
   resolveCardForBot(p);
+  const prof = aiProfile(p);
 
   // walk the route to (x, y) - reach 1 stops beside a tile it cannot stand
   // on, which is exactly WORK_REACH - and return the straight-line distance,
   // or -1 when there is no route (drop the goal, do not wait on it)
-  const steerTo = (x, y, reach) => {
-    const n = navTo(p, x, y, PLAYER_R, reach || 0, dt);
+  const steerTo = (x, y, reach, budget) => {
+    const n = navTo(p, x, y, PLAYER_R, reach || 0, dt, budget);
     if (!n.ok) return -1;
     inp.mx = n.dx; inp.my = n.dy;
     return n.d;
@@ -111,6 +259,19 @@ function updateAI(p, dt) {
   ai.thinkT -= dt;
   if (ai.buildT > 0) ai.buildT -= dt;
   if (ai.hideCd > 0) ai.hideCd -= dt;
+  if (ai.pushCd > 0) ai.pushCd -= dt;
+  // the profile's clocks: the aim scatter re-rolls, the ability roll
+  ai.aimT -= dt;
+  if (ai.aimT <= 0) { ai.aimT = AI_AIM_T; ai.aox = rand(-1, 1) * prof.aim; ai.aoy = rand(-1, 1) * prof.aim; }
+  ai.abilT -= dt;
+  if (ai.abilT <= 0) { ai.abilT = AI_ABIL_T; ai.abilOk = rng() < prof.abil; }
+  // what it is minding: its own bird under attack inside defendR, the rival
+  // bird it is due to push, and (an ally) the human it escorts
+  const own = aiOwnEagle(p);
+  const defend = own && own.hitT < AI_DEFEND_T && Math.hypot(own.x - p.x, own.y - p.y) < prof.defendR ? own : null;
+  const pushE = ai.pushCd > 0 ? null : aiWantsPush(p, prof);
+  const guardE = aiOnGuard(p, prof);
+  const ward = prof.support && !player.dead && !inAir(player) && player !== p ? player : null;
 
   // 0. spend a free skill point before the ladder - waiting on it is leaving
   //    growth on the table. Lowest ability level first, so the kit rises evenly.
@@ -125,8 +286,12 @@ function updateAI(p, dt) {
   //    only starts one with nobody close enough to do that. Standing there
   //    chewing under fire is not patience, it is a free kill. `foe` is read
   //    here rather than at rung 2 because this rung is the first to need it.
-  const foe = aiNearestEnemy(p);
+  const foe = aiNearestEnemy(p, prof, [defend || guardE, pushE, ward]);
   const foeD = foe ? Math.hypot(foe.x - p.x, foe.y - p.y) : Infinity;
+  // the reaction: a rival stays noticed prof.react seconds before the bot
+  // turns on it (a slow side keeps chopping while you line up the shot)
+  ai.seeT = foe ? ai.seeT + dt : Math.max(0, ai.seeT - dt * 2);
+  const engage = foe && ai.seeT >= prof.react ? foe : null;
   if (p.eatT <= 0 && p.foodCd <= 0 && foeD > AI_EAT_R) {
     if (p.hp < p.maxHp * 0.5 && bagCount(p, 'fish') > 0) inp.eatFish = true;
     else if (p.hp < p.maxHp * 0.8 && bagCount(p, 'berry') > 0) inp.eatBerry = true;
@@ -153,7 +318,7 @@ function updateAI(p, dt) {
   if (wolf) down = false;
   else if (foe) down = p.prone && Math.hypot(foe.x - p.x, foe.y - p.y) > 48;
   else if (p.prone) down = ai.hideT > 0 && p.hp < p.maxHp * 0.9;
-  else if (p.hp < p.maxHp * 0.4 && ai.hideCd <= 0 && canBury) down = true;
+  else if (p.hp < p.maxHp * prof.flee && ai.hideCd <= 0 && canBury) down = true;
   if (down !== p.prone) {
     inp.ability = 3;                                  // snow cover: the burrow's one door, in and out
     if (p.prone) ai.hideCd = 18;                      // back up: no re-burrowing for a while
@@ -167,10 +332,16 @@ function updateAI(p, dt) {
     ai.hideCd = 12;
   }
 
-  // 3. a rival in sight: circle at bow range and shoot
-  if (foe) {
+  // 3. a rival in sight (and reacted to): circle at bow range and shoot.
+  //    The profile says how well: the aim point carries its scatter and its
+  //    lead, abilities go on the ability roll, the draw is loosed at the
+  //    profile's fraction, the dodge at its rate - and a slow side stands
+  //    still for part of every strafe, which is when it gets hit.
+  if (engage) {
+    const foe = engage;
     const d = foeD;
-    aimAt(foe.x, foe.y - 6);
+    const tf = prof.lead > 0 ? d / 300 * prof.lead : 0; // s of flight it leads by
+    aimAt(foe.x + foe.vx * tf + ai.aox, foe.y - 6 + foe.vy * tf + ai.aoy);
     // hold ~70px: close in when far, back off when crowded, strafe in between
     const clear = aiLineClear(p, foe.x, foe.y - 6);
     if (p.prone) {
@@ -183,7 +354,7 @@ function updateAI(p, dt) {
     }
     // the class abilities, spent off cooldown at the foe - through the same
     // edge key a human presses, so a bot can never cast what a hand couldn't
-    if (p.castT <= 0 && p.rushT <= 0 && p.shieldT <= 0 && p.grapT <= 0 && inp.ability < 0) {
+    if (ai.abilOk && p.castT <= 0 && p.rushT <= 0 && p.shieldT <= 0 && p.grapT <= 0 && inp.ability < 0) {
       if (p.cls === 0) { // hunter: skewer the open lane, tangle the gap
         // (the grapple is a held key and a terrain read - a hand skill the
         // ladder does not try to fake; snow cover is spent at rung 2)
@@ -200,8 +371,9 @@ function updateAI(p, dt) {
     const a = Math.atan2(foe.y - p.y, foe.x - p.x);
     const turn = !clear || d > 85 ? 0.3 * side : d < 50 ? Math.PI * 0.85 * side : Math.PI / 2 * side;
     inp.mx = Math.cos(a + turn); inp.my = Math.sin(a + turn);
-    inp.fire = clear && p.chargeT < kitOf(p).bowCharge * 0.95; // draw, then loose near full
-    if (p.hp < p.maxHp * 0.45 && p.dodgeCharges > 0 && rng() < dt * 2) inp.dodge = true;
+    if (prof.strafe < 1 && (state.tick % 120) >= 120 * prof.strafe) { inp.mx = 0; inp.my = 0; } // the standing part of the strafe
+    inp.fire = clear && p.chargeT < kitOf(p).bowCharge * prof.draw; // draw, then loose at the profile's draw
+    if (p.hp < p.maxHp * 0.45 && p.dodgeCharges > 0 && rng() < dt * 2 * prof.dodge) inp.dodge = true;
     ai.tgt = null;
     return;
   }
@@ -224,6 +396,91 @@ function updateAI(p, dt) {
   //    Everything below this rung walks somewhere, and a bot crawling to a
   //    berry bush at PRONE_SPEED is a bot that has stopped playing.
   if (p.prone) { inp.fire = false; return; }
+
+  // 5b. its bird is under attack: get to it. Rung 3 takes over on arrival -
+  //     the bird is an anchor, so the archer standing off it is in sight.
+  if (defend) {
+    const d = Math.hypot(defend.x - p.x, defend.y - p.y);
+    if (d > 80) { // home through its own lane, like a push
+      if (aiToRoost(p, defend, steerTo, 3) >= 0) { aimAt(defend.x, defend.y); inp.fire = false; ai.tgt = null; return; }
+    } else { inp.fire = false; ai.tgt = null; return; } // on station: wait for them to show
+  }
+
+  // 5b'. on guard: stand by its own bird, and go on down the ladder (working
+  //      what is near) while it is within AI_GUARD_R of it. The bird is its
+  //      anchor, so a rival standing off the roost is rung 3's the moment
+  //      they show.
+  if (guardE && Math.hypot(guardE.x - p.x, guardE.y - p.y) > AI_GUARD_R) {
+    if (aiToRoost(p, guardE, steerTo, 4) >= 0) { aimAt(guardE.x, guardE.y); inp.fire = false; ai.tgt = null; return; }
+  }
+
+  // 5c. the objective: drive off the rival bird. A hunter holds AI_HOLD off
+  //     it - outside the gust - and looses at the roost; a warrior walks up
+  //     to a roost tile and swings E on it, gust and all, exactly as a hand
+  //     does. Defenders in sight are rung 3's business (the bird anchors
+  //     them). A roost it cannot route to is left for a while (pushCd).
+  if (pushE) {
+    const e = pushE;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    // the roost sits in the corner's forest at the end of its lane, and the
+    // lane is the only way in: off it, the walk is aiToRoost's (gate, mouth,
+    // lane); on it, the class decides the approach
+    // the roost's gate carries turrets: any bot in the lane takes those down
+    // first with E (STRUCT_HIT_DMG a swing), exactly as a hand would, since
+    // a bot standing off the bird under bolt fire never gets a draw finished
+    const tur = aiInLane(p, e) ? nearestObj(p.x, p.y, 4, (o) => { const st = structOf(o); return st.type === 'turret' && st.team === e.team && !st.building; }) : null;
+    if (!aiInLane(p, e)) {
+      if (aiToRoost(p, e, steerTo, 5) >= 0) { aimAt(e.x, e.y); inp.fire = false; ai.tgt = null; return; }
+      ai.pushCd = 10;
+    } else if (tur) {
+      const st = structOf(tur), tx = st.tx * TILE + 8, ty = st.ty * TILE + 8;
+      aimAt(tx, ty);
+      const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+      if (Math.max(Math.abs(st.tx - ptx), Math.abs(st.ty - pty)) <= WORK_REACH) { inp.work = true; inp.fire = false; ai.tgt = null; return; }
+      if (steerTo(tx, ty, WORK_REACH, AI_ROOST_BUDGET) >= 0) { inp.fire = false; ai.tgt = null; return; }
+      ai.pushCd = 10;
+    } else if (p.cls === 1) {
+      const t = aiEagleTile(e, p);
+      if (t) {
+        const tx = t.tx * TILE + 8, ty = t.ty * TILE + 8;
+        aimAt(tx, ty);
+        const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
+        if (Math.max(Math.abs(t.tx - ptx), Math.abs(t.ty - pty)) <= WORK_REACH) { inp.work = true; ai.tgt = null; return; }
+        if (steerTo(tx, ty, WORK_REACH, AI_ROOST_BUDGET) >= 0) { ai.tgt = null; return; }
+      }
+      ai.pushCd = 10;
+    } else {
+      // the archer's station: AI_HOLD out from the bird ON THE LANE'S AXIS,
+      // where the gate's gap leaves the line to the roost open (off the axis
+      // its walls eat the shot), outside the gust
+      const sx = e.x + e.laneDir.x * AI_HOLD, sy = e.y + e.laneDir.y * AI_HOLD;
+      const ux = (e.x - p.x) / (d || 1), uy = (e.y - p.y) / (d || 1);
+      aimAt(e.x, e.y - 8);
+      // the roost tiles are solid, so the line is read to just short of them
+      const clear = aiLineClear(p, e.x - ux * 40, e.y - uy * 40);
+      const ds = Math.hypot(sx - p.x, sy - p.y);
+      if (ds > 14) {
+        if (steerTo(sx, sy, 0, AI_ROOST_BUDGET) < 0) { ai.pushCd = 10; }
+        else { inp.fire = d < 170 && clear && p.chargeT < kitOf(p).bowCharge * prof.draw; ai.tgt = null; return; }
+      } else {
+        if (d < GUST_BLAST_R + 16) { inp.mx = -ux; inp.my = -uy; } // out of the gust's reach
+        inp.fire = clear && p.chargeT < kitOf(p).bowCharge * prof.draw;
+        ai.tgt = null;
+        return;
+      }
+    }
+  }
+
+  // 5d. an ally's escort: with the human on the ground and within reach, it
+  //     keeps AI_ESCORT of them - the two lowest allied slots, so the rest
+  //     of the side still farms and builds. Inside that it goes on down the
+  //     ladder, working what is near, and comes back when they walk off.
+  if (ward && aiEscorts(p)) {
+    const d = Math.hypot(ward.x - p.x, ward.y - p.y);
+    if (d > AI_ESCORT && d < AI_ESCORT_R) {
+      if (steerTo(ward.x, ward.y, 4) >= 0) { aimAt(ward.x, ward.y); inp.fire = false; ai.tgt = null; return; }
+    }
+  }
 
   // 6. meat is gold: chase and shoot the nearest animal, but give up on one
   //    it cannot catch in 6 s (prey outruns a walk) or cannot route to at all
@@ -354,7 +611,9 @@ function updateAI(p, dt) {
     aimAt(t.tx * TILE + 8, t.ty * TILE + 8);
     const ptx = Math.floor(p.x / TILE), pty = Math.floor(p.y / TILE);
     if (Math.max(Math.abs(t.tx - ptx), Math.abs(t.ty - pty)) <= WORK_REACH) {
-      inp.work = true;
+      // the E key at the profile's duty cycle - a slow side rests between
+      // swings, which is what sets how fast it levels
+      inp.work = prof.work >= 1 || (state.tick % 120) < 120 * prof.work;
       return;
     }
     // route to any tile within WORK_REACH of it, whichever side is open;

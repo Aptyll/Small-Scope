@@ -254,7 +254,7 @@ function updatePlay(dt) {
       if (inWorld(atx, aty)) {
         const o = objects[idx(atx, aty)];
         if (o && o.type === 'eagle' && o.team !== a.team) {
-          hurtEagle(state.drop.eagles[o.team], a.dmg, players[a.owner], a.x, a.y);
+          hurtEagle(state.drop.eagles[o.team], EAGLE_ARROW_DMG, players[a.owner], a.x, a.y); // a flat spook, not the body damage
           if (a.ambush) ambushFx(a.x, a.y);
           dead = true;
         }
