@@ -419,10 +419,6 @@ class Player {
     // cleared by reset() - an order outlives the hand that gave it.
     this.flag = null;
     this.eliminated = false;            // its bird was driven off: no coming back - see die()/eagleFleeResolve
-    // who put this slot down last, for the defeat screen's one line: a
-    // killer's name and team, or null with a DEATH_CAUSE key when the world
-    // did it. die() writes them, endSnapshot() freezes them, nothing else looks.
-    this.downedBy = null; this.downedTeam = 0; this.downedCause = null;
     this.respawnT = 0;                  // seconds left on an active respawn countdown
     this.level = 1; this.xp = 0;        // hero level and lifetime gold earned; survive death
     this.trickleT = 0;                  // s toward the next passive coin (TRICKLE_T, js/sim.js)
@@ -739,9 +735,6 @@ function die(p, src, cause) {
   // an item on the cursor goes back in the bag first, so it spills with the
   // rest of the build instead of vanishing with the hand that was holding it
   if (p === player && state.drag) { dragReturn(); state.dragPend = null; }
-  p.downedBy = killer ? killer.name : null;
-  p.downedTeam = killer ? killer.team : p.team;
-  p.downedCause = cause;
   spillInventory(p, killer);
   if (killer) {
     killer.kills++;
@@ -875,8 +868,8 @@ function practiceRevive(p) {
 
 // Both end screens print the same object, so there is one of these rather
 // than one per ending: the four tally numbers, the class it was played in,
-// the kit it finished in, and the two facts only one of the screens uses
-// (the roster for the win's stage, place/by for the loss's headline).
+// the whole side both stages stand, and the one fact only the loss prints
+// (its placing).
 function endSnapshot() {
   // where the local slot finished: every slot still in the match outlasted
   // it, so place is one past that count. A win is 1st by definition (the
@@ -885,15 +878,13 @@ function endSnapshot() {
   return {
     gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
     team: player.team, cls: player.cls,
-    gear: player.gear.slice(), gearLv: player.gearLv.slice(),
-    // the whole side, the local slot first: every body the win stands on its
-    // stage, with the name, class and kit it finished in (a mate who is down
-    // at the whistle still won)
+    // the whole side, the local slot first: every body either ending stands
+    // on its stage, with the name, class and kit it finished in (a mate who
+    // is down at the whistle still shares the result)
     roster: players.filter((q) => q.active && q.team === player.team)
       .sort((a, b) => (a === player ? -1 : b === player ? 1 : a.id - b.id))
       .map((q) => ({ name: q.name, cls: q.cls, gear: q.gear.slice(), gearLv: q.gearLv.slice() })),
     place: player.eliminated ? left + 1 : 1, of: players.filter((q) => q.active).length,
-    by: player.downedBy, byTeam: player.downedTeam, cause: player.downedCause,
   };
 }
 

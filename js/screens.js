@@ -483,44 +483,52 @@ const WIN_BANNER_W = 36, WIN_BANNER_H = 96; // the cloth; the rail hangs above i
 function winLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  // the win's stage is set from the outside in, so it breathes with the
-  // view: the braziers stand as far out as the frame allows, the banners
-  // hang just inside them, and the bodies take what is left with a gap
-  // between them that closes on a narrow view before anything overlaps
+  // the stage is set from the outside in, so it breathes with the view: the
+  // braziers stand as far out as the frame allows, the banners hang just
+  // inside them, and the bodies take what is left with a gap between them
+  // that closes on a narrow view before anything overlaps
   const brazierX = Math.min(200, cx - 14);
   const bannerX = brazierX - 36;
   const gap = Math.max(0, Math.min(6, Math.floor((bannerX - (WIN_BANNER_W >> 1) - 6 - WIN_BODY * 2.5) / 2)));
   return {
     toy, cx, brazierX, bannerX, gap,
-    spread: Math.min(112, cx - 22), // the loss's braziers, at the ends of its drift
     titleY: toy + 20,   // VICTORY / DEFEAT, 4x - 20px tall
     ruleY: toy + 44,
-    subY: toy + 56,     // the loss's FELLED BY line
-    bannerY: toy + 50,  // the rail the win's banners hang from
-    stageY: toy + 138,  // the win's stage: its middle step, where the side stands
-    champY: toy + 68,   // top of the loss's 5x body box (80px tall)
-    daisY: toy + 146,   // where the loss's drift lies (the dais of the old win stood here)
-    statY: toy + 170,
-    gearY: toy + 200,
-    plankY: toy + 230,
+    bannerY: toy + 50,  // the rail the banners hang from
+    stageY: toy + 138,  // the stage: the step the side stands on (the loss's drift lies here)
+    statY: toy + 174,
+    plankY: toy + 218,
   };
 }
 
 // Where each body of the side stands: the roster's first entry (the local
-// slot) on the raised middle block, the rest fanning out a rank at a time to
-// the right and the left of it, so the line is mirrored whatever order the
-// roster came in. y is the top of the 3x body box, feet sunk two rows into
-// the tier's snow cap.
-function winStands(L, ws) {
+// slot) in the middle, tier px up (the win's raised block; the loss has
+// none), the rest fanning out a rank at a time to the right and the left of
+// it, so the line is mirrored whatever order the roster came in. y is the
+// top of the 3x body box, feet sunk two rows into the snow. Both endings
+// stand the side on these.
+function winStands(L, ws, tier) {
   const pitch = WIN_BODY + L.gap;
   return ws.roster.map((m, i) => {
     const rank = (i + 1) >> 1, side = i & 1 ? 1 : -1;
     return {
       m, rank,
       x: L.cx + (i ? side * rank * pitch : 0) - (WIN_BODY >> 1),
-      y: L.stageY + 2 - WIN_BODY - (i ? 0 : WIN_TIER),
+      y: L.stageY + 2 - WIN_BODY - (i ? 0 : tier),
     };
   });
+}
+
+// a blend of two hex colours, f of the way from a to b: the loss's banner is
+// the win's chilled toward the wash, not a second palette to keep
+function mixHex(a, b, f) {
+  const A = parseInt(a.slice(1), 16), B = parseInt(b.slice(1), 16);
+  let out = '#';
+  for (let s = 16; s >= 0; s -= 8) {
+    const v = Math.round(((A >> s) & 255) * (1 - f) + ((B >> s) & 255) * f);
+    out += (v < 16 ? '0' : '') + v.toString(16);
+  }
+  return out;
 }
 
 // the numbers the screen prints, frozen at the win. Icon plus number, no
@@ -709,17 +717,21 @@ const WIN_TAIL = 12; // the swallowtail's depth, in cloth rows
 // between two gold rules, fold lines down the hang and a fringed swallowtail
 // cut out of the alpha - so the live pass has only to ripple the rows. flip
 // mirrors it, so the lit fold of both banners faces the middle of the stage.
+// cold is the loss's: the same cloth chilled halfway to the wash, its gold
+// gone to frost, moth-eaten down the hang and frayed where the tassels were.
 // ti is the team PRESET (already through skin()).
-function winBannerCv(ti, flip) {
+function winBannerCv(ti, flip, cold) {
   const cache = winBannerCv.cache || (winBannerCv.cache = {});
-  const key = ti + (flip ? 'f' : '');
+  const key = ti + (flip ? 'f' : '') + (cold ? 'c' : '');
   if (cache[key]) return cache[key];
-  const tm = TEAMS[ti];
+  const T = TEAMS[ti], WASH = '#141c3c';
+  const C = cold ? (c) => mixHex(c, WASH, 0.5) : (c) => c;
+  const tm = { coat: C(T.coat), coatL: C(T.coatL), coatD: C(T.coatD), trim: C(T.trim), trimD: C(T.trimD), mark: C(T.mark) };
   const W = WIN_BANNER_W, H = WIN_BANNER_H, half = W >> 1, CLOTH = H - 3; // 3 rows of tassel under the tips
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const g = cv.getContext('2d');
   const px = (x, y, c, w) => { w = w || 1; g.fillStyle = c; g.fillRect(flip ? W - x - w : x, y, w, 1); };
-  const GOLD = '#c89a3c', GILT = '#ffd95c', DARK = '#1a1430';
+  const GOLD = cold ? RULE_FROST.bar : '#c89a3c', GILT = cold ? RULE_FROST.hi : '#ffd95c', DARK = '#1a1430';
   for (let y = 0; y < CLOTH; y++) {
     const cut = y >= CLOTH - WIN_TAIL ? y - (CLOTH - WIN_TAIL) + 1 : 0; // the notch, widening down the tail
     const segs = cut === 0 ? [[0, W]] : [[0, half - cut], [half + cut, W - half - cut]];
@@ -758,11 +770,19 @@ function winBannerCv(ti, flip) {
   // the team's diamond between the rules, on a dark rim
   for (let d = -4; d <= 4; d++) { const dw = 4 - Math.abs(d); px(half - dw - 1, 48 + d, DARK, dw * 2 + 3); }
   for (let d = -3; d <= 3; d++) { const dw = 3 - Math.abs(d); px(half - dw, 48 + d, d < 0 ? tm.trim : tm.mark, dw * 2 + 1); }
-  // the tips: a gilt hem, and tassels hanging off it
+  // the tips: a gilt hem, and tassels hanging off it - or, cold, a frayed one
   const tipW = half - WIN_TAIL;
   for (const o of [0, W - tipW]) {
     px(o, CLOTH - 1, GILT, tipW);
-    for (let x = o; x < o + tipW; x += 2) { px(x, CLOTH, GILT); px(x, CLOTH + 1, GOLD); px(x, CLOTH + 2, '#8a6a2c'); }
+    for (let x = o; x < o + tipW; x += 2) {
+      if (cold) { px(x, CLOTH, tm.coatD); continue; }
+      px(x, CLOTH, GILT); px(x, CLOTH + 1, GOLD); px(x, CLOTH + 2, '#8a6a2c');
+    }
+  }
+  if (cold) { // moth holes down the hang, bitten out of the alpha
+    for (let y = 30; y < CLOTH; y++) for (let x = 3; x < W - 3; x++) {
+      if (hash2(x * 13 + 5, y * 7 + ti) < 0.012) g.clearRect(x, y, 2, 2);
+    }
   }
   cache[key] = cv;
   return cv;
@@ -772,8 +792,8 @@ function winBannerCv(ti, flip) {
 // gilt finial at each end and two rings, then the baked cloth a row at a
 // time under a ripple that is pinned at the rail and swings more the lower
 // it hangs, so it moves like weight rather than like a flag in a gale
-function drawWinBanner(cx, top, ti, flip, a, now) {
-  const cv = winBannerCv(ti, flip), w = cv.width, h = cv.height;
+function drawWinBanner(cx, top, ti, flip, a, now, cold) {
+  const cv = winBannerCv(ti, flip, cold), w = cv.width, h = cv.height;
   const x = cx - (w >> 1);
   ctx.globalAlpha = a;
   ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 6, top - 6, w + 12, 5);
@@ -781,8 +801,8 @@ function drawWinBanner(cx, top, ti, flip, a, now) {
   ctx.fillStyle = '#4a5a90'; ctx.fillRect(x - 5, top - 5, w + 10, 1);
   for (const fx of [x - 8, x + w + 5]) {
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(fx - 1, top - 8, 5, 8);
-    ctx.fillStyle = '#c89a3c'; ctx.fillRect(fx, top - 7, 3, 6);
-    ctx.fillStyle = '#ffd95c'; ctx.fillRect(fx, top - 7, 3, 1); ctx.fillRect(fx, top - 6, 1, 3);
+    ctx.fillStyle = cold ? RULE_FROST.bar : '#c89a3c'; ctx.fillRect(fx, top - 7, 3, 6);
+    ctx.fillStyle = cold ? RULE_FROST.hi : '#ffd95c'; ctx.fillRect(fx, top - 7, 3, 1); ctx.fillRect(fx, top - 6, 1, 3);
   }
   for (const rx of [x + 4, x + w - 6]) {
     ctx.fillStyle = '#0a0e23'; ctx.fillRect(rx - 1, top - 3, 4, 4);
@@ -918,32 +938,6 @@ function drawEndStatPlate(r, st, ws, t, i, T, ac) {
   ctx.globalAlpha = 1;
 }
 
-// the kit a match finished in, centred under the tally: one HUD cell per
-// slot, at the material it reached, with the same buy pips the in-match row
-// draws. A maxed slot rims in the ending's accent.
-function drawEndGear(ws, y, a, ac) {
-  if (a <= 0) return;
-  ctx.globalAlpha = Math.min(1, a);
-  const gwAll = GEAR_SLOTS.length * BAG_CELL + (GEAR_SLOTS.length - 1) * BAG_GAP;
-  let gx = Math.round((VIEW_W - gwAll) / 2);
-  ctx.fillStyle = '#0a0e23'; chamRect(gx - 4, y - 3, gwAll + 8, BAG_CELL + 6);
-  ctx.fillStyle = '#141c3c'; chamRect(gx - 3, y - 2, gwAll + 6, BAG_CELL + 4);
-  for (let i = 0; i < GEAR_SLOTS.length; i++) {
-    const lv = ws.gearLv[i];
-    ctx.fillStyle = lv >= GEAR_LV_MAX ? ac.rule : '#35426e';
-    ctx.fillRect(gx, y, BAG_CELL, BAG_CELL);
-    ctx.fillStyle = '#0f1632';
-    ctx.fillRect(gx + 1, y + 1, BAG_CELL - 2, BAG_CELL - 2);
-    for (let k = 0; k < GEAR_LV_MAX - 1; k++) { // pips above the icon, as the HUD cell draws them
-      ctx.fillStyle = k < lv - 1 ? '#f2cc6a' : '#2c3560';
-      ctx.fillRect(gx + 3 + k * 4, y + 2, 3, 2);
-    }
-    ctx.drawImage(SPRITES.gearIcons[i][ws.gear[i]][lv - 1], gx + 3, y + 5);
-    gx += BAG_CELL + BAG_GAP;
-  }
-  ctx.globalAlpha = 1;
-}
-
 // the tally row: n plates of one width, centred, each on its own beat
 function drawEndTally(stats, ws, t, y, T, ac) {
   const pw = 24 + Math.max.apply(null, stats.map((st) => pixelTextWidth(st.val(ws), 2))) + 6;
@@ -987,7 +981,7 @@ function renderVictory(now) {
     drawWinBrazier(L.cx + L.brazierX, L.stageY + 14, now, rise);
     drawWinBanner(L.cx - L.bannerX, L.bannerY - lift, ti, true, rise, now);
     drawWinBanner(L.cx + L.bannerX, L.bannerY - lift, ti, false, rise, now);
-    const stands = winStands(L, ws);
+    const stands = winStands(L, ws, WIN_TIER);
     const ranks = stands.length >> 1;
     drawWinDais(L.cx, L.stageY + lift, ranks * (WIN_BODY + L.gap) + (WIN_BODY >> 1) + 8, tm, rise);
     // every body of the side, outer ranks first and the local slot last: 3x,
@@ -1061,11 +1055,6 @@ function renderVictory(now) {
   // --- the tally ----------------------------------------------------------
   drawEndTally(WIN_STATS, ws, t, L.statY, WIN_T, WIN_ACCENT);
 
-  // the kit it was won in: the four pieces at the material they reached,
-  // carrying the same buy pips the in-match HUD row draws
-  drawEndGear(ws, L.gearY,
-    Math.min(1, (t - (WIN_T.stats + WIN_STATS.length * WIN_T.statStep)) / 0.3), WIN_ACCENT);
-
   // --- the planks, sliding up to land exactly on WIN_T.menu ---------------
   if (t > WIN_T.menu - WIN_SLIDE) {
     const e = easeOut(Math.min(1, (t - (WIN_T.menu - WIN_SLIDE)) / WIN_SLIDE));
@@ -1080,17 +1069,19 @@ function renderVictory(now) {
 // does not actually end until you stop watching, which is why LOBBY on an
 // elimination lands here (deadActivate) and this screen's own plank is the
 // door out. It is drawn on winLayout()'s anchors deliberately: DEFEAT sits
-// exactly where VICTORY sat, the rule, the tally and the kit strip land in
-// the same bands, and the two read as one pair rather than two designs.
-// Everything else is the win inverted - the letters fall instead of
-// dropping in, the rule is frost instead of gold, the braziers are out, no
-// crown, and the champion is face down in the drift the dais stood on.
-// state.defeatT is the clock: state.deadTimer has been running since the
-// body fell, which may have been minutes ago.
+// exactly where VICTORY sat, the side stands on the same stands, the rule
+// and the tally land in the same bands, and the two read as one pair rather
+// than two designs. Everything else is the win inverted - the letters fall
+// instead of dropping in, the rule is frost instead of gold, the banners
+// are cold and moth-eaten, the braziers are out, no block and no crown, and
+// the side stands knee-deep in a drift where the dais stood with the local
+// slot face down in the middle of it. state.defeatT is the clock:
+// state.deadTimer has been running since the body fell, which may have been
+// minutes ago.
 const DEF_T = {
   dim: 0.45,      // the cold wash has finished settling
   title: 0.18, letter: 0.06, land: 0.34, // DEFEAT falls in a letter at a time
-  stage: 0.55,    // the drift, the dead braziers and the body settle in
+  stage: 0.55, stand: 0.07, // the drift, the dead braziers and the side settle in, a rank a beat after the last
   rule: 0.95,     // the frost rule sweeps out of the middle
   stats: 1.55, statStep: 0.16, roll: 0.5, // the tally, one plate at a time
   menu: 2.70,     // the plank is up and the screen is live
@@ -1100,7 +1091,8 @@ const DEF_SLIDE = 0.32; // the plank's slide, finishing exactly on DEF_T.menu
 // Where the local slot finished, and what it earned getting there: the four
 // columns the win prints, with the placing in front of them. That number is
 // the one thing a loss has to say that a win does not - "4/6" and not a word
-// of it, because the podium glyph beside it is the label.
+// of it, because the podium glyph beside it is the label. Who put the local
+// slot down is the event feed's line, not this screen's: the side lost.
 const DEF_STATS = [
   { icon: 'place', roll: false, val: (w) => w.place + '/' + w.of },
   { icon: 'gold', roll: true, val: (w) => String(w.gold) },
@@ -1183,6 +1175,7 @@ function renderDefeat(now) {
   const ws = state.end || (state.end = endSnapshot());
   const t = state.defeatT;
   const L = winLayout();
+  const ti = skin(ws.team), tm = TEAMS[ti];
   const dim = Math.min(1, t / DEF_T.dim);
 
   // --- backdrop: a colder, heavier wash than the win's --------------------
@@ -1195,26 +1188,44 @@ function renderDefeat(now) {
   ctx.fillStyle = vg; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   drawWinMotes(now, dim, 44, true);
 
-  // --- the stage: dead braziers, the drift, the body ----------------------
+  // --- the stage: dead braziers, cold banners, the side in the drift ------
   const rise = easeOut(Math.max(0, Math.min(1, (t - DEF_T.stage) / 0.6)));
   if (rise > 0) {
     const settle = Math.round((1 - rise) * 8); // it comes down into place, not up
-    drawDeadBrazier(L.cx - L.spread, L.daisY + 14, now, rise);
-    drawDeadBrazier(L.cx + L.spread, L.daisY + 14, now, rise);
-    drawDefeatDrift(L.cx - 6, L.daisY - 2 - settle, 70, 30, rise); // the bank behind
-    // The champion, face down and SIDE-ON: a body lying across the frame is
-    // the one pose that cannot be misread as standing. Same 5x and the same
-    // 80px box the winner rises in. No gear marks - those sit on the standing
-    // body plan (see drawPlayer), which is why the kit strip below is where
-    // the kit is read on this screen.
-    const bx = L.cx - 40, by = L.champY - 8 - settle;
+    drawDeadBrazier(L.cx - L.brazierX, L.stageY + 14, now, rise);
+    drawDeadBrazier(L.cx + L.brazierX, L.stageY + 14, now, rise);
+    drawWinBanner(L.cx - L.bannerX, L.bannerY - settle, ti, true, rise, now, true);
+    drawWinBanner(L.cx + L.bannerX, L.bannerY - settle, ti, false, rise, now, true);
+    const stands = winStands(L, ws, 0);
+    const hw = (stands.length >> 1) * (WIN_BODY + L.gap) + (WIN_BODY >> 1);
+    drawDefeatDrift(L.cx, L.stageY - 4 - settle, hw + 12, 26, rise); // the bank behind
+    // the mates on their feet in it, outer ranks first, each settling a beat
+    // after the last, wearing the gear it finished in, its name over its head
+    for (let k = stands.length - 1; k >= 1; k--) {
+      const s = stands[k];
+      const sr = easeOut(Math.max(0, Math.min(1, (t - DEF_T.stage - s.rank * DEF_T.stand) / 0.6)));
+      if (sr <= 0) continue;
+      const by = s.y - Math.round((1 - sr) * 8);
+      ctx.globalAlpha = sr;
+      ctx.drawImage(SPRITES.champ[s.m.cls][ti].down[0], s.x, by, WIN_BODY, WIN_BODY);
+      drawGearMarks(s.m, s.x, by, 3);
+      drawPixelTextOutline(ctx, s.m.name, centreTextX(s.x + (WIN_BODY >> 1), s.m.name), by - 8, tm.mark, '#0f1632');
+      ctx.globalAlpha = 1;
+    }
+    // ...and the local slot face down among them, SIDE-ON: a body lying
+    // across the frame is the one pose that cannot be misread as standing.
+    // No gear marks - those sit on the standing body plan (see drawPlayer).
+    // The name sits over the body's top row (row 7 of the prone grid).
+    const me = stands[0];
+    const bx = me.x, by = L.stageY + 6 - WIN_BODY - settle;
     ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.cls][skin(ws.team)].prone.right[0], bx, by, 80, 80);
+    ctx.drawImage(SPRITES.champ[me.m.cls][ti].prone.right[0], bx, by, WIN_BODY, WIN_BODY);
+    drawPixelTextOutline(ctx, me.m.name, centreTextX(bx + (WIN_BODY >> 1), me.m.name), by + 13, tm.mark, '#0f1632');
     ctx.globalAlpha = 1;
-    // ...and the snow in FRONT of it, over the body's last few rows: the
-    // drift has already started taking it back
-    drawDefeatDrift(L.cx, L.daisY + 14 - settle, 92, 26, rise);
-    stampGrid(DEF_ARROW, DEF_ARROW_PAL, L.cx + 46, L.daisY - 42 - settle, 3, '#0a0e23');
+    // ...and the snow in FRONT of them all, over every boot and the body's
+    // last rows: the drift has already started taking them back
+    drawDefeatDrift(L.cx, L.stageY + 14 - settle, hw + 32, 20, rise);
+    stampGrid(DEF_ARROW, DEF_ARROW_PAL, L.cx + 14, L.stageY - 24 - settle, 2, '#0a0e23');
   }
 
   // --- the headline: DEFEAT, one letter at a time, falling ----------------
@@ -1243,21 +1254,13 @@ function renderDefeat(now) {
     }
   }
 
-  // the rule sweeps out, then the one line that says who did it
+  // the rule sweeps out of the middle; the stage under it says who lost
   if (t > DEF_T.rule) {
-    const sweep = easeOut(Math.min(1, (t - DEF_T.rule) / 0.4));
-    drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * sweep), 1, RULE_FROST);
-    const sub = ws.by ? 'FELLED BY ' + ws.by : (DEATH_CAUSE[ws.cause] || 'WENT DOWN');
-    ctx.globalAlpha = Math.min(1, (t - DEF_T.rule) / 0.5);
-    drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
-      ws.by ? TEAMS[skin(ws.byTeam)].mark : '#8f9cc4', '#0a0e23');
-    ctx.globalAlpha = 1;
+    drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * easeOut(Math.min(1, (t - DEF_T.rule) / 0.4))), 1, RULE_FROST);
   }
 
-  // --- the tally and the kit it was lost in -------------------------------
+  // --- the tally ----------------------------------------------------------
   drawEndTally(DEF_STATS, ws, t, L.statY, DEF_T, DEF_ACCENT);
-  drawEndGear(ws, L.gearY,
-    Math.min(1, (t - (DEF_T.stats + DEF_STATS.length * DEF_T.statStep)) / 0.3), DEF_ACCENT);
 
   // --- the plank, sliding up to land exactly on DEF_T.menu ----------------
   if (t > DEF_T.menu - DEF_SLIDE) {
@@ -1267,4 +1270,3 @@ function renderDefeat(now) {
     ctx.globalAlpha = 1;
   }
 }
-

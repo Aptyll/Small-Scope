@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.93'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.94'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.94', 'THE DEFEAT SCREEN STANDS THE WHOLE LOSING SIDE KNEE-DEEP IN THE DRIFT UNDER COLD, MOTH-EATEN BANNERS WITH YOU FACE DOWN IN THE MIDDLE, AND THE KIT STRIP IS GONE FROM BOTH END SCREENS.'],
   ['2.93', 'THE VICTORY SCREEN STANDS THE WHOLE WINNING SIDE ON A WIDER THREE-TIER STAGE WITH A NAME OVER EVERY HEAD, UNDER TWO BIG CRESTED BANNERS, THE TALLY ICONS AT TWICE THE SIZE AND NOT A LINE OF TEXT UNDER THE RULE.'],
   ['2.92', 'THE WIKI BEASTS LEGEND READS CLEAN: EVERY LEADER STARTS CLEAR OF THE FRAME AND TURNS ON A COLUMN OF ITS OWN, SO NO LINE CROSSES THE LEVEL PLATE OR ANOTHER LABEL.'],
   ['2.91', 'THE WIKI OPENS ON A CLASSES PAGE: BOTH CLASSES WITH THEIR HEALTH AND STAT PIPS, AND ALL EIGHT ABILITIES WITH THEIR COOLDOWN, CAST AND WHAT EACH DOES.'],
