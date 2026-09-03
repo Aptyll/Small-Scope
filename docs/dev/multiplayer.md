@@ -62,6 +62,9 @@ ability       edge-triggered (keys 1-4): cast that class ability, -1 = none
 cmd           one-shot order {kind:'build'|'upgrade'|'demolish', tx, ty, id}
               or {kind:'gear', piece} - a gear buy: no tile, no reach, no contest
               or {kind:'skill', i} - a hud-ability rank: same, free (a skill point)
+              or {kind:'shop', act, ...} - a buy or a food trade at the
+              merchant's counter: no tile and no contest (an offer is a line,
+              not a queue), but it re-checks its own reach (shopCmd, js/shop.js)
 ```
 
 `sampleHumanInput(player)` (input banner) folds `keys`/`mouse` into slot 0's struct once per step,
@@ -429,7 +432,10 @@ The ladder:
    outruns a walk). Birds are excluded: they fly, and no ground route catches a flushed flock.
 11. **loot** — walk onto a drop within 72 px (drops are neutral and first-come).
 12. **spend** — first a [gear](gameplay.md#gear) level when the purse covers the cheapest piece
-   plus a 15-gold float. Then, with gold in hand, build a generator (or, 30% of the time and
+   plus a 15-gold float. **A bot never shops**: [the merchant's counter](gameplay.md#the-merchants-counter)
+   takes the same `input.cmd` a gear buy does and `shopBuy`/`shopTrade` take any `p`, so the
+   path is there the day this rung learns to walk to a roost and read a price — nothing about the
+   shop is human-only except the drag that sells. Then, with gold in hand, build a generator (or, 30% of the time and
    only where `findSite` finds 3×2 of room, a bot bay) on a nearby stump, else upgrade its own
    work; steps off a build site first, since a building is solid. Picking up a dropped card off the ground already falls out of the loot rung
    (drops are type-agnostic loot); a bot never opens the pick-1-of-3 draft itself

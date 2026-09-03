@@ -1225,6 +1225,9 @@ loadSettings();
 // ...and the tech tree, which decides what this profile's world may drop.
 // Must run after PROFILE.load() and before initPlayers()/any swing.
 rebuildLootPool();
+// ...and the merchants' market, which primes three days of prices behind it
+// so the counter's graphs are graphs on day one (js/shop.js).
+initMarket();
 relayout(); // fitCanvas already ran at load; this places the UI for the fitted view
 SFX.setVolume(settings.volume);
 SFX.setMusicVolume(settings.musicVol);
@@ -1359,6 +1362,21 @@ window.DBG = {
   // all a profile still remembers about the tree.
   TECH, TECH_ROWS, techNodeRect, techHit, rebuildLootPool, LOOT_POOL,
   wipeTech: () => PROFILE.clearTech(),
+  // The merchant's counter (js/shop.js): the live market and its two goods,
+  // the rolled stock, the panel's geometry, and every trade without the
+  // pointer. `marketStep(n)` walks the prices n moves on so a driver can watch
+  // a spike without waiting three days for one, and `shopRestock()` turns the
+  // counter over on the spot.
+  market, GOODS, MKT_STEP, MKT_HIST, MKT_DAYS, SHOP_RESTOCK, marketPrice, marketHist,
+  marketStep: (n) => { for (let i = 0; i < (n || 1); i++) updateMarket(MKT_STEP); return MKT_ORDER.map(marketPrice); },
+  shopRestock: () => shopRestock(true), shopOffer, itemValue, cellValue, sellValue,
+  merchNear: (p) => merchNear(p || player),
+  openShop: (p) => openShop(merchNear(p || player)), closeShop, shopOpen,
+  shopLayout, shopHit: (x, y) => shopHit(x == null ? mouse.x : x, y == null ? mouse.y : y),
+  shopBuy: (sec, i, p) => shopBuy(p || player, sec, i),
+  shopSellCell: (i, p) => shopSellCell(p || player, i),
+  shopTrade: (id, dir, p) => shopTrade(p || player, id, dir),
+  CARD_PRICE,
   // what the pointer is on, as the panel would describe it (null = nothing)
   tipAt: (x, y) => tipAt(x == null ? mouse.x : x, y == null ? mouse.y : y),
   tipLift,

@@ -999,6 +999,7 @@ rather than a different resource (the League model: one number, many ways to ear
 | bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
 | generator | `tiers[tier].pay` every `period` s: 1/15, 1/10, 2/12 — 4 / 6 / 10 a minute | passive income, deposited to its owner; sized under the clock's own 15 so a farm of them never out-trickles the trickle |
 | chest | `CHEST_GOLD_MIN`–`MAX` (8–20) + a card, and 3 in 4 a **top-tier** tool or bit | ~14 caches along the treeline, one free E press — the only source of the best weapons |
+| a sale at [the counter](#the-merchants-counter) | half a made thing's price, or the live market price for fish and berries | the one payout that is **not** XP (`tradeGold`) — a trade is an exchange, not a source, and the counter buys food at the price it sells it |
 
 The per-swing rows went to zero and the fells to a coin in 2.63, when a pine paying 5 in
 four swings had every bot at the level cap by two minutes: the table is sized so that a
@@ -1042,6 +1043,144 @@ toward the nearest player, and everyone standing on one contests it
 room** for a drop is neither magnetised by it nor a claimant, so a full bag hands the pickup to
 whoever else is standing there instead of sitting on it, and standing alone on something you
 cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than eating it.
+
+## The merchant's counter
+
+**Each eagle's merchant is a shop, and both shops serve everybody.** Walk up to either team's
+[merchant](#the-merchant), press **E**, and its counter opens: twelve offers rolled off the tool,
+bit and card pools, a **sell well** anything in the pack can be dragged onto, and a live **fish
+and berry market**. The whole feature is [js/shop.js](../../js/shop.js) — the `market`,
+`the counter's stock`, `buying and selling` and `the shop panel` banners.
+
+Your own roost's merchant is the near one; the rival's is a walk through their base and sells the
+same twelve things, because there is **one market and two shopfronts onto it**. That is also why a
+merchant **cannot be killed**: `unitAlive` (js/actions.js) answers false for one, which takes it
+out of the arrow loop, the roll sweep, every area sweep, a turret's mark, a worker's quarry and
+the hunt reticle in a single place — a shop nobody can reach is not a shop. It has no `hp` field
+at all and draws no health bar.
+
+### Opening it
+
+`merchNear(p)` is the resolver — the nearest merchant within `SHOP_REACH` (34 px) of a body,
+either team's — and the `E SHOP` cap over it (`drawShopHint`, js/ui.js) is the same proximity
+prompt the practice armory's `E ARM` uses, drawn only when no [work target](#the-swing-tools-e)
+is in reach, exactly as the press is only taken then. The counter is a **panel, not a held wheel**:
+the press opens it and E, Escape, the X or **walking out of reach** shuts it (`updateMarket`
+re-checks `inReach` every step). It is HUD like the pack and the character sheet — **the sim runs
+on underneath, and standing at a counter protects nobody**.
+
+Two things open with it: the **backpack** (`bagOpenNow`), because a sale is a drag out of the
+grid; and nothing else — the character sheet closes, since the two slabs would sit on each other.
+While it is up, E does not swing at the world (`sampleHumanInput`), the way a wheel already
+swallows it.
+
+The merchant **stands still and faces you** while its counter is open (`shopServing`, read by
+`updateMerchant`): it drops the gate, the felling and the loiter for as long as the sale takes.
+It is gated on the OPEN PANEL rather than on proximity because everybody lands at the roost
+together, and a merchant that stopped for anyone standing near it would never raise its gate.
+
+### The stock, and what it costs
+
+**Every tool, bit and card has a gold price on its own def**: `price` on the `TOOLS` and
+`BITS` entries (js/tools.js) and `CARD_PRICE` by rarity (js/player.js). A card is priced by rarity and
+not per entry because the rarity is what changes hands — the [pick of three](#roguelike-cards)
+inside it is drawn afterwards, so the buyer is paying for the odds.
+
+| section | offers | rolled from |
+| --- | --- | --- |
+| TOOLS | 3 | every key in `TOOLS`, distinct |
+| BITS | 3 | the `proj` bits, distinct |
+| MODIFIERS | 3 | the `proj: false` bits, distinct |
+| CARDS | 3 | `rollCardRarity(SHOP_CARD_ODDS)` — kinder than a chest's `CHEST_ODDS`, since a counter you chose to walk to should beat a box you tripped over |
+
+**An offer is a LINE, not a single item**: it can be bought from as often as gold and bag room
+allow until the counter turns over, every `SHOP_RESTOCK` (120 s), announced in the feed and drawn
+as a bar draining under the header. That is what makes the clock matter — what is on the counter
+is a *window*, not a queue — and it is also why nothing here is [contested](multiplayer.md#contested-orders):
+two players at one counter cannot take the same thing from each other.
+
+Everything rolls on `mktRng`, the market's **own** stream seeded off `SEED` (the landmarks' `lmRng`
+pattern): the same seed is the same market on every machine, and a busy shop can never shift a loot
+roll by consuming draws out of the shared stream.
+
+**Buying** goes through `input.cmd = { kind: 'shop', … }` → `runCmd` → `shopBuy`, the path
+[gear](#gear) already uses, so a bot could buy tomorrow without a second code path; it re-validates
+its own reach the way `buyGear` re-validates its cost, and it checks **bag room before it takes
+the money**, so nothing is ever paid for that cannot be carried. Bots do not shop yet.
+
+**Selling** is a **drag**: pick a cell out of the grid and let go over the sell well
+(`shopDropSell`, reached from `dragDrop`). The whole cell goes — an instanced tool cannot be
+split — and **a loaded tool sells with its bits**, at half of each, so nothing is ever quietly
+emptied for gold (`cellValue` → `sellValue`). Made goods fetch **half** their asking price; that
+margin is the whole reason looting still beats shopping. Unlike the buys, a sale resolves on the
+spot rather than through `input.cmd`: what is on the cursor is out of the bag already, and a
+command the sim might drop that frame (pause, the chart) would take the item with it.
+
+**A sale pays gold but no XP** — `tradeGold`, the one documented exception to the `gainGold`
+rule in [CLAUDE.md](../../CLAUDE.md). A trade is an exchange, not a source: the counter buys food
+at the price it sells it, so paying levels for a sale would turn two clicks into a level farm.
+
+### The fish and berry market
+
+**Fish and berries have a price that moves, and they are the only two things in the game that do.**
+`GOODS` (js/shop.js) is the whole table: `base` is what a thing is worth when nothing is
+happening, `min`/`max` are rails it can never leave, `vol` is the ordinary step and `shock`
+the chance a step is a **lurch** instead — straight to `lo` or `hi` of where it stood.
+
+| good | base | rails | ordinary step | lurch |
+| --- | --- | --- | --- | --- |
+| FISH | 18 | 5–60 | ±13% | 5% of steps, ×0.62 or ×1.7 |
+| BERRIES | 4 | 1–15 | ±11% | 4% of steps, ×0.66 or ×1.6 |
+
+Fish are the money good and berries the small change — a fish is worth four or five berries at
+rest and the gap widens on a spike, so a full bag of fish is a real decision about *when* to sell
+it. Every `MKT_STEP` (5 s) each good takes one step: a pull `MKT_REVERT` of the way back to its
+base, the drift, then the lurch. `price` is a float and the walk runs on it; what is ever **paid**
+is `marketPrice()`, the rounded coin, so the graph can wander between two whole numbers without
+the counter's price flickering.
+
+**Both goods trade at one price in both directions** — no spread at all, the one place the
+half-price rule does not apply. A spread would kill the only thing the market is *for* (buy low,
+hold, sell high), and there is nothing to protect: the price does the taking by itself.
+
+**The graphs are three days deep.** Each good keeps `MKT_HIST` samples (`MKT_DAYS × CYCLE ÷
+MKT_STEP` = 99, one per step), drawn as a filled sparkline with a dotted gridline per day boundary
+and its high and low printed small at the ends. `initMarket()` **primes the whole history at
+boot** by walking it forward from the base price, so the counter's graphs are graphs on day one
+rather than a flat line that fills in over the first quarter of an hour.
+
+**A big move makes the feed.** `marketNews` cuts a headline when the price has moved both
+`MKT_NEWS` (30%) *and* the good's own `news` gold since the last one — `FISH SPIKE 34G`,
+`BERRIES CRASH 2G` — green on a rise and red on a fall, over `SFX.market(up)`, a two-note blip
+that rises or falls so the direction is audible with the feed off screen. The absolute floor is
+the half that matters: a berry going 2G → 3G is a 50% "spike", and without it the feed fills with
+small change. The card that made one pulses in the panel for three seconds.
+
+### The panel
+
+It is **wide and short and pinned near the top edge** rather than centred, and that is the one
+piece of the layout that is not taste: the [tooltip](rendering.md#the-hover-tooltip) is bottom-left and grows
+upward off the bottom rim, so a tall centred slab would put its own bottom-left corner exactly
+where a tall tooltip lands — hovering the last row of offers would hide the last row of offers.
+Ending at 176 px keeps the whole panel clear of the deepest tooltip the game can draw, and leaves
+the pack, the hud strip and the feed readable underneath it while you trade.
+
+A header carries the merchant's own portrait in its side's mark, the sell well and the purse; the
+turnover bar runs under it; the four sections sit as a 2×2 grid of three-well rows; the two market
+cards run along the bottom. Every offer well wears **its item's own tier plate** (`tierPlate`,
+gilded ones still shine) with the price on a band along the bottom in can/cannot-afford ink, so a
+tool reads as the same tool it will be in the pack.
+
+Nothing on it is labelled with a verb. The sell well is a **pack, an arrow and a coin**; a market
+card's two trade plates say their direction by *arrangement* — coin into item is a buy, item into
+coin is a sale — and the price is stated once, big, because it is the same number both ways. The
+section headings (TOOLS / BITS / MODIFIERS / CARDS) and the graphs' own numbers are this panel's
+share of [CLAUDE.md](../../CLAUDE.md)'s carve-out, for the reason the practice instruments have
+one: reading a market **is** reading numbers, and no shape compares a price today against a price
+yesterday. Hovering anything on it describes it in the ordinary tooltip — an offer with a PRICE
+row on top of the rows that item shows anywhere else, a good with its day's change and its
+three-day high and low — and while the counter is up, every bag cell's tooltip gains a SELLS FOR
+row.
 
 ## Inventory and the backpack
 
@@ -1464,14 +1603,23 @@ and retried last when no route reaches it); then the **rim**: every pine within 
 `MERCH_SWING_T` a swing, **paying no gold** (like the crater and the lane — the same free start
 for both sides), picking the nearest pine to itself that still has an open side to stand on and
 keeping a timed `b.avoids` list of trunks no route reached (one slot flipped forever between two
-walled-in trees); then it keeps to the lane mouth, a step or two either way. The gate's owner is
-the team's first slot (kill credit for the turrets' bolts). It is a unit in `robots` with
-`merchant: true` and `kind: 'merchant'`: the same arrow loop, `hurtUnit` → `hurtRobot`,
-`separateUnits` (player radius and mass — `unitRadius`/`UNIT_MASS.merchant`), turret marking and
-y-sorted draw a worker rides, dispatched to `updateMerchant`/`drawMerchant` off the flag after
-`updateRobot`'s shared status/stun/wreck handling. `owner` is -1, so it reads no flag and no flag
-ever recalls it; killed, it stays dead (`e.merchant` clears, the feed says who felled it) — there
-is no second driver. `DBG.merchants` lists both.
+walled-in trees); then it keeps to the lane mouth, a step or two either way — **and keeps shop there**: that post is
+[the counter](#the-merchants-counter), open to either team, and it stands still and faces its
+customer for as long as one is being served.
+
+It is a unit in `robots` with `merchant: true` and `kind: 'merchant'`: the same
+`separateUnits` (player radius and mass — `unitRadius`/`UNIT_MASS.merchant`) and y-sorted draw a
+worker rides, dispatched to `updateMerchant`/`drawMerchant` off the flag after `updateRobot`'s
+shared status/stun handling. The gate's owner is the team's first slot (kill credit for the
+turrets' bolts). `owner` is -1, so it reads no flag and no flag ever recalls it.
+
+**It cannot be hurt, and it has no `hp` field at all rather than a large one.** `unitAlive`
+(js/actions.js) answers false for a merchant, and that one function is the gate every target
+picker in the game asks — the arrow loop, the roll's sweep, `unitsNear`/`unitsHit`, a turret's
+`turretFoe`, a worker's `robotFoeUnit`, a flag's `flagUnitAt` and the cursor's hunt reticle — so
+it is invisible to every weapon in the world rather than merely immune to one of them. It draws no
+health bar either: a full bar that could never move would promise a fight that is not on offer.
+There is no second driver and now there never needs to be. `DBG.merchants` lists both.
 
 ## Worker flags
 

@@ -31,7 +31,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | what the game *is* — the pillars, and what it deliberately is not | [docs/dev/game.md](docs/dev/game.md) |
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
-| movement, tools and bits, the draw and the cycle, the class abilities, dodge, wildlife, economy, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
+| movement, tools and bits, the draw and the cycle, the class abilities, dodge, wildlife, economy, the merchant's shop and the fish/berry market, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
 | player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | a **new look** for anything drawn — concept sheets Noah picks from before a grid ships | the `concept-art` skill ([.claude/skills/concept-art/SKILL.md](.claude/skills/concept-art/SKILL.md)); past sheets in `docs/media/concepts/` |
@@ -43,7 +43,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 
 Five legacy files — `profile.js`, `font.js`, `sprites.js`, the generated `sfxdata.js`,
 `audio.js` — keep their IIFEs and expose fixed `window` globals; after them the game code is
-**flat top-level classic scripts sharing one global scope** — twenty-one files, `core.js` through
+**flat top-level classic scripts sharing one global scope** — twenty-two files, `core.js` through
 `boot.js` (the tag `pre-split` keeps the one-file history).
 [index.html](index.html) loads them in a fixed order and they communicate **only through
 globals**, so each file's globals must exist before the next loads. The file table and the
@@ -65,7 +65,7 @@ them; `core.js` keeps only the numbers with no one owner. A const is invisible t
 before its own, so anything read at *load time* must be declared no later:
 [architecture](docs/dev/architecture.md#the-game-files-corejs--bootjs).
 
-The game code is organized only by `// ------ name` banners inside its twenty-one files.
+The game code is organized only by `// ------ name` banners inside its twenty-two files.
 **Keep every banner honest**, and find any function by its banner in
 [docs/dev/code-map.md](docs/dev/code-map.md) — read it before grepping blind.
 
@@ -85,10 +85,11 @@ team, a plank that lifts on hover — not "CLICK OR ARROWS TO SWAP", not "PLAYER
 control must read as what it does by its shape and its hover state alone, and if you catch
 yourself writing a hint sentence, build the affordance instead. Text is for names, numbers,
 headlines (a death, a landmark) and five deliberate carve-outs: **keybind indicators** (`'ESC
-BACK'`, a "1" in a slot's corner), the **settings, PLAYER, gear and character panels**' labelled rows, the
-**practice instruments** (the dummy meter, the parkour's lap clock and the archery round's
-readouts, with their BEST / LAST plates — a training instrument's whole job is comparing
-numbers), and the **hover tooltip** (bottom-left,
+BACK'`, a "1" in a slot's corner), the **settings, PLAYER, gear, character and shop panels**'
+labelled rows, the **instruments** — the practice room's (the dummy meter, the parkour's lap
+clock and the archery round's readouts, with their BEST / LAST plates) and the merchant's
+(the two price graphs and their high/low) — because an instrument's whole job is comparing
+numbers, and the **hover tooltip** (bottom-left,
 `tipAt`/`drawTooltip`, ui.js) — which earns it because comparing a tool's rate of fire against a
 bit's weight is comparing *numbers*, and no shape does that. It is a carve-out, not a licence: the
 well still has to read at a glance without it. Anything else that wants words is a design bug.
@@ -130,6 +131,9 @@ lives in `docs/dev/*.md` beside the code it protects.
   stepped; a new kind of thing that walks must join its list (and `UNIT_MASS`, and be marked `small`
   unless a roll should stop on it) or it walks through everyone. A player mid-roll is the exception:
   it skips contact with a small unit, because `rollSweep` turns that contact into a hit instead.
+- **Every target picker asks `unitAlive(e)`** — the arrow loop, the roll's sweep,
+  `unitsNear`/`unitsHit`, a turret's mark, a worker's quarry, the hunt reticle — so one answer
+  takes a body out of *every* weapon at once; that is what makes a **merchant** untouchable.
 - **Every living thing takes the same hit.** A blow goes through `hurtUnit(e, dmg, nx, ny, src, o)`
   and a state through its setter (`stunUnit`/`rootUnit`/`slowUnit`/`netUnit`/`markUnit`/`igniteUnit`,
   the `status effects` banner); an area effect sweeps `unitsNear`/`unitsHit`, never a loop per kind.
@@ -142,7 +146,9 @@ lives in `docs/dev/*.md` beside the code it protects.
 - **A loop over `players` that touches the world must skip `inAir(p)`** (riding or falling from the
   eagle) alongside `!p.active`/`p.dead` — arrows, drops, wildlife, the draw list and both maps all do.
 - **Gold never goes straight into `p.inv.gold`** — every payout calls `gainGold(p, n)`, which is
-  also the XP source; a direct `+=` earns no levels.
+  also the XP source; a direct `+=` earns no levels. One exception: `tradeGold`, the merchant's
+  till — a sale is an exchange, and a counter that buys fish at its own asking price would
+  otherwise be a level farm ([the counter](docs/dev/gameplay.md#the-merchants-counter)).
 - **A tool is an instance, not a type name.** Its bag cell carries the bits loaded into it, so a
   tool is **moved** between bag, slot, drop and back (`bagPut`, `slotPut`, `spawnDrop`'s `it`) and
   never rebuilt from `s.type` — rebuilding it silently empties somebody's build. What the button

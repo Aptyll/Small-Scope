@@ -569,6 +569,14 @@
     },
     // one number climbing on the victory screen: a dry, quiet blip
     tally() { tone(1320, 0.03, 'square', 0.035); },
+    // the market moving hard (marketNews, js/shop.js): two coin-bright notes,
+    // up for a spike and down for a crash, so the news is legible with the
+    // feed off screen. Synth on purpose - like a menu blip it must be
+    // identical every time, since it is read as a DIRECTION, not a texture.
+    market(up) {
+      tone(up ? 700 : 990, 0.07, 'square', 0.06);
+      tone(up ? 990 : 700, 0.14, 'triangle', 0.07, 0, 0.06);
+    },
     heal() { if (smp('warm', { vol: 0.6, rate: 1.3, jitter: 0.06 })) return; tone(440, 0.1, 'triangle', 0.08); tone(554, 0.12, 'triangle', 0.08, 0, 0.08); },
     splash() { noise(0.28, 0.28, 750); tone(300, 0.22, 'sine', 0.1, -190); noise(0.14, 0.12, 1500, 0.06); },
     // the wolf den: the pack answering, or a rising synth howl that sags at the end

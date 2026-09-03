@@ -45,6 +45,9 @@ window.addEventListener('keydown', (e) => {
   // and ordinary work is suppressed while any wheel is up (sampleHumanInput).
   if (e.key.toLowerCase() === 'e' && !e.repeat && !state.wheel && !state.mapOpen &&
       !state.settingsOpen && !state.draft && !state.drag && !player.dead) {
+    // The merchant's counter is a PANEL, not a held wheel, so the key that
+    // opened it shuts it - whatever else has come into reach meanwhile.
+    if (state.shop) { closeShop(); return; }
     const t = workTarget(player);
     if (!t || !t.near) {
       const rk = rackNear(player);
@@ -62,6 +65,10 @@ window.addEventListener('keydown', (e) => {
           // rest of the furniture, and the sink and rise are mid-ceremony.
           const bl = agBellNear(player);
           if (bl && agame.phase === 'off') { SFX.unlock(); state.wheel = { kind: 'agbell', tx: bl.tx, ty: bl.ty, seg: -1, ax: mouse.x, ay: mouse.y }; }
+          // ...and a MERCHANT: the press opens its counter (js/shop.js). Last
+          // in the chain because the practice room's furniture and a merchant
+          // can never be in reach of each other.
+          else { SFX.unlock(); openShop(merchNear(player)); }
         }
       }
     }
@@ -86,6 +93,7 @@ window.addEventListener('keydown', (e) => {
     else if (state.wheel) state.wheel = null;
     else if (state.draft) state.draft = null; // closes without picking
     else if (state.mapOpen) state.mapOpen = false;
+    else if (state.shop) closeShop();
     else if (state.charOpen) state.charOpen = false;
     else { state.settingsOpen = !state.settingsOpen; dragSlider = null; state.wheel = null; }
   }
@@ -142,7 +150,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (e.button === 2) {
     if (state.mode !== 'play' || state.mapOpen || state.settingsOpen || state.wheel || state.draft) return;
     if (bagHit(mouse.x, mouse.y) || gearHit(mouse.x, mouse.y) >= 0 || stripHit(mouse.x, mouse.y) ||
-        bitColHit(mouse.x, mouse.y) >= 0) return; // no build wheel through the HUD
+        shopHit(mouse.x, mouse.y) || bitColHit(mouse.x, mouse.y) >= 0) return; // no build wheel through the HUD
     SFX.unlock();
     const tx = Math.floor(mouseWX() / TILE), ty = Math.floor(mouseWY() / TILE);
     const o = structOf(objAt(tx, ty));
@@ -185,6 +193,7 @@ canvas.addEventListener('mousedown', (e) => {
   // closes, and the slab eats the rest. Everything else goes through
   // hudPress, which arms a drag the mouseup below either completes or reads
   // as a click.
+  if (shopClick(shopHit(mouse.x, mouse.y))) return;
   if (state.charOpen && charClick(charHit(mouse.x, mouse.y))) return;
   if (hudPress(mouse.x, mouse.y)) { SFX.unlock(); return; }
   // pressing on the world while carrying something: the release throws it,
@@ -308,7 +317,7 @@ function sampleHumanInput(p) {
   // the grapple reels only while its own key is held - the one HELD ability
   // input, read by updatePlayer's grapple branch; releasing it lets go early
   inp.grapple = !!keys['3'];
-  inp.work = !!keys['e'] && !state.wheel;
+  inp.work = !!keys['e'] && !state.wheel && !state.shop; // the counter swallows E the way a wheel does
   if (state.wheel) { inp.fire = false; inp.dodge = false; inp.ability = -1; } // the wheel swallows the shot
 }
 

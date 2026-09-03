@@ -1239,9 +1239,11 @@ function drawRobot(b, ex, ey, now) {
 // grids (sprites.js), two rows taller than a slot, standing on player feet
 // (b.y + 8 in the sort, the feet on the player's own foot row),
 // with the worker's axe swing over whatever it is felling or setting, the hop
-// off the bird as a lift, the shared tells, and a MERCH nameplate over its
-// bar in the side's paint - a name, the one text a body over the world gets
-// (the bird it drives wears PERCH the same way, drawEagle in boot.js).
+// off the bird as a lift, the shared tells, and a MERCH nameplate in the
+// side's paint - a name, the one text a body over the world gets (the bird it
+// drives wears PERCH the same way, drawEagle in boot.js). NO HEALTH BAR: it
+// has no health to draw (the `merchant` banner, js/robots.js), and a full bar
+// that can never move would promise a fight that is not on offer.
 function drawMerchant(b, ex, ey, now) {
   const set = SPRITES.merchant[skin(b.team)];
   const frames = set[b.dir] || set.down;
@@ -1270,7 +1272,6 @@ function drawMerchant(b, ex, ey, now) {
     }
   }
   drawUnitStates(b, px, py - lift, spr.width, spr.height, now);
-  drawHealthBar(b.x - ex, py - 6 - lift, b.hp, b.maxHp, 14, b.team);
   drawPixelTextOutline(ctx, 'MERCH', centreTextX(b.x - ex, 'MERCH'), py - 17 - lift, TEAMS[skin(b.team)].mark, '#0f1632');
   if (b.stunT > 0) drawStunStars(Math.round(b.x - ex), py - 10, b, 5);
 }

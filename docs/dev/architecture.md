@@ -36,6 +36,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/draw-world.js](../../js/draw-world.js) | ~1160 | shared scope, no `window.*` export | the world's pixels: the prerendered ground, every entity's sprite pass, the flag and landmark glyphs, lighting/weather/vignettes |
 | [js/render.js](../../js/render.js) | ~980 | shared scope, no `window.*` export | `render()` composes and blits the frame; the `.` debug overlays; cursor, reticle and aim line |
 | [js/ui.js](../../js/ui.js) | ~1950 | shared scope, no `window.*` export | the in-match HUD: radial wheel, brackets and prompts, minimap, the backpack, the character panel, the weapon strip and bit column, the drag, card draft, the hover tooltip |
+| [js/shop.js](../../js/shop.js) | ~700 | shared scope, no `window.*` export | the merchant's counter: the fish/berry market and its three-day history, the rolled stock and its turnover, buying and selling, and the panel all three are read on |
 | [js/panels.js](../../js/panels.js) | ~820 | shared scope, no `window.*` export | the TAB scoreboard + event feed, the M world map, the ESC settings slab, the PLAYER name panel |
 | [js/menu.js](../../js/menu.js) | ~1450 | shared scope, no `window.*` export | the title screen: menu planks, reroll die, tutorial + patch panels, class select, the gear pop-up, the tech tree screen, `PATCH_TXT` |
 | [js/screens.js](../../js/screens.js) | ~1160 | shared scope, no `window.*` export | the replay window, the death overlay and spectating, the victory and defeat ceremonies |

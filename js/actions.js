@@ -293,7 +293,7 @@ function rollSweep(p) {
     if (a.kind === 'deer') { rollTackle(p, sp, nx, ny); return; } // too much animal to go through
   }
   for (const b of robots) {
-    if (b.dead || b.team === p.team || p.rollHit.includes(b)) continue;
+    if (!unitAlive(b) || b.team === p.team || p.rollHit.includes(b)) continue;
     if (Math.hypot(b.x - p.x, b.y - p.y) > ROLL_HIT_R + unitRadius(b)) continue;
     p.rollHit.push(b);
     hurtUnit(b, dmg, nx, ny, p);
@@ -626,9 +626,16 @@ function isAnimalUnit(e) { return !(e instanceof Player) && e.kind !== undefined
 // where a blow lands on a body: a bird rides its altitude, everything else
 // stands on its own feet
 function unitMidY(e) { return e.y - (e.alt || 0) - 6; }
-// can this be hit at all right now
+// Can this be hit at all right now - and it is the ONE gate every target
+// picker in the game asks, not just the blow itself: the arrow pipeline, the
+// roll's sweep, a turret's mark, a worker's foe and a flag's quarry all run
+// their candidates through it, so a body that answers false is invisible to
+// every weapon in the world rather than merely immune to one of them.
+// A MERCHANT always answers false. It is a shopfront, not a combatant - both
+// sides trade at either counter (js/shop.js), so neither side may shoot one,
+// and nothing may stand between a player and the shop they walked to.
 function unitAlive(e) {
-  if (!e || e.dead) return false;
+  if (!e || e.dead || e.merchant) return false;
   return e instanceof Player ? e.active && !inAir(e) : true;
 }
 // Whose side a unit is on. Wildlife has none (-1): neutral to everyone and

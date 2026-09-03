@@ -1,6 +1,6 @@
 # Where things live in the game code
 
-The game code is ~14000 lines of flat top-level code across twenty-one files sharing one global
+The game code is ~14000 lines of flat top-level code across twenty-two files sharing one global
 scope ([architecture.md](architecture.md) has the file table and the load order), organized
 inside each file only by banner comments of the form `// ------ name`. **Keep every banner
 honest** — one that has drifted from what sits under it is worse than no banner, because it sends
@@ -122,7 +122,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | a bot leaving the bay's mouth, and the frame it spends deciding | `makeRobot`, `updateRobot` (`updateStructures` rolls them out: `the building sim`, structures.js) | `workers` |
 | shooting a worker bot: its hitbox, its damage, its wreck, and who it is now angry at | `robotHit`, `hurtRobot`, `robotDies`, `b.mad` | `workers` |
 | what a worker does this frame: the flag dispatch, the harvest tick, the melee | the tail of `updateRobot`, `engage`, `gather`, `holdAt` | `workers` |
-| the eagle's merchant: climbing down at the crash, the gate it raises off the ring stumps, the rim it fells, keeping to the lane mouth | `MERCH_*`, `freeTileNear`, `spawnMerchant` (called from `eagleCrash`, boot.js), `updateMerchant` (dispatched from `updateRobot` on `b.merchant`), `b.plan`/`b.avoids` | `merchant` |
+| the eagle's merchant: climbing down at the crash, the gate it raises off the ring stumps, the rim it fells, keeping to the lane mouth, and standing still to serve whoever opens its counter | `MERCH_*`, `freeTileNear`, `spawnMerchant` (called from `eagleCrash`, boot.js), `updateMerchant` (dispatched from `updateRobot` on `b.merchant`), `b.plan`/`b.avoids`, `shopServing` (js/shop.js) | `merchant` |
 | the worker flag: what a tile orders, planting/moving/lifting it, whose crew reads it | `FLAG_JOBS`, `FLAG_ATTACK`, `flagResolve`, `plantFlag`, `clearFlag`, `flagRecall`, `flagOf` | `worker flags` |
 | the lane a PATH flag asks for, and who has already claimed a tile in it | `flagCorridor`, `flagPathTarget`, `objTaken` | `worker flags` |
 | a worker's attack: who is a valid mark, where the axe lands, the blow itself | `robotFoeUnit`, `enemyStructNear`, `foeAlive`, `foePoint`, `robotStrike`, `ROBOT_*` | `worker flags` › `a worker's simple attack` |
@@ -249,6 +249,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | brackets, the E prompt, the fish prompt, wheel pixels | `drawSelection`, `drawWorkHint`, `drawFishHint`, `renderWheel`, `drawWheelHub`, `drawWheelStick` | `selection, hints & wheel` |
 | HUD and minimap | `renderUI`, `renderMinimap`, `updateMinimap` (throttled to `MM_REBUILD` ticks), `mmChrome`/`mmArcBand` (the disc's baked chrome and cached day/night arc band) | `UI` (the disc's per-tile colour comes from `objMapColor(o, 'mm')`: `world`, world.js) |
 | is the pointer over HUD that owns its own clicks, rather than over the world | `overHud` | `UI` (its callers are input.js's middle-button handlers and `flagTarget`, robots.js) |
+| the `E SHOP` cap over a merchant in reach | `drawShopHint` | `selection, hints & wheel` (the resolver and everything behind it: `merchNear`, shop.js) |
 | the backpack (bottom-right): the pack button (shut: the whole widget), the open frame's ten-cell grid and bottom strip (food + gold), the refusal flash | `BAG_CELL`/`BAG_GAP`/`BAG_PAD`/`BAG_BTN`/`BAG_STRIP`/`BAG_BG`/`BAG_WELL`, `bagOpenNow`, `bagFrameRect`, `bagBtnRect`, `bagCellRect`, `bagStripRect`, `bagCellPlate`, `bagHit`, `bagClick`, `bagDenied`, `drawFoodClock`, `drawBag` | `UI` › `the backpack` |
 | the pack button's 20px rucksack icon, baked once | `BAG_ICON`, `BAG_ICON_PAL`, `bagIconCv` | `UI` › `the pack icon` |
 | the character panel (G): the live body with its gear bands, the stat ledger off the live kit, the four gear pieces and their buys | `CHAR_LEDW`/`CHAR_WELL`, `charLayout`, `charHit`, `gearHit` (the piece-index read tipAt and the cursor keep using), `charClick`, `drawCharPanel` (state: `state.charOpen`, core.js) | `UI` › `the character panel` |
@@ -263,6 +264,20 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the weapon well's "it does not fit in here" red, the backpack's twin | `toolFlash`, `toolDenied` (aged in `updateFx`, sim.js, beside `bagFlash`) | `UI` › `hud strip` (its head, above `hudStripRect`) |
 | the bit column hovering the weapon well raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
 | the plate a tier is stated on, wherever an item sits, and the shine on the top one | `tierPlate`, `tierShine`, `drawItemIcon` | `UI` › `hud strip` (the tiers themselves: `TOOL_TIERS`, tools.js) |
+
+## js/shop.js
+
+| Looking for | Start at | Banner |
+| --- | --- | --- |
+| the fish/berry market: the walk, the shocks, the rails, the three-day history, and the market's own rng stream | `GOODS`, `MKT_STEP`/`MKT_DAYS`/`MKT_HIST`/`MKT_REVERT`/`MKT_NEWS`, `mktRng`, `market`, `marketPrice`, `marketHist`, `marketWalk`, `initMarket` (called from boot.js), `updateMarket` (called once a step from `updatePlay`, sim.js) | `market` |
+| a price move worth a feed line | `marketNews` (the good's own `news` gold floor beside `MKT_NEWS`) | `market` (the line itself: `logEvent`'s colour override, panels.js; the cue: `SFX.market`, audio.js) |
+| the twelve offers and their turnover | `SHOP_RESTOCK`, `SHOP_COLS`, `SHOP_SECTIONS`, `SHOP_CARD_ODDS`, `shopPick`, `shopRestock`, `shopOffer` | `the counter's stock` |
+| what a thing is worth, both ways | `itemValue`, `cellValue` (a tool carries its loaded bits), `sellValue` (half, except the two goods) | `buying and selling` (the prices themselves: `price` on `TOOLS`/`BITS` tools.js, `CARD_PRICE` player.js) |
+| standing at a counter, and the merchant standing still to serve it | `SHOP_REACH`, `merchNear`, `inReach`, `shopServing` (read by `updateMerchant`, robots.js) | `buying and selling` |
+| the trades | `shopBuy`, `shopSell`, `shopSellCell`, `shopTrade`, `shopCmd` (the `runCmd` entry, ui.js), `shopFx`, `shopDeny`/`shopNoRoom` | `buying and selling` (a sale pays through `tradeGold`, player.js - gold without XP) |
+| the panel: whether it is up, opening and shutting it, and its geometry | `shopOpen`, `openShop`, `closeShop` (`state.shop` holds the merchant itself), `SHOP_W`/`SHOP_H`/`SHOP_Y`/`SHOP_WELL_*`/`SHOP_SEC_*`/`SHOP_CARD_*`, `shopLayout`, `shopHit`, `hitR`, `shopClick`, `shopDropSell` | `the shop panel` |
+| its pixels | `drawShopPanel`, `drawShopSection`, `drawShopWell`, `drawSellWell`, `drawMarketCard`, `drawMarketGraph`, `drawTradePlate`, `drawTradeArrow`, `drawTrend` | `the shop panel` › `drawing` (the `E SHOP` cap over the body: `drawShopHint`, ui.js) |
+| what the pointer is on there, in the shared descriptor shape | `tipShop` | `the shop panel` › `tooltips` (`tipBase`/`tipTool`/`tipBit`/`tipStack`: `tooltips`, ui.js) |
 
 ## js/panels.js
 

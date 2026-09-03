@@ -113,6 +113,13 @@ function gainGold(p, n) {
   if (p === player && !PRACTICE) PROFILE.addGold(n);
   while (p.level < LEVEL_MAX && p.xp >= LEVEL_XP[p.level]) levelUp(p);
 }
+// The merchant's till, and the ONE way gold reaches a wallet without XP
+// behind it (CLAUDE.md names it as the exception to the gainGold rule). A
+// SALE is an exchange, not a source: the counter buys fish and berries at the
+// same price it sells them, so paying levels for one would turn two clicks
+// into a level farm rather than into a trade. Everything that EARNS gold -
+// a fell, a kill, a chest, the clock - still goes through gainGold.
+function tradeGold(p, n) { if (p && n > 0) p.inv.gold += n; }
 // Gold is never a physical drop: every source pays the earner on the spot
 // through this one wrapper - the wallet (via gainGold, so it levels too), the
 // '+N' popup at the place the action happened, and the coin blip for the
@@ -172,6 +179,12 @@ const ITEMS = {
   cardGold:   { icon: 'itemCardGold',   stack: 5 },
 };
 const CARD_RARITIES = ['white', 'green', 'blue', 'purple', 'gold'];
+// What one unopened card of each rarity costs at the merchant's counter
+// (the `shop` banner, js/shop.js), and half of it what one fetches sold back.
+// A card is priced by its RARITY and not per entry, because the rarity is
+// what is ever bought or carried: the pick of three inside it is drawn after
+// the money changes hands, so the buyer is paying for the odds, not the buff.
+const CARD_PRICE = { white: 25, green: 45, blue: 80, purple: 130, gold: 210 };
 // 'white' <-> the 'cardWhite' ITEMS/RES_COLORS key every rarity is stored under
 function cardKey(rarity) { return 'card' + rarity[0].toUpperCase() + rarity.slice(1); }
 const CARD_TYPE_RARITY = {}; // 'cardWhite' -> 'white', the inverse of cardKey

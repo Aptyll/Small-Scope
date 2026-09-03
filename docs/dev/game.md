@@ -15,8 +15,9 @@ BLUE** (slots alternate). Everyone picks one of **two classes** (the ranged HUNT
 WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the map's one
 diagonal in opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of
 its line each eagle dives into its **corner's** treeline — RED always bottom-left, BLUE always
-top-right — and becomes its team's **objective**; its **merchant** climbs down to raise a gate and
-clear the rim, and a **lane** of pines falls open back to the snow. **Drive off the rival eagle
+top-right — and becomes its team's **objective**; its **merchant** climbs down to raise a gate,
+clear the rim and then keep shop at the lane mouth for anybody at all who walks up to it, and a
+**lane** of pines falls open back to the snow. **Drive off the rival eagle
 and the match is won** — nothing else ends one: a player who goes down waits, and is set back
 down at their own bird.
 
@@ -41,10 +42,13 @@ nothing in it is at stake. See [the practice arena](world.md#the-practice-arena)
 with a rate of fire, a number of bit cells and a weight it is strong enough to throw. What comes
 out of it is the **bits** loaded into it, fired in order and then round again: a plain arrow, a
 log that arcs down and flattens whoever it lands on, a wisp that circles you lighting the dark,
-or a modifier that rewrites every shot on that tool at once. Neither is bought. Both are found —
-in broken rocks, in felled trees, and at the top tier in the treeline's chests — so the weapon you
-finish a match with is one the map handed you a piece at a time. Hover the weapon well and its bit
-column rises out of it to be rebuilt mid-fight. [Tools and bits](gameplay.md#tools-and-bits).
+or a modifier that rewrites every shot on that tool at once. Both are **found first** — in broken
+rocks, in felled trees, and at the top tier in the treeline's chests — so the weapon you finish a
+match with is one the map handed you a piece at a time. The other way in is the **merchant's
+counter**, which puts a rotating handful of them behind a price: gold you earned somewhere else,
+spent on the twelve things that happen to be on the counter this minute, never on the one thing
+you wanted. Hover the weapon well and its bit column rises out of it to be rebuilt mid-fight.
+[Tools and bits](gameplay.md#tools-and-bits), [the counter](gameplay.md#the-merchants-counter).
 
 **Keys 1-4 are your class.** Each class carries four active abilities — the HUNTER's piercing
 shot, net, grapple and snow cover; the WARRIOR's shield, rush, stomp and juggernaut — each with a
@@ -83,15 +87,22 @@ selected, they come out on their own for whatever is under the cursor.
 
 **Gold is the only currency, and gold is also XP.** No wood, no stone — one number earned many
 ways, each source with its own yield profile, and it pays itself: gold is never a pickup on the
-ground, every source pays the earner on the spot. Every payout levels you as a side effect.
-[Economy](gameplay.md#economy-one-currency), [Hero levels](multiplayer.md#hero-levels).
+ground, every source pays the earner on the spot. Every payout levels you as a side effect — a
+*sale* at the counter is the one exception, because a price you can both buy and sell at would
+otherwise be a level farm. **Fish and berries have a price that moves**, drastically and all day,
+and they are the only two things in the game that do: the counter buys them at the same number it
+sells them for, so what a bag of fish is worth is a question of *when*.
+[Economy](gameplay.md#economy-one-currency), [the counter](gameplay.md#the-merchants-counter),
+[Hero levels](multiplayer.md#hero-levels).
 
 **You carry a 10-cell backpack.** The wallet (`p.inv`) is gold and nothing else; everything you
 *carry* is `p.bag`. Berries and fish are food, never spent; tools and bits are the build being laid
 out. [Inventory and the backpack](gameplay.md#inventory-and-the-backpack).
 
-**Gear is 4 pieces × 3 variants, bought from anywhere.** No shop building and no trip home — the
-gear pop-up is a menu, and a piece levels through four materials. [Gear](gameplay.md#gear).
+**Gear is 4 pieces × 3 variants, bought from anywhere.** No trip home for *armour* — the gear
+pop-up is a menu, and a piece levels through four materials. The counter is the opposite bargain
+on purpose: it sells what changes the way you *play* rather than what you survive, and it makes
+you walk to a body to get it. [Gear](gameplay.md#gear).
 
 **Your eagle is your life.** The bird that carried the team in crashes into its corner's trees at
 the end of its line and roosts there, armoured in team colour — the crater it blows, the lane its

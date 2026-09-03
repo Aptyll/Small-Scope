@@ -983,6 +983,10 @@ function cursorInfo() {
   // an item riding the pointer hides the reticle entirely: the drag ghost IS
   // the cursor until it is put down somewhere
   if (state.drag) return { kind: 'grab' };
+  // the merchant's counter: a hand over anything that trades, an arrow over
+  // the rest of the slab (which still swallows the click)
+  const sp = shopHit(mouse.x, mouse.y);
+  if (sp) return { kind: sp === 'panel' ? 'arrow' : 'hand' };
   // the backpack widget: a hand over anything in it that does something, a
   // plain arrow over the rest of its frame (which still swallows the click).
   // The weapon slots and an open bit column are the other left-draggable HUD.
@@ -1028,7 +1032,7 @@ function cursorInfo() {
     }
   }
   for (const b of robots) {
-    if (b.dead || b.team === player.team) continue;
+    if (!unitAlive(b) || b.team === player.team) continue; // a merchant is not a mark
     if (Math.abs(wx - b.x) <= 7 && wy >= b.y - 7 && wy <= b.y + 4) {
       return ret('hunt', busy);
     }

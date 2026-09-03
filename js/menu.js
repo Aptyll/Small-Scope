@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.70'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.71'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.71', 'BOTH EAGLES KEEP A SHOP NOW - THE MERCHANT SELLS TOOLS, BITS AND CARDS THAT TURN OVER EVERY TWO MINUTES, BUYS ANYTHING IN YOUR PACK BACK, AND RUNS A FISH AND BERRY MARKET WHOSE PRICE SWINGS ALL DAY.'],
   ['2.70', 'THE STOREFRONT WEARS FIVE PLAYED STILLS - THE EAGLES CROSSING, THE ROOST, A FISH HELD HIGH, A NIGHT HUNT AT THE ROOKERY AND THE PRACTICE FIELD.'],
   ['2.69', 'THE FISH HOIST HOLDS YOU FOR ONE SECOND, NOT TWO - AFTER THAT A STEP WALKS OUT OF IT, WHILE A SHOT, A ROLL, A CAST, A SWING, A MEAL OR A HIT STILL ENDS IT AT ANY MOMENT.'],
   ['2.68', 'THE FISH HOIST IS A TWO-SECOND HOLD - WALKING NO LONGER CUTS IT, YOU STAND AND SHOW THE CATCH, AND ONLY A SHOT, A ROLL, A CAST, A SWING, A MEAL OR A HIT ENDS IT EARLY.'],

@@ -20,12 +20,16 @@ const events = [];        // {txt, bg, fg, t}; updateFx ages and expires them
 // p tints the line and is who it is about; null = a line nobody owns. The
 // plate takes the team's dark coat, not its bright mark: the ink is a pale
 // per-slot tint, and a bright plate over snow leaves it nothing to sit on.
-function logEvent(txt, p) {
+// `o` overrides that palette for a line no SLOT owns but the world still
+// wants coloured - the market's own headlines, green on a spike and red on a
+// crash (marketNews, js/shop.js).
+function logEvent(txt, p, o) {
+  o = o || {};
   events.push({
     txt: String(txt).toUpperCase(), t: 0,
-    bg: p ? TEAMS[skin(p.team)].coatD : '#2a3358',
-    edge: p ? TEAMS[skin(p.team)].mark : '#6d7ea6',
-    fg: p ? playerTint(p) : '#e6ecfa',
+    bg: o.bg || (p ? TEAMS[skin(p.team)].coatD : '#2a3358'),
+    edge: o.edge || (p ? TEAMS[skin(p.team)].mark : '#6d7ea6'),
+    fg: o.fg || (p ? playerTint(p) : '#e6ecfa'),
   });
   while (events.length > EVENT_MAX * 3) events.shift();
 }

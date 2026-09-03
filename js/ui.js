@@ -88,6 +88,7 @@ function resolveWheel() {
 function runCmd(p, c) {
   if (c.kind === 'gear') { buyGear(p, c.piece); return; } // no tile, no reach - gear is bought from anywhere
   if (c.kind === 'ability') { buyAbilityLv(p, c.i); return; } // an ability level: a skill point, from anywhere
+  if (c.kind === 'shop') { shopCmd(p, c); return; } // the merchant's counter (js/shop.js) - it checks its own reach
 
   if (c.kind === 'build') { placeStruct(c.tx, c.ty, c.id, p); return; }
   if (c.kind === 'rack') { rackEquip(p, c); return; } // the practice armory (js/world.js)
@@ -149,7 +150,9 @@ function drawWorkHint(ox, oy) {
   if (player.charging || player.fallT > 0 || player.dodgeT > 0) return;
   if (hoverFish()) return; // the fish prompt wins over CRACK ICE on the same tile
   const t = workTarget(player);
-  if (!t || !t.near) { drawRackHint(ox, oy); drawPkHint(ox, oy); drawBellHint(ox, oy); return; } // no work target: the armory, the roll station or the range bell may still be in reach
+  // no work target: the armory, the roll station, the range bell or a
+  // MERCHANT may still be in reach
+  if (!t || !t.near) { drawRackHint(ox, oy); drawPkHint(ox, oy); drawBellHint(ox, oy); drawShopHint(ox, oy); return; }
   const st = t.o && structOf(t.o);
   const isStruct = !!(st && STRUCTS[st.type]);
   const d = t.o && OBJECTS[t.o.type];
@@ -242,6 +245,19 @@ function drawBellHint(ox, oy) {
 // 9x11 pixel mouse, the "click" key-cap. Only the LEFT button carries colour
 // (gold = the game's "active" accent, hot orange while pressed); the right
 // button is plain body so nothing suggests right-click.
+// The merchant's prompt, the rack's own proximity grammar one body over: an
+// E SHOP cap over whichever merchant is in reach (merchNear, js/shop.js -
+// the same resolver the press uses), either team's. It hides while the
+// counter is up, the way every hint hides under a wheel.
+function drawShopHint(ox, oy) {
+  if (state.shop) return;
+  const b = merchNear(player);
+  if (!b) return;
+  const verb = 'SHOP';
+  const totalW = 9 + 3 + pixelTextWidth(verb);
+  drawKeyPrompt(Math.round(b.x - ox - totalW / 2), Math.round(b.y - 44 - oy), verb, !!keys['e']);
+}
+
 function drawMouseIcon(x, y, pressed) {
   ctx.fillStyle = '#0a0e23';
   ctx.fillRect(x + 1, y, 7, 1); ctx.fillRect(x, y + 1, 9, 8); ctx.fillRect(x + 1, y + 9, 7, 1); ctx.fillRect(x + 2, y + 10, 5, 1);
@@ -724,7 +740,9 @@ function bagGridH() {
 // the grid, so the grid has to be there to drag from. Everything that lays the
 // widget out or hit-tests it asks this, never state.bagOpen, or the two
 // disagree by a row and every click below the gear lands one cell out.
-function bagOpenNow() { return state.bagOpen || bitEditSlot() >= 0; }
+// ...and whenever the merchant's counter is up, for the same reason: a sale
+// is a DRAG out of the grid into the counter's sell well (js/shop.js).
+function bagOpenNow() { return state.bagOpen || bitEditSlot() >= 0 || shopOpen(); }
 // the pack button, flush in the corner - drawn shut and open alike, so the
 // toggle never moves under the pointer that just used it
 function bagBtnRect() { return { x: VIEW_W - BAG_BTN, y: VIEW_H - BAG_BTN, w: BAG_BTN, h: BAG_BTN }; }
@@ -751,7 +769,7 @@ function bagStripRect() {
 }
 // the pointer is over HUD that owns its own clicks, not over the world
 function overHud(x, y) {
-  return !!bagHit(x, y) || !!charHit(x, y) || !!stripHit(x, y) || abBuyHit(x, y) >= 0 ||
+  return !!bagHit(x, y) || !!charHit(x, y) || !!shopHit(x, y) || !!stripHit(x, y) || abBuyHit(x, y) >= 0 ||
     bitColHit(x, y) >= 0 || overMinimap();
 }
 // What the pointer is on: { kind: 'btn' } (the pack button) | { kind: 'cell',
@@ -1438,6 +1456,10 @@ function dragDropSlot(i) {
 // away - so a fumbled release inside the frame costs nothing and a deliberate
 // drag out onto the snow is the one way to get rid of a tool.
 function dragDrop(mx, my) {
+  // the counter first: its sell well is the one place a release turns an item
+  // into gold, and the rest of the slab sends it home
+  const sp = shopHit(mx, my);
+  if (sp) { if (sp.kind === 'sell') shopDropSell(); else dragReturn(); return; }
   const bc = bitColHit(mx, my);
   if (bc >= 0) { dragDropBit(bitEditSlot(), bc); return; }
   const sh = stripHit(mx, my);
@@ -2222,6 +2244,12 @@ function tipAt(mx, my) {
     return null;
   }
   if (state.mode !== 'play') return null;
+  // the counter is asked first, so a drag held over its sell well is priced
+  // rather than merely described; over the bare slab it answers nothing and
+  // the carried item below takes over
+  const sp = shopHit(mx, my);
+  const stip = sp && tipShop(sp);
+  if (stip) return stip;
   if (state.drag) {
     // what is in hand, and the one thing shift is for: spending the click on a
     // well without putting this down
@@ -2273,6 +2301,11 @@ function tipAt(mx, my) {
     const d = tipCell(s, null);
     if (d && isToolCell(s)) tipSend(d, 'TAKE IT IN HAND');
     else if (d && bitIdOf(s.type) && heldTool(player)) tipSend(d, 'LOAD IT IN THE WEAPON');
+    // ...and while the counter is up, what it is worth over there
+    if (d && shopOpen()) {
+      d.rows.push(['SELLS FOR', sellValue(s) + ' GOLD', RES_COLORS.gold]);
+      d.notes.push(['DRAG IT TO THE COUNTER TO SELL', TIP_DIM]);
+    }
     return d;
   }
   return null;
@@ -2380,6 +2413,10 @@ function renderUI(now) {
     drawHudScaled(now, Math.round(slide * 40), hudIn >= 1);
     if (hudIn >= 1) drawDragGhost(now);
   }
+
+  // the merchant's counter (js/shop.js): over the HUD like the character
+  // sheet, with the pack open beside it to drag a sale out of
+  if (!out && shopOpen()) drawShopPanel(now);
 
   // the character panel (G): over the HUD, under the toasts and the tooltip
   if (!out && state.charOpen && !player.dead) drawCharPanel(now);

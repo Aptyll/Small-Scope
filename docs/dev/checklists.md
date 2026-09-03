@@ -33,6 +33,13 @@ declare victory. The three affordances:
   after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
   cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
   player will quietly shoot it dead mid-capture, so park its bow with `setNock(1e9, p)` first.
+- **The counter needs a merchant, and a merchant needs a roost**: `startGame()`, step until
+  `DBG.merchants.length` is 2 and the mode is `play`, step out the `state.dropBrief`, `hopOff()`,
+  then `warp` beside `DBG.merchants[i]` — it is a working NPC and wanders off its post, so re-warp
+  before each check unless a counter is open (an open counter pins it: `shopServing`). `DBG.openShop()`,
+  `shopHit(x, y)`, `shopBuy/shopSellCell/shopTrade` and `shopLayout()` drive the panel without a
+  pointer; `DBG.marketStep(n)` walks the prices n moves on, so a spike is one call rather than
+  three days of waiting, and it ticks the restock clock with them.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
@@ -142,7 +149,8 @@ which carries the same `mm`/`map` pair and gets solidity, both maps and the E pr
 the drop pickup, the death spill, the drag and the refusal tell are all generic over that table.
 What is *not* generic and must be written per item: an 8×8 icon sprite (bake it beside its own
 code, not in the byte-fragile js/sprites.js — see `bakeGrid` in js/tools.js and `CHEST_SPR`), a
-colour in `RES_COLORS` for the pickup floater, whatever *makes* the item, and what using it does —
+colour in `RES_COLORS` for the pickup floater, **what it is worth** (see the counter below, or
+it sells for nothing), whatever *makes* the item, and what using it does —
 `bagClick` maps a cell click onto an input flag, so a new item needs its own branch there or
 clicking its cell will just deny (`sendBagCell` runs first and handles only the two kinds that
 have somewhere to *go*, a bit and a tool) — and a branch in `tipStack` (the `tooltips` banner, js/ui.js) or
@@ -158,7 +166,10 @@ one: it is a wallet number with no ceiling. See
 ([js/tools.js](../../js/tools.js)); the loop at the foot of that file registers the `ITEMS` and
 `RES_COLORS` rows, so storage, drops, the death spill, the drag, the click that sends it between
 pack and weapon, and the loot pools all pick it up
-with no other edit. A **tool** needs `rof`/`cap`/`tensile`/`tier` and an `art` key — reuse one of
+with no other edit. Both need a `price`, or the merchant sells it for nothing and buys it back
+for nothing ([the counter](gameplay.md#the-merchants-counter) - half the price is what it fetches,
+and a tool carries its loaded bits into that sum). A **tool** needs `rof`/`cap`/`tensile`/`tier`
+and an `art` key — reuse one of
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
 **projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`col` and an
 8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
@@ -181,6 +192,16 @@ A brand-new `path` is the only thing that is not table-driven: it needs a
 branch in `steerBit`, and a body of its own in the shots pass (`drawTumbler`/`drawMote`,
 js/render.js) if the arrow silhouette would misread it — plus a line in `drawAimLine`'s honesty
 rule, which refuses to draw a straight line for a path that does not fly straight.
+
+**Putting something on the merchant's counter** — nothing, if it is a tool, a bit or a card: the
+stock is rolled off `TOOLS`/`BITS`/`CARD_RARITIES` themselves (`shopRestock`,
+[js/shop.js](../../js/shop.js)), so a new kind is on sale the moment it has a `price`. A new
+**section** is a row in `SHOP_SECTIONS` plus its branch in `shopOffer` and room in
+`shopLayout`'s 2×2 grid — which is full, so a fifth section is a re-layout, not an insert.
+A new **traded good** (a thing whose price moves) is one `GOODS` entry and its `MKT_ORDER`
+place; the walk, the graph, the headlines, the trade plates and the tooltip are all generic over
+that table, but the panel has room for exactly two cards, and "one currency" ([game.md](game.md))
+means a good is a *commodity you carry*, never a second wallet.
 
 **Adding a class** — the tables make most of it mechanical, and every screen picks the new
 entry up with no edit: the select roster grows a portrait (the column wraps right past

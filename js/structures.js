@@ -223,10 +223,10 @@ function turretSees(o, pv, tx, ty) {
   }
   return true;
 }
-// a valid mark is an enemy player (never one still on the eagle) or worker bot
+// a valid mark is an enemy player (never one still on the eagle) or worker
+// bot - unitAlive (js/actions.js) is the one gate, so a merchant is never one
 function turretFoe(o, tg) {
-  if (!tg || tg.dead || tg.team === o.team) return false;
-  return tg.input ? (tg.active && !inAir(tg)) : true;
+  return unitAlive(tg) && tg.team !== o.team;
 }
 function turretHolds(o, tg, range, pv) {
   return turretFoe(o, tg) &&

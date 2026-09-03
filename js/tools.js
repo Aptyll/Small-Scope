@@ -42,6 +42,11 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // number counted in game STEPS, since it is a cadence rather than a physical
 // quantity - toolRof() is the single place that converts it.
 //
+// `price` is what the merchant sells one for (the `shop` banner, js/shop.js),
+// and half of it is what the merchant pays for one back. It is the only
+// number on a bit the sim never reads - loot does not consult it and a found
+// bit is worth exactly what a bought one is.
+//
 // A MODIFIER bit (`proj: false`) has no weight and never flies. Its `mod(m)`
 // edits the shot envelope every projectile bit on the SAME tool is fired
 // through, so one FLAME in the list sets the whole tool alight. Cells fold in
@@ -59,51 +64,51 @@ const TIER_SHINE = 2; // the tier whose plate animates
 const BITS = {
   // -- projectiles ---------------------------------------------------------
   arrow: {
-    name: 'ARROW', blurb: 'THE PLAIN SHAFT. LIGHT AND TRUE.', tier: 0, proj: true,
+    name: 'ARROW', blurb: 'THE PLAIN SHAFT. LIGHT AND TRUE.', price: 6, tier: 0, proj: true,
     weight: 2, path: 'line', solid: true, ff: false,
     life: 0.85, speed: 320, dmg: 8, col: '#e8dcb4',
   },
   barb: {
-    name: 'BARBED SHOT', blurb: 'WEAVES. HITS HARDER.', tier: 0, proj: true,
+    name: 'BARBED SHOT', blurb: 'WEAVES. HITS HARDER.', price: 16, tier: 0, proj: true,
     weight: 5, path: 'zig', solid: true, ff: false,
     life: 1, speed: 250, dmg: 12, col: '#cfd8e8',
   },
   hook: {
-    name: 'HOOKSHOT', blurb: 'FLIES OUT AND COMES BACK.', tier: 0, proj: true,
+    name: 'HOOKSHOT', blurb: 'FLIES OUT AND COMES BACK.', price: 14, tier: 0, proj: true,
     weight: 3, path: 'boomer', solid: false, ff: false,
     life: 1.5, speed: 260, dmg: 7, col: '#9fc4dd',
   },
   care: {
-    name: 'CARE ARROW', blurb: 'FAST, PASSES WALLS, LIGHTS THE SNOW.', tier: 1, proj: true,
+    name: 'CARE ARROW', blurb: 'FAST, PASSES WALLS, LIGHTS THE SNOW.', price: 42, tier: 1, proj: true,
     weight: 4, path: 'line', solid: false, ff: false,
     life: 0.7, speed: 430, dmg: 13, col: '#ffe6a8', lit: 34,
   },
   wisp: {
-    name: 'WISP', blurb: 'CIRCLES YOU, LIGHTING THE DARK.', tier: 1, proj: true,
+    name: 'WISP', blurb: 'CIRCLES YOU, LIGHTING THE DARK.', price: 34, tier: 1, proj: true,
     weight: 3, path: 'orbit', solid: false, ff: false,
     life: 3, speed: 250, dmg: 6, col: '#8fd8ff', lit: 40,
   },
   log: {
-    name: 'THROWING LOG', blurb: 'SLOW, ARCS DOWN, FLATTENS ANYONE.', tier: 1, proj: true,
+    name: 'THROWING LOG', blurb: 'SLOW, ARCS DOWN, FLATTENS ANYONE.', price: 52, tier: 1, proj: true,
     weight: 8, path: 'lob', solid: true, ff: true,
     life: 2.2, speed: 155, dmg: 34, col: '#a3794f',
   },
   lance: {
-    name: 'ICE LANCE', blurb: 'HEAVY, FLAT AND VERY FAST.', tier: 2, proj: true,
+    name: 'ICE LANCE', blurb: 'HEAVY, FLAT AND VERY FAST.', price: 110, tier: 2, proj: true,
     weight: 7, path: 'line', solid: true, ff: false,
     life: 1.1, speed: 380, dmg: 26, col: '#bfe6ff',
   },
   // -- modifiers -----------------------------------------------------------
   speedup: {
-    name: 'SPEEDUP', blurb: 'EVERY SHOT FLIES TWICE AS FAST.', tier: 0, proj: false,
+    name: 'SPEEDUP', blurb: 'EVERY SHOT FLIES TWICE AS FAST.', price: 22, tier: 0, proj: false,
     col: '#8fe08a', mod: (m) => { m.spdMul *= 2; },
   },
   fan: {
-    name: 'SPLITTER', blurb: 'EVERY SHOT BECOMES THREE, EACH WEAKER.', tier: 0, proj: false,
+    name: 'SPLITTER', blurb: 'EVERY SHOT BECOMES THREE, EACH WEAKER.', price: 28, tier: 0, proj: false,
     col: '#cfe0f2', mod: (m) => { m.fan = 3; m.dmgMul *= 0.6; },
   },
   flame: {
-    name: 'FLAME', blurb: 'EVERY SHOT SETS WHAT IT HITS ALIGHT, AND LIGHTS ITS WAY.', tier: 1, proj: false,
+    name: 'FLAME', blurb: 'EVERY SHOT SETS WHAT IT HITS ALIGHT, AND LIGHTS ITS WAY.', price: 46, tier: 1, proj: false,
     col: '#ff9440',
     mod: (m) => {
       m.type = 'fire';
@@ -114,19 +119,19 @@ const BITS = {
     },
   },
   twin: {
-    name: 'DUPLICATE', blurb: 'FIRES THE NEXT TWO BITS AT ONCE.', tier: 1, proj: false,
+    name: 'DUPLICATE', blurb: 'FIRES THE NEXT TWO BITS AT ONCE.', price: 60, tier: 1, proj: false,
     col: '#a259e6', mod: (m) => { m.twin = true; },
   },
   heft: {
-    name: 'HEFT', blurb: 'MUCH HARDER, RATHER SLOWER.', tier: 2, proj: false,
+    name: 'HEFT', blurb: 'MUCH HARDER, RATHER SLOWER.', price: 95, tier: 2, proj: false,
     col: '#f2cc6a', mod: (m) => { m.dmgMul *= 1.6; m.spdMul *= 0.75; },
   },
   longshot: {
-    name: 'LONGSHOT', blurb: 'EVERY SHOT FLIES MUCH FURTHER.', tier: 2, proj: false,
+    name: 'LONGSHOT', blurb: 'EVERY SHOT FLIES MUCH FURTHER.', price: 88, tier: 2, proj: false,
     col: '#7ac0e8', mod: (m) => { m.lifeMul *= 1.8; m.spdMul *= 1.15; },
   },
   pyre: {
-    name: 'PYRE', blurb: 'THE FIRE TAKES HOLD. IT BURNS TWICE AS LONG, AND TWICE AS HOT.', tier: 2, proj: false,
+    name: 'PYRE', blurb: 'THE FIRE TAKES HOLD. IT BURNS TWICE AS LONG, AND TWICE AS HOT.', price: 125, tier: 2, proj: false,
     col: '#ff5a2a',
     mod: (m) => {
       m.type = 'fire';
@@ -136,7 +141,7 @@ const BITS = {
     },
   },
   cinder: {
-    name: 'CINDER BURST', blurb: 'EVERY IMPACT THROWS EMBERS. EVERYTHING AROUND IT CATCHES.', tier: 2, proj: false,
+    name: 'CINDER BURST', blurb: 'EVERY IMPACT THROWS EMBERS. EVERYTHING AROUND IT CATCHES.', price: 135, tier: 2, proj: false,
     col: '#ffb347',
     mod: (m) => {
       m.type = 'fire';
@@ -157,15 +162,17 @@ const CINDER_R = 26;   // px of ring an ending shot sets alight
 // ---- tools ---------------------------------------------------------------
 // `rof` is in game steps between shots (the number the HUD's cooldown wipe
 // runs on); `cap` is how many bit cells the tool has; `tensile` is the
-// heaviest bit it can throw. `art` picks the 12x12 silhouette, which is baked
+// heaviest bit it can throw; `price` is the merchant's asking price (js/shop.js)
+// and half of it what one fetches sold back - a tool sold with bits in it
+// fetches half of those too, so nothing is ever quietly emptied for gold. `art` picks the 12x12 silhouette, which is baked
 // once per tier - so a tool's shape says which family it is and its colour
 // says how good it is, the way GEAR_MATS tints one gear icon across levels.
 const TOOLS = {
-  shortbow: { name: 'SHORTBOW',    tier: 0, rof: 55, cap: 2, tensile: 4, art: 'bow' },
-  sling:    { name: 'SLING',       tier: 0, rof: 26, cap: 2, tensile: 3, art: 'sling' },
-  recurve:  { name: 'RECURVE BOW', tier: 1, rof: 40, cap: 3, tensile: 6, art: 'recurve' },
-  hornbow:  { name: 'HORN BOW',    tier: 1, rof: 34, cap: 4, tensile: 5, art: 'bow' },
-  longbow:  { name: 'LONGBOW',     tier: 2, rof: 28, cap: 5, tensile: 9, art: 'recurve' },
+  shortbow: { name: 'SHORTBOW',    tier: 0, price: 30,  rof: 55, cap: 2, tensile: 4, art: 'bow' },
+  sling:    { name: 'SLING',       tier: 0, price: 26,  rof: 26, cap: 2, tensile: 3, art: 'sling' },
+  recurve:  { name: 'RECURVE BOW', tier: 1, price: 85,  rof: 40, cap: 3, tensile: 6, art: 'recurve' },
+  hornbow:  { name: 'HORN BOW',    tier: 1, price: 72,  rof: 34, cap: 4, tensile: 5, art: 'bow' },
+  longbow:  { name: 'LONGBOW',     tier: 2, price: 170, rof: 28, cap: 5, tensile: 9, art: 'recurve' },
 };
 const TOOL_SLOTS = 1;        // ONE weapon slot: the class weapon, left end of the strip
 const TOOL_ROF_STEP = 1 / 60; // a tool's `rof` is counted in game steps of this length
@@ -573,7 +580,9 @@ function noteSeen(p, type) {
 }
 
 // ---- loot: what the world pays out --------------------------------------
-// Tools and bits are found, not bought. A broken rock is the common source and
+// Tools and bits are found FIRST and bought SECOND - the merchant's counter
+// (js/shop.js) rotates a handful of them every couple of minutes, and this
+// is the other, older way in. A broken rock is the common source and
 // a felled tree the rare one, both rolling on the shared rng at the moment the
 // swing lands (never inside genWorld - see the seed rule in CLAUDE.md). Only
 // the bottom tier lies around loose; the good stuff is in the chests.

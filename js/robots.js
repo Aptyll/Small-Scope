@@ -42,9 +42,12 @@ function makeRobot(sp) {
 function robotHit(b, x, y) { return Math.hypot(b.x - x, b.y - 1 - y) < 7; }
 
 // an arrow landing on a worker - and a turret bolt too, since bolts ride the
-// same pipeline. src is the shooter, for the feed line on the kill.
+// same pipeline. src is the shooter, for the feed line on the kill. Reached
+// only through hurtUnit, which asks unitAlive first, so a merchant never
+// arrives here - the guard below is the same question asked twice on purpose,
+// since this is a named function and nothing stops a later caller finding it.
 function hurtRobot(b, dmg, nx, ny, src) {
-  if (b.dead) return;
+  if (!unitAlive(b)) return;
   // a worker under a flag remembers who hit it and swings back; with no flag
   // it is the same defenceless hauler it always was
   // madX/madY is where it was standing when it was hit: the leash it fights
@@ -72,9 +75,10 @@ function robotDies(b, src) {
     if (src && src.inv) awardGold(src, b.carry, b.x, b.y);
     b.carry = 0;
   }
-  // a downed worker is not a downed slot: it makes the feed, never the kill count
-  if (src && src.team !== b.team) logEvent(src.name + (b.merchant ? ' FELLED MERCH' : ' SCRAPPED A WORKER'), src);
-  if (b.merchant) { const e = state.drop && state.drop.eagles[b.team]; if (e && e.merchant === b) e.merchant = null; }
+  // a downed worker is not a downed slot: it makes the feed, never the kill
+  // count. There is no merchant line any more: a merchant cannot be downed
+  // (unitAlive, js/actions.js), so nothing reaches here carrying one.
+  if (src && src.team !== b.team) logEvent(src.name + ' SCRAPPED A WORKER', src);
 }
 
 function updateRobot(b, dt) {
@@ -297,13 +301,20 @@ function updateRobot(b, dt) {
 // crash cut (a turret on the stump flanking the lane each side, walls on the
 // ring stumps behind them), then the ring of pines beyond the crash's stump
 // ring felled to stumps so the base has room and build sites, then it keeps
-// to the roost. It is a unit in `robots` with `merchant: true`: the same
-// arrow, blow, separation, turret-mark and draw pipelines a worker rides,
-// dispatched to updateMerchant/drawMerchant by that flag (updateRobot's
-// status/stun/wreck handling is shared). owner -1: it obeys no flag and pays
-// nobody - its work is the eagle's, free like the crater, the same for both
-// sides.
-const MERCH_HP = 60;
+// to the roost - where it becomes the SHOP (the `shop` banner, js/shop.js):
+// walk up to either team's merchant and E opens its counter.
+//
+// It is a unit in `robots` with `merchant: true`: the same separation and
+// draw pipelines a worker rides, dispatched to updateMerchant/drawMerchant by
+// that flag (updateRobot's status/stun handling is shared). owner -1: it
+// obeys no flag and pays nobody - its work is the eagle's, free like the
+// crater, the same for both sides.
+//
+// It CANNOT BE KILLED, and it has no hp at all rather than a large number:
+// unitAlive (js/actions.js) answers false for a merchant, which takes it out
+// of every arrow, blow, sweep, turret mark and worker's quarry in one place.
+// Both sides trade at both counters, so neither side may shoot one, and
+// nothing may stand between a player and the shop they walked to.
 const MERCH_SPD = 46;        // px/s
 const MERCH_SWING_T = 0.7;   // s per axe swing (a pine is 4 hp: ~3 s a tree)
 const MERCH_BUILD_T = 0.9;   // s of hammering to set a site
@@ -333,7 +344,7 @@ function spawnMerchant(e) {
   const at = freeTileNear(Math.floor(wx / TILE), Math.floor(wy / TILE), 6) || { tx: Math.floor(e.x / TILE), ty: Math.floor(e.y / TILE) };
   const b = {
     merchant: true, kind: 'merchant', team: e.team, owner: -1, home: null,
-    x: (at.tx + 0.5) * TILE, y: (at.ty + 0.5) * TILE, hp: MERCH_HP, maxHp: MERCH_HP,
+    x: (at.tx + 0.5) * TILE, y: (at.ty + 0.5) * TILE, // no hp: nothing can hurt it (unitAlive)
     roost: e, plan: [], tgt: null, workT: 0, thinkT: 0, avoids: [], avoid: null, avoidT: 0, nav: null,
     hopT: MERCH_HOP_T, dir: 'down', moving: false, animT: 0, mvx: 0, mvy: 0, moveT: 0, idleT: 1,
     atkAim: null, atkCd: 0, mad: null, madT: 0, carry: 0, flash: 0, kbx: 0, kby: 0, dead: false,
@@ -379,6 +390,22 @@ function updateMerchant(b, dt) {
     return n.d;
   };
   const owner = players.find((p) => p.team === b.team) || player;
+  // ---- serving: a counter is OPEN on this body, so everything else waits --
+  // The shop IS this body and its reach is measured off it (the `shop`
+  // banner, js/shop.js), so a merchant that walked off mid-sale would shut
+  // its own counter in the customer's face. It drops the axe, stands where it
+  // is and turns to them; the gate and the felling are still there afterwards.
+  const cust = shopServing(b);
+  if (cust) {
+    b.moveT = 0;
+    b.workT = 0;
+    b.tgt = null; // the axe comes down: nothing is half-swung while it serves
+    const cdx = cust.x - b.x, cdy = cust.y - b.y;
+    b.dir = Math.abs(cdx) > Math.abs(cdy) ? (cdx > 0 ? 'right' : 'left') : (cdy > 0 ? 'down' : 'up');
+    b.moving = false;
+    b.animT = 0;
+    return;
+  }
   const unitOn = (tx, ty) => { // a body on or beside the tile: setting a solid site there would entomb it
     const cx = tx * TILE + 8, cy = ty * TILE + 8;
     for (const q of players) if (q.active && !q.dead && !inAir(q) && Math.abs(q.x - cx) < 8 + PLAYER_R && Math.abs(q.y - cy) < 8 + PLAYER_R) return true;
@@ -545,7 +572,7 @@ function flagUnitAt(team, x, y) {
     if (Math.hypot(q.x - x, q.y - 6 - y) < 10) return q;
   }
   for (const b of robots) {
-    if (b.dead || b.team === team) continue;
+    if (!unitAlive(b) || b.team === team) continue;
     if (Math.hypot(b.x - x, b.y - 1 - y) < 10) return b;
   }
   return null;
@@ -679,7 +706,7 @@ function robotFoeUnit(b, range) {
     if (d < bd && d <= seenAt(q, range)) { bd = d; best = q; }
   }
   for (const r of robots) {
-    if (r === b || r.dead || r.team === b.team) continue;
+    if (r === b || !unitAlive(r) || r.team === b.team) continue;
     const d = Math.hypot(r.x - b.x, r.y - 1 - b.y);
     if (d < bd) { bd = d; best = r; }
   }

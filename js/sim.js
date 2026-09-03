@@ -224,6 +224,7 @@ function updatePlay(dt) {
     }
   }
   resolveContests(); // this step's work swings, build orders and fish claims
+  if (!PRACTICE) updateMarket(dt); // fish/berry prices and the merchants' stock (js/shop.js)
   updateAbilityWorld(dt); // craters and nets in flight
   if (state.drop) updateDrop(dt);
 
@@ -364,7 +365,7 @@ function updatePlay(dt) {
       // worker bots take the same shot: they are units in the open, on a
       // team, and the only thing that ever stood outside the arrow pipeline
       for (const b of robots) {
-        if ((a.team === b.team && !a.ff) || b.dead) continue;
+        if ((a.team === b.team && !a.ff) || !unitAlive(b)) continue;
         if (a.pierce && a.pierceHit.includes(b)) continue;
         if (robotHit(b, a.x, a.y)) {
           blow(b, 40);
