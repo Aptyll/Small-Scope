@@ -98,7 +98,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the tuning for everything wild: the holes cut down to the fish, the shoal itself, the pack, the flock | `ICE_HOLE_HITS`, `HOLE_FALL_DMG`/`HOLE_FALL_T`, `FISH_CATCH_R`, `FISH_MAX`/`FISH_MIN`/`FISH_SPAWN_FAST`/`FISH_EMERGE_*`, `WOLF_*`, `BIRD_*` | `fish` (the ice and shoal half) and above `wolves` (the pack and the flock); `FISH_SPAWN_T` alone stays in core.js |
 | an animal taking a hit from anything (arrow or roll): flee/wake, floater, knockback, kill credit | `hurtAnimal` | `animals` |
 | where an animal walks next: the graze/patrol goal, and the bolt away from a player | `wanderGoal`, `preyWander`, `fleeGoal` | `animals` |
-| the pack: the one circle its threat bar fills inside and drains outside, waking the den, the hunt to an empty bar, the bite | `WOLF_THREAT_T`/`WOLF_THREAT_DECAY` (above the banner), `wakePack`, `updateWolf` | `wolves` |
+| the pack: the ground its threat bar fills and holds on and drains off, waking the den, the hunt to an empty bar, the bite | `WOLF_GROUND`, `WOLF_THREAT_T`/`WOLF_THREAT_DECAY` (above the banner), `wakePack`, `updateWolf` | `wolves` |
 | the flock: the flush, the circuit, the perch | `flushBirds`, `updateBird` | `birds` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `fishWater`, `spawnFish` | `fish` |
 | where new fish come from, and why one is invisible until it is under the ice | `spawnEmerger`, `buildEmergeSites`, `fishVis`, `f.born`/`f.vis`, `FISH_MAX`/`FISH_MIN`, `state.fishT` | `fish` |

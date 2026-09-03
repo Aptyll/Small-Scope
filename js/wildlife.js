@@ -457,27 +457,29 @@ function animalDies(a) {
 // landmark inhabitants (the places themselves are the LANDMARKS table in
 // the landmarks banner). Wolves are the only thing in the world that hunts
 // a player; birds are the only thing that flies.
-const WOLF_SIGHT = 96;     // px: the one circle a wolf's threat turns on - fills inside, drains outside (x1.75 at full dark)
+const WOLF_SIGHT = 96;     // px a wolf notices a player at, and fills its threat bar on (x1.75 at full dark)
+const WOLF_GROUND = 190;   // px from its den: the pack's ground - the threat bar fills and holds on it, drains anywhere off it
 const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a slide
 const WOLF_BITE_R = 13;    // px reach of a bite
 const WOLF_BITE_DMG = 9;
 const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
 const WOLF_THREAT_T = 2.5;   // s lingering at the edge of its sight before a wolf charges; three times as fast at its nose
-const WOLF_THREAT_DECAY = 3; // s for a full threat bar to drain outside its sight - then the wolf goes home
+const WOLF_THREAT_DECAY = 3; // s for a full threat bar to drain off the ground - then the wolf goes home
 const BIRD_FLUSH = 34;     // px: a player this close puts the whole rookery up
 const BIRD_SPD = 112;      // px/s in flight
 const BIRD_ALT = 15;       // px a perched bird sits above its tile; flight climbs past it
 
 // ------------------------------------------------------------ wolves
 // A wolf holds station at its den and watches anyone who comes inside its
-// sight (much further after dark). One circle rules the whole thing: inside
-// it the threat bar fills while they linger - faster the closer they stand -
-// and outside it the bar drains. Full, the wolf charges and runs them down at
-// WOLF_SPD - faster than a walk, slower than a slide, so the answer is
-// momentum, not distance - biting on its own cooldown, and it keeps coming
-// while the bar drains; the hunt ends when the bar is empty, and then it goes
-// home. There is no leash: the only way off a wolf is out of its circle for
-// long enough.
+// sight (much further after dark) on the pack's ground, WOLF_GROUND around
+// the den: its threat bar fills while they linger - faster the closer they
+// stand - and full, the wolf charges and runs them down at WOLF_SPD - faster
+// than a walk, slower than a slide, so the answer is momentum, not distance -
+// biting on its own cooldown. The bar holds while the quarry is on the ground
+// and drains anywhere off it, whether or not the wolf is at its heels, and it
+// keeps coming while the bar drains; the hunt ends when the bar is empty, and
+// then it goes home. There is no leash on the chase itself: the ground is
+// where the bar drains, not where the wolf stops.
 // A hit skips the bar: the den comes for a shooter at once. damagePlayer's
 // i-frames are what stops four wolves shredding anyone instantly: the pack is
 // pressure, not burst. Waking one wakes the den, which is what makes it a
@@ -500,11 +502,12 @@ function updateWolf(a, dt) {
   a.biteCd = Math.max(0, a.biteCd - dt);
 
   const sight = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
-  // the nearest slot inside the circle. GHOSTSTEP - and lying buried in the
-  // snow - shrink it for that one slot
+  const onGround = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_GROUND;
+  // the nearest slot in sight on the pack's ground. GHOSTSTEP - and lying
+  // buried in the snow - shorten the sight for that one slot
   let near = null, nd = sight;
   for (const p of players) {
-    if (!p.active || p.dead || inAir(p)) continue;
+    if (!p.active || p.dead || inAir(p) || !onGround(p)) continue;
     const d = Math.hypot(p.x - a.x, p.y - a.y);
     if (d < nd && d < seenAt(p, sight)) { nd = d; near = p; }
   }
@@ -512,9 +515,10 @@ function updateWolf(a, dt) {
   let t = a.target;
   if (t && (!t.active || t.dead || inAir(t))) { t = null; a.threat = 0; navClear(a); }
   if (t) {
-    // hunting: the bar holds while the quarry is inside the circle and drains
-    // while it is out; the chase goes on either way until the bar is empty
-    if (Math.hypot(t.x - a.x, t.y - a.y) < seenAt(t, sight)) a.threat = 1;
+    // hunting: the bar holds while the quarry is on the ground and drains
+    // once it is off - the wolf at its heels or not; the chase goes on either
+    // way until the bar is empty
+    if (onGround(t)) a.threat = 1;
     else {
       a.threat = Math.max(0, a.threat - dt / WOLF_THREAT_DECAY);
       if (a.threat <= 0) { t = null; navClear(a); } // the quarry got away; home

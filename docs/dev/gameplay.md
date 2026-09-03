@@ -1033,10 +1033,12 @@ They are not shown on the minimap or world map.
 
 A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
 
-- **One circle.** `WOLF_SIGHT` (96 px around the wolf — scaled by `1 + darkness * 0.75`, so at
-  full night it is ~168 px and the den is a different proposition after sunset; `seenAt` shrinks
-  it for a GHOSTSTEP or a buried body) is the only radius a wolf has. Inside it the threat bar
-  fills; outside it the bar drains. There is **no leash** — a wolf chases as far as it takes.
+- **Sight, and the ground.** A wolf notices a player inside `WOLF_SIGHT` (96 px — scaled by
+  `1 + darkness * 0.75`, so at full night it is ~168 px and the den is a different proposition
+  after sunset; `seenAt` shrinks it for a GHOSTSTEP or a buried body) who is on the **pack's
+  ground**, `WOLF_GROUND` (190 px) around the den. The ground is where the threat bar fills and
+  holds; anywhere off it the bar drains — and that is the whole escape rule, because the wolf
+  itself has **no leash**: it chases as far as the bar lasts.
 - **The threat bar.** Nothing charges on sight. A wolf with someone inside its circle stops its
   patrol, squares up (faces them, stands) and fills `a.threat` (0..1) — the red bar stacked on
   its health bar the way a player's stamina is (`THREAT_COL`, `drawAnimal`; 3 rows up, sharing
@@ -1047,11 +1049,12 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   patrol. Full, the den charges: `wakePack(w, target)` hands the find to every wolf of the same
   den at threat 1 and plays `SFX.howl()`. An arrow skips the bar — a hit is `wakePack` at once
   (a wolf shot from cover does **not** flee like a deer; the den comes for the shooter). A
-  chasing wolf's bar holds full while you are inside its circle and drains while you are out of
-  it, and **it keeps coming while the bar drains** — the hunt ends only when the bar is empty,
-  and then it walks home. Since it outruns a walk, opening 96 px and holding it for 3 s is a job
-  for the momentum system; a pack-mate that never saw you gets threat 1 from the howl and runs
-  in, and joins for good once it has you in its own circle.
+  chasing wolf's bar holds full while you are on the ground and drains once you are off it —
+  with the wolf at your heels or not, so a chase that keeps up still ends — and **it keeps coming
+  while the bar drains**: the hunt ends only when the bar is empty, and then it walks home. Off
+  the ground you have 3 s of a wolf on you, and it outruns a walk, so the momentum system is how
+  you take no bites on the way out; a pack-mate that never saw you gets threat 1 from the howl
+  and runs in with the rest.
 - **The chase.** `WOLF_SPD` (96 px/s) is faster than the 72 px/s walk and slower than a slide or
   the ice cap, so the answer is the momentum system, not distance — and the wolf routes around
   trees and water ([Pathfinding](#pathfinding)), so a treeline is not cover; a quarry it cannot
