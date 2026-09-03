@@ -14,9 +14,11 @@ const PANEL_SLIDE_T = 0.32;
 const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'TECH TREE', 'SETTINGS'];
 // sealed under ice until they exist: inert to hover, keys and clicks.
 // MULTIPLAYER (1) is solid ice - a coming-soon plank. PRACTICE TOOL (2) is
-// sealed the same way but its ice is BREAKABLE: three knocks shatter the
-// sheet (iceRefuse below), the profile remembers, and from then on the plank
-// is a live item that boots the training arena (beginPractice).
+// sealed the same way but its ice is BREAKABLE, and it says so: one crack web
+// stands on it at rest (ICE_FLAW, drawn by drawMenuButton) where the solid
+// plank has none. Three knocks shatter the sheet (iceRefuse below), the
+// profile remembers, and from then on the plank is a live item that boots
+// the training arena (beginPractice).
 function menuFrozen(i) { return i === 1 || (i === 2 && !PROFILE.practiceOpen()); }
 const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // First plank, in the 270-tall authored frame; the seed row follows the last
@@ -24,10 +26,21 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.75'; // printed bottom-right of the title screen; click it for the notes
+// The practice plank's tell: its sheet is flawed from the first look - one
+// crack web standing at rest, at a fixed point and seed in the plank's own
+// pixels, on that plank and no other - so the art says which ice gives before
+// anyone knocks (the hint lives in the picture, never in a prompt). It is a
+// corner chip - struck a pixel in from the plank's top-right corner, with a
+// shorter walk than a knock's web (steps) - so its fissures run inward and
+// stop short of the label instead of scribbling over it. The webs the knocks
+// leave (iceMarks) join it; the break clears them and the flaw goes with the
+// glaze.
+const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
+const PATCH_TXT = 'PATCH 2.76'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
-  ['2.75', 'A MEAL YOU CANNOT EAT - NONE IN THE BAG, THE CLOCK STILL UP, FULL HEALTH - REDDENS AND SHAKES ITS BUTTON, THE WAY THE PACK AND THE WEAPON WELL ALREADY REFUSE.'],
+  ['2.76', 'THE PRACTICE PLANK\'S ICE WEARS A CRACK AT REST, SO THE PICTURE SAYS WHICH SHEET GIVES BEFORE ANYONE KNOCKS ON IT.'],
+  ['2.75','A MEAL YOU CANNOT EAT - NONE IN THE BAG, THE CLOCK STILL UP, FULL HEALTH - REDDENS AND SHAKES ITS BUTTON, THE WAY THE PACK AND THE WEAPON WELL ALREADY REFUSE.'],
   ['2.74', 'EVERY SHOT NOW CARRIES A KNOCKBACK, AND THREE BITS THAT ARE NOT ARCHERY JOIN THE ARSENAL - A BIG FIST THAT THROWS BODIES, A BIG AXE THAT CURVES AND FELLS THE TREES IT LANDS AMONG, AND A TELEPORT REQUEST THAT PUTS YOU WHEREVER IT STICKS.'],
   ['2.73', 'DROPPING A BIT ONTO A LOADED CELL SWAPS THE TWO NOW - WHAT IT PUSHES OUT GOES BACK WHERE YOUR HAND CAME FROM - AND A MODIFIER WEARS A HATCHED PLATE THAT TELLS IT FROM A SHOT ANYWHERE IT SITS.'],
   ['2.72', 'THE COUNTER MOVES ITS SELL WELL TO A FULL-WIDTH STRIP ALONG THE BOTTOM THAT SAYS SELL, AND ANYTHING PRICED PAST YOUR PURSE NOW GOES RED AND GREYS OUT INSTEAD OF QUIETLY DIMMING.'],
@@ -655,15 +668,16 @@ function drawMenuButton(r, label, hv, now, pressed, frozen) {
       ctx.globalAlpha = a0;
     }
     // one knock's crack web: dark fissures with the odd white glint, so they
-    // read against the pale glaze. Shared by the refusal flash and the
-    // practice plank's STANDING marks - each knock there leaves its web in
-    // m.iceMarks until the third breaks the sheet (iceRefuse).
-    const cracksAt = (px0, py0, seed, alpha) => {
+    // read against the pale glaze. Shared by the refusal flash, the practice
+    // plank's resting flaw (ICE_FLAW) and its STANDING marks - each knock
+    // there leaves its web in m.iceMarks until the third breaks the sheet
+    // (iceRefuse).
+    const cracksAt = (px0, py0, seed, alpha, steps) => {
       ctx.globalAlpha = alpha;
       for (let c = 0; c < 5; c++) {
         let px = px0, py = py0;
         let ang = (c / 5) * Math.PI * 2 + hash2(c * 7 + seed, seed) * 1.3;
-        for (let s = 0; s < 12; s++) {
+        for (let s = 0; s < (steps || 12); s++) {
           ang += (hash2(c * 11 + s, seed * 5 + 1) - 0.5) * 0.9;
           px += Math.cos(ang) * 1.5; py += Math.sin(ang) * 1.5;
           if (px < 2 || px >= w - 2 || py < 1 || py >= h - 1) break;
@@ -676,6 +690,9 @@ function drawMenuButton(r, label, hv, now, pressed, frozen) {
       ctx.fillRect(x + Math.round(px0), y + Math.round(py0), 1, 1);
       ctx.globalAlpha = a0;
     };
+    // the breakable sheet is the one that is already cracked: the flaw stands
+    // whatever the pointer is doing, and the knocks' webs land beside it
+    if (r.i === 2) cracksAt(ICE_FLAW.x, ICE_FLAW.y, ICE_FLAW.seed, a0 * 0.85, ICE_FLAW.steps);
     if (r.i === 2) for (const mk of m.iceMarks) cracksAt(mk.x, mk.y, mk.seed, a0 * 0.85);
     if (m.iceT > 0 && m.iceI === r.i) cracksAt(m.iceX, m.iceY, m.iceSeed, a0 * Math.min(1, m.iceT / 0.45));
   }

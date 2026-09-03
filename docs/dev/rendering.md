@@ -1016,8 +1016,11 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   that plank rattles for `menu.iceT` (`menu.iceI` names which), hairline cracks flash from the
   struck point (`menu.iceX/iceY`, reseeded per knock by `menu.iceSeed`) and heal as it
   refreezes, and `menu.shards` ice chips spray and fall, to `SFX.iceKnock`. **PRACTICE TOOL's
-  ice is breakable**: each knock there also leaves its crack web standing (`menu.iceMarks`,
-  drawn every frame by the same `cracksAt` helper), and the third calls `breakPracticeIce` —
+  ice is breakable, and its art says so**: one crack web stands on that plank at rest
+  (`ICE_FLAW`, a fixed point and seed in the plank's pixels, drawn every frame by the same
+  `cracksAt` helper and on no other plank), so the hint that this sheet gives lives in the picture
+  rather than a prompt; each knock there also leaves its own crack web standing
+  (`menu.iceMarks`, the same helper), and the third calls `breakPracticeIce` —
   the whole glaze sprays off, `PROFILE.markPractice()` keeps the break, and from then on the
   plank is a live item whose activation is `beginPractice()` (the reroll's whiteout onto
   `?practice=1`, the [practice arena](world.md#the-practice-arena)). SINGLEPLAYER leads
