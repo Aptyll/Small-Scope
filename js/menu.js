@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.84'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.85'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.85', 'HEALTH BARS ALWAYS SIT ON TOP: A WOLF\'S THREAT BAR AND A DEER\'S SPRINT BAR NOW HANG UNDER THE HEALTH BAR, THE WAY A PLAYER\'S STAMINA DOES.'],
   ['2.84', 'A DEER WEARS A WHITE SPRINT BAR OVER ITS HEALTH: THE FIRST STRETCH OF A FLIGHT IS A SPRINT FAR FASTER THAN ITS RUN AND DRAINS THE BAR, WHICH REFILLS WHILE IT GRAZES - A DEER THAT HAS JUST BEEN RUN IS THE ONE YOU CAN CATCH.'],
   ['2.83', 'A WOLF\'S THREAT BAR DRAINS WHENEVER YOU ARE OFF THE PACK\'S GROUND AROUND ITS DEN, EVEN WITH THE WOLF AT YOUR HEELS - A CHASE THAT KEPT UP NEVER USED TO END.'],
   ['2.82', 'A WOLF HAS NO LEASH ANY MORE: ONE CIRCLE RULES ITS THREAT BAR - IT FILLS WHILE YOU STAND INSIDE, DRAINS WHILE YOU ARE OUTSIDE, AND A CHASING WOLF KEEPS COMING UNTIL THE BAR IS EMPTY; THE BAR SITS TIGHT ON ITS HEALTH BAR LIKE A PLAYER\'S STAMINA.'],

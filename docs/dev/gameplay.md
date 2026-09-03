@@ -1019,7 +1019,7 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
   tiles off, as straight away from the threat as the ground allows (fanning out, then sideways,
   then past it), the first it can route to; a leg that arrives or fails hands over to the next,
   and an animal with nowhere to run stops fleeing.
-- **A deer's sprint.** A deer always wears a second bar over its health — stamina white
+- **A deer's sprint.** A deer always wears a second bar under its health — stamina white
   (`STAM_COL`), stacked the way a player's is (`drawAnimal`) — and spends it on the first stretch
   of every flight: while `a.sprint` (0..1) is above zero the legs run at `DEER_SPRINT` (170 px/s,
   past any walk or slide) and the bar drains over `DEER_SPRINT_T` (2.5 s of running); empty, the
@@ -1047,8 +1047,8 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   holds; anywhere off it the bar drains — and that is the whole escape rule, because the wolf
   itself has **no leash**: it chases as far as the bar lasts.
 - **The threat bar.** Nothing charges on sight. A wolf with someone inside its circle stops its
-  patrol, squares up (faces them, stands) and fills `a.threat` (0..1) — the red bar stacked on
-  its health bar the way a player's stamina is (`THREAT_COL`, `drawAnimal`; 3 rows up, sharing
+  patrol, squares up (faces them, stands) and fills `a.threat` (0..1) — the red bar hung under
+  its health bar the way a player's stamina is (`THREAT_COL`, `drawAnimal`; 3 rows down, sharing
   a frame wall), drawn only while it is above zero — at `1 / WOLF_THREAT_T` per second (2.5 s
   to fill) at the edge of the circle and three times that at its nose, so a walk past the edge
   shows a flicker and a walk up to the den is a charge in under a second. Step out before it

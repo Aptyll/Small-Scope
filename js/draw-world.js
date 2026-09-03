@@ -1249,16 +1249,17 @@ function drawAnimal(a, ex, ey, now) {
   // netted, snared, alight, marked: the same four tells a player wears, at
   // this body's size (drawUnitStates, js/abilities.js)
   drawUnitStates(a, px, py, spr.width, spr.height, now);
-  drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
-  // the second bar, stacked on the health the way a player's stamina is -
-  // 3 rows up, the two frames sharing a wall: a wolf's threat, from the
-  // first flicker of interest to the full bar it charges on (updateWolf,
-  // js/wildlife.js), none at rest; a deer's sprint (updatePrey), always
+  // health on top, always - a deer's and a wolf's sits 3 rows higher than a
+  // rabbit's to leave room for the second bar under it, the way a player's
+  // stamina hangs under the health, the two frames sharing a wall: a wolf's
+  // threat, from the first flicker of interest to the full bar it charges
+  // on (updateWolf, js/wildlife.js), none at rest, so the slot is empty
+  // then and the health never moves; a deer's sprint (updatePrey), always
   // worn, in stamina white - it is one
-  const second = wolf ? a.threat > 0 : !rabbit;
-  if (wolf && second) drawHealthBar(a.x - ex, py - 8, a.threat, 1, 12, undefined, THREAT_COL);
-  else if (second) drawHealthBar(a.x - ex, py - 8, a.sprint, 1, 16, undefined, STAM_COL);
-  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : second ? 13 : 10), a, 4);
+  drawHealthBar(a.x - ex, py - (rabbit ? 4 : 8), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
+  if (wolf && a.threat > 0) drawHealthBar(a.x - ex, py - 5, a.threat, 1, 12, undefined, THREAT_COL);
+  else if (!rabbit && !wolf) drawHealthBar(a.x - ex, py - 5, a.sprint, 1, 16, undefined, STAM_COL);
+  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : 13), a, 4);
 }
 
 // The only thing in the world that leaves the ground: the sprite lifts off
