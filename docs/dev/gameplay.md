@@ -516,6 +516,14 @@ page itself — the slab, the tabs, the blocks, the rail — is in
 the numbers come from. Every number on a page is read off the constant the sim spends, never
 typed twice, so a retune can never leave the wiki lying.
 
+- **CLASSES** (the page the wiki opens on) — the two classes as class select reads them: the
+  body at 3x in the side you play in, the name and role, the three lines of the pitch, and a
+  ledger of health and the four stat pips (`CLASSES[c].stats`, `kit.maxHp`); under each, its
+  four abilities in key order — the key on a plate, the strip's own 32 px icon in a well
+  (`classAbIcon`), the name, COOLDOWN and CAST in the columns (`WIKI_AB_COLS`, off `CLASS_AB`)
+  and the blurb wrapped beneath. A hover raises class select's ability card (`tipClassAb` with
+  the class passed, so the base cooldown). The intro names what a skill point does
+  (`AB_LV_CD`, `AB_LV_MAX`, [Hero levels](multiplayer.md#hero-levels)).
 - **BEASTS** — the meadow's four kinds, each drawn wearing the frame it wears in the snow; a
   legend naming the frame's parts once (the level plate, health, the stamina bar that is a
   wolf's threat bar, the `!` noticed mark); and per kind a line of what it does and a growth

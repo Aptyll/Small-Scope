@@ -2393,7 +2393,9 @@ function tipAt(mx, my) {
     const m = state.menu;
     if (m.screen === 'wiki' && m.wikiT >= 1) {
       const h = wikiHit(mx, my);
-      return h && h.kind === 'row' ? tipKind(h.id) : null;
+      // an ARSENAL row describes its kind; a CLASSES row is class select's
+      // own ability card, read at the base cooldown since nobody has levelled
+      return !h ? null : h.kind === 'row' ? tipKind(h.id) : h.kind === 'ab' ? tipClassAb(h.i, h.cls) : null;
     }
     // the stage's ability wells on class select: the strip's own tooltip,
     // readable before the class is ever locked

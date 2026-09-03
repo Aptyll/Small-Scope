@@ -383,7 +383,10 @@ A page is data. `WIKI_PAGES` is `{ id, label, build() }` and `build` returns the
 with its column heads over their columns), `row` (a kind on its tier plate with its numbers in
 the columns, `WIKI_TOOL_COLS` / `WIKI_BIT_COLS` / `WIKI_MOD_COLS` naming each column's label,
 width and getter), `legend` (the deer wearing the overhead frame, a leader from each part of it
-to its name) and `beast` (a kind standing on its snow beside its growth table, `WIKI_BEASTS`) —
+to its name), `beast` (a kind standing on its snow beside its growth table, `WIKI_BEASTS`),
+`cls` (a class card: the body at 3x, pitch, health and the stat pips, `WIKI_STATS`) and `ab`
+(an ability: key plate, the strip's icon in a well, name, the `WIKI_AB_COLS` numbers, the blurb
+wrapped by `wikiWrap`; hoverable, answering `tipClassAb`) —
 each with a fixed height, built once (`wikiBlocks`). `wikiLayout()` is the single source of
 every rect: the slab, the tab cells, the window, each block's y (pre-scroll), the scroll bound,
 the rail and its thumb; `wikiHit(mx, my)` reads it back as a tab, a row (carrying its kind id,

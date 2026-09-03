@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.90'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.91'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.91', 'THE WIKI OPENS ON A CLASSES PAGE: BOTH CLASSES WITH THEIR HEALTH AND STAT PIPS, AND ALL EIGHT ABILITIES WITH THEIR COOLDOWN, CAST AND WHAT EACH DOES.'],
   ['2.90', 'THE TECH TREE PLANK IS NOW A WIKI: A BEASTS PAGE SHOWS EVERY ANIMAL WEARING ITS FRAME WITH ITS HEALTH AND KILL GOLD AT LEVELS 1, 6 AND 12, AND AN ARSENAL PAGE LISTS EVERY TOOL AND BIT WITH ITS NUMBERS WRITTEN DOWN.'],
   ['2.89', 'A KILL PAYS FOR THE ANIMAL\'S LEVEL: A TENTH MORE GOLD A LEVEL, SO A LATE MEADOW IS RICHER AS WELL AS HARDER.'],
   ['2.88', 'EVERY RABBIT, DEER AND WOLF WEARS A LEVEL PLATE AND POPS A "!" THE MOMENT IT SEES YOU, THE MEADOW RESTOCKS AT THE TABLE\'S LEVEL, AND A HOVERED DEN SHOWS THE CLOCK TO ITS NEXT WOLF.'],
@@ -2290,7 +2291,9 @@ function renderGear(now, a) {
 // and to the gold a kill pays, at levels 1, 6 and 12, read off the same
 // constants the sim spends (ANIMAL_HP, ANIMAL_LV_HP, YIELD, ANIMAL_LV_GOLD,
 // js/wildlife.js and js/core.js), so the page can never disagree with the
-// game.
+// game. The CLASSES page is the two classes as class select reads them -
+// body, pitch, health and the four stat pips - and their eight abilities
+// with the cooldown, the cast and what each does, off CLASS_AB itself.
 const WIKI_W_MAX = 400;
 const WIKI_H = 200;           // the slab; the window is inside it
 const WIKI_LEVELS = [1, 6, 12]; // the three columns a beast's growth is shown at
@@ -2329,6 +2332,25 @@ const WIKI_BIT_COLS = [
 const WIKI_MOD_COLS = [
   { label: 'EFFECT', w: 180, get: (id) => BITS[id].blurb.split('. ')[0].replace(/\.$/, ''), col: TIP_DIM },
 ];
+// the classes page: an ability row's two numbers (the tooltip's own rows,
+// tipClassAb), and the four stats a class card shows as pips - the kit's
+// numbers behind each are in CLASSES, player.js
+const WIKI_AB_COLS = [
+  { label: 'COOLDOWN', w: 40, get: (ab) => tipSec(ab.cd) },
+  { label: 'CAST', w: 32, get: (ab) => tipSec(ab.cast) },
+];
+const WIKI_STATS = [['ICE', 'ice'], ['DRAW', 'draw'], ['POWER', 'power'], ['TOUGH', 'tough']];
+// a sentence broken into lines no wider than maxW, on word boundaries
+function wikiWrap(text, maxW) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? line + ' ' + word : word;
+    if (pixelTextWidth(next) > maxW && line) { lines.push(line); line = word; } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
 // every kind of one sort, worn to gilded, in the order the TECH table names them
 function wikiKinds(sort) {
   const ids = TECH.map((n) => n.id).filter((id) => sort === 'tool' ? !!toolIdOf(id)
@@ -2337,6 +2359,18 @@ function wikiKinds(sort) {
 }
 
 const WIKI_PAGES = [
+  { id: 'classes', label: 'CLASSES', build() {
+    const b = [];
+    b.push({ kind: 'line', h: 9, text: 'TWO CLASSES, PICKED ON THE WAY IN. KEYS 1-4 ARE THE CLASS, EACH ON ITS OWN COOLDOWN.', col: '#cfe0ff' });
+    b.push({ kind: 'line', h: 9, text: 'A HERO LEVEL IS A SKILL POINT: ' + Math.round(AB_LV_CD * 100) + '% OFF ONE ABILITY\'S COOLDOWN, UP TO LEVEL ' + AB_LV_MAX + '.', col: TIP_DIM });
+    CLASSES.forEach((c, cls) => {
+      b.push({ kind: cls ? 'rule' : 'gap', h: cls ? 10 : 4 });
+      b.push({ kind: 'cls', h: 52, cls });
+      b.push({ kind: 'head', h: 12, text: 'KEYS 1-4', cols: WIKI_AB_COLS });
+      CLASS_AB[cls].forEach((ab, i) => b.push({ kind: 'ab', h: 36, cls, i, cols: WIKI_AB_COLS }));
+    });
+    return b;
+  } },
   { id: 'beasts', label: 'BEASTS', build() {
     const b = [];
     b.push({ kind: 'line', h: 9, text: 'EVERY BEAST IS DEALT THE TABLE\'S AVERAGE HERO LEVEL WHEN IT SPAWNS, AND KEEPS IT.', col: '#cfe0ff' });
@@ -2401,9 +2435,10 @@ function wikiHit(mx, my) {
   if (L.maxScroll > 0 && mx >= L.rail.x - 2 && mx < L.rail.x + L.rail.w + 2 && my >= L.rail.y && my < L.rail.y + L.rail.h) return { kind: 'rail', y: my };
   if (my < L.winY || my >= L.winY + L.winH || mx < L.left || mx >= L.right) return null;
   for (const r of L.rows) {
-    if (r.bl.kind !== 'row') continue;
+    if (r.bl.kind !== 'row' && r.bl.kind !== 'ab') continue;
     const ry = r.y - L.scroll;
-    if (my >= ry && my < ry + r.bl.h) return { kind: 'row', id: r.bl.id };
+    if (my < ry || my >= ry + r.bl.h) continue;
+    return r.bl.kind === 'row' ? { kind: 'row', id: r.bl.id } : { kind: 'ab', cls: r.bl.cls, i: r.bl.i };
   }
   return null;
 }
@@ -2560,7 +2595,52 @@ function renderWiki(now, a) {
       ctx.fillStyle = '#2c3a68';
       ctx.fillRect(L.left, y + 10, L.right - L.left, 1);
     } else if (bl.kind === 'row') drawWikiRow(r, L, hit && hit.kind === 'row' && hit.id === bl.id, now);
-    else if (bl.kind === 'legend') {
+    else if (bl.kind === 'cls') {
+      // a class card: the body at 3x on the left (the side you play in), its
+      // name and role, the three lines of its pitch, and on the right the
+      // ledger class select reads - health, then the four stats as pips
+      const c = CLASSES[bl.cls];
+      const spr = SPRITES.champ[bl.cls][skin(player.team)].down[0];
+      ctx.drawImage(spr, L.left, y + 2, 48, 48);
+      const tx = L.left + 56;
+      drawPixelTextShadow(ctx, c.name, tx, y + 4, '#ffd95c', '#0a0e23');
+      drawPixelTextShadow(ctx, c.role, tx + pixelTextWidth(c.name) + 7, y + 4, TIP_LABEL, '#0a0e23');
+      c.blurb.forEach((t, k) => drawPixelTextShadow(ctx, t, tx, y + 14 + k * 8, k ? TIP_DIM : '#cfe0ff', '#0a0e23'));
+      const px0 = L.right - 19, lx = px0 - 5;
+      let ry = y + 4;
+      drawPixelTextShadow(ctx, 'HEALTH', lx - pixelTextWidth('HEALTH'), ry, TIP_LABEL, '#0a0e23');
+      const hp = String(c.kit.maxHp);
+      drawPixelTextShadow(ctx, hp, L.right - pixelTextWidth(hp), ry, '#f4f7ff', '#0a0e23');
+      for (const [label, key] of WIKI_STATS) {
+        ry += 8;
+        drawPixelTextShadow(ctx, label, lx - pixelTextWidth(label), ry, TIP_LABEL, '#0a0e23');
+        for (let k = 0; k < 5; k++) { ctx.fillStyle = k < c.stats[key] ? '#ffd95c' : '#2c3560'; ctx.fillRect(px0 + k * 4, ry + 1, 3, 3); }
+      }
+    } else if (bl.kind === 'ab') {
+      // an ability: its key on a plate, its icon in a well (the strip's
+      // own), its name, the two numbers in the columns, and what it does
+      const ab = CLASS_AB[bl.cls][bl.i];
+      const hot = hit && hit.kind === 'ab' && hit.cls === bl.cls && hit.i === bl.i;
+      const iy = y + 1, wx = L.left + 10;
+      ctx.fillStyle = '#0a0e23'; ctx.fillRect(L.left, iy + 12, 7, 8);
+      ctx.fillStyle = '#1c2750'; ctx.fillRect(L.left + 1, iy + 13, 5, 6);
+      drawPixelText(ctx, String(bl.i + 1), L.left + 2, iy + 14, '#ffd95c');
+      ctx.fillStyle = hot ? '#7a8bb8' : '#0a0e23'; ctx.fillRect(wx - 1, iy - 1, 34, 34);
+      ctx.fillStyle = BAG_WELL; ctx.fillRect(wx, iy, 32, 32);
+      ctx.drawImage(classAbIcon(bl.cls, bl.i), wx, iy);
+      const tx = wx + 37;
+      drawPixelTextShadow(ctx, ab.name, tx, y + 4, hot ? '#ffd95c' : '#f4f7ff', '#0a0e23');
+      let rx = L.right, firstX = rx;
+      for (let k = bl.cols.length - 1; k >= 0; k--) {
+        const col = bl.cols[k], v = col.get(ab), vw = pixelTextWidth(v);
+        drawPixelTextShadow(ctx, v, rx - vw, y + 4, '#f4f7ff', '#0a0e23');
+        firstX = rx - vw;
+        rx -= col.w;
+      }
+      ctx.fillStyle = '#2c3560';
+      for (let px = tx + pixelTextWidth(ab.name) + 3; px < firstX - 3; px += 2) ctx.fillRect(px, y + 8, 1, 1);
+      wikiWrap(ab.blurb, L.right - tx).slice(0, 2).forEach((t, k) => drawPixelTextShadow(ctx, t, tx, y + 14 + k * 8, TIP_DIM, '#0a0e23'));
+    } else if (bl.kind === 'legend') {
       // the frame, labelled: one deer, and a leader from each part of the
       // frame to what it is. Every beast on the page wears this same frame.
       const fx = L.left + 40, base = y + 52;
