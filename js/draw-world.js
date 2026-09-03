@@ -985,7 +985,40 @@ function drawHealthBar(cxp, topY, hp, maxHp, w, team, col) {
   ctx.fillStyle = '#3a3448';
   ctx.fillRect(x, y, w, 2);
   ctx.fillStyle = col || barCol(team);
-  ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
+  // a living thing's last sliver of hp is still a pixel; an empty charge
+  // (a wolf's threat at rest, a spent jink) is bare track, not a false one
+  ctx.fillRect(x, y, frac > 0 ? Math.max(1, Math.round(w * frac)) : 0, 2);
+}
+
+// The level plate: a 7-tall badge hard against a bar backing's LEFT column
+// (`rx`, the column past the plate, already painted by the bar), sharing that
+// one frame column and spanning the two bars stacked under it (topY..topY+6).
+// Same backing and track as the bars. It sizes itself to the number and
+// grows LEFT, so a two-digit level (the cap is 12) overhangs the way a stun
+// plate does on the other side rather than squashing the digits. One shape
+// for a hero (drawPlayer) and for a beast (drawAnimal): the number on a body
+// is what it costs to take.
+function drawLevelBadge(rx, topY, level) {
+  const lt = String(level), lw = pixelTextWidth(lt);
+  const bw = lw + 3, bx = rx - bw;
+  ctx.fillStyle = 'rgba(12,18,42,0.78)';
+  ctx.fillRect(bx, topY, bw, 7);
+  ctx.fillStyle = '#3a3448';
+  ctx.fillRect(bx + 1, topY + 1, bw - 1, 5);
+  drawPixelText(ctx, lt, bx + 2, topY + 1, '#f2cc6a');
+}
+
+// The noticed mark: a "!" over a head for as long as an animal has a player
+// in sight (e.senseT - seconds since it did, 0 while it does not; the prey
+// and wolves banners, js/wildlife.js), in the colour of what that means -
+// prey's alarm in stamina white, a wolf's in its threat red - rising out of
+// the head over its first tenth of a second and gone the frame the sight is.
+// It turns where the stun stars turn, and the stars win: a stunned body is
+// seeing nothing. So a deer running wears the reason over its head, and one
+// grazing on wears the absence of it.
+function drawSenseMark(cx, topY, e, col) {
+  const lift = e.senseT < 0.05 ? 2 : e.senseT < 0.1 ? 1 : 0;
+  drawPixelTextOutline(ctx, '!', cx - 1, topY + lift, col, '#0f1632');
 }
 
 // Seeing stars. Three sparks on an orbit, phased off the unit's own stun
@@ -1249,18 +1282,24 @@ function drawAnimal(a, ex, ey, now) {
   // netted, snared, alight, marked: the same four tells a player wears, at
   // this body's size (drawUnitStates, js/abilities.js)
   drawUnitStates(a, px, py, spr.width, spr.height, now);
-  // health on top, always, with the second bar hung 3 rows under it the way
-  // a player's stamina hangs under the health, the two frames sharing a
-  // wall: a wolf's threat, from the first flicker of interest to the full
-  // bar it charges on (updateWolf, js/wildlife.js), none at rest, so the
-  // slot is empty then and the health never moves; a deer's sprint and a
-  // rabbit's jink charge (updatePrey), always worn, in stamina white - each
-  // is one, spent on the run and on the dash
+  // The player's frame, on a beast: health on top, always, the second bar
+  // hung 3 rows under it the way a player's stamina hangs under the health,
+  // the two sharing a wall, and the level badge on the left spanning both -
+  // the same plate a hero wears (drawLevelBadge), because the number means
+  // the same thing over either. The second bar is always worn: a wolf's
+  // threat, bare track at rest and filling from the first flicker of
+  // interest to the full bar it charges on (updateWolf, js/wildlife.js); a
+  // deer's sprint and a rabbit's jink charge (updatePrey) in stamina white -
+  // each is one, spent on the run and on the dash. Over the frame, the stun
+  // stars or the noticed mark, never both.
   const bw = rabbit ? 8 : wolf ? 12 : 16;
+  const bx = Math.round(a.x - ex - bw / 2); // the bars' own left column (drawHealthBar's x)
   drawHealthBar(a.x - ex, py - 8, a.hp, a.maxHp, bw);
-  if (wolf) { if (a.threat > 0) drawHealthBar(a.x - ex, py - 5, a.threat, 1, bw, undefined, THREAT_COL); }
+  if (wolf) drawHealthBar(a.x - ex, py - 5, a.threat, 1, bw, undefined, THREAT_COL);
   else drawHealthBar(a.x - ex, py - 5, rabbit ? a.dodge : a.sprint, 1, bw, undefined, STAM_COL);
+  drawLevelBadge(bx - 1, py - 9, a.level);
   if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - 13, a, 4);
+  else if (a.senseT > 0) drawSenseMark(Math.round(a.x - ex), py - 16, a, wolf ? THREAT_COL : STAM_COL);
 }
 
 // The only thing in the world that leaves the ground: the sprite lifts off
@@ -1650,20 +1689,10 @@ function drawPlayer(p, ex, ey, now) {
   const fx = Math.round(p.x - ex) + FRAME_DX;
   drawHealthBar(p.x - ex + FRAME_DX, hy - 7, p.hp, p.maxHp, 14, p.team);
   // level badge: a 7-tall plate sharing its right frame column with the bar
-  // backing's left edge (one 1px frame everywhere, never a doubled wall), and
-  // spanning the health bar and the stamina bar stacked (hy-8 .. hy-2). Same
-  // backing / track colours as the bars. It sizes itself to the number and
-  // grows LEFT, so a two-digit level (the cap is 12) overhangs the way the
-  // stun plate does on the other side rather than squashing the digits.
-  {
-    const lt = String(p.level), lw = pixelTextWidth(lt);
-    const bw = lw + 3, bx = fx - 8 - bw, by = hy - 8;
-    ctx.fillStyle = 'rgba(12,18,42,0.78)';
-    ctx.fillRect(bx, by, bw, 7); // the column past it is the bar backing, already painted
-    ctx.fillStyle = '#3a3448';
-    ctx.fillRect(bx + 1, by + 1, bw - 1, 5);
-    drawPixelText(ctx, lt, bx + 2, by + 1, '#f2cc6a');
-  }
+  // backing's left edge (fx-8: one 1px frame everywhere, never a doubled
+  // wall), and spanning the health bar and the stamina bar stacked (hy-8 ..
+  // hy-2) - the plate every animal wears too (drawLevelBadge)
+  drawLevelBadge(fx - 8, hy - 8, p.level);
   // Every slot carries a name tag in its team colour so a fight stays
   // legible - your own included: the profile name is what the rest of the
   // table sees over your head, and hiding it from you alone would make it

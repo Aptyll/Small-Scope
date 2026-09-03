@@ -194,7 +194,10 @@ visible state everywhere the cursor lands, not a faded pine quietly borrowing th
 a bare bush never rims because `workTarget`'s `ready` gate already refuses it — a *hovered* bare
 bush shows its regrow clock instead, the neutral unit bar (`drawHealthBar`, gold) over the plant
 filling toward `BUSH_REGROW`, drawn only while the pointer's tile is that bush (`hovO`, resolved
-beside `fadeWkO` at any reach, since a look asks nothing of the legs). A hovered tree
+beside `fadeWkO` at any reach, since a look asks nothing of the legs). A hovered **wolf den**
+wears the same bar the same way — over the mouth, filling toward its next wolf off the site's
+top-up clock (`o.site.repopT`, [world.md](world.md#runtime)) while the pack is short, nothing
+while it is whole. A hovered tree
 also holds full ink against the fade, and a mid-shake chop lifts a faded neighbour back to
 opaque. While any pine
 is inside the ramp the hero also wears a **black 1px silhouette rim** — `treeFadeSil`, the
@@ -582,10 +585,18 @@ you and your allies and red over rivals on your screen, and neutral gold (`BAR_N
 grammar) over wildlife, the practice dummy and anything handed no team; `col` overrides the side
 for the bars that are not health, every one hung under the health bar the way a player's stamina is
 (3 rows down, sharing a frame wall; **health is always the top bar**, at the same height on every
-animal, and a wolf's stays put while its slot is empty): a wolf's threat (`THREAT_COL` red, only
-while it is above zero: [gameplay.md](gameplay.md#wolves-the-first-enemy)), a deer's sprint and a
-rabbit's dodge charge (both `STAM_COL` white, always worn, at the health bar's own width:
-[gameplay.md](gameplay.md#wildlife)). How full it is carries the
+animal): a wolf's threat (`THREAT_COL` red, bare track at rest:
+[gameplay.md](gameplay.md#wolves-the-first-enemy)), a deer's sprint and a
+rabbit's dodge charge (both `STAM_COL` white, at the health bar's own width:
+[gameplay.md](gameplay.md#wildlife)) — every second bar always worn, since **the level plate
+spans both**: `drawLevelBadge(rx, topY, level)` is the one 7-tall badge a hero and a beast
+share, hard against the bar backing's left column and growing left with the digits, so a
+rabbit's frame is the player's frame at 8 px. An empty bar is bare track (`drawHealthBar`
+paints no fill at zero; a living thing's last sliver of hp is still a pixel). Over the frame,
+where the stun stars turn, an animal that has a player in sight wears the **noticed mark** —
+`drawSenseMark`, the font's `!` under a dark rim, white on prey and threat red on a wolf,
+rising out of the head over its first tenth of a second and gone the frame the sight is
+([gameplay.md](gameplay.md#wildlife)); the stars win while a stun runs. How full a bar is carries the
 health. The old green → amber → red drain spent the rival's colour on "hurt", so a hurt ally
 read as an enemy at a glance. **Birds are the one exception** — 3 hp means every hit is a kill, and
 a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow
@@ -641,8 +652,9 @@ pixels, `w >> 1`, which puts the run's **middle column** on `round(sx)` — the 
 for any text centred over a model; free-floating text (damage floaters, wheel labels) is not
 centred on anything and keeps its own maths.
 
-**Every other bar in the game is centred on its model directly** — none of them carries a badge, so
-none of them needs `FRAME_DX`. `drawHealthBar(cxp, …)` centres an even-width bar on `cxp`, and
+**Every other bar in the game is centred on its model directly** — an animal's frame carries the
+level badge too, but its bars stay on the body's own centre and the badge simply overhangs to the
+left, the way a stun plate overhangs right, so nothing but a player needs `FRAME_DX`. `drawHealthBar(cxp, …)` centres an even-width bar on `cxp`, and
 every caller hands it a true centre: `a.x - ex` for an
 animal (whose sprite is placed at `round(a.x - w/2 - ex)`), `b.x - ex` for a robot, and the centre
 of the **footprint** for a building — `sx + sh + (spr.width >> 1)`, which is where the sprite

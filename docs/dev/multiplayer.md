@@ -143,7 +143,10 @@ Growth is flat and identical for both classes: each level past 1 adds `LVL_HP` (
 (`emitBit` adds it after the bit's base + pow × draw + speed bonus). Level 12 is +99 hp / +22
 damage, and a level-8 hero of this table is about a capped hero of the old one: rarer, and
 worth more. A level-up pushes a 2× gold `LEVEL n` floater over the slot (skipped while `inAir`) and
-plays `SFX.levelUp()` for the local slot.
+plays `SFX.levelUp()` for the local slot. The table's **average** level is also what the
+wildlife is dealt at spawn (`animalLevel`, js/wildlife.js): an animal never levels, but the
+meadow and the dens restock at the level the match has reached —
+[gameplay.md](gameplay.md#wildlife).
 
 Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1), and a
 point buys exactly one thing: **a level on one of the four class abilities**

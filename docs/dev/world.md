@@ -34,7 +34,8 @@ anything that must stay stable per tile.
 - `objects` — flat `Array(WORLD*WORLD)`, **at most one object per tile**. Every object is
   `{ type, tx, ty, hp, flash, shake, ...extra }`. Types: `tree`, `deadTree`, `stump`, `rock`,
   `bush`, `chest`, `den`, `wall`, `turret`, `generator`, `spawner`, `part`. `deadTree` (a 3 hp snag, chopped like a
-  tree for `YIELD.deadTreeHit`/`deadTreeFall`, leaves a stump) and `den` (solid, inert scenery)
+  tree for `YIELD.deadTreeHit`/`deadTreeFall`, leaves a stump) and `den` (solid, inert scenery
+  that carries its `site` — the landmark record — so a hover can wear the pack's clock)
   exist only inside [landmarks](#landmarks); `chest` is a
   [treasure chest](#treasure-chests) standing where a border tree stood. `part` is the filler a multi-tile building leaves on
   every footprint tile but its anchor (`{ type: 'part', of: <building> }`): solid, coloured like its
@@ -158,9 +159,15 @@ type** it stamps — that is the checklist in
 
 ### Runtime
 
-`updateLandmarks(dt)` (from `updatePlay`) counts each site's living inhabitants every `repop`
-seconds and calls `spawnOne` when it is short — never while any player is within 96 px, so
-clearing a den is a real reward for a while and the site still grows back. `landmarkAt(x, y)`
+`updateLandmarks(dt)` (from `updatePlay`) runs each site's top-up clock (`L.repopT`), kept
+honest enough to be shown: a site at strength holds the clock at `repop`, so a loss starts the
+whole count; short, it counts down; and due, it **holds at zero** for as long as any player is
+within 96 px — clearing a den is a real reward for a while and the site still grows back, the
+moment the intruder leaves — then `spawnOne` and the clock resets. **A hovered den wears the
+clock**: `render()`'s den branch draws the neutral unit bar over the mouth, the picked bush's
+own read ([rendering.md](rendering.md#the-tree-fade)), filling toward the next wolf while the
+pack is short (`landmarkPop(o.site) < pop`) and nothing at all while it is whole; a full bar
+holding is a wolf that is due and waiting for you to go. `landmarkAt(x, y)`
 returns the landmark a world position stands in; `updatePlay` feeds it `state.loc`
 (`{ L, t }`), which drives the arrival toast in
 [rendering.md](rendering.md#landmarks-on-the-maps).

@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.87'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.88'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.88', 'EVERY RABBIT, DEER AND WOLF WEARS A LEVEL PLATE AND POPS A "!" THE MOMENT IT SEES YOU, THE MEADOW RESTOCKS AT THE TABLE\'S LEVEL, AND A HOVERED DEN SHOWS THE CLOCK TO ITS NEXT WOLF.'],
   ['2.87', 'PRESS PLAY AGAIN DURING THE CLASS SELECT COUNTDOWN AND THE EAGLE COMES AT ONCE - THE SECOND PRESS SKIPS THE COUNT.'],
   ['2.86', 'A RABBIT WEARS THE DEER\'S WHITE BAR AS ONE DODGE CHARGE: A SHOT COMING AT IT IS JINKED WITH A SIDEWAYS DASH OFF THE ARROW\'S LINE AND A BOLT AWAY, AND THE CHARGE TAKES TEN SECONDS TO COME BACK - THE SECOND ARROW IS THE ONE THAT LANDS.'],
   ['2.85', 'HEALTH BARS ALWAYS SIT ON TOP: A WOLF\'S THREAT BAR AND A DEER\'S SPRINT BAR NOW HANG UNDER THE HEALTH BAR, THE WAY A PLAYER\'S STAMINA DOES.'],

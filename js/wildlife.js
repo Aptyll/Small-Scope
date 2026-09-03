@@ -8,6 +8,19 @@
 // this same array so arrows, the draw list, the kill payouts and the cursor
 // all treat them as what they are: things you shoot.
 const ANIMAL_HP = { rabbit: 8, deer: 24, wolf: 30, bird: 3 };
+// Every animal wears a hero-style level, dealt ONCE at spawn (makeAnimal) from
+// the table's average hero level (animalLevel) and never raised after: what
+// grows with it is hp, ANIMAL_LV_HP a level over ANIMAL_HP, and a wolf's bite
+// (WOLF_LV_DMG, the wolves banner) - so the number on a body is what it costs
+// to take, the way a hero's is, and a meadow restocked late in a match is a
+// harder one than the one the eagle dropped you into. The payout does not
+// grow: a kill is worth what the YIELD table says at every level.
+const ANIMAL_LV_HP = { rabbit: 1, deer: 2, wolf: 3, bird: 0 };
+function animalLevel() {
+  let n = 0, s = 0;
+  for (const p of players) if (p.active) { n++; s += p.level; }
+  return n ? Math.max(1, Math.min(LEVEL_MAX, Math.round(s / n))) : 1;
+}
 const HIT_PUFF = { rabbit: '#eef2fa', deer: '#a5825a', wolf: '#6f778c', bird: '#cfd6e4' };
 // Prey: how close a player gets before it bolts, how long it runs, and the two
 // speeds. A deer keeps the wider watch and the longer run; a rabbit sits tight
@@ -40,9 +53,11 @@ const RABBIT_DODGE_T = 0.11;   // s it lasts: ~29 px, well clear of the 8 px dis
 const RABBIT_DODGE_CD = 10;    // s for the charge to come back
 
 function makeAnimal(kind, x, y) {
-  const hp = ANIMAL_HP[kind] || 8;
+  const level = animalLevel();
+  const hp = (ANIMAL_HP[kind] || 8) + (ANIMAL_LV_HP[kind] || 0) * (level - 1);
   const a = {
-    kind, x, y, hp, maxHp: hp,
+    kind, x, y, hp, maxHp: hp, level,
+    senseT: 0,                           // s it has had a player in sight (0: it has not) - the mark over its head (drawAnimal)
     dir: rng() < 0.5 ? 'left' : 'right',
     goal: null, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
     animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
@@ -89,29 +104,64 @@ function hurtAnimal(a, dmg, nx, ny, kb, owner, ambush) {
   if (nearPlayer(a.x, a.y)) { SFX.hit(); if (a.hp > 0 && a.kind !== 'bird') SFX.yelp(); }
 }
 
-function spawnAnimals() {
+// The passive pair, and the strength the meadow is kept at: PREY_POP of each
+// kind - rabbits biased toward berry bushes, which is what makes a patch read
+// as a warren - put down at boot by spawnAnimals and then topped up one at a
+// time by updatePreyStock, every PREY_REPOP seconds a kind is short, at a spot
+// no live slot is within PREY_CLEAR of (past the edge of any screen at zoom
+// 1, so nothing is ever seen to appear) and at the level the table has
+// reached by then (animalLevel). Neither kind breeds: the meadow is restocked,
+// not grown, and a hunt never empties it for good.
+const PREY_POP = { rabbit: 16, deer: 10 };
+const PREY_REPOP = 15;  // s between top-ups (one animal each)
+const PREY_CLEAR = 280; // px from every live slot a newcomer must land
+let preyRepopT = PREY_REPOP;
+
+// one animal of a kind on a free tile: beside one of `bushes` seven times in
+// ten when a list is given, clear of the map's centre, and - when `clear` -
+// out of everyone's reach. The animal, or null if forty tries found nowhere
+function spawnPrey(kind, bushes, clear) {
+  for (let tries = 0; tries < 40; tries++) {
+    let tx, ty;
+    if (bushes && bushes.length && rng() < 0.7) {
+      const b = bushes[randi(0, bushes.length - 1)];
+      tx = b.tx + randi(-4, 4); ty = b.ty + randi(-4, 4);
+    } else {
+      tx = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
+      ty = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
+    }
+    if (!inWorld(tx, ty) || objects[idx(tx, ty)] || Math.hypot(tx - cx, ty - cy) <= 14) continue;
+    const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    if (clear && players.some((p) => p.active && !p.dead && !inAir(p) && Math.hypot(p.x - x, p.y - y) < PREY_CLEAR)) continue;
+    const a = makeAnimal(kind, x, y);
+    animals.push(a);
+    return a;
+  }
+  return null;
+}
+
+function bushList() {
   const bushes = [];
   for (const o of objects) if (o && o.type === 'bush') bushes.push(o);
-  const freeSpot = (tx, ty) =>
-    inWorld(tx, ty) && !objects[idx(tx, ty)] &&
-    Math.hypot(tx - cx, ty - cy) > 14;
-  const place = (kind, nearBushes) => {
-    for (let tries = 0; tries < 40; tries++) {
-      let tx, ty;
-      if (nearBushes && bushes.length && rng() < 0.7) {
-        const b = bushes[randi(0, bushes.length - 1)];
-        tx = b.tx + randi(-4, 4); ty = b.ty + randi(-4, 4);
-      } else {
-        tx = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
-        ty = randi(BORDER_MIN + 2, WORLD - 3 - BORDER_MIN);
-      }
-      if (!freeSpot(tx, ty)) continue;
-      animals.push(makeAnimal(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE));
-      return;
-    }
-  };
-  for (let i = 0; i < 16; i++) place('rabbit', true);
-  for (let i = 0; i < 10; i++) place('deer', false);
+  return bushes;
+}
+
+function spawnAnimals() {
+  const bushes = bushList();
+  for (let i = 0; i < PREY_POP.rabbit; i++) spawnPrey('rabbit', bushes, false);
+  for (let i = 0; i < PREY_POP.deer; i++) spawnPrey('deer', null, false);
+}
+
+// the top-up: on the clock, the kind furthest under strength gets one back
+function updatePreyStock(dt) {
+  preyRepopT -= dt;
+  if (preyRepopT > 0) return;
+  preyRepopT = PREY_REPOP;
+  const live = { rabbit: 0, deer: 0 };
+  for (const a of animals) if (!a.dead && live[a.kind] !== undefined) live[a.kind]++;
+  let kind = null, short = 0;
+  for (const k in PREY_POP) if (PREY_POP[k] - live[k] > short) { short = PREY_POP[k] - live[k]; kind = k; }
+  if (kind) spawnPrey(kind, kind === 'rabbit' ? bushList() : null, true);
 }
 
 // ------------------------------------------------------------ fish
@@ -454,7 +504,8 @@ function updatePrey(a, dt) {
     const d = Math.hypot(p.x - a.x, p.y - a.y);
     if (d < sd) { sd = d; scare = p; }
   }
-  if (a.fleeT <= 0 && scare && sd < seenAt(scare, FLEE_SIGHT[a.kind] || 0)) {
+  const seen = !!scare && sd < seenAt(scare, FLEE_SIGHT[a.kind] || 0);
+  if (a.fleeT <= 0 && seen) {
     const t = FLEE_TIME[a.kind];
     a.fleeT = rand(t[0], t[1]);
     a.goal = null; navClear(a); // the graze is off
@@ -504,6 +555,10 @@ function updatePrey(a, dt) {
 
   // the sprint comes back on its own once the deer has stopped running
   if (!rabbit && a.fleeT <= 0) a.sprint = Math.min(1, a.sprint + dt / DEER_SPRINT_REGEN);
+  // the mark over its head (drawAnimal): up from the frame it has a player
+  // inside its ring or is running from one, down the frame neither is true -
+  // so a deer wearing it is a deer that has seen you, and one without has not
+  a.senseT = seen || a.fleeT > 0 ? a.senseT + dt : 0;
 
   if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
   a.animT += dt * (moving ? (dashing ? 16 : rabbit ? 10 : sprinting ? 12 : 7) : 0);
@@ -549,6 +604,7 @@ const WOLF_GROUND = 190;   // px from its den: the pack's ground - the threat ba
 const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a slide
 const WOLF_BITE_R = 13;    // px reach of a bite
 const WOLF_BITE_DMG = 9;
+const WOLF_LV_DMG = 1;     // bite dmg a level over WOLF_BITE_DMG (the level: animalLevel, the animals banner)
 const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
 const WOLF_THREAT_T = 2.5;   // s lingering at the edge of its sight before a wolf charges; three times as fast at its nose
 const WOLF_THREAT_DECAY = 3; // s for a full threat bar to drain off the ground - then the wolf goes home
@@ -617,6 +673,10 @@ function updateWolf(a, dt) {
     if (a.threat >= 1) { wakePack(a, near); t = near; }
   } else a.threat = Math.max(0, a.threat - dt / WOLF_THREAT_DECAY);
   a.target = t;
+  // the mark over its head (drawAnimal): a wolf with a slot in sight on its
+  // ground, or one on a hunt - never one whose bar is draining with nobody in
+  // view, which is a wolf that has LOST you
+  a.senseT = near || t ? a.senseT + dt : 0;
 
   let moving = false;
   if (t) {
@@ -629,7 +689,7 @@ function updateWolf(a, dt) {
     moving = n.ok;
     if (d < WOLF_BITE_R && a.biteCd <= 0) {
       a.biteCd = WOLF_BITE_CD;
-      damagePlayer(t, WOLF_BITE_DMG, a.mvx, a.mvy, null, 'wolf');
+      damagePlayer(t, WOLF_BITE_DMG + WOLF_LV_DMG * (a.level - 1), a.mvx, a.mvy, null, 'wolf');
       burst(a.x + a.mvx * 6, a.y - 4, '#e04a54', 5, 40, 0.35);
       if (nearPlayer(a.x, a.y)) SFX.bite();
     }

@@ -976,11 +976,34 @@ the answer; a warrior bot has no burrow to decide.
 ## Wildlife
 
 `animals` holds **everything that is shot rather than swung at** — four kinds, keyed by
-`a.kind` with hp from `ANIMAL_HP`. The passive pair is spawned once at boot by `spawnAnimals()`
-(called right after `genWorld()`, so its `rng()` draws don't reshuffle the world layout): 16
-rabbits (8 HP, biased to spawn near berry bushes) and 10 deer (24 HP). Neither reproduces or
-respawns. **Wolves** (30 HP) and **birds** (3 HP) belong to a
-[landmark](world.md#landmarks) instead — `a.home` points at it, and the site restocks them.
+`a.kind` with hp from `ANIMAL_HP`. The passive pair is spawned at boot by `spawnAnimals()`
+(called right after `genWorld()`, so its `rng()` draws don't reshuffle the world layout) at
+`PREY_POP` strength: 16 rabbits (8 HP, biased to spawn near berry bushes) and 10 deer (24 HP).
+Neither reproduces, but **the meadow is restocked**: `updatePreyStock` (from `updatePlay`, never
+under `PRACTICE`) puts one animal of the kind furthest under strength back every `PREY_REPOP`
+(15 s) through `spawnPrey`, on a free tile no live slot is within `PREY_CLEAR` (280 px — past
+the edge of any screen at zoom 1) of, so nothing is ever seen to appear. **Wolves** (30 HP) and
+**birds** (3 HP) belong to a [landmark](world.md#landmarks) instead — `a.home` points at it,
+and the site restocks them.
+
+**Every animal wears a level** (`a.level`), the hero's plate on the left of its frame
+([rendering.md](rendering.md#overhead-health-bars)), dealt once by `makeAnimal` from
+`animalLevel()` — the **average hero level of the active slots**, rounded, capped at
+`LEVEL_MAX` — and never raised after: an animal does not level, the meadow does, as the ones
+the eagle dropped you into (all level 1) are shot and restocked at whatever the table has
+reached. What grows with it is hp, `ANIMAL_LV_HP` a level over `ANIMAL_HP` (rabbit +1, deer
++2, wolf +3; a level-6 pack is 45 hp a wolf), and a wolf's bite, `WOLF_LV_DMG` (+1 a level).
+The payout does **not** grow — a kill is worth what `YIELD` says at every level — so a late
+meadow is a harder one, not a richer one.
+
+**The noticed mark.** An animal that has a player in sight wears a `!` over its head — the
+`drawSenseMark` glyph in [rendering.md](rendering.md#overhead-health-bars), stamina white on
+prey and threat red on a wolf — for as long as it does: `a.senseT` counts the seconds since it
+first did and is 0 whenever it does not. For prey, "in sight" is a player inside the
+`FLEE_SIGHT` ring (through `seenAt`, so cover keeps it down) **or a flight already under way**,
+so a deer running wears the reason it is running and a deer that grazes on has not seen you; for
+a wolf it is a slot in sight on its ground or a hunt in progress, and **not** a bar draining
+with nobody in view — that wolf has lost you, and the mark going out is how it says so.
 
 `updateAnimal()` is the shared shell: it ages the flash and knockback, runs
 `updateUnitStatus` (the shared clock — root, slow, net, mark, fire), dispatches to
@@ -1060,7 +1083,7 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
 - **The threat bar.** Nothing charges on sight. A wolf with someone inside its circle stops its
   patrol, squares up (faces them, stands) and fills `a.threat` (0..1) — the red bar hung under
   its health bar the way a player's stamina is (`THREAT_COL`, `drawAnimal`; 3 rows down, sharing
-  a frame wall), drawn only while it is above zero — at `1 / WOLF_THREAT_T` per second (2.5 s
+  a frame wall), always worn and bare track at rest — at `1 / WOLF_THREAT_T` per second (2.5 s
   to fill) at the edge of the circle and three times that at its nose, so a walk past the edge
   shows a flicker and a walk up to the den is a charge in under a second. Step out before it
   fills and the bar drains over `WOLF_THREAT_DECAY` (3 s), and the wolf goes back to its
@@ -1076,7 +1099,8 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
 - **The chase.** `WOLF_SPD` (96 px/s) is faster than the 72 px/s walk and slower than a slide or
   the ice cap, so the answer is the momentum system, not distance — and the wolf routes around
   trees and water ([Pathfinding](#pathfinding)), so a treeline is not cover; a quarry it cannot
-  route to (out on a hole) it holds and faces. Bites do `WOLF_BITE_DMG` (9)
+  route to (out on a hole) it holds and faces. Bites do `WOLF_BITE_DMG` (9, plus
+  `WOLF_LV_DMG` — 1 — for every level past the wolf's first)
   inside `WOLF_BITE_R` (13 px) every `WOLF_BITE_CD` (1 s) per wolf, through
   `damagePlayer(t, dmg, dx, dy, null, 'wolf')` — whose own 0.7 s of i-frames is what keeps four
   wolves from deleting anyone: measured, standing in a den costs ~9 hp/s, so a level-1 slot has

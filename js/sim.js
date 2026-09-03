@@ -424,6 +424,7 @@ function updatePlay(dt) {
   for (let i = animals.length - 1; i >= 0; i--) if (animals[i].dead) animals.splice(i, 1);
   updateFish(dt);
   updateLandmarks(dt); // named sites restock their inhabitants
+  if (!PRACTICE) updatePreyStock(dt); // and the meadow keeps its rabbits and deer
   if (PRACTICE) updatePractice(dt); // the dummy mends itself between combos
 
   // the named place the local player is standing in drives the arrival toast

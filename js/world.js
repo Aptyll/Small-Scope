@@ -437,7 +437,7 @@ const LANDMARKS = {
     icon: [[2, 3, 3, 3], [1, 4, 5, 2], [0, 1, 1, 2], [2, 0, 1, 2], [4, 0, 1, 2], [6, 1, 1, 2]], // paw print
     pop: 4, repop: 40,
     gen(L) {
-      placeObj(L.tx, L.ty, 'den');
+      placeObj(L.tx, L.ty, 'den', { site: L }); // the mouth knows its site: a hover reads the pack's clock off it (render.js)
       const n = lmRandi(5, 8); // a broken ring of boulders around the mouth
       for (let i = 0; i < n; i++) {
         const s = lmSpot(L, 2, L.r);
@@ -1553,18 +1553,22 @@ function updatePractice(dt) {
   parkour.wasLine = onLine;
 }
 
-// slow top-up, never while someone is standing in the site: clearing a
-// landmark is a real reward for a while, but it always grows back into one
+// The top-up clock, honest enough to be worn: a site at strength holds its
+// clock at the top, so a loss starts the whole `repop` count; short, it
+// counts down; and due, it holds at zero for as long as someone is standing
+// in the site (96 px) - clearing a landmark is a real reward for a while, but
+// it always grows back into one, and the moment they leave it does. A den's
+// mouth wears the count under the pointer (render.js's den branch).
 function updateLandmarks(dt) {
   for (const L of landmarks) {
     if (!L.spec.repop) continue;
-    L.repopT -= dt;
+    if (landmarkPop(L) >= L.spec.pop) { L.repopT = L.spec.repop; continue; }
+    L.repopT = Math.max(0, L.repopT - dt);
     if (L.repopT > 0) continue;
-    L.repopT = L.spec.repop;
-    if (landmarkPop(L) >= L.spec.pop) continue;
     const px = (L.tx + 0.5) * TILE, py = (L.ty + 0.5) * TILE;
     if (players.some((p) => p.active && !p.dead && !inAir(p) && Math.hypot(p.x - px, p.y - py) < 96)) continue;
     L.spec.spawnOne(L);
+    L.repopT = L.spec.repop;
   }
 }
 

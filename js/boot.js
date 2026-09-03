@@ -1488,6 +1488,9 @@ window.DBG = {
   },
   PRONE_BURY, PRONE_SPEED, PRONE_SNIFF, PRONE_CUT, PRONE_MOVE, PRONE_MAP, AMBUSH_MUL,
   spawnAnimal: (kind, x, y) => { const a = makeAnimal(kind, x, y); animals.push(a); return a; },
+  // the level a spawn is dealt (the table's average), the meadow's strength
+  // and its top-up (which a driver can call by hand to force one now)
+  animalLevel, PREY_POP, updatePreyStock,
   // debug staging: place a construction site directly, no cost or validation
   buildStruct: (tx, ty, type, tier) => {
     const t = Math.min(STRUCTS[type].tiers.length - 1, tier || 0);

@@ -360,6 +360,12 @@ function render() {
       drawSpriteFlash(spr, px + sh, py - 8, o.flash);
     } else if (o.type === 'den') {
       drawSpriteFlash(SPRITES.den, px + sh, py + 4, o.flash);
+      // hovered while the pack is short: the den's clock, the same neutral
+      // bar a picked bush wears, filling toward the next wolf out of the
+      // mouth (updateLandmarks, world.js) - full and holding is one that is
+      // due and waiting for the site to empty. A pack at strength wears none.
+      if (o === hovO && o.site && landmarkPop(o.site) < o.site.spec.pop)
+        drawHealthBar(px + 8, py + 1, o.site.spec.repop - o.site.repopT, o.site.spec.repop, 12);
     } else if (o.type === 'rock') {
       const spr = SPRITES.rock[o.variant];
       if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py + 4, now);
