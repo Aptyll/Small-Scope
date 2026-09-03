@@ -263,6 +263,18 @@ while a drag off either one picks it up. A release over any well that will take 
 over the rest of the HUD it goes home; **over the world it is thrown**, which is the only way to
 get rid of a tool — and it goes with its bits.
 
+**A drop onto a loaded well SWAPS.** Whatever the drop displaces goes back to *home* — the well
+this drag started from (`dragHome`) — because home is the one place already known to be free: it
+is where the thing in hand came out of. So a bit dragged from the pack onto a loaded bit cell
+trades places with the bit that was there, a tool dropped on the weapon well sends the old one to
+the bag cell it came out of, and a bit dragged out of the column onto a bit in the grid does the
+same in reverse: one move each way, which is the swap `sendBagCell`'s CLICK already made and the
+drag did not. Home can be gone by the time it is asked — a stack that did not empty is still
+sitting in it, an earlier swap in the same gesture filled it, or it cannot hold that kind at all
+(a berry does not go in a bit cell, a bit does not go on the weapon key) — and then the displaced
+item rides the cursor exactly as it used to, which is free, because what was on it is what just
+went into the well.
+
 **A plain click is the whole move**, because every one of these wells has exactly one sensible
 destination (`sendBagCell` / `sendBitCell` / `sendSlot`): a **bit** in the grid loads into the
 weapon's first free cell, a **bit** in the column comes back to the pack (merging its own stack,
@@ -281,15 +293,26 @@ the weapon well in the same red for the same 0.6 s. The hover tooltip names what
 do where the item actually sits (`tipSend`), which is why a tool reads TAKE IT IN HAND in the
 grid and STOW IT IN THE PACK in the well.
 
-**Shift is for when something is already riding the cursor.** A plain press while carrying puts
-the item down where it lands; a press begun with shift held is remembered on `state.dragPend`
-(`keep`) and its release runs `sendAt(mx, my)` instead — the same wells `dragDrop` tries, in the
-same order, but acting on what is already *sitting* there and leaving what is in hand in hand.
-Over anything else — the bare frame, an empty cell, the rest of the HUD — it does nothing at all,
-because that promise is the whole point. Recording the modifier at the press rather than reading
-it at the release is deliberate: letting go of shift mid-click cannot change what the gesture
-turns out to be. (Carrying an item with no button held is an ordinary state, not a trick — a
-drop onto an occupied well swaps, and the displaced item rides the cursor.)
+**Shift SENDS**, in both hands. With an **empty** one it is the plain click's own transfer above,
+nothing more: shift-click is what anybody trained on another inventory reaches for first, so the
+modifier finds the gesture instead of denying it. With something already riding the cursor, a
+plain press puts the item down where it lands, while a press begun with shift held is remembered
+on `state.dragPend` (`keep`) and its release runs `sendAt(mx, my)` instead — the same wells
+`dragDrop` tries, in the same order, but acting on what is already *sitting* there and leaving
+what is in hand in hand. Over anything else — the bare frame, an empty cell, the rest of the HUD —
+it does nothing at all, because that promise is the whole point. Recording the modifier at the
+press rather than reading it at the release is deliberate: letting go of shift mid-click cannot
+change what the gesture turns out to be.
+
+The pack advertises the gesture rather than expecting you to know it: `drawShiftHint` floats a
+**SHIFT key cap** (the world prompts' own `drawKeyPrompt`, the keybind-indicator carve-out of
+[CLAUDE.md](../../CLAUDE.md)'s UI rule) over the pack's top-right corner whenever the pointer is
+on a well with somewhere to send what it holds, and the verb on it is that **destination** —
+`LOAD` for a bit in the grid, `STOW` for a bit in the risen column or the tool on the weapon,
+`HOLD` for a tool in the grid — so the plate teaches which way the transfer goes rather than
+merely announcing a key. `shiftVerb` asks the same wells in the same order `sendAt` does, so the
+plate and the click can never disagree; a berry and a card get none, because eating and drafting
+are not transfers. The cap presses down while the key is actually held.
 
 ### Where tools and bits come from
 
@@ -316,7 +339,17 @@ tool's own numbers. The tier is stated in **one** place and the same way everywh
 behind the icon, in every well the item ever sits in (bag cell, weapon slot, bit cell, drag ghost,
 loadout card) — which is why nothing on screen has to say "TIER 2". `tierPlate(type)` is that
 lookup and `itemTier(type)` the raw index. The top tier is the only one that moves: `tierShine`
-sweeps a highlight across its plate. On the ground a find glints in its tier's colour so it is
+sweeps a highlight across its plate.
+
+**Which of the two kinds of bit it is is stated on that same plate**, by `modPlate` (ui.js),
+called wherever a bit sits — the grid, the column, the cursor, the counter's wells, a tech node,
+the tooltip's own icon plate. A **projectile** keeps the flat square plate every carried item
+wears: it is a thing you fire. A **modifier** gets its plate hatched in the bit's own colour and
+its corners cut back — it never flies, it is fitted *into* the tool — so the two are told apart
+across a whole grid without recognising a single glyph. Colour is already spent on tier, which is
+why the difference has to be texture and silhouette. The column then adds what only it knows: a
+projectile's `weight` as gold pips along the cell's bottom (red when this tool cannot throw it), a
+modifier's colour as a bar, because it has no weight at all. On the ground a find glints in its tier's colour so it is
 told from a berry at a distance. A tool's **shape** says which family it is and its **palette**
 says its tier, so three 12×12 silhouettes cover five tools across three tiers — the same trick
 `GEAR_MATS` plays with one gear icon across four materials.

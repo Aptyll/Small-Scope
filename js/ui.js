@@ -184,11 +184,14 @@ function drawWorkHint(ox, oy) {
   drawKeyPrompt(x, y, verb, pressed);
 }
 
-// the key-cap + verb pair itself, shared by the work prompt and the rack's:
-// navy rim, icy face, top highlight; pressed = the face drops a pixel and
-// the verb goes gold
-function drawKeyPrompt(x, y, verb, pressed) {
-  const capW = 9;
+// the key-cap + verb pair itself, shared by the work prompt, the rack's and
+// the pack's SHIFT plate: navy rim, icy face, top highlight; pressed = the
+// face drops a pixel and the verb goes gold. `key` is the letter on the cap
+// (E unless said otherwise) and the cap grows to fit it, so a modifier's name
+// wears the same indicator a one-letter binding does.
+function drawKeyPrompt(x, y, verb, pressed, key) {
+  key = key || 'E';
+  const capW = pixelTextWidth(key) + 6; // the cap's own padding: the key sits at x + 3 at any width
   const cy = y + (pressed ? 1 : 0);
   ctx.fillStyle = '#0a0e23';
   ctx.fillRect(x, y, capW, 10);
@@ -198,7 +201,7 @@ function drawKeyPrompt(x, y, verb, pressed) {
     ctx.fillStyle = '#f4f7ff'; ctx.fillRect(x + 1, y + 1, capW - 2, 1);
     ctx.fillStyle = '#8fb3d6'; ctx.fillRect(x + 1, y + 8, capW - 2, 1); // bottom shade = depth
   }
-  drawPixelText(ctx, 'E', x + 3, cy + 3, '#0a0e23');
+  drawPixelText(ctx, key, x + 3, cy + 3, '#0a0e23');
   drawPixelTextOutline(ctx, verb, x + capW + 3, y + 3, pressed ? '#ffd95c' : '#f4f7ff', '#0f1632');
 }
 
@@ -822,6 +825,26 @@ function dragTake(cell, from) {
   SFX.pickup();
   return true;
 }
+// Lifting what a well is holding onto the cursor: the move a press that
+// TRAVELS makes (hudMove), one function over the three kinds of well so the
+// three branches cannot drift apart. Returns whether anything was lifted.
+function dragLift(src) {
+  if (src.k === 'bag') {
+    const s = player.bag[src.i];
+    if (!s) return false;
+    player.bag[src.i] = null;
+    return dragTake(s, src);
+  }
+  if (src.k === 'slot') {
+    const s = player.tools[src.i];
+    if (!s) return false;
+    player.tools[src.i] = null;
+    return dragTake(s, src);
+  }
+  const cell = player.tools[src.slot];
+  const was = cell && bitPut(cell, src.i, null);
+  return was ? dragTake({ type: bitType(was), n: 1 }, src) : false;
+}
 // Put a carried cell back where the drag started. Home may have been filled
 // behind it (the drop that landed there, a swap earlier in the same gesture),
 // so every branch falls back to any free bag cell and then to the snow -
@@ -846,8 +869,41 @@ function throwCell(cell) {
   spawnDrop(player.x, player.y - 4, cell.type, cell.n, cell.bits ? cell : null);
   SFX.stash();
 }
+// Where the item a drop DISPLACES goes: HOME, the well this drag started
+// from. That well is the one place already known to be free - it is where
+// what is in hand came out of - so a drop onto a loaded well is a straight
+// SWAP, the same one move each way the CLICK already makes (sendBagCell),
+// instead of leaving the ousted item stuck to the cursor to be filed by hand.
+//
+// Home can be gone by the time it is asked: a stack that did not empty is
+// still sitting in it, an earlier swap in the same gesture filled it, or it
+// cannot hold this kind at all (a berry does not go in a bit cell, a bit does
+// not go on the weapon key). Then this says no and the caller falls back to
+// what it always did - the ousted item rides the cursor, which is free,
+// because what was on it is what just went into the well.
+function dragHome(out, from) {
+  if (!from) return false;
+  if (from.k === 'bag') {
+    const s = player.bag[from.i];
+    if (!s) { player.bag[from.i] = out; return true; }
+    // refilled with more of its own kind: top that stack up instead
+    const max = ITEMS[out.type] ? ITEMS[out.type].stack : 1;
+    if (s.type === out.type && !s.bits && !out.bits && s.n + out.n <= max) { s.n += out.n; return true; }
+    return false;
+  }
+  if (from.k === 'slot') {
+    if (!isToolCell(out) || player.tools[from.i]) return false;
+    player.tools[from.i] = out;
+    return true;
+  }
+  const cell = player.tools[from.slot], id = bitIdOf(out.type);
+  if (!id || out.n > 1 || !cell || cell.bits[from.i]) return false;
+  bitPut(cell, from.i, id);
+  return true;
+}
 // a carried cell landing on grid cell i: merge into the same kind if it will
-// take it, otherwise swap with whatever is sitting there
+// take it, otherwise swap with whatever is sitting there - what was here
+// going back where the carried item came from (dragHome)
 function dragDropBag(i) {
   const d = state.drag, s = player.bag[i];
   if (!s) { player.bag[i] = d.cell; state.drag = null; SFX.stash(); return true; }
@@ -859,9 +915,10 @@ function dragDropBag(i) {
     SFX.stash();
     return true;
   }
-  player.bag[i] = d.cell;                 // swap: what was here is now carried
-  state.drag = { cell: s, from: { k: 'bag', i } };
-  SFX.pickup();
+  player.bag[i] = d.cell;                 // the swap...
+  state.drag = null;
+  if (dragHome(s, d.from)) SFX.stash();
+  else { state.drag = { cell: s, from: { k: 'bag', i } }; SFX.pickup(); } // ...or the cursor keeps it
   return true;
 }
 // opens the pick-1-of-3 draft for a rarity - a pure local UI state change,
@@ -1160,6 +1217,44 @@ function drawFoodClock(x, y, w, h, type) {
   if (cov < h) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(x, y + cov, w, 1); }
 }
 
+// ---- the pack's SHIFT plate ---------------------------------------------
+// The one keybind indicator the backpack carries (the carve-out CLAUDE.md's
+// UI rule names), in the world prompts' own key-cap grammar. It is up while
+// the pointer is on a well that has somewhere to send what it holds - a bit
+// in the grid (into the weapon), a bit in the risen column or a tool on the
+// weapon (back into the pack), a tool in the grid (into your hands) - and its
+// verb is that DESTINATION, so the plate teaches which way the transfer goes
+// rather than merely announcing a key. The cap depresses while shift is
+// actually down, so it also answers "is it registering".
+//
+// Shift-click IS that transfer, in both hands: with an empty one it is the
+// plain click's own move (hudRelease), and while carrying something it is
+// sendAt, which spends the click on this well and leaves the hand loaded. The
+// verb reads the same either way, because the well's item goes the same way.
+// A berry or a card gets no plate: eating and drafting are not transfers, and
+// a plate over them would promise a move that does not exist.
+function shiftVerb(mx, my) {
+  if (!mouse.inside || player.dead) return null;
+  const bc = bitColHit(mx, my);   // the same wells, in the same order, sendAt tries
+  if (bc >= 0) return player.tools[bitEditSlot()].bits[bc] ? 'STOW' : null;
+  const sh = stripHit(mx, my);
+  if (sh) return sh.kind === 'slot' && player.tools[sh.i] ? 'STOW' : null;
+  const bh = bagHit(mx, my);
+  if (!bh || bh.kind !== 'cell') return null;
+  const s = player.bag[bh.i];
+  if (isToolCell(s)) return 'HOLD';                    // trades places with the weapon
+  return s && bitIdOf(s.type) && heldTool(player) ? 'LOAD' : null;
+}
+function drawShiftHint() {
+  const verb = shiftVerb(mouse.x, mouse.y);
+  if (!verb) return;
+  // over the pack's top-right corner, whether it is the open frame or the
+  // shut button - clear of the grid it is about, and of the bit column
+  const totalW = pixelTextWidth('SHIFT') + 9 + pixelTextWidth(verb);
+  const top = bagOpenNow() ? bagFrameRect().y : bagBtnRect().y;
+  drawKeyPrompt(VIEW_W - 2 - totalW, top - 12, verb, !!keys['shift'], 'SHIFT');
+}
+
 function drawBag(now) {
   if (player.dead) return;
   const hov = mouse.inside ? bagHit(mouse.x, mouse.y) : null;
@@ -1201,6 +1296,7 @@ function drawBag(now) {
       const y = bagCellPlate(r, on ? '#8fa0c8' : s ? tp.rim : '#2c3560',
         s ? tp.plate : '#171f45', on && s);
       if (!s) continue;
+      modPlate(s.type, r, y);
       tierShine(r, y, s.type, now);
       // the icon sits high in the cell so the count can have the bottom
       // right corner without its outline eating the cell's own rim
@@ -1226,7 +1322,7 @@ function drawBag(now) {
       }
     }
   }
-  if (!open) { ctx.restore(); return; } // shut: the button is the whole widget
+  if (!open) { ctx.restore(); drawShiftHint(); return; } // shut: the button is the whole widget
   // The bottom strip: everything that is a NUMBER rather than a slot. It
   // lives INSIDE the open pack - reading your purse is opening the bag - and
   // shares the frame's ground rather than wearing a plate of its own; the
@@ -1262,6 +1358,7 @@ function drawBag(now) {
   ctx.drawImage(SPRITES.itemGold, gx - 11, st.y + 2);
   drawPixelTextOutline(ctx, gt, gx, st.y + 4, '#f5c542', '#0f1632');
   ctx.restore();
+  drawShiftHint(); // outside the refusal shake: the plate is not what refused
 }
 
 // ---- hud strip: the weapon and ability wells over the xp bar, bottom-centre
@@ -1425,10 +1522,11 @@ function bitColHit(mx, my) {
   return -1;
 }
 // A carried bit landing in bit cell i of slot s. One bit comes off the stack;
-// whatever it displaces goes onto the now-free hand, into the bag, or onto the
-// snow - in that order, so a swap is never a deletion.
+// whatever it displaces goes home first (dragHome - the pack cell or the bit
+// cell this drag began in, which makes the drop a swap), then onto the
+// now-free hand, into the bag, or onto the snow, so it is never a deletion.
 function dragDropBit(s, i) {
-  const cell = player.tools[s], d = state.drag;
+  const cell = player.tools[s], d = state.drag, from = d.from;
   const id = bitIdOf(d.cell.type);
   if (!id) { SFX.deny(); return; }        // a tool does not go inside a tool
   const was = bitPut(cell, i, id);
@@ -1436,19 +1534,23 @@ function dragDropBit(s, i) {
   if (d.cell.n <= 0) state.drag = null;
   if (was) {
     const out = { type: bitType(was), n: 1 };
-    if (!state.drag) state.drag = { cell: out, from: { k: 'bit', slot: s, i } };
-    else if (!bagPut(player, out)) throwCell(out);
+    if (!dragHome(out, from)) {
+      if (!state.drag) state.drag = { cell: out, from: { k: 'bit', slot: s, i } };
+      else if (!bagPut(player, out)) throwCell(out);
+    }
   }
   SFX.stash();
 }
 // A carried tool landing on weapon slot i. Only a tool goes here - a bit
 // dropped on a slot is refused rather than quietly swallowed, because a bit
-// belongs in a tool, not on a key.
+// belongs in a tool, not on a key. The tool it displaces takes the bag cell
+// this one came out of (dragHome), which is the swap the CLICK already makes.
 function dragDropSlot(i) {
-  const d = state.drag;
+  const d = state.drag, from = d.from;
   if (!isToolCell(d.cell)) { SFX.deny(); return; }
   const was = slotPut(player, i, d.cell);
-  state.drag = was ? { cell: was, from: { k: 'slot', i } } : null;
+  state.drag = null;
+  if (was && !dragHome(was, from)) state.drag = { cell: was, from: { k: 'slot', i } };
   SFX.place();
 }
 // Where the carried item is being let go. Every well that can hold one is
@@ -1604,21 +1706,7 @@ function hudMove(mx, my) {
   if (!q || q.empty || q.keep) return; // neither an empty well nor a shift-hold picks anything up
   if (Math.abs(mx - q.x) < DRAG_SLOP && Math.abs(my - q.y) < DRAG_SLOP) return;
   state.dragPend = null;
-  if (q.src.k === 'bag') {
-    const s = player.bag[q.src.i];
-    if (!s) return;
-    player.bag[q.src.i] = null;
-    dragTake(s, q.src);
-  } else if (q.src.k === 'slot') {
-    const s = player.tools[q.src.i];
-    if (!s) return;
-    player.tools[q.src.i] = null;
-    dragTake(s, q.src);
-  } else {
-    const cell = player.tools[q.src.slot];
-    const was = cell && bitPut(cell, q.src.i, null);
-    if (was) dragTake({ type: bitType(was), n: 1 }, q.src);
-  }
+  dragLift(q.src);
 }
 // The release, where every click in this widget is actually decided. A live
 // drag is put down - or, when the press was begun with shift held, spends
@@ -1627,6 +1715,12 @@ function hudMove(mx, my) {
 // the TRANSFER: the bag cell's own use (a bit into the weapon, a tool into
 // the hand, otherwise bagClick's eat/draft), the weapon well and a bit cell
 // of the column both stowing what they hold in the pack.
+//
+// SHIFT sends too, in both hands: with an empty one it is the plain click
+// (below - the transfer is what shift-click means everywhere else, so the
+// modifier costs nothing and finds the gesture for anybody who reaches for
+// it), and while carrying it is the same transfer aimed at the well under
+// the pointer instead of at what is in hand (sendAt above).
 function hudRelease(mx, my) {
   const q = state.dragPend;
   state.dragPend = null;
@@ -1712,6 +1806,38 @@ function tierShine(r, y, type, now) {
   }
   ctx.globalAlpha = 1;
   ctx.restore();
+}
+// The one thing that tells the two kinds of BIT apart wherever either one
+// sits - the bag grid, the tool's column, the cursor, the counter, the tech
+// tree. A PROJECTILE is a thing you fire, and it keeps the flat square plate
+// every other carried item wears. A MODIFIER never flies: it is fitted INTO
+// the tool and rewrites every shot on it, so its plate is hatched in the
+// bit's own colour and cut back at the corners - a fitting rather than a
+// card. Colour is already spent on TIER, which is why the difference has to
+// be the plate's texture and silhouette: those still read across a whole grid
+// at a glance, without recognising a single glyph on it. Called on the drawn
+// plate, under the icon; (y, h) are the plate's own, since a hovered cell
+// lifts and the counter's plate is shorter than its well.
+function modPlate(type, r, y, h) {
+  const id = type && bitIdOf(type);
+  if (!id || !BITS[id] || BITS[id].proj) return;
+  h = h || r.h;
+  const x0 = r.x + 1, y0 = y + 1, x1 = r.x + r.w - 1, y1 = y + h - 1;
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = BITS[id].col;
+  for (let d = 1 - h; d < r.w; d += 4) { // 1px diagonals, four apart
+    for (let k = 0; k < h; k++) {
+      const px = r.x + d + k, py = y + k;
+      if (px >= x0 && px < x1 && py >= y0 && py < y1) ctx.fillRect(px, py, 1, 1);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#0a0e23';
+  for (const [cx, sx] of [[r.x, 1], [r.x + r.w - 1, -1]]) {
+    for (const [cy, sy] of [[y, 1], [y + h - 1, -1]]) {
+      ctx.fillRect(cx, cy, 1, 1); ctx.fillRect(cx + sx, cy, 1, 1); ctx.fillRect(cx, cy + sy, 1, 1);
+    }
+  }
 }
 // an item icon centred in a cell of any size (tools are 12x12, everything
 // else 8x8), so one call covers every well the two sizes share
@@ -1968,6 +2094,7 @@ function drawBitColumn(now) {
     ctx.fillStyle = tp.plate;
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     if (b) {
+      modPlate(bitType(id), r, r.y);
       tierShine(r, r.y, bitType(id), now);
       drawItemIcon(bitType(id), r, r.y - 2);
       if (b.proj) { // weight, as pips: gold while this tool can throw it
@@ -2010,6 +2137,7 @@ function drawDragGhost(now) {
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = tp.plate;
   ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  modPlate(d.cell.type, r, r.y);
   tierShine(r, r.y, d.cell.type, now);
   drawItemIcon(d.cell.type, r, r.y);
   ctx.globalAlpha = 1;
@@ -2347,6 +2475,7 @@ function drawTooltip() {
     const s = d.icon.width;
     ctx.fillStyle = d.plate || BAG_WELL;
     ctx.fillRect(tx - 1, cy - 1, s + 2, s + 2);
+    modPlate(d.type, { x: tx - 1, y: cy - 1, w: s + 2, h: s + 2 }, cy - 1);
     ctx.drawImage(d.icon, tx, cy);
     tx += s + 3;
   }

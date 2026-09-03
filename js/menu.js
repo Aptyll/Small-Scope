@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.72'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.73'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.73', 'DROPPING A BIT ONTO A LOADED CELL SWAPS THE TWO NOW - WHAT IT PUSHES OUT GOES BACK WHERE YOUR HAND CAME FROM - AND A MODIFIER WEARS A HATCHED PLATE THAT TELLS IT FROM A SHOT ANYWHERE IT SITS.'],
   ['2.72', 'THE COUNTER MOVES ITS SELL WELL TO A FULL-WIDTH STRIP ALONG THE BOTTOM THAT SAYS SELL, AND ANYTHING PRICED PAST YOUR PURSE NOW GOES RED AND GREYS OUT INSTEAD OF QUIETLY DIMMING.'],
   ['2.71', 'BOTH EAGLES KEEP A SHOP NOW - THE MERCHANT SELLS TOOLS, BITS AND CARDS THAT TURN OVER EVERY TWO MINUTES, BUYS ANYTHING IN YOUR PACK BACK, AND RUNS A FISH AND BERRY MARKET WHOSE PRICE SWINGS ALL DAY.'],
   ['2.70', 'THE STOREFRONT WEARS FIVE PLAYED STILLS - THE EAGLES CROSSING, THE ROOST, A FISH HELD HIGH, A NIGHT HUNT AT THE ROOKERY AND THE PRACTICE FIELD.'],
@@ -2327,6 +2328,7 @@ function drawTechNode(id, r, c, hot, focused, now) {
   ctx.fillRect(n.x, y, n.w, n.h);
   ctx.fillStyle = tp.plate;
   ctx.fillRect(n.x + 1, y + 1, n.w - 2, n.h - 2);
+  modPlate(id, n, y);
   tierShine(n, y, id, now);
   const im = SPRITES[ITEMS[id].icon];
   ctx.drawImage(im, n.x + ((n.w - im.width) >> 1), y + ((n.h - im.height) >> 1));
