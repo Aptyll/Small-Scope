@@ -53,8 +53,10 @@ anything that must stay stable per tile.
   bush regrows in `BUSH_REGROW` (70 s) and **wears its own clock**: `bushEmpty` until ripening is
   `BUSH_BUD_T` away, then `bushBud` (pale buds where the berries will be), `bushRipen` (the
   berries back but dull) inside `BUSH_RIPEN_T`, then `bush` — chosen in `render()`'s bush
-  branch, so a player reads wait-or-move-on off the plant with no bar and no number; `ready`
-  still refuses E until the berries are ripe, so neither in-between frame ever rims. The first
+  branch, so a player reads wait-or-move-on off the plant at a glance, and **under the pointer a
+  regrowing bush wears the neutral unit bar** filling toward ripe (the frames say roughly, a hover
+  says exactly — [rendering.md](rendering.md#the-tree-fade)); `ready` still refuses E until the
+  berries are ripe, so neither in-between frame ever rims. The first
   three have three tiers; the spawner
   (the bot bay) has one and a **3×2 footprint** — `STRUCTS.spawner.w/h`, with `footprint()`,
   `structCenter()` and `structMouth()` (the ground point in front of the doorway) as the geometry

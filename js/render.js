@@ -295,10 +295,16 @@ function render() {
   let fadeP = viewPlayer();
   if (!fadeP.active || fadeP.dead || inAir(fadeP)) fadeP = null;
   let fadeWkO = null;
+  // the scenery under the pointer, for the one thing a hover shows on a
+  // thing E cannot act on yet: a regrowing bush's clock (its branch below).
+  // Any reach: a look asks nothing of the legs
+  let hovO = null;
   treeFadeSil = 0;
   if (fadeP) {
     const wk = workTarget(fadeP);
     if (wk) fadeWkO = wk.o;
+    if (mouse.inside && state.mode === 'play' && !state.mapOpen && !state.settingsOpen && !state.wheel && !state.drag)
+      hovO = objAt(Math.floor(mouseWX() / TILE), Math.floor(mouseWY() / TILE));
     const ptx = Math.floor(fadeP.x / TILE), pty = Math.floor(fadeP.y / TILE);
     for (let sy = pty - 2; sy <= pty + 2; sy++) for (let sx = ptx - 2; sx <= ptx + 2; sx++) {
       const so = inWorld(sx, sy) ? objects[idx(sx, sy)] : null;
@@ -427,6 +433,10 @@ function render() {
       // so the rim only ever lands on berries worth picking
       if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py + 4, now);
       drawSpriteFlash(spr, px + sh, py + 4, o.flash);
+      // hovered while regrowing: the clock itself, the neutral unit bar over
+      // the plant filling toward ripe - the frames say roughly, a look asks
+      // exactly. A ripe bush wears the rim instead, and says pick me.
+      if (o.berries <= 0 && o === hovO) drawHealthBar(px + 8, py + 1, BUSH_REGROW - o.regrow, BUSH_REGROW, 12);
     } else if (STRUCTS[o.type]) {
       const spr = structSprite(o);
       const sy = py + structH(o.type) * TILE - spr.height; // skirt on the footprint's bottom edge

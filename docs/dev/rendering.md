@@ -191,7 +191,10 @@ storing anything per tree. The hero's **work target** — the hovered tree, dead
 berried bush or chest — draws under a **pulsing gold rim** (`drawTargetRim`: the buy plates' two
 golds, stamped through the scratch canvas like the silhouette below), so the target is its own
 visible state everywhere the cursor lands, not a faded pine quietly borrowing the normal look;
-a bare bush never rims because `workTarget`'s `ready` gate already refuses it. A hovered tree
+a bare bush never rims because `workTarget`'s `ready` gate already refuses it — a *hovered* bare
+bush shows its regrow clock instead, the neutral unit bar (`drawHealthBar`, gold) over the plant
+filling toward `BUSH_REGROW`, drawn only while the pointer's tile is that bush (`hovO`, resolved
+beside `fadeWkO` at any reach, since a look asks nothing of the legs). A hovered tree
 also holds full ink against the fade, and a mid-shake chop lifts a faded neighbour back to
 opaque. While any pine
 is inside the ramp the hero also wears a **black 1px silhouette rim** — `treeFadeSil`, the
