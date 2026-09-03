@@ -13,9 +13,13 @@ const ANIMAL_HP = { rabbit: 8, deer: 24, wolf: 30, bird: 3 };
 // grows with it is hp, ANIMAL_LV_HP a level over ANIMAL_HP, and a wolf's bite
 // (WOLF_LV_DMG, the wolves banner) - so the number on a body is what it costs
 // to take, the way a hero's is, and a meadow restocked late in a match is a
-// harder one than the one the eagle dropped you into. The payout does not
-// grow: a kill is worth what the YIELD table says at every level.
+// harder one than the one the eagle dropped you into. The kill pays for it:
+// ANIMAL_LV_GOLD of the YIELD payout more a level (animalDies), a tenth, so
+// a level-12 beast is worth a little over twice a level-1 one - about what
+// its hp grew by. Gold is XP, so the loop feeds itself, but at a tenth a
+// level it is a slope, not a farm.
 const ANIMAL_LV_HP = { rabbit: 1, deer: 2, wolf: 3, bird: 0 };
+const ANIMAL_LV_GOLD = 0.1;
 function animalLevel() {
   let n = 0, s = 0;
   for (const p of players) if (p.active) { n++; s += p.level; }
@@ -565,19 +569,21 @@ function updatePrey(a, dt) {
   a.moving = moving;
 }
 
-// what a kill pays: one profile per kind, all of it out of the YIELD table,
+// what a kill pays: one profile per kind out of the YIELD table, grown
+// ANIMAL_LV_GOLD a level for the animal's own level (the top of the banner),
 // straight into the wallet of whoever landed the final blow (a.lastHit,
 // stamped by hurtAnimal) - gold is never a physical drop. A HUNTSMAN's kill
-// pays its bonus on top of the same award; a kill nobody is left alive to
-// credit pays nobody.
+// pays its bonus on top of the same, grown award; a kill nobody is left
+// alive to credit pays nobody.
 function animalDies(a) {
   a.dead = true;
   if (nearPlayer(a.x, a.y)) SFX.monsterDie(a.kind);
   const hunter = a.lastHit !== undefined ? players[a.lastHit] : null;
   const y = YIELD[a.kind];
   if (hunter && !hunter.dead && y && y.coins) {
-    const bonus = Math.max(0, Math.ceil(y.coins * y.each * (kitOf(hunter).huntMul - 1)));
-    awardGold(hunter, y.coins * y.each + bonus, a.x, a.y - (a.alt || 0));
+    const base = Math.round(y.coins * y.each * (1 + ANIMAL_LV_GOLD * ((a.level || 1) - 1)));
+    const bonus = Math.max(0, Math.ceil(base * (kitOf(hunter).huntMul - 1)));
+    awardGold(hunter, base + bonus, a.x, a.y - (a.alt || 0));
   }
   if (a.kind === 'rabbit') {
     burst(a.x, a.y - 3, '#eef2fa', 10, 45, 0.5);

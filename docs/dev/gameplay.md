@@ -993,8 +993,11 @@ and the site restocks them.
 the eagle dropped you into (all level 1) are shot and restocked at whatever the table has
 reached. What grows with it is hp, `ANIMAL_LV_HP` a level over `ANIMAL_HP` (rabbit +1, deer
 +2, wolf +3; a level-6 pack is 45 hp a wolf), and a wolf's bite, `WOLF_LV_DMG` (+1 a level).
-The payout does **not** grow — a kill is worth what `YIELD` says at every level — so a late
-meadow is a harder one, not a richer one.
+**The kill pays for it**: `animalDies` grows the `YIELD` payout by `ANIMAL_LV_GOLD` (a tenth)
+a level, rounded, before the HUNTSMAN bonus is taken off it — a level-6 rabbit is 15 gold, a
+level-6 wolf 36, and a level-12 beast a little over twice its level-1 self, about what its hp
+grew by. Gold is XP, so a richer meadow lifts the table that made it richer, but at a tenth a
+level it is a slope, not a farm.
 
 **The noticed mark.** An animal that has a player in sight wears a `!` over its head — the
 `drawSenseMark` glyph in [rendering.md](rendering.md#overhead-health-bars), stamina white on
@@ -1061,7 +1064,8 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
   next arrow lands; a rooted or netted rabbit never spends it. A shot already past or flying
   wide is nothing to it, and a stun drops a dash mid-jink like any other move.
 
-A kill pays its `YIELD` gold straight to whoever landed the final blow (`a.lastHit`, through
+A kill pays its `YIELD` gold, grown a tenth a level for the animal's level (`ANIMAL_LV_GOLD`,
+above), straight to whoever landed the final blow (`a.lastHit`, through
 `awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
 pickup, and a burn credits the slot that lit it, so an animal that walks away and dies of its
 fire still pays. Shots, rolls and the class abilities are what hurt them (there is no
@@ -1109,7 +1113,8 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
 - **Off duty** it patrols its den on routed legs from the same `wanderGoal` the prey graze with
   (2–5 tiles); once it drifts past `r * 0.8` the arc narrows to 0.5 rad straight back at the den,
   so the only way it will walk out there is home. Taking a quarry drops the patrol goal.
-- **The payout** is `YIELD.wolf` — 24 gold, the biggest single kill in the game, for 30 hp of
+- **The payout** is `YIELD.wolf` — 24 gold at level 1 (a tenth more a level, see
+  [Wildlife](#wildlife)), the biggest single kill in the game, for 30 hp of
   arrows (three full draws at level 1). Dangerous, rewarding.
 
 ### Birds: the flock
