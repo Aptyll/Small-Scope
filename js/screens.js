@@ -462,35 +462,65 @@ function drawEndPlanks(now, dy) {
 // the last beat skips to it (endSkip): the reward is worth watching, never
 // twice. Everything here is procedural in the title screen's idiom (hash2 for
 // static grain, the frame clock for flicker); the only sprites are the
-// champion, the gear icons and the coin.
+// side's bodies, the gear icons and the coin.
 const WIN_T = {
   flash: 0.30,   // the white bloom off the winning frame
   dim: 0.50,     // the backdrop has finished settling
   title: 0.45, letter: 0.07, land: 0.26, // VICTORY drops in a letter at a time
   rule: 1.10,    // the gold rule sweeps out of the middle
-  stage: 1.00,   // banners, dais and the champion rise
+  stage: 1.00, stand: 0.07, // banners, dais and the side rise - each rank a beat after the last
   crown: 1.70, crownLand: 2.02,
   stats: 2.25, statStep: 0.16, roll: 0.5, // the tally, one plate at a time
   menu: 3.30,    // the planks are up and the screen is live
 };
 const WIN_SLIDE = 0.32; // the planks' slide, finishing exactly on WIN_T.menu
+// the side on its stage: every body at 3x (WIN_BODY px square), the local
+// slot in the middle on a block WIN_TIER px above the mates either side of it
+const WIN_BODY = 48, WIN_TIER = 8;
+const WIN_BANNER_W = 36, WIN_BANNER_H = 96; // the cloth; the rail hangs above it
 
 // the composition, in the 270-tall frame everything else is authored in
 function winLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
+  // the win's stage is set from the outside in, so it breathes with the
+  // view: the braziers stand as far out as the frame allows, the banners
+  // hang just inside them, and the bodies take what is left with a gap
+  // between them that closes on a narrow view before anything overlaps
+  const brazierX = Math.min(200, cx - 14);
+  const bannerX = brazierX - 36;
+  const gap = Math.max(0, Math.min(6, Math.floor((bannerX - (WIN_BANNER_W >> 1) - 6 - WIN_BODY * 2.5) / 2)));
   return {
-    toy, cx,
-    spread: Math.min(112, cx - 22), // the braziers; the banners sit inside them
-    titleY: toy + 20,   // VICTORY, 4x - 20px tall
+    toy, cx, brazierX, bannerX, gap,
+    spread: Math.min(112, cx - 22), // the loss's braziers, at the ends of its drift
+    titleY: toy + 20,   // VICTORY / DEFEAT, 4x - 20px tall
     ruleY: toy + 44,
-    subY: toy + 56,
-    champY: toy + 68,   // top of the 5x champion (80px tall, feet at +75)
-    daisY: toy + 146,   // top face of the dais: the champion stands on it
+    subY: toy + 56,     // the loss's FELLED BY line
+    bannerY: toy + 50,  // the rail the win's banners hang from
+    stageY: toy + 138,  // the win's stage: its middle step, where the side stands
+    champY: toy + 68,   // top of the loss's 5x body box (80px tall)
+    daisY: toy + 146,   // where the loss's drift lies (the dais of the old win stood here)
     statY: toy + 170,
-    gearY: toy + 198,
-    plankY: toy + 226,
+    gearY: toy + 200,
+    plankY: toy + 230,
   };
+}
+
+// Where each body of the side stands: the roster's first entry (the local
+// slot) on the raised middle block, the rest fanning out a rank at a time to
+// the right and the left of it, so the line is mirrored whatever order the
+// roster came in. y is the top of the 3x body box, feet sunk two rows into
+// the tier's snow cap.
+function winStands(L, ws) {
+  const pitch = WIN_BODY + L.gap;
+  return ws.roster.map((m, i) => {
+    const rank = (i + 1) >> 1, side = i & 1 ? 1 : -1;
+    return {
+      m, rank,
+      x: L.cx + (i ? side * rank * pitch : 0) - (WIN_BODY >> 1),
+      y: L.stageY + 2 - WIN_BODY - (i ? 0 : WIN_TIER),
+    };
+  });
 }
 
 // the numbers the screen prints, frozen at the win. Icon plus number, no
@@ -651,43 +681,116 @@ function drawWinMotes(now, a, n, cold) {
   ctx.globalAlpha = 1;
 }
 
-// a hanging team banner: iron rail, cloth with a lit left fold and a dark
-// right edge, a swallowtail bitten out of the bottom, the team's mark as a
-// diamond over a gold band. The whole length ripples on one slow sine.
-function drawWinBanner(x, top, w, h, tm, a, now) {
-  ctx.globalAlpha = a;
-  ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 4, top - 4, w + 8, 4);
-  ctx.fillStyle = '#4a5a90'; ctx.fillRect(x - 4, top - 4, w + 8, 1);
-  ctx.fillStyle = '#2a3560'; ctx.fillRect(x - 4, top - 1, w + 8, 1);
-  const wobAt = (yy) => Math.round(Math.sin(now * 1.1 + yy * 0.17) * 1.2);
-  for (let yy = 0; yy < h; yy++) {
-    const wob = wobAt(yy);
-    const tail = h - yy;
-    const cut = tail <= 8 ? 9 - tail : 0; // the swallowtail bitten up the middle
-    const half = w >> 1;
-    const segs = cut === 0 ? [[0, w]]
-      : cut < half ? [[0, half - cut], [half + cut, w - half - cut]] : [];
+// The crest every banner wears: an eagle displayed - the bird both sides
+// ride in on - wings raised to the corners, feathers notched along their
+// lower edge, tail fanned, talons spread, in the team's trim over its
+// cloth. 15 x 14, stamped at 2x. 'm' the feathers, 'w' the eyes, 'g' the
+// beak and the talons, 'o' the outline.
+const WIN_CREST = [
+  'o.....ooo.....o',
+  'oo...owgwo...oo',
+  'omo..ommmo..omo',
+  'ommo.ommmo.ommo',
+  'ommmoommmoommmo',
+  'ommmmmmmmmmmmmo',
+  'ommmmmmmmmmmmmo',
+  'ommmmmmmmmmmmmo',
+  'omomommmmmomomo',
+  '.o.oommmmmoo.o.',
+  '....ommmmmo....',
+  '...gommmmmog...',
+  '..ggomomomogg..',
+  '..g.ooooooo.g..',
+];
+const WIN_TAIL = 12; // the swallowtail's depth, in cloth rows
+
+// One side's banner, baked once: a gold-bordered cloth with a lit fold and
+// a shaded edge, a pale chief across the top, the crest, the team's diamond
+// between two gold rules, fold lines down the hang and a fringed swallowtail
+// cut out of the alpha - so the live pass has only to ripple the rows. flip
+// mirrors it, so the lit fold of both banners faces the middle of the stage.
+// ti is the team PRESET (already through skin()).
+function winBannerCv(ti, flip) {
+  const cache = winBannerCv.cache || (winBannerCv.cache = {});
+  const key = ti + (flip ? 'f' : '');
+  if (cache[key]) return cache[key];
+  const tm = TEAMS[ti];
+  const W = WIN_BANNER_W, H = WIN_BANNER_H, half = W >> 1, CLOTH = H - 3; // 3 rows of tassel under the tips
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const px = (x, y, c, w) => { w = w || 1; g.fillStyle = c; g.fillRect(flip ? W - x - w : x, y, w, 1); };
+  const GOLD = '#c89a3c', GILT = '#ffd95c', DARK = '#1a1430';
+  for (let y = 0; y < CLOTH; y++) {
+    const cut = y >= CLOTH - WIN_TAIL ? y - (CLOTH - WIN_TAIL) + 1 : 0; // the notch, widening down the tail
+    const segs = cut === 0 ? [[0, W]] : [[0, half - cut], [half + cut, W - half - cut]];
     for (const seg of segs) {
       const o = seg[0], sw = seg[1];
       if (sw <= 0) continue;
-      const px = x + o + wob;
-      ctx.fillStyle = tm.coat; ctx.fillRect(px, top + yy, sw, 1);
-      ctx.fillStyle = tm.coatD; ctx.fillRect(px + sw - 1, top + yy, 1, 1);
-      if (o === 0) { ctx.fillStyle = tm.coatL; ctx.fillRect(px, top + yy, 2, 1); }
-      if (yy % 9 === 4) { ctx.fillStyle = tm.coatD; ctx.fillRect(px + 2, top + yy, Math.max(1, sw - 4), 1); }
+      px(o, y, tm.coat, sw);
+      if (o === 0) px(0, y, tm.coatL, 2); else px(o, y, tm.coatL); // the lit fold, and the notch's lit edge
+      px(o + sw - 1, y, tm.coatD);                                   // the shaded edge
+      for (let x = o; x < o + sw; x++) {                              // wear, sparse, on plain cloth only
+        if ((y < 8 || y > 56) && hash2(x * 7 + 3, y * 11 + ti) < 0.035) px(x, y, tm.coatD);
+      }
+      if (cut) { // the fringe: gilt tassels off both edges of the notch, every other row
+        if (y & 1) { px(o === 0 ? o + sw - 1 : o, y, GILT); px(o === 0 ? o + sw : o - 1, y + 1, GOLD); }
+      }
+    }
+    if (y === 2) px(2, y, GOLD, W - 4);                                // the top border
+    if (y >= 2 && !cut) { px(2, y, y % 6 === 1 ? GILT : GOLD); px(W - 3, y, y % 6 === 4 ? GILT : GOLD); }
+    if (y >= 4 && y <= 6) px(3, y, y === 6 ? tm.trimD : tm.trim, W - 6);  // the chief
+    if (y === 7) px(3, y, tm.coatD, W - 6);
+    if (y === 44 || y === 52) { px(5, y, GOLD, W - 10); px(half - 3, y, GILT, 7); } // the two rules
+    if (y >= 60 && y < 60 + half - 4) { // a gold chevron down the lower cloth, meeting under the rules
+      const k = y - 60;
+      px(3 + k, y, k & 1 ? GOLD : GILT, 2); px(W - 5 - k, y, k & 1 ? GOLD : GILT, 2);
     }
   }
-  // gold band and the team diamond, riding the same ripple as the cloth
-  const my = top + 16, mx = x + (w >> 1) + wobAt(16);
-  ctx.fillStyle = '#c89a3c';
-  ctx.fillRect(mx - (w >> 1), my - 6, w, 1); ctx.fillRect(mx - (w >> 1), my + 6, w, 1);
-  for (let d = -4; d <= 4; d++) {
-    const dw = 4 - Math.abs(d);
-    ctx.fillStyle = '#0a0e23'; ctx.fillRect(mx - dw - 1, my + d, dw * 2 + 3, 1);
+  // the crest, 2px cells, over the cloth between the chief and the rules
+  const CPAL = { '.': null, o: DARK, m: tm.trim, w: '#ffffff', g: '#f2cc6a' };
+  for (let r = 0; r < WIN_CREST.length; r++) {
+    for (let c = 0; c < WIN_CREST[r].length; c++) {
+      const col = CPAL[WIN_CREST[r][c]];
+      if (!col) continue;
+      px(3 + c * 2, 12 + r * 2, col, 2); px(3 + c * 2, 13 + r * 2, col, 2);
+    }
   }
-  for (let d = -3; d <= 3; d++) {
-    const dw = 3 - Math.abs(d);
-    ctx.fillStyle = d < 0 ? tm.trim : tm.mark; ctx.fillRect(mx - dw, my + d, dw * 2 + 1, 1);
+  // the team's diamond between the rules, on a dark rim
+  for (let d = -4; d <= 4; d++) { const dw = 4 - Math.abs(d); px(half - dw - 1, 48 + d, DARK, dw * 2 + 3); }
+  for (let d = -3; d <= 3; d++) { const dw = 3 - Math.abs(d); px(half - dw, 48 + d, d < 0 ? tm.trim : tm.mark, dw * 2 + 1); }
+  // the tips: a gilt hem, and tassels hanging off it
+  const tipW = half - WIN_TAIL;
+  for (const o of [0, W - tipW]) {
+    px(o, CLOTH - 1, GILT, tipW);
+    for (let x = o; x < o + tipW; x += 2) { px(x, CLOTH, GILT); px(x, CLOTH + 1, GOLD); px(x, CLOTH + 2, '#8a6a2c'); }
+  }
+  cache[key] = cv;
+  return cv;
+}
+
+// a banner hung from its rail at cx: an iron bar wider than the cloth with a
+// gilt finial at each end and two rings, then the baked cloth a row at a
+// time under a ripple that is pinned at the rail and swings more the lower
+// it hangs, so it moves like weight rather than like a flag in a gale
+function drawWinBanner(cx, top, ti, flip, a, now) {
+  const cv = winBannerCv(ti, flip), w = cv.width, h = cv.height;
+  const x = cx - (w >> 1);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = '#0a0e23'; ctx.fillRect(x - 6, top - 6, w + 12, 5);
+  ctx.fillStyle = '#2a3560'; ctx.fillRect(x - 5, top - 5, w + 10, 3);
+  ctx.fillStyle = '#4a5a90'; ctx.fillRect(x - 5, top - 5, w + 10, 1);
+  for (const fx of [x - 8, x + w + 5]) {
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(fx - 1, top - 8, 5, 8);
+    ctx.fillStyle = '#c89a3c'; ctx.fillRect(fx, top - 7, 3, 6);
+    ctx.fillStyle = '#ffd95c'; ctx.fillRect(fx, top - 7, 3, 1); ctx.fillRect(fx, top - 6, 1, 3);
+  }
+  for (const rx of [x + 4, x + w - 6]) {
+    ctx.fillStyle = '#0a0e23'; ctx.fillRect(rx - 1, top - 3, 4, 4);
+    ctx.fillStyle = '#5a6690'; ctx.fillRect(rx, top - 2, 2, 2);
+  }
+  for (let yy = 0; yy < h; yy++) {
+    const wob = Math.round(Math.sin(now * 1.1 + yy * 0.11) * 1.6 * Math.min(1, yy / 24));
+    ctx.drawImage(cv, 0, yy, w, 1, x + wob, top + yy, w, 1);
   }
   ctx.globalAlpha = 1;
 }
@@ -736,9 +839,11 @@ function drawWinBrazier(cx, baseY, now, a) {
   ctx.globalAlpha = 1;
 }
 
-// the dais: a snow-capped slab the winner stands on, set on a wider base
-// step that carries a gold inlay with the team's diamond, icicles under the
-// lower lip. Two tiers rather than one - a single slab reads as a plank.
+// the stage: three snow-capped tiers of coursed stone - a raised block in
+// the middle for the local slot, the wide step the whole side stands on (hw
+// is its half width) and a base a step wider again that carries a gold inlay
+// with the team's diamond, icicles under its lip. top is the middle step's
+// cap; the block rises WIN_TIER above it.
 function drawWinDais(cx, top, hw, tm, a) {
   ctx.globalAlpha = a;
   // one tier: dark rim, speckled snow cap, lit-left coursed stone face
@@ -768,8 +873,9 @@ function drawWinDais(cx, top, hw, tm, a) {
     }
     return { x, w };
   };
+  step(top - WIN_TIER, 30, WIN_TIER + 1, false);
   step(top, hw, 10, false);
-  const b = step(top + 10, hw + 14, 13, true);
+  const b = step(top + 10, hw + 14, 12, true);
   // gold inlay across the base, the team's diamond set in the middle of it
   const iy = top + 17;
   ctx.fillStyle = '#c89a3c'; ctx.fillRect(b.x + 5, iy, b.w - 10, 1);
@@ -785,10 +891,11 @@ function drawWinDais(cx, top, hw, tm, a) {
   ctx.globalAlpha = 1;
 }
 
-// one number: a chamfered plate, its icon on the left, the value at 2x. The
-// plate pops up as it arrives and the value climbs from zero behind it, the
-// rule warming on the frame it lands. T is the ending's timeline and ac its
-// accent pair, so the same plate tallies a win in gold and a loss in frost.
+// one number: a chamfered plate, its icon at 2x on the left, the value at
+// 2x beside it. The plate pops up as it arrives and the value climbs from
+// zero behind it, the rule warming on the frame it lands. T is the ending's
+// timeline and ac its accent pair, so the same plate tallies a win in gold
+// and a loss in frost.
 function drawEndStatPlate(r, st, ws, t, i, T, ac) {
   const s0 = T.stats + i * T.statStep;
   if (t < s0) return;
@@ -803,11 +910,11 @@ function drawEndStatPlate(r, st, ws, t, i, T, ac) {
   ctx.fillStyle = '#141c3c'; chamRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
   ctx.fillStyle = done ? ac.rule : '#35426e';
   ctx.fillRect(r.x + 2, y + 1, r.w - 4, 1); ctx.fillRect(r.x + 2, y + r.h - 2, r.w - 4, 1);
-  const iy = y + ((r.h - 8) >> 1);
-  if (st.icon === 'gold') ctx.drawImage(SPRITES.itemGold, r.x + 4, iy);
-  else if (st.icon === 'kills') ctx.drawImage(SPRITES.itemBow, r.x + 4, iy);
-  else stampGrid(WIN_ICONS[st.icon], ac.icon, r.x + 4, iy, 1);
-  drawPixelTextShadow(ctx, txt, r.x + 15, y + ((r.h - 10) >> 1), done ? ac.txt : '#f4f7ff', '#0a0e23', 2);
+  const iy = y + ((r.h - 16) >> 1);
+  if (st.icon === 'gold') ctx.drawImage(SPRITES.itemGold, r.x + 4, iy, 16, 16);
+  else if (st.icon === 'kills') ctx.drawImage(SPRITES.itemBow, r.x + 4, iy, 16, 16);
+  else stampGrid(WIN_ICONS[st.icon], ac.icon, r.x + 4, iy, 2);
+  drawPixelTextShadow(ctx, txt, r.x + 24, y + ((r.h - 10) >> 1), done ? ac.txt : '#f4f7ff', '#0a0e23', 2);
   ctx.globalAlpha = 1;
 }
 
@@ -839,10 +946,10 @@ function drawEndGear(ws, y, a, ac) {
 
 // the tally row: n plates of one width, centred, each on its own beat
 function drawEndTally(stats, ws, t, y, T, ac) {
-  const pw = 15 + Math.max.apply(null, stats.map((st) => pixelTextWidth(st.val(ws), 2))) + 5;
+  const pw = 24 + Math.max.apply(null, stats.map((st) => pixelTextWidth(st.val(ws), 2))) + 6;
   let sx = Math.round((VIEW_W - (stats.length * pw + (stats.length - 1) * 6)) / 2);
   for (let i = 0; i < stats.length; i++) {
-    drawEndStatPlate({ x: sx, y, w: pw, h: 18 }, stats[i], ws, t, i, T, ac);
+    drawEndStatPlate({ x: sx, y, w: pw, h: 22 }, stats[i], ws, t, i, T, ac);
     sx += pw + 6;
   }
 }
@@ -851,14 +958,14 @@ function renderVictory(now) {
   const ws = state.end || (state.end = endSnapshot());
   const t = state.deadTimer;
   const L = winLayout();
-  const tm = TEAMS[skin(ws.team)];
+  const ti = skin(ws.team), tm = TEAMS[ti];
   const dim = Math.min(1, t / WIN_T.dim);
 
   // --- backdrop: wash, aurora, rays, vignette, flurry ---------------------
   ctx.fillStyle = 'rgba(7,10,26,' + (0.88 * dim).toFixed(3) + ')';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   drawWinAurora(now, dim, L.toy);
-  drawWinRays(L.cx, L.toy + 110, now, dim);
+  drawWinRays(L.cx, L.stageY - 32, now, dim);
   const vg = ctx.createRadialGradient(L.cx, L.toy + 120, VIEW_H * 0.22, L.cx, L.toy + 120, VIEW_W * 0.62);
   vg.addColorStop(0, 'rgba(3,5,16,0)');
   vg.addColorStop(1, 'rgba(3,5,16,' + (0.85 * dim).toFixed(3) + ')');
@@ -872,38 +979,48 @@ function renderVictory(now) {
     ctx.globalAlpha = 1;
   }
 
-  // --- the stage: braziers, banners, dais, the champion -------------------
+  // --- the stage: braziers, banners, the dais and the side on it ----------
   const rise = easeOut(Math.max(0, Math.min(1, (t - WIN_T.stage) / 0.55)));
   if (rise > 0) {
     const lift = Math.round((1 - rise) * 26);
-    drawWinBrazier(L.cx - L.spread, L.daisY + 14, now, rise);
-    drawWinBrazier(L.cx + L.spread, L.daisY + 14, now, rise);
-    const bw = 22, bh = 78;
-    for (const sx of [-1, 1]) {
-      drawWinBanner(L.cx + sx * Math.round(L.spread * 0.62) - (bw >> 1),
-        L.toy + 64 - lift, bw, bh, tm, rise, now);
+    drawWinBrazier(L.cx - L.brazierX, L.stageY + 14, now, rise);
+    drawWinBrazier(L.cx + L.brazierX, L.stageY + 14, now, rise);
+    drawWinBanner(L.cx - L.bannerX, L.bannerY - lift, ti, true, rise, now);
+    drawWinBanner(L.cx + L.bannerX, L.bannerY - lift, ti, false, rise, now);
+    const stands = winStands(L, ws);
+    const ranks = stands.length >> 1;
+    drawWinDais(L.cx, L.stageY + lift, ranks * (WIN_BODY + L.gap) + (WIN_BODY >> 1) + 8, tm, rise);
+    // every body of the side, outer ranks first and the local slot last: 3x,
+    // each breathing on its own beat, wearing the gear it finished in, its
+    // name over its head - the local slot's a row higher, clear of its crown
+    let bobMe = 0;
+    for (let k = stands.length - 1; k >= 0; k--) {
+      const s = stands[k];
+      const sr = easeOut(Math.max(0, Math.min(1, (t - WIN_T.stage - s.rank * WIN_T.stand) / 0.55)));
+      if (sr <= 0) continue;
+      const ph = now * 2.2 + k * 1.3;
+      const bob = Math.round(Math.sin(ph) * 1.5);
+      if (k === 0) bobMe = bob;
+      const by = s.y + Math.round((1 - sr) * 26) + bob;
+      ctx.globalAlpha = sr;
+      ctx.drawImage(SPRITES.champ[s.m.cls][ti].down[Math.sin(ph) > 0.6 ? 1 : 0], s.x, by, WIN_BODY, WIN_BODY);
+      drawGearMarks(s.m, s.x, by, 3);
+      drawPixelTextOutline(ctx, s.m.name, centreTextX(s.x + (WIN_BODY >> 1), s.m.name), by - (k ? 8 : 13), tm.mark, '#0f1632');
+      ctx.globalAlpha = 1;
     }
-    drawWinDais(L.cx, L.daisY + lift, 40, tm, rise);
-    // the champion: 5x, breathing in place, wearing the gear it finished in
-    const bob = Math.round(Math.sin(now * 2.2) * 1.5);
-    const bx = L.cx - 40, by = L.champY + lift + bob;
-    ctx.globalAlpha = rise;
-    ctx.drawImage(SPRITES.champ[ws.cls][skin(ws.team)].down[Math.sin(now * 2.2) > 0.6 ? 1 : 0], bx, by, 80, 80);
-    drawGearMarks(ws, bx, by, 5);
-    ctx.globalAlpha = 1;
-    // the crown, dropped onto the head
+    // the crown, dropped onto the local slot's head
     const ct = (t - WIN_T.crown) / (WIN_T.crownLand - WIN_T.crown);
     if (ct > 0) {
       const e = Math.min(1, ct);
-      const cy = Math.round(by + 3 - (1 - e * e) * 70);
-      stampGrid(WIN_CROWN, WIN_CROWN_PAL, L.cx - 19, cy + (ct > 1 && ct < 1.25 ? 1 : 0), 3, '#3c2a1e');
+      const cy = Math.round(stands[0].y + 1 + (ct >= 1 ? bobMe : 0) - (1 - e * e) * 70);
+      stampGrid(WIN_CROWN, WIN_CROWN_PAL, L.cx - 13, cy + (ct > 1 && ct < 1.25 ? 1 : 0), 2, '#3c2a1e');
       if (ct >= 1 && ct < 1.6) { // a ring of sparks off the landing
         const f = (ct - 1) / 0.6;
         ctx.globalAlpha = 1 - f;
         for (let i = 0; i < 14; i++) {
           const ang = (i / 14) * Math.PI * 2, rr = 6 + f * 30;
           ctx.fillStyle = i & 1 ? '#ffd95c' : '#ffffff';
-          ctx.fillRect(Math.round(L.cx + Math.cos(ang) * rr), Math.round(cy + 8 + Math.sin(ang) * rr * 0.6), 2, 2);
+          ctx.fillRect(Math.round(L.cx + Math.cos(ang) * rr), Math.round(cy + 6 + Math.sin(ang) * rr * 0.6), 2, 2);
         }
         ctx.globalAlpha = 1;
       }
@@ -936,14 +1053,9 @@ function renderVictory(now) {
     }
   }
 
-  // the rule sweeps out of the middle, then the line that says who won
+  // the rule sweeps out of the middle; the stage under it says who won
   if (t > WIN_T.rule) {
     drawGoldRule(L.cx, L.ruleY, Math.round((tw / 2 + 10) * easeOut(Math.min(1, (t - WIN_T.rule) / 0.4))), 1, RULE_GOLD);
-    const sub = ws.mates > 0 ? tm.name + ' HOLDS THE FROSTLANDS' : 'LAST ONE STANDING';
-    ctx.globalAlpha = Math.min(1, (t - WIN_T.rule) / 0.5);
-    drawPixelTextOutline(ctx, sub, Math.round((VIEW_W - pixelTextWidth(sub)) / 2), L.subY,
-      ws.mates > 0 ? tm.mark : '#9fb6d8', '#0a0e23');
-    ctx.globalAlpha = 1;
   }
 
   // --- the tally ----------------------------------------------------------

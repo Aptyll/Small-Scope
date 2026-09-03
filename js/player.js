@@ -876,7 +876,7 @@ function practiceRevive(p) {
 // Both end screens print the same object, so there is one of these rather
 // than one per ending: the four tally numbers, the class it was played in,
 // the kit it finished in, and the two facts only one of the screens uses
-// (mates for the win's headline, place/by for the loss's).
+// (the roster for the win's stage, place/by for the loss's headline).
 function endSnapshot() {
   // where the local slot finished: every slot still in the match outlasted
   // it, so place is one past that count. A win is 1st by definition (the
@@ -886,8 +886,12 @@ function endSnapshot() {
     gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
     team: player.team, cls: player.cls,
     gear: player.gear.slice(), gearLv: player.gearLv.slice(),
-    // a teammate still standing means the TEAM won, and the headline says so
-    mates: players.filter((q) => q !== player && q.active && !q.dead && q.team === player.team).length,
+    // the whole side, the local slot first: every body the win stands on its
+    // stage, with the name, class and kit it finished in (a mate who is down
+    // at the whistle still won)
+    roster: players.filter((q) => q.active && q.team === player.team)
+      .sort((a, b) => (a === player ? -1 : b === player ? 1 : a.id - b.id))
+      .map((q) => ({ name: q.name, cls: q.cls, gear: q.gear.slice(), gearLv: q.gearLv.slice() })),
     place: player.eliminated ? left + 1 : 1, of: players.filter((q) => q.active).length,
     by: player.downedBy, byTeam: player.downedTeam, cause: player.downedCause,
   };

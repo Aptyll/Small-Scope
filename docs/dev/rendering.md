@@ -827,6 +827,10 @@ A match ends on one of two full-frame ceremonies — `renderVictory` in the `vic
 both read their anchors from `winLayout()` (in the same 270-tall authored frame every other screen
 uses), so DEFEAT sits exactly where VICTORY sat and the rule, the tally and the kit strip land in
 the same bands. `deadLayout()` reads the same `plankY`, so the planks sit under the tally on both.
+The two stages are the one thing laid out apart: the win's (`stageY`, `bannerY`, `brazierX`,
+`bannerX`, `gap`) is set **from the outside in** — the braziers as far out as the view allows, the
+banners just inside them, the line of bodies taking what is left with a gap that closes on a narrow
+view — while the loss keeps `daisY` and `spread` for its drift and its dead braziers.
 
 **When each is up.** A win goes straight to its screen (`endMatch('won')` → `state.over = 'won'`).
 A loss does **not**: an elimination only dims the play screen, because the match runs on underneath
@@ -844,41 +848,55 @@ win is clocked off `state.deadTimer`, already ticking since the body fell; the l
 beat calls `endSkip()`, which jumps the relevant clock to the end.
 
 - **Victory**: white bloom → **VICTORY** dropping in a letter at a time (each landing white, then
-  gold, kicking up snow) → the gold rule sweeping out → braziers, team banners, the two-tier dais
-  and the champion at 5× rising → a crown falling onto its head → four stat plates popping in with
-  their numbers climbing from zero → the kit strip → the planks sliding up.
+  gold, kicking up snow) → the gold rule sweeping out → the stage rising: braziers, the two crested
+  team banners, the three-tier dais and **the whole winning side** on it — every active slot of the
+  team at 3× in a mirrored line (`winStands`: the local slot in the middle on the raised block,
+  mates fanning out a rank at a time to the right and the left, each rank a beat after the last),
+  wearing the gear it finished in, its name over its head in the team's mark → a crown falling onto
+  the local slot's head → four stat plates popping in with their numbers climbing from zero → the
+  kit strip → the planks sliding up. Nothing is written under the rule: the stage is the headline.
 - **Defeat**: the same beats inverted. A colder, heavier wash → **DEFEAT** *falling* in a letter at
   a time on an ease-**in** (it drops, it does not spring), flashing cold rather than white → a
   **frost** rule (`drawGoldRule` takes a `pal`; `RULE_FROST`) → the stage *settling* rather than
   rising: the braziers out (`drawDeadBrazier` — the same ironwork with ash on the rim and a thread
-  of smoke), a snow bank where the dais stood, the champion **prone and side-on** at the same 5×
-  lying in it, an arrow planted beside it where the crown would be → five stat plates → the kit
-  strip → one plank.
+  of smoke), a snow bank where the dais stood, the champion **prone and side-on** at 5× (a lone
+  body earns a bigger scale than the winners' 3×) lying in it, an arrow planted beside it where the
+  crown would be → five stat plates → the kit strip → one plank.
 
 **What they print** is one frozen object either way — `endSnapshot()` on `state.end`, taken in
 `endMatch` because the match keeps running underneath and a total that climbs behind a tally which
-already counted it reads as a bug. The four shared columns are gold / kills / level / clock; the
+already counted it reads as a bug. Its `roster` is the whole side, the local slot first — name,
+class and kit per slot, a mate who is down at the whistle included — and is what the win's stage
+stands. The four shared columns are gold / kills / level / clock; the
 loss puts its **placing** (`4/6`, off `place`/`of`) in front of them and names who did it under the
 rule (FELLED BY *name*, in the killer's team colour, off `p.downedBy` — or the `DEATH_CAUSE` line
 when the world did it). `drawEndTally` / `drawEndStatPlate` / `drawEndGear` / `drawEndPlanks` are
 the shared passes: each takes the ending's timeline and its accent pair (`WIN_ACCENT` gold,
-`DEF_ACCENT` frost), so one plate tallies both. `dy` on the planks slides them without moving the
-rects `deadHit()` tests, so a plank is only clickable once it has arrived. The fallen champion
-draws **no gear marks** — those sit on the standing body plan (see `drawPlayer`), which is why the
+`DEF_ACCENT` frost), so one plate tallies both. A plate is icon-and-number and nothing else — the
+icon at 2× (the coin and the bow blitted at 16 px, the stamped glyphs at 2 px cells) beside the
+value at 2×, so the row reads at a glance with no label on it. `dy` on the planks slides them
+without moving the rects `deadHit()` tests, so a plank is only clickable once it has arrived. The
+fallen champion draws **no gear marks** — those sit on the standing body plan (see `drawPlayer`), which is why the
 kit strip below is where the kit is read on that screen.
 
 The art is procedural, in the title screen's idiom — `drawWinAurora` (three additive curtains of
 2 px strands across the top band), `drawWinRays` (stepped wedges walking out from behind the
 champion, blocks rather than an anti-aliased triangle), `drawWinMotes` (gold and snow falling from
 `hash2` alone, no array; `cold` drops the sparks for the loss), `drawBlizzard` (wind streaks on the
-same no-array idiom, a second speed under the motes), `drawWinBanner`, `drawBrazierIron` +
-`drawWinBrazier` / `drawDeadBrazier`, `drawWinDais` and `drawDefeatDrift`. The drift's profile is a
+same no-array idiom, a second speed under the motes), `winBannerCv` + `drawWinBanner` (each
+side's banner **baked once** — a 36×96 gold-bordered cloth with a lit fold and a shaded edge, a
+pale chief, the `WIN_CREST` eagle displayed stamped at 2×, the team's diamond between two gold
+rules, a gold chevron down the hang and a fringed swallowtail cut into the alpha, mirrored with
+`flip` so both lit folds face the stage — then hung from a finialed iron rail a row at a time
+under a ripple pinned at the rail), `drawBrazierIron` + `drawWinBrazier` / `drawDeadBrazier`,
+`drawWinDais` (three tiers: the raised block the local slot stands on, the side's step, the
+inlaid base with its icicles) and `drawDefeatDrift`. The drift's profile is a
 cosine under a flattening root: a plain cosine domes, and a dome leaves the ends of a body lying on
 it up in the air. It is drawn twice, once behind the body and once in front, so the champion lies
 **in** the snow rather than on a hill. `stampGrid(rows, pal, x, y, s, rim)` paints a char grid at
 any cell size, the shape [sprites.js](../../js/sprites.js) authors in, for the crown, the arrow and
 the stat glyphs (`WIN_ICONS`) that never earned a baked sprite; the sprites the screens do use are
-the champion, `SPRITES.gearIcons`, `itemGold` and `itemBow`.
+the champion bodies, `SPRITES.gearIcons`, `itemGold` and `itemBow`.
 
 **The death dim** underneath is the third state, and it is not a ceremony: a wash, **YOU COLLAPSED
 IN THE SNOW** at 3× (2× on a view too narrow to hold it) in the upper band — it is the first thing

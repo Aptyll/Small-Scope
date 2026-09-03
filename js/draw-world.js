@@ -1513,7 +1513,7 @@ const GEAR_MARKS = [
   { y: 13, x: 5, w: 2, x2: 9 },  // boots: one mark per foot
 ];
 // s scales the whole 16x16 grid the marks are authored on: 1 in the world,
-// 5 on the victory screen's big champion
+// 3 on the victory screen's stage
 function drawGearMarks(p, px, py, s) {
   s = s || 1;
   for (let i = 0; i < GEAR_MARKS.length; i++) {
