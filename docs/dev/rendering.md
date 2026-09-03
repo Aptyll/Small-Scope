@@ -445,8 +445,12 @@ the shared food clock (`drawFoodClock`, the very function the bag's cells wear) 
 buttons together and lifts the one being chewed white. A meal you have none of keeps its seat
 but dims to 0.35 with no count, so the column never rearranges; the click sets the same
 `eatBerry`/`eatFish` edge-trigger the key does, so `startEat` speaks every refusal and the
-button can never disagree with Q or F. Hover raises the bag cell's own food descriptor
-(`tipStack`).
+button can never disagree with Q or F. And it *shows* the refusal: whatever the reason (none in
+the bag, the clock still up, full health, a busy body), the button that was asked takes the
+well's red band and the pack's 1px shake for `foodFlash` seconds — `foodDenied(type)`, the third
+of `bagDenied()`/`toolDenied()`, fired only from `startEat` and aged in `updateFx` beside them —
+so a Q with no berry reads as denied rather than dead. Hover raises the bag cell's own food
+descriptor (`tipStack`).
 
 The whole widget — plate, wells, buy plates and the risen bit column — draws at the **HUD SIZE**
 the ESC panel's GAME slider holds (`settings.hudScale`, 0.75×–1.5×, default 0.8×). All geometry stays in 1×

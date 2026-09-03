@@ -1149,6 +1149,7 @@ function updateFx(dt) {
   updateWarps(dt); // the silhouettes a teleport request left behind (js/tools.js)
   if (bagFlash > 0) bagFlash -= dt; // the backpack's refusal red is chrome: wall time
   if (toolFlash > 0) toolFlash -= dt; // ... and the weapon well's, beside it
+  if (foodFlash > 0) foodFlash -= dt; // ... and the meal button's
   for (let i = footprints.length - 1; i >= 0; i--) {
     const f = footprints[i];
     f.t += dt;

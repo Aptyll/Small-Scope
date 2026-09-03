@@ -326,14 +326,15 @@ const FOOD_EAT = 1.5;    // the channel, interruptible for its whole length
 const FOOD_SLOW = 0.5;   // eating walks you - the same drag a cast puts on the legs
 const FOOD_FX_T = 0.12;  // seconds between crumbs while chewing
 
-// Q / F and a click on a food cell all arrive here. Refused - with the deny
-// the ability wells already speak - while the clock is up, the body is busy,
-// or there is nothing a meal could do.
+// Q / F and a click on a food cell all arrive here. Refused - the meal button
+// that was asked reddens and shakes and speaks the deny (foodDenied, ui.js,
+// the pack's and the weapon well's own refusal) - while the clock is up, the
+// body is busy, or there is nothing a meal could do.
 function startEat(p, type) {
   if (p.dead || p.eatT > 0 || p.foodCd > 0 || p.hp >= p.maxHp ||
     bagCount(p, type) <= 0 || p.stunT > 0 || p.fallT > 0 || p.dodgeT > 0 ||
     p.castT > 0 || p.rushT > 0 || inAir(p)) {
-    if (p === player) SFX.deny();
+    if (p === player) foodDenied(type);
     return;
   }
   p.eatT = FOOD_EAT;

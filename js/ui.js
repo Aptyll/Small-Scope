@@ -1435,6 +1435,22 @@ function foodCellRect(i) {
   const R = hudStripRect();
   return { x: R.x + AB_W - FOOD_CELL, y: R.y + AB_PAD + i * (FOOD_CELL + AB_GAP), w: FOOD_CELL, h: FOOD_CELL };
 }
+// The meal buttons' share of that refusal: a press that could not become a
+// meal - nothing in the bag, the clock still up, full health, a busy body -
+// reddens and shakes the button that was asked, in the red the well and the
+// pack already refuse in, so a Q with no berry reads as denied rather than
+// dead. startEat is the one path every press takes (key or click), so it is
+// the one caller; a second press on the same button while the red is up is
+// swallowed as the pack's is, while the other meal's button answers fresh.
+// updateFx ages it on wall time beside bagFlash and toolFlash.
+let foodFlash = 0, foodFlashI = 0;
+function foodDenied(type) {
+  const i = type === 'fish' ? 1 : 0;
+  if (foodFlash > 0 && foodFlashI === i) return;
+  foodFlash = 0.6;
+  foodFlashI = i;
+  SFX.deny();
+}
 // The floating buy plate: an affordable ability level's ask hovers in the
 // open screen ABOVE the well - gear's old chevron grammar, made a real
 // button. The plate is the buy click and the well below stays purely the
@@ -1980,12 +1996,20 @@ function drawAbBuyPlate(i, now, hot) {
 // clock wiping over it exactly as it wipes the bag's cells - one grammar for
 // the meal wherever it is read. A meal you have none of keeps its seat but
 // dims, so the column never rearranges; the click sets the same edge-trigger
-// the key does and startEat speaks every refusal.
+// the key does and startEat speaks every refusal - and the refused button
+// wears the well's red band and the pack's 1px shake for it (foodDenied).
 function drawFoodCell(i, now, on) {
   const p = player, type = FOOD_BTNS[i].type;
   const r = foodCellRect(i);
   const n = bagCount(p, type);
-  ctx.fillStyle = on ? '#8fa0c8' : n > 0 ? '#35426e' : '#232c52';
+  const red = foodFlash > 0 && foodFlashI === i;
+  if (red) {
+    ctx.save();
+    ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
+    ctx.fillStyle = '#c2465a';
+    ctx.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+  }
+  ctx.fillStyle = red ? '#c2465a' : on ? '#8fa0c8' : n > 0 ? '#35426e' : '#232c52';
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = BAG_WELL;
   ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
@@ -2000,6 +2024,7 @@ function drawFoodCell(i, now, on) {
   }
   drawPixelTextOutline(ctx, FOOD_BTNS[i].key, r.x + 2, r.y + r.h - 8,
     n > 0 && p.foodCd <= 0 ? '#f4f7ff' : '#7a8bb8', '#0f1632');
+  if (red) ctx.restore();
 }
 function drawHudStrip(now) {
   const R = hudStripRect();
