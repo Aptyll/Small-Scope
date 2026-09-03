@@ -1131,7 +1131,9 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   last on ONE, all of them once it has run out, and none at rest — a white flash as each turns).
   Gear stays open through the count (the widget still opens its pop-up, which shuts itself at
   zero); a class swap is refused with `SFX.deny`; Esc/Backspace call it off (`cancelCount`)
-  and, at rest, go back to the menu. At zero `lockIn()` — `menu.lockT`, then straight to
+  and, at rest, go back to the menu; **PLAY again (Enter, Space or the plank) skips the rest of
+  it** — the second `pressPlay()` ends the count where zero would have (every card face-up, the
+  gear pop-up shut). At zero, or on that press, `lockIn()` — `menu.lockT`, then straight to
   `beginDrop()` (the eagle ride, below). No instructional text anywhere on the screen.
 - **Gear pop-up** (`menu.screen = 'gear'`, easing over the still-lit select screen on
   `menu.gearT`): a dim, then a floating panel in two columns (`gearLayout()`/`gearScreenHit()`).

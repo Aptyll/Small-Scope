@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.86'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.87'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.87', 'PRESS PLAY AGAIN DURING THE CLASS SELECT COUNTDOWN AND THE EAGLE COMES AT ONCE - THE SECOND PRESS SKIPS THE COUNT.'],
   ['2.86', 'A RABBIT WEARS THE DEER\'S WHITE BAR AS ONE DODGE CHARGE: A SHOT COMING AT IT IS JINKED WITH A SIDEWAYS DASH OFF THE ARROW\'S LINE AND A BOLT AWAY, AND THE CHARGE TAKES TEN SECONDS TO COME BACK - THE SECOND ARROW IS THE ONE THAT LANDS.'],
   ['2.85', 'HEALTH BARS ALWAYS SIT ON TOP: A WOLF\'S THREAT BAR AND A DEER\'S SPRINT BAR NOW HANG UNDER THE HEALTH BAR, THE WAY A PLAYER\'S STAMINA DOES.'],
   ['2.84', 'A DEER WEARS A WHITE SPRINT BAR OVER ITS HEALTH: THE FIRST STRETCH OF A FLIGHT IS A SPRINT FAR FASTER THAN ITS RUN AND DRAINS THE BAR, WHICH REFILLS WHILE IT GRAZES - A DEER THAT HAS JUST BEEN RUN IS THE ONE YOU CAN CATCH.'],
@@ -1015,9 +1016,10 @@ function drawPatchBar(ox, oy) {
 // pop-up - beginGear; ESC, the X, or a click outside close it). PLAY locks
 // the class and starts the COUNTDOWN (pressPlay): COUNT_T seconds in big
 // digits over the plank, one rival card turning face-up per tick, gear
-// still open through it, ESC calling it off (cancelCount) - and at zero
-// lockIn() flies to the eagle (lockT -> beginDrop). Nothing on the screen
-// is instructions: the shapes carry it.
+// still open through it, ESC calling it off (cancelCount), PLAY again
+// skipping the rest of it - and at zero lockIn() flies to the eagle
+// (lockT -> beginDrop). Nothing on the screen is instructions: the shapes
+// carry it.
 const SEL_P_CELL = 36, SEL_P_GAP = 4;  // a portrait well and its gap
 const SEL_P_PER = 2;                   // emblems per column before wrapping left
 const SEL_CARD = 20, SEL_CARD_GAP = 4; // a roster card's well and its gap
@@ -1748,10 +1750,19 @@ function selectClass(i) {
 }
 // PLAY: the class is locked here and the countdown starts. Gear stays open
 // through it (the widget still opens its pop-up), ESC calls it off, and the
-// eagle comes at zero (updateTitle -> lockIn).
+// eagle comes at zero (updateTitle -> lockIn) - or at once on a SECOND
+// press: a player who has already decided is not made to sit through the
+// count, so PLAY again ends it where zero would have (every rival card
+// face-up, the gear pop-up shut, lockIn).
 function pressPlay() {
   const m = state.menu;
-  if (m.countT > 0 || m.lockT > 0) return;
+  if (m.lockT > 0) return;
+  if (m.countT > 0) {
+    m.countT = 0; m.countN = 0;
+    if (m.screen === 'gear') leaveGear();
+    lockIn();
+    return;
+  }
   setClass(player, m.csel);
   m.countT = COUNT_T; m.countN = COUNT_T;
   m.pressT = 0.12;
