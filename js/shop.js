@@ -368,18 +368,29 @@ function shopCmd(p, c) {
 // which is the one piece of this layout that is not taste: the tooltip is
 // bottom-left and grows upward off the bottom rim, and a tall centred slab
 // puts its own bottom-left corner exactly where a tall tooltip lands - so
-// hovering the last row of offers would hide the last row of offers. Ending
-// at SHOP_Y + SHOP_H = 176 keeps the whole panel clear of the deepest tooltip
-// the game can draw, and leaves the pack, the hud strip and the feed all
-// readable underneath it while you trade.
-const SHOP_W = 290, SHOP_H = 172, SHOP_Y = 4;
+// hovering the last row of offers would hide the last row of offers. Pinned
+// at the top it ends at 190, and the tooltip that is up while the pointer is
+// on the panel's own bottom row - the sell well's, which is three lines -
+// tops out forty pixels below that. Only the deepest tooltip in the game (a
+// fully loaded tool hovered in the PACK) reaches the strip at all, and that
+// is while reading a price, not while dropping the thing on it.
+const SHOP_W = 290, SHOP_H = 186, SHOP_Y = 4;
 const SHOP_WELL_W = 42, SHOP_WELL_H = 28; // an offer's icon plate...
 const SHOP_BAND = 8;                      // ...and the price band under it
 const SHOP_SEC_W = SHOP_WELL_W * 3 + 8;   // a section: three wells and the gaps between
 const SHOP_SEC_H = 6 + SHOP_WELL_H + SHOP_BAND;  // label + plate + band
 const SHOP_CARD_W = 137, SHOP_CARD_H = 48;       // one market card
 const SHOP_GRAPH_H = 20;
+const SHOP_SELL_H = 16;                   // the sell strip along the bottom rim
 const SHOP_BG = '#0a0e23', SHOP_IN = '#10173a';
+// A price you cannot pay: the refusal red every other "not enough gold" in the
+// game already speaks (tipGear's next-level row, the bag's own denial flash),
+// said three ways at once on the well so it cannot be missed at a glance -
+// a red rim, a red price band, and the goods themselves greyed back under a
+// wash. It does not lift on hover either: a well that does not answer the
+// pointer is not a button.
+const SHOP_DEAR_RIM = '#6b2230', SHOP_DEAR_BAND = '#3a1420', SHOP_DEAR_INK = '#e0637a';
+const SHOP_DEAR_WASH = 'rgba(8,10,26,0.62)';
 
 // the counter is up: the panel is drawn, eats its own clicks, and holds the
 // pack open beside it
@@ -400,10 +411,12 @@ function closeShop() {
   SFX.pickup();
 }
 
-// The whole geometry in one place: a header carrying the portrait, the sell
-// well and the purse; the turnover bar under it; the four sections as a 2x2
-// grid of three-well rows; and the two market cards side by side along the
-// bottom.
+// The whole geometry in one place, top to bottom: a header carrying the
+// portrait and the purse; the turnover bar under it; the four sections as a
+// 2x2 grid of three-well rows; the two market cards side by side; and the
+// SELL strip along the bottom rim, the full width of the slab, because it is
+// a drop target and a drop target should be hard to miss with an item on the
+// cursor.
 function shopLayout() {
   const x = Math.max(2, Math.round((VIEW_W - BAG_W - SHOP_W) / 2));
   const y = SHOP_Y;
@@ -429,7 +442,7 @@ function shopLayout() {
     panel: { x, y, w: SHOP_W, h: SHOP_H },
     bar: { x: x + 4, y: y + 24, w: SHOP_W - 8, h: 2 },
     secs, cards,
-    well: { x: x + 108, y: y + 3, w: 100, h: 18 },
+    well: { x: x + 6, y: y + SHOP_H - SHOP_SELL_H - 4, w: SHOP_W - 12, h: SHOP_SELL_H },
     xr: { x: x + SHOP_W - 14, y: y + 4, w: 10, h: 10 },
   };
 }
@@ -515,8 +528,8 @@ function drawShopPanel(now) {
   ctx.fillRect(L.bar.x, L.bar.y, Math.round(L.bar.w * fr), L.bar.h);
 
   for (const s of L.secs) drawShopSection(s, h, now);
-  drawSellWell(L.well, h, now);
   for (const c of L.cards) drawMarketCard(c, h, now);
+  drawSellWell(L.well, h, now);
 
   // the X: the drawn way out (ESC, E and walking away all close too)
   const hot = h === 'x';
@@ -548,8 +561,8 @@ function drawShopSection(s, h, now) {
 // the counter too; the price band under it is the only new part, and it says
 // afford / cannot afford in ink alone.
 function drawShopWell(r, o, hot, now) {
-  const afford = !!o && player.inv.gold >= o.price;
-  const y = r.y - (hot && afford ? 1 : 0);
+  const dear = !!o && player.inv.gold < o.price; // out of reach: SHOP_DEAR_* above
+  const y = r.y - (hot && !dear ? 1 : 0);
   const iconH = SHOP_WELL_H;
   ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
   if (!o) { // an empty line: a flat well and nothing in it
@@ -558,11 +571,11 @@ function drawShopWell(r, o, hot, now) {
     return;
   }
   const tp = tierPlate(o.type, hot);
-  ctx.fillStyle = hot ? '#8fa0c8' : afford ? tp.rim : '#2c3560';
+  ctx.fillStyle = dear ? SHOP_DEAR_RIM : hot ? '#8fa0c8' : tp.rim;
   ctx.fillRect(r.x, y, r.w, r.h);
   ctx.fillStyle = tp.plate;
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, iconH - 1);
-  tierShine({ x: r.x, y: r.y, w: r.w, h: iconH }, y, o.type, now);
+  if (!dear) tierShine({ x: r.x, y: r.y, w: r.w, h: iconH }, y, o.type, now); // nothing you cannot buy shines
   // the icon at 2x: a counter shows its goods bigger than a bag cell does,
   // and a whole-number scale is the only one that keeps the pixels square
   const im = SPRITES[ITEMS[o.type].icon];
@@ -570,18 +583,31 @@ function drawShopWell(r, o, hot, now) {
     ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + ((iconH - im.height * 2) >> 1),
       im.width * 2, im.height * 2);
   }
+  // ...under a wash if it is out of reach, so the GOODS grey back with the
+  // price rather than the price greying out alone. The tier plate keeps its
+  // own hue through it - which tier a thing is stays true whatever it costs.
+  if (dear) {
+    ctx.fillStyle = SHOP_DEAR_WASH;
+    ctx.fillRect(r.x + 1, y + 1, r.w - 2, iconH - 1);
+  }
   // the price band, flush along the bottom of the plate
-  ctx.fillStyle = afford ? '#141c3c' : '#101430';
+  ctx.fillStyle = dear ? SHOP_DEAR_BAND : '#141c3c';
   ctx.fillRect(r.x + 1, y + iconH, r.w - 2, SHOP_BAND - 1);
   const txt = String(o.price);
   const cx = r.x + ((r.w - (9 + pixelTextWidth(txt))) >> 1);
+  ctx.globalAlpha = dear ? 0.5 : 1;
   ctx.drawImage(SPRITES.itemGold, cx, y + iconH);
-  drawPixelText(ctx, txt, cx + 9, y + iconH + 2, afford ? RES_COLORS.gold : '#6a5a3a');
+  ctx.globalAlpha = 1;
+  drawPixelText(ctx, txt, cx + 9, y + iconH + 2, dear ? SHOP_DEAR_INK : RES_COLORS.gold);
 }
 
-// The sell well: pack, arrow, coin, and not one word. While something is on
-// the cursor it names the price - which is the only moment a number here
-// could mean anything, because until then there is nothing to price.
+// The SELL strip: the full width of the slab's bottom rim, a recessed well
+// with corner brackets, and the word on it. It is the one control here that
+// is not a click - you arrive at it holding something - so it says SELL
+// rather than trusting a glyph to carry a verb, and it is wide because a drop
+// target you are aiming at with an item on the cursor should be hard to miss.
+// Idle it is SELL -> a coin; with something in hand it becomes that item ->
+// a coin and the gold it fetches, and the whole well lights and pulses.
 function drawSellWell(r, h, now) {
   const d = state.drag;
   const hot = !!h && h.kind === 'sell';
@@ -597,17 +623,23 @@ function drawSellWell(r, h, now) {
     [r.x + 3, r.y + r.h - 4, 1, -1], [r.x + r.w - 4, r.y + r.h - 4, -1, -1]]) {
     ctx.fillRect(cx, cy, 4 * dx, 1); ctx.fillRect(cx, cy, 1, 4 * dy);
   }
-  // pack -> coin, and while something is on the cursor the price it fetches -
-  // the only moment a number here could mean anything, since until then there
-  // is nothing to price
-  const v = d ? sellValue(d.cell) : 0;
-  const txt = d ? '+' + v : '';
-  const wide = 20 + 5 + 5 + 5 + 8 + (d ? 3 + pixelTextWidth(txt) : 0);
-  const x0 = r.x + ((r.w - wide) >> 1), cy = r.y - 1;
-  ctx.drawImage(bagIconCv, x0, cy, 20, 20);
-  drawTradeArrow(x0 + 25, r.y + 9, 1, d ? '#f2cc6a' : '#4a5a8c');
-  ctx.drawImage(SPRITES.itemGold, x0 + 33, r.y + 5);
-  if (d) drawPixelTextShadow(ctx, txt, x0 + 44, r.y + 6, RES_COLORS.gold, SHOP_BG);
+  // the content, centred as one group: the word, what is going in, the arrow,
+  // the coin, and - only while there is something to price - what it fetches
+  const im = d ? SPRITES[ITEMS[d.cell.type].icon] : null;
+  const txt = d ? '+' + sellValue(d.cell) : '';
+  const lab = 'SELL', labW = pixelTextWidth(lab);
+  const wide = labW + 6 + (im ? im.width + 4 : 0) + 5 + 4 + 8 + (d ? 4 + pixelTextWidth(txt) : 0);
+  let cx = r.x + ((r.w - wide) >> 1);
+  const mid = r.y + ((r.h - 5) >> 1);
+  drawPixelTextShadow(ctx, lab, cx, mid, d ? '#ffd95c' : '#9fb6d8', SHOP_BG);
+  cx += labW + 6;
+  if (im) { ctx.drawImage(im, cx, r.y + ((r.h - im.height) >> 1)); cx += im.width + 4; }
+  drawTradeArrow(cx, r.y + (r.h >> 1), 1, d ? '#f2cc6a' : '#4a5a8c');
+  cx += 5 + 4;
+  ctx.globalAlpha = d ? 1 : 0.75;
+  ctx.drawImage(SPRITES.itemGold, cx, r.y + ((r.h - 8) >> 1));
+  ctx.globalAlpha = 1;
+  if (d) drawPixelTextShadow(ctx, txt, cx + 12, mid, RES_COLORS.gold, SHOP_BG);
 }
 
 // a 5x5 triangle: the direction a trade runs, and the only thing on a trade
@@ -647,9 +679,10 @@ function drawMarketCard(c, h, now) {
   // the two plates. Carrying none of a good greys its sale; not affording one
   // greys the buy - the same can/cannot ink every price in the game uses.
   const held = bagCount(player, c.id);
-  const canBuy = player.inv.gold >= price && bagRoom(player, c.id) > 0;
-  drawTradePlate(c.buy, 1, c.id, canBuy, !!h && h.kind === 'trade' && h.id === c.id && h.dir > 0, now);
-  drawTradePlate(c.sell, -1, c.id, held > 0, !!h && h.kind === 'trade' && h.id === c.id && h.dir < 0, now);
+  const dear = player.inv.gold < price; // ...as against merely having no room for one
+  drawTradePlate(c.buy, 1, c.id, !dear && bagRoom(player, c.id) > 0,
+    !!h && h.kind === 'trade' && h.id === c.id && h.dir > 0, now, dear);
+  drawTradePlate(c.sell, -1, c.id, held > 0, !!h && h.kind === 'trade' && h.id === c.id && h.dir < 0, now, false);
   // what you are carrying, on the sale plate's own edge: the number that
   // decides whether the plate is even worth pressing
   if (held > 0) {
@@ -670,13 +703,15 @@ function drawTrend(x, y, up) {
 }
 
 // A trade plate: coin -> item is a buy, item -> coin is a sale. `on` is
-// whether the trade can be made at all; a dead plate goes flat and dark.
-function drawTradePlate(r, dir, id, on, hot, now) {
+// whether the trade can be made at all; a dead plate goes flat and dark, and
+// `dear` says the reason is the PRICE rather than a full pack, so it wears
+// the counter's out-of-reach red like an offer well does.
+function drawTradePlate(r, dir, id, on, hot, now, dear) {
   const y = r.y - (hot && on ? 1 : 0);
   ctx.fillStyle = 'rgba(4,6,18,0.5)'; ctx.fillRect(r.x + 1, r.y + 1, r.w, r.h);
-  ctx.fillStyle = !on ? '#232c52' : hot ? '#8fa0c8' : (Math.sin(now * 6) > 0 ? '#4a5a8c' : '#41527f');
+  ctx.fillStyle = dear ? SHOP_DEAR_RIM : !on ? '#232c52' : hot ? '#8fa0c8' : (Math.sin(now * 6) > 0 ? '#4a5a8c' : '#41527f');
   ctx.fillRect(r.x, y, r.w, r.h);
-  ctx.fillStyle = on ? '#141c3c' : '#0c1128';
+  ctx.fillStyle = dear ? SHOP_DEAR_BAND : on ? '#141c3c' : '#0c1128';
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
   const item = SPRITES[ITEMS[id].icon], coin = SPRITES.itemGold;
   const x0 = r.x + ((r.w - 29) >> 1), iy = y + 2;

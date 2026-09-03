@@ -1162,18 +1162,34 @@ It is **wide and short and pinned near the top edge** rather than centred, and t
 piece of the layout that is not taste: the [tooltip](rendering.md#the-hover-tooltip) is bottom-left and grows
 upward off the bottom rim, so a tall centred slab would put its own bottom-left corner exactly
 where a tall tooltip lands — hovering the last row of offers would hide the last row of offers.
-Ending at 176 px keeps the whole panel clear of the deepest tooltip the game can draw, and leaves
-the pack, the hud strip and the feed readable underneath it while you trade.
+Pinned at the top it ends at 190 px, and the tooltip that is up while the pointer is on its own
+bottom row — the sell well's, which is three lines — tops out forty pixels below that. Only the
+deepest tooltip in the game (a fully loaded tool hovered in the **pack**) reaches the strip at
+all, and that one is telling you to drag the thing to the counter; it collapses to three lines the
+moment you do. The pack, the hud strip and the feed all stay readable underneath while you trade.
 
-A header carries the merchant's own portrait in its side's mark, the sell well and the purse; the
-turnover bar runs under it; the four sections sit as a 2×2 grid of three-well rows; the two market
-cards run along the bottom. Every offer well wears **its item's own tier plate** (`tierPlate`,
-gilded ones still shine) with the price on a band along the bottom in can/cannot-afford ink, so a
-tool reads as the same tool it will be in the pack.
+Top to bottom: a header carrying the merchant's own portrait in its side's mark and the purse; the
+turnover bar; the four sections as a 2×2 grid of three-well rows; the two market cards side by
+side; and the **SELL strip** along the bottom rim, the full width of the slab. Every offer well
+wears **its item's own tier plate** (`tierPlate`, gilded ones still shine) with the price on a
+band along the bottom.
 
-Nothing on it is labelled with a verb. The sell well is a **pack, an arrow and a coin**; a market
-card's two trade plates say their direction by *arrangement* — coin into item is a buy, item into
-coin is a sale — and the price is stated once, big, because it is the same number both ways. The
+**A price you cannot pay is said three ways at once**, because one was too quiet to catch at a
+glance: the well's rim and its price band both go to the counter's out-of-reach red
+(`SHOP_DEAR_*`), the price ink with them, and the goods themselves grey back under a wash — the
+tier plate keeping its own hue through it, since which tier a thing is stays true whatever it
+costs. It does not lift under the pointer and it does not shine. It is the same red
+[tipGear](#gear)'s next-level row and the pack's own refusal already speak, and a market card's
+BUY plate wears it too when the reason it is dead is the price rather than a full pack.
+
+The one control here that is not a click is the one with a **word** on it: you arrive at the sell
+strip already holding something, so it says SELL rather than trusting a glyph to carry a verb, and
+it is a full-width recessed well with corner brackets because a drop target you are aiming at with
+an item on the cursor should be hard to miss. Idle it is SELL → a coin; with something in hand it
+becomes that item → a coin and the gold it fetches, and the whole well lights and pulses. Nothing
+else on the panel is labelled with a verb: a market card's two trade plates say their direction by
+*arrangement* — coin into item is a buy, item into coin is a sale — and the price is stated once,
+big, because it is the same number both ways. The
 section headings (TOOLS / BITS / MODIFIERS / CARDS) and the graphs' own numbers are this panel's
 share of [CLAUDE.md](../../CLAUDE.md)'s carve-out, for the reason the practice instruments have
 one: reading a market **is** reading numbers, and no shape compares a price today against a price
