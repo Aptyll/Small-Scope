@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.91'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.92'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.92', 'THE WIKI BEASTS LEGEND READS CLEAN: EVERY LEADER STARTS CLEAR OF THE FRAME AND TURNS ON A COLUMN OF ITS OWN, SO NO LINE CROSSES THE LEVEL PLATE OR ANOTHER LABEL.'],
   ['2.91', 'THE WIKI OPENS ON A CLASSES PAGE: BOTH CLASSES WITH THEIR HEALTH AND STAT PIPS, AND ALL EIGHT ABILITIES WITH THEIR COOLDOWN, CAST AND WHAT EACH DOES.'],
   ['2.90', 'THE TECH TREE PLANK IS NOW A WIKI: A BEASTS PAGE SHOWS EVERY ANIMAL WEARING ITS FRAME WITH ITS HEALTH AND KILL GOLD AT LEVELS 1, 6 AND 12, AND AN ARSENAL PAGE LISTS EVERY TOOL AND BIT WITH ITS NUMBERS WRITTEN DOWN.'],
   ['2.89', 'A KILL PAYS FOR THE ANIMAL\'S LEVEL: A TENTH MORE GOLD A LEVEL, SO A LATE MEADOW IS RICHER AS WELL AS HARDER.'],
@@ -2643,13 +2644,17 @@ function renderWiki(now, a) {
     } else if (bl.kind === 'legend') {
       // the frame, labelled: one deer, and a leader from each part of the
       // frame to what it is. Every beast on the page wears this same frame.
+      // Each leader starts a clear pixel off the frame (the plate's left
+      // edge, the mark's rim, the bar backing's right wall) and the three on
+      // the right fan out - a column of their own each, label rows 10 px
+      // apart - so no line crosses a plate, a bar or another line.
       const fx = L.left + 40, base = y + 52;
       const spr = SPRITES.deer.right[0], py = base + 2 - spr.height;
       drawWikiBeast(WIKI_BEASTS[1], fx, base, level, now);
-      wikiLeader(fx - 12, py - 6, fx - 26, py - 6, 'LEVEL', '#f2cc6a');
-      wikiLeader(fx + 10, py - 7, fx + 30, py - 12, 'HEALTH', BAR_NEUTRAL);
-      wikiLeader(fx + 10, py - 4, fx + 30, py - 1, 'STAMINA - A WOLF\'S THREAT', STAM_COL);
-      wikiLeader(fx + 3, py - 14, fx + 30, py - 22, 'SEES YOU', '#f4f7ff');
+      wikiLeader(fx - 17, py - 6, fx - 27, py - 6, 'LEVEL', '#f2cc6a');
+      wikiLeader(fx + 4, py - 14, fx + 26, py - 22, 'SEES YOU', '#f4f7ff');
+      wikiLeader(fx + 11, py - 7, fx + 34, py - 12, 'HEALTH', BAR_NEUTRAL);
+      wikiLeader(fx + 11, py - 4, fx + 42, py - 2, 'STAMINA - A WOLF\'S THREAT', STAM_COL);
     } else if (bl.kind === 'beast') {
       const bs = bl.beast;
       drawWikiBeast(bs, L.left + 26, y + 40, level, now);
