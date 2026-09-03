@@ -257,10 +257,12 @@ slot earned). What happens next depends on `teamEagleDown(p.team)` alone — see
 `p.eliminated = true`, the permanent path, once it has been driven off;
 `updatePlayer` just zeroes a dead slot's intents either way. Only the local slot's **elimination**
 takes the full death overlay with it (`endMatch('lost')`); a respawn-pending local death gets the
-lighter `endMatch('respawning')` overlay instead — same `state.mode = 'dead'` machinery (so the
-4-second replay window, the TAB scoreboard and the dim all still work), just a countdown string
-and no permanent loss. Either way `state.mode = 'dead'` offers spectating a living rival through
-`viewPlayer()`/`specNext()`, or the way out to the title — which for an **elimination** goes
+lighter `endMatch('respawning')` wait instead — same `state.mode = 'dead'` machinery (so the
+replay window and the TAB scoreboard still work), but no dim and no planks: the camera goes to an
+ally, one countdown line sits over it, and the replay of the death opens large over the view until
+it is closed. An elimination offers spectating any living slot through
+`viewPlayer()`/`specNext()` (a wait keeps to the side's own, `specOk`), or the way out to the
+title — which for an **elimination** goes
 through [the defeat screen](rendering.md#the-end-screens) first (`openDefeat()`, and its own plank
 calls `toLobby()`), because a lost match ends when you stop watching it rather than when you go
 down. Every death runs `checkLastStanding()`, which ends the match as a win once no **rival
@@ -278,11 +280,12 @@ match keeps simulating while you are out** — `update()` runs `updatePlay` in b
 There is no Keep and no permadeath: the team's roosting eagle is the way back, and the only thing
 that takes a slot out for good is that eagle being driven off. `updateRespawns(dt)` (called from
 `updatePlay` beside `updateStructures`) counts down every `p.dead && !p.eliminated` slot's
-`p.respawnT` — `respawnTime(p)`: `RESPAWN_TIME` (8 s) plus `RESPAWN_LV` (1.5 s) per hero level
-past 1 plus `RESPAWN_MIN` (1 s) per minute on the match clock, capped at `RESPAWN_MAX` (45 s) —
-League-style, so a late death costs more of the match (a level-8 hero at fifteen minutes waits
-33 s) and a wiped side late in a game is a real window on a roost its defenders otherwise come
-back to from sixty pixels away every few seconds. At zero it calls `respawnPlayer(p)`, which puts `p.spawn`
+`p.respawnT` — `respawnTime(p)`: `RESPAWN_BASE` (1 s) plus `RESPAWN_LV` (2 s) per hero level —
+3 s at level 1, 5 s at level 2, 25 s at the `LEVEL_MAX` of 12, and nothing off the match clock:
+gold is XP and the table only climbs, so the level *is* the clock. An early death costs almost
+nothing and a late one costs real match, which is what makes a wiped side late in a game (everyone
+high) a real window on a roost its defenders otherwise come back to from sixty pixels away every
+few seconds. At zero it calls `respawnPlayer(p)`, which puts `p.spawn`
 `RESPAWN_OUT` (40 px) down the lane from the bird (`e.laneDir`; the nearest standable tile there
 through `nearestDryTile`, the same spiral a hole is climbed out of) and calls `p.reset(false)`,
 the exact full-clear a fresh landing gets, i-frames included — so the way back into the match is

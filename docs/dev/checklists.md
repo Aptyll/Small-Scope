@@ -371,7 +371,7 @@ already current, so it is safe to call from a state change that repeats.
 **Tuning balance** — the numbers live inline: `STRUCTS` costs/HP/build times (plus turret
 range/dmg/rate, generator pay/period, bay bot count/HP and its `w`/`h` footprint; the roll-out
 cadence is inline in `updateStructures()`'s spawner branch), `CHEST_ODDS` (a chest's card rarity
-roll, js/actions.js), `RESPAWN_TIME`/`RESPAWN_LV`/`RESPAWN_MIN`/`RESPAWN_MAX` (the wait for the
+roll, js/actions.js), `RESPAWN_BASE`/`RESPAWN_LV` (the wait for the
 bird, beside `die()`, js/player.js), the `CARDS` table (every card's effect, by rarity) and `pick3Distinct`'s
 draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the trickle
 (`TRICKLE_GOLD`/`TRICKLE_T`, js/sim.js) and `TREE_HP` (js/world.js) beside it, the hero-level table

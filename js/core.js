@@ -92,6 +92,8 @@ const state = {
   // 'menu' (the planks) | 'spec' (following a living slot); spec: that slot's
   // id; sel + hover: the planks' keyboard pick and per-plank hover eases
   over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
+  // the replay window over a respawn wait has been closed (endMatch reopens it)
+  rpClosed: false,
   // a win or an elimination freezes the numbers its end screen prints
   // (endSnapshot(), the victory banner); defeatT is the loss summary's own
   // clock, started when that view opens rather than when the slot went down

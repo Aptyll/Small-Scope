@@ -1432,7 +1432,9 @@ window.DBG = {
   // the two end screens: their timelines, the frozen numbers they print, and
   // a way to open the loss summary without pressing its plank. Set
   // state.defeatT / state.deadTimer to scrub either ceremony to a beat.
-  WIN_T, DEF_T, openDefeat, endSnapshot, endScreen, deadLayout, deadHit, deadActivate,
+  WIN_T, DEF_T, openDefeat, endSnapshot, endScreen, deadLayout, deadHit, deadActivate, respawnTime,
+  // the replay window's rect this frame, its close box, and whether the pointer is on it
+  rpRect, rpCloseRect, rpCloseHit,
   // routes: the search itself, and showPaths = true draws every unit's live route
   findPath, walkable, navTo, showPaths: false,
   // hero levels: pay a slot gold (and XP) the way a pickup would

@@ -1928,26 +1928,31 @@ roosts ([PvP](multiplayer.md#pvp)).
 
 Either way the local slot's overlay goes up through `endMatch('lost' | 'won' | 'respawning')` (the
 `death & spectate` banner): `state.mode = 'dead'`, every local overlay closed, and the screen goes
-to a dim with two planks — **SPECTATE** and **LOBBY** for `'lost'` (permanent) and `'respawning'`
-(temporary — the second plank line reads a live countdown instead of "OUT OF THE MATCH", see
-`renderDead`) alike — or to [the victory screen](rendering.md#the-end-screens), whose planks are
-**KEEP PLAYING** and **LOBBY**, for `'won'`. **LOBBY** on a `'lost'` dim does not leave: it opens
+to a dim with two planks — **SPECTATE** and **LOBBY** — for `'lost'` (permanent), to
+[the victory screen](rendering.md#the-end-screens), whose planks are **KEEP PLAYING** and
+**LOBBY**, for `'won'`, or, for `'respawning'` (temporary), to **the wait**: no dim and no planks
+at all — `endMatch` puts the view on an ally (`state.deadView = 'spec'`, `specNext` keeping to
+the side's own through `specOk`), one line — **RESPAWNING IN Ns** at 3× in the upper band — reads
+the live countdown, and [the replay window](rendering.md#replay-the-last-four-seconds) opens large
+over the view with a close box on its corner (or ESC), so the death is watched first and the ally
+after, the player choosing when. **LOBBY** on a `'lost'` dim does not leave: it opens
 [the defeat screen](rendering.md#the-end-screens), the loss's own summary, and that screen's single
 plank is the door out — a lost match ends when you stop watching it, not the instant you go down.
-A `'respawning'` LOBBY still leaves directly, and `'respawning'` needs no state of its own beyond
-that: once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same
+`'respawning'` needs no state of its own beyond `state.rpClosed` (reset by every `endMatch`):
+once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same
 one-line way `'KEEP PLAYING'` already does, lands the local slot at its bird, and replays the HUD
 slide-in a fresh eagle landing gets. A win *or* an elimination also freezes what its screen will
 print (`endSnapshot()` on `state.end`: gold, kills, level, clock, team, class, the kit, and the
 placing and killer only the loss prints) because the match keeps running underneath and a total
 that climbs behind a tally which already counted it reads as a bug — and because a loss's summary
 is opened off a plank minutes later, by which time none of those numbers are still true. Spectating
-sets `state.spec` to a living rival's id and `viewPlayer()` — the one place the camera and minimap
+sets `state.spec` to a living slot's id and `viewPlayer()` — the one place the camera and minimap
 ask who to frame — returns it. The control is
 a top-centre `[<] NAME [>]` strip (`specLayout`/`specHit`, sized to the widest slot name so the
 arrows never shift): clicking an arrow or pressing the arrow keys cycles (`specNext`, slot order,
-skipping the dead), ESC returns to the planks, and a watched slot that dies hands the view to the
-next. There is deliberately no hint text — the arrows are the whole explanation (CLAUDE.md's
+skipping the dead — and skipping rivals while a respawn wait runs, since the wait is not a scouting
+window), ESC returns to the planks (on a wait, which has none, it closes the replay instead), and a
+watched slot that dies hands the view to the next. There is deliberately no hint text — the arrows are the whole explanation (CLAUDE.md's
 "show, don't label" rule); with nobody left the plate shows a dash instead of a name. LOBBY (`toLobby`) fades to dark and reloads
 the page on the same seed, which boots into the title screen. **TAB still opens the standings
 while you are out**, which is the point of holding them above the dim.

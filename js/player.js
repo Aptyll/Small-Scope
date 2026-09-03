@@ -688,16 +688,16 @@ function spillInventory(p, killer) {
   }
 }
 
-// The wait for the bird to set a downed slot back down: gold-free, a flat
-// base plus a little per hero level and per minute of the match (League-
-// style - a late death costs more of the match than an early one, which is
-// what makes a wiped side late a real window on a roost its defenders
-// otherwise come back to sixty pixels from the bird every few seconds)
-const RESPAWN_TIME = 8;   // s at level 1, at the start
-const RESPAWN_LV = 1.5;   // s more per level past 1
-const RESPAWN_MIN = 1;    // s more per minute on the match clock
-const RESPAWN_MAX = 45;   // s, the ceiling (level 12 at 25 minutes would be 49.5)
-function respawnTime(p) { return Math.min(RESPAWN_MAX, RESPAWN_TIME + RESPAWN_LV * (p.level - 1) + RESPAWN_MIN * state.elapsed / 60); }
+// The wait for the bird to set a downed slot back down: gold-free, and a
+// read of the hero's level alone - 3 s at level 1, 5 s at level 2, 25 s at
+// LEVEL_MAX - so an early death costs almost nothing and a late one costs
+// real match, which is what makes a wiped side late (everyone high) a real
+// window on a roost its defenders otherwise come back to sixty pixels from
+// the bird every few seconds. Nothing off the match clock: the level IS the
+// clock, since gold is XP and the table only climbs.
+const RESPAWN_BASE = 1;   // s
+const RESPAWN_LV = 2;     // s more per hero level
+function respawnTime(p) { return RESPAWN_BASE + RESPAWN_LV * p.level; }
 
 // A slot goes down two ways. While its team's bird still roosts (or is
 // still flying in) it is temporary: p.dead is set (out of the world right
@@ -908,6 +908,7 @@ function endMatch(how) {
   state.flagAim = false;
   state.deadTimer = 0;
   state.defeatT = 0;
+  state.rpClosed = false; // every death opens the replay again
   // an ENDING freezes its numbers here, not in the render pass: the match
   // runs on underneath (a generator can still pay out, a rival can still
   // fall) and a total that climbs behind a tally which already counted it
@@ -918,5 +919,9 @@ function endMatch(how) {
   // the end screen has a song of its own; a respawn timer is not the end of anything
   if (how === 'won' || how === 'lost') SFX.music.play(how === 'won' ? 'victory' : 'defeat', { in: 1.2 });
   player.input = makeInput(); // whatever was held dies with the slot
+  // a respawn wait has no planks: it opens straight onto an ally, with the
+  // replay window over the view until it is closed (the `death & spectate`
+  // banner, js/screens.js); specNext keeps to the side while the wait runs
+  if (how === 'respawning') { state.deadView = 'spec'; state.spec = -1; specNext(1); }
 }
 

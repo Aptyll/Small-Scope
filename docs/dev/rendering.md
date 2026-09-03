@@ -903,26 +903,37 @@ the champion bodies, `SPRITES.gearIcons`, `itemGold` and `itemBow`.
 **The death dim** underneath is the third state, and it is not a ceremony: a wash, **YOU COLLAPSED
 IN THE SNOW** at 3× (2× on a view too narrow to hold it) in the upper band — it is the first thing
 to read and the match is still playing behind it, so it goes where an eye lands rather than over
-the body that fell — a second line saying whether this is permanent or a countdown, and two planks.
+the body that fell — a second line saying the match is over for you, and two planks. That is the
+**elimination** only. **The respawn wait** is the fourth state and the lightest: no wash, no
+planks, the camera already on an ally through the spectate strip, one line — **RESPAWNING IN Ns**
+at the same 3× in the same band, the number live — and [the replay](#replay-the-last-four-seconds)
+open large under it until its close box or ESC puts it away.
 
 ## Replay: the last four seconds
 
-The `replay` banner keeps a rolling four seconds of what was on screen and plays it back in the
-bottom-left corner while you are **dead** (the planks view, not while spectating, and never over
-[the end screens](#the-end-screens)) or **paused**.
+The `replay` banner keeps a rolling four seconds of what was on screen and plays it back while you
+are **dead** or **paused**. Where depends on why (`rpRect()`): on a **respawn wait** it opens
+**large and centred** under the countdown (`RP_BIG_W`×`RP_BIG_H`, 288×162 — three fifths of the
+view), over the ally the camera is on, and stays until it is closed — a close box rides its
+top-right corner (`rpCloseRect`/`rpCloseHit`, a 12 px plank with a cross that lights gold under the
+pointer; ESC does the same) and `state.rpClosed` remembers, reset by every `endMatch`; on an
+elimination's planks and on pause it sits in the **bottom-left corner** at `RP_W`×`RP_H` (160×90).
+Never over [the end screens](#the-end-screens).
 It records pixels, not state, so it costs nothing to keep and re-renders nothing to play.
 
-**Why it is not drawn in the game canvas.** The window is `RP_W`×`RP_H` (160×90) *game* px, and a
+**Why it is not drawn in the game canvas.** The corner window is 160×90 *game* px, and a
 480×270 view does not fit in a ninth of itself — eight of every nine pixels are gone before
 anything is drawn, and no amount of stored resolution brings them back. The same corner of the
 *screen* is `RP_W * devScale` px across (640 device px at a 1080p fullscreen's 4× scale), which is
 **more** pixels than the view itself has. So the frame goes to its own canvas, `#replay`
-(z-order above `#game`, `pointer-events: none`), positioned over that rect by `layoutReplay()` —
-which `relayout()` calls, so it follows every resize and fullscreen toggle (camera zoom no longer
-resizes anything). The game
-canvas draws only the plate, the frost rim, the playhead and a low-res copy underneath, which
-keeps the feature legible in a plain `canvas.toDataURL()` capture (`POST /shot`) and is covered
-exactly by the overlay on screen.
+(z-order above `#game`, `pointer-events: none`), positioned over the window's rect by
+`layoutReplay()` — which `relayout()` calls, so it follows every resize and fullscreen toggle
+(camera zoom no longer resizes anything), and which `renderReplay` calls again whenever the rect
+it laid out (`rpKey`) is not the one `rpRect()` now returns. The game
+canvas draws only the plate, the frost rim, the playhead, the close box and a low-res copy
+underneath, which keeps the feature legible in a plain `canvas.toDataURL()` capture (`POST /shot`)
+and is covered exactly by the overlay on screen — which is why the close box sits **outside** the
+frame, on the rim's corner: a DOM layer covers whatever the canvas draws under it.
 
 Fullscreen here is the browser's (F11), which fullscreens the document, so a `position: fixed`
 sibling still renders. Calling `requestFullscreen()` on `#game` itself would render *only* that
@@ -937,8 +948,8 @@ canvas every `1/RP_FPS` s and wraps. `RP_SECS` 4 × `RP_FPS` 30 = `RP_N` 120 slo
 across; `RP_RATE` 0.5 is the playback speed.
 
 **Capture resolution rides on `devScale`** (device px per game px, the integer `fitCanvas()`
-picks). `rpTarget()` fits the view inside three ceilings — what the corner can show
-(`RP_W * devScale`), the memory cap (`RP_CAP_W`×`RP_CAP_H`, 480×270), and 1:1, since upscaling the
+picks). `rpTarget()` fits the view inside three ceilings — what the biggest window can show
+(`RP_BIG_W * devScale`), the memory cap (`RP_CAP_W`×`RP_CAP_H`, 480×270), and 1:1, since upscaling the
 view would cost memory and add no detail. At a 1080p or 4K fullscreen all three land on the view
 itself, so the capture is **1:1 and nothing is resampled anywhere** — the atlas slot, the overlay
 backing store and the blit out are all the same pixels. A window wide enough to render more than
@@ -987,7 +998,7 @@ them — and both duck under the map/settings panels. The feed also stands down 
 newest along the bottom. It has that corner to itself now the gear row lives in the
 [backpack](#the-backpack-and-gear-widget), and shares it only with the
 [replay window](#replay-the-last-four-seconds), stepping up by `replayLift()` px for as long as
-that window is open. `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
+that window is open *in the corner* (the wait's big window sits clear of it). `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
 supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate
 on snow leaves the text nothing to sit on), a 1 px edge in the team's bright `mark`, and the ink
 in `playerTint(p)` so two players on one team read as two people. `updateFx()` ages every line on
