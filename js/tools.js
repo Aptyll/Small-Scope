@@ -32,7 +32,8 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // A PROJECTILE bit is one shot: `weight` is what the tool has to be strong
 // enough to throw (a bit heavier than the tool's tensile is dead weight and is
 // skipped), `path` is how it flies, `solid` whether a wall stops it, `ff`
-// whether it will hurt your own side, and life/speed/dmg are the baselines the
+// whether it will hurt your own side, `kb` how hard it shoves whatever it
+// lands on, and life/speed/dmg are the baselines the
 // tool, the champion kit, the hero level and any modifier bits scale - and
 // the DRAW scales all three again (`the draw` below). A spent shot is gone:
 // nothing lands in the snow to be picked back up, and the tool's own cycle
@@ -41,6 +42,21 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // in and what every hit test downstream reads. A tool's `rof` is the one
 // number counted in game STEPS, since it is a cadence rather than a physical
 // quantity - toolRof() is the single place that converts it.
+//
+// KNOCKBACK (`kb`) is a MULTIPLIER, not a speed: 1 is the ordinary shove a
+// blow lands and the bit scales it. It has to be a multiplier, because the
+// three kinds of unit are already shoved at three different weights (a slot
+// at HIT_KB, a worker at ROBOT_KB, an animal on a curve off the draw) and one
+// number written on a bit has to mean the same thing thrown at any of them -
+// so it rides to hurtUnit as `kbMul` and scales whatever shove that kind
+// takes. A shot with no `kb` at all pushes exactly as hard as it always did.
+//
+// Four optional fields under those: `reach` is extra px on every hit test (a
+// body wider than a shaft's tip - the fist and the axe), `body` names the
+// silhouette the shots pass draws it with (BIT_BODY, js/render.js; absent =
+// the arrow), `impact` what it DOES where it lands on something rather than
+// simply running out (BIT_IMPACT below), and `bot: false` marks a bit no AI
+// slot can read, the way the paths it cannot aim are already left alone.
 //
 // `price` is what the merchant sells one for (the `shop` banner, js/shop.js),
 // and half of it is what the merchant pays for one back. It is the only
@@ -60,43 +76,76 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // bot alike, because a burn is a unit state like any other.
 //
 // `path` is one of: 'line' straight | 'zig' weaving | 'orbit' circling the
-// shooter | 'boomer' out and back | 'lob' a heavy throw that arcs down.
+// shooter | 'boomer' out and back | 'lob' a heavy throw that arcs down |
+// 'curve' a scything arc, the way a thrown axe goes.
+//
+// The swung pair's flight, in seconds - declared above the table because the
+// table reads it at LOAD time (PYRE_T and the rest sit under it, read inside
+// a closure). It is SHORT on purpose: a fifth of a second at 300 px/s is a
+// body length of travel, so the fist and the axe read as a blow thrown from
+// where you stand rather than as anything in flight. They are projectiles
+// only because a projectile is what the one weapon slot fires.
+const FIST_T = 0.2;
 const BITS = {
   // -- projectiles ---------------------------------------------------------
   arrow: {
     name: 'ARROW', blurb: 'THE PLAIN SHAFT. LIGHT AND TRUE.', price: 6, tier: 0, proj: true,
-    weight: 2, path: 'line', solid: true, ff: false,
+    weight: 2, path: 'line', solid: true, ff: false, kb: 1,
     life: 0.85, speed: 320, dmg: 8, col: '#e8dcb4',
   },
   barb: {
     name: 'BARBED SHOT', blurb: 'WEAVES. HITS HARDER.', price: 16, tier: 0, proj: true,
-    weight: 5, path: 'zig', solid: true, ff: false,
+    weight: 5, path: 'zig', solid: true, ff: false, kb: 1.2,
     life: 1, speed: 250, dmg: 12, col: '#cfd8e8',
   },
   hook: {
     name: 'HOOKSHOT', blurb: 'FLIES OUT AND COMES BACK.', price: 14, tier: 0, proj: true,
-    weight: 3, path: 'boomer', solid: false, ff: false,
+    weight: 3, path: 'boomer', solid: false, ff: false, kb: 0.5,
     life: 1.5, speed: 260, dmg: 7, col: '#9fc4dd',
   },
   care: {
     name: 'CARE ARROW', blurb: 'FAST, PASSES WALLS, LIGHTS THE SNOW.', price: 42, tier: 1, proj: true,
-    weight: 4, path: 'line', solid: false, ff: false,
+    weight: 4, path: 'line', solid: false, ff: false, kb: 0.8,
     life: 0.7, speed: 430, dmg: 13, col: '#ffe6a8', lit: 34,
   },
   wisp: {
     name: 'WISP', blurb: 'CIRCLES YOU, LIGHTING THE DARK.', price: 34, tier: 1, proj: true,
-    weight: 3, path: 'orbit', solid: false, ff: false,
-    life: 3, speed: 250, dmg: 6, col: '#8fd8ff', lit: 40,
+    weight: 3, path: 'orbit', solid: false, ff: false, kb: 0.3,
+    life: 3, speed: 250, dmg: 6, col: '#8fd8ff', lit: 40, body: 'mote',
   },
   log: {
     name: 'THROWING LOG', blurb: 'SLOW, ARCS DOWN, FLATTENS ANYONE.', price: 52, tier: 1, proj: true,
-    weight: 8, path: 'lob', solid: true, ff: true,
-    life: 2.2, speed: 155, dmg: 34, col: '#a3794f',
+    weight: 8, path: 'lob', solid: true, ff: true, kb: 2.4,
+    life: 2.2, speed: 155, dmg: 34, col: '#a3794f', body: 'tumble',
   },
   lance: {
     name: 'ICE LANCE', blurb: 'HEAVY, FLAT AND VERY FAST.', price: 110, tier: 2, proj: true,
-    weight: 7, path: 'line', solid: true, ff: false,
+    weight: 7, path: 'line', solid: true, ff: false, kb: 1.6,
     life: 1.1, speed: 380, dmg: 26, col: '#bfe6ff',
+  },
+  // The closing line: three bits that are not archery at all. Each one is
+  // about ARRIVING - the fist at arm's length, the axe in the treeline, the
+  // request wherever it sticks - which is what makes them a lineage on the
+  // tech page rather than three loose oddities.
+  fist: {
+    name: 'BIG FIST', blurb: 'A PUNCH. NO REACH, AND IT THROWS BODIES.', price: 20, tier: 0, proj: true,
+    weight: 4, path: 'line', solid: true, ff: false, kb: 4,
+    // a fifth of a second of flight: it is gone before it reads as a shot,
+    // which is the whole trick - a projectile that looks like a melee blow
+    life: FIST_T, speed: 300, dmg: 16, col: '#e8b98a',
+    reach: 5, body: 'fist', bot: false,
+  },
+  axe: {
+    name: 'BIG AXE', blurb: 'A CURVING HEAD. HEAVY, AND NO REACH.', price: 78, tier: 1, proj: true,
+    weight: 6, path: 'curve', solid: true, ff: false, kb: 2,
+    life: 0.24, speed: 290, dmg: 20, col: '#cfd8e8',   // a hair past FIST_T: the head is heavier
+    reach: 6, body: 'axe', impact: 'chop', bot: false,
+  },
+  warp: {
+    name: 'TELEPORT REQUEST', blurb: 'FLIES WRONG. YOU END UP WHERE IT DOES.', price: 150, tier: 2, proj: true,
+    weight: 5, path: 'line', solid: true, ff: false, kb: 0.2,
+    life: 0.75, speed: 620, dmg: 6, col: '#c58fff', lit: 22,
+    body: 'warp', impact: 'warp', bot: false,
   },
   // -- modifiers -----------------------------------------------------------
   speedup: {
@@ -158,6 +207,99 @@ const BITS = {
 const PYRE_T = BURN_T * 2;
 const PYRE_DPS = BURN_DPS * 2;
 const CINDER_R = 26;   // px of ring an ending shot sets alight
+
+// ---- what a bit does where it LANDS ---------------------------------------
+// `impact` on a bit names one of these, and the arrow update calls it when the
+// shot ended ON something - a wall, a tree, a body - rather than merely
+// running out of life over open snow. That distinction is the whole of the
+// teleport's rule: a request that hits nothing takes you nowhere.
+// `a` is the spent shot (a.x/a.y is where it stopped) and `p` whoever fired
+// it, which may be gone by now.
+const AXE_CHOP_R = 26;   // px around a landed axe head that takes the chop with it
+const WARP_BACK = 0.02;  // s of flight rewound before the arrival, so it lands short of what it hit
+// what the thrown axe is allowed to bite: the two things an E axe fells
+const CHOPPABLE = { tree: true, deadTree: true };
+const BIT_IMPACT = {
+  // TELEPORT REQUEST: the shooter is standing where it stopped. The landing
+  // spot is pulled back off whatever was hit and onto a tile a body can
+  // actually stand on (nearestDryTile, js/actions.js), so a request buried in
+  // a treeline puts you beside the tree rather than inside it.
+  warp: (a, p) => {
+    if (!unitAlive(p)) return;   // downed, or up on the bird, between loose and landing
+    warpPlayer(p, a.x - a.vx * WARP_BACK, a.y - a.vy * WARP_BACK);
+  },
+  // BIG AXE: one chop into every tree within AXE_CHOP_R of where the head
+  // stopped - the tile it struck included. It is the same blow an E swing
+  // lands (chopTree, js/actions.js), gold and fell and loot roll and all, so
+  // an axe thrown into a treeline is a real, if expensive, way to log.
+  chop: (a, p) => {
+    if (!p) return;
+    // the tile square the ring fits inside, not the whole object array: the
+    // same scan nearestDryTile and every other radius search here makes
+    const r = Math.ceil(AXE_CHOP_R / TILE);
+    const htx = Math.floor(a.x / TILE), hty = Math.floor(a.y / TILE);
+    for (let ty = hty - r; ty <= hty + r; ty++) for (let tx = htx - r; tx <= htx + r; tx++) {
+      if (!inWorld(tx, ty)) continue;
+      const o = objAt(tx, ty);
+      if (!o || !CHOPPABLE[o.type]) continue;
+      if (Math.hypot(tx * TILE + 8 - a.x, ty * TILE + 8 - a.y) > AXE_CHOP_R) continue;
+      // a work order is contested like any other: an axe and an E swing on
+      // one tile in one step must be ONE chop, whichever of them got there
+      contest('work:' + idx(tx, ty), p, () => {
+        const t = objAt(tx, ty);
+        if (t && CHOPPABLE[t.type]) chopTree(t, p);
+      });
+    }
+  },
+};
+// One shot's impact, dispatched. Kept a function rather than an inline lookup
+// so the sim reads as "what did this land on" and every new kind of ending
+// stays one row in the table above.
+function bitImpact(a) {
+  const f = BIT_IMPACT[a.impact];
+  if (f) f(a, players[a.owner]);
+}
+
+// ---- the teleport ---------------------------------------------------------
+// A slot picked up and put down somewhere else, plus the tell that says it
+// happened. Nothing else in the game moves a body without walking it, so the
+// FLASH is not decoration: a silhouette of the character is stamped every
+// WARP_STEP px of the line it crossed, all of them fading together over
+// WARP_FLASH_T, which is what makes the jump read as a path rather than as a
+// slot blinking out of existence. The trail is drawn by drawWarps
+// (js/render.js) and aged by updateWarps below.
+const WARP_FLASH_T = 0.34; // s the silhouettes hang before they are gone
+const WARP_STEP = 11;      // px between them along the line
+const WARP_MAX = 14;       // ...and the most a very long jump may stamp
+const warps = []; // live flashes: {spr, x0, y0, x1, y1, n, col, t}
+function warpPlayer(p, x, y) {
+  let tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  if (!inWorld(tx, ty) || isSolidTile(tx, ty) || ground[idx(tx, ty)] === 2) {
+    const t = nearestDryTile(x, y, p);
+    tx = t.tx; ty = t.ty;
+    x = tx * TILE + 8; y = ty * TILE + 8;
+  }
+  const d = Math.hypot(x - p.x, y - p.y);
+  warps.push({
+    spr: classSet(p)[p.dir][0], x0: p.x, y0: p.y, x1: x, y1: y,
+    n: Math.max(2, Math.min(WARP_MAX, Math.round(d / WARP_STEP))),
+    col: BITS.warp.col, t: 0,
+  });
+  risePlayer(p);   // you cannot be buried somewhere you are no longer standing
+  cancelCatch(p);  // ...nor still holding a fish over the hole you left
+  p.x = x; p.y = y;
+  p.kbx = 0; p.kby = 0;
+  burst(x, y - 6, BITS.warp.col, 12, 60, 0.5, true);
+  burst(p.x, p.y - 6, '#f4f7ff', 6, 40, 0.4, true);
+  if (nearPlayer(x, y)) SFX.dodge();
+  if (p === player) state.shake = Math.max(state.shake, 2);
+}
+function updateWarps(dt) {
+  for (let i = warps.length - 1; i >= 0; i--) {
+    warps[i].t += dt;
+    if (warps[i].t >= WARP_FLASH_T) warps.splice(i, 1);
+  }
+}
 
 // ---- tools ---------------------------------------------------------------
 // `rof` is in game steps between shots (the number the HUD's cooldown wipe
@@ -417,6 +559,11 @@ function emitBit(p, b, id, m, amb, seq) {
       // stops it, who it is allowed to hurt, and what it leaves behind
       bit: id, path: b.path, solid: b.solid !== false, ff: !!b.ff,
       lit, col: b.col,
+      // how hard it shoves what it lands on (1 = the ordinary blow), how far
+      // past the tip its body reaches, what the shots pass draws it as, and
+      // what it does where it stops - see the four optional fields on BITS
+      kb: b.kb === undefined ? 1 : b.kb, reach: b.reach || 0,
+      body: b.body || null, impact: b.impact || null,
       // what it does when it lands: the damage type, the fire it leaves in
       // the body, and the ring it sets alight where it ends
       type: m.type, burn: m.burn, burnDps: m.burnDps, cinder: m.cinder,
@@ -492,6 +639,7 @@ const ZIG_SWING = 0.5; // rad either side of the bearing
 const ORBIT_R = 46;    // px the wisp circles its shooter at
 const LOB_DRAG = 0.55; // per second: how fast a thrown log gives up its speed
 const LOB_FALL = 210;  // px/s^2 the same log is pulled down at
+const CURVE_TURN = 3.4; // rad/s a thrown axe's bearing sweeps, always the one way
 function steerBit(a, dt) {
   if (!a.path || a.path === 'line') return;
   if (a.path === 'zig') {
@@ -502,6 +650,13 @@ function steerBit(a, dt) {
   if (a.path === 'lob') {
     a.vx *= Math.pow(LOB_DRAG, dt);
     a.vy = a.vy * Math.pow(LOB_DRAG, dt) + LOB_FALL * dt;
+    return;
+  }
+  if (a.path === 'curve') {
+    // a scythe: the bearing sweeps steadily one way, so the head carves an arc
+    // out of the bearing it was thrown on instead of holding it
+    a.ang += CURVE_TURN * dt;
+    a.vx = Math.cos(a.ang) * a.spd; a.vy = Math.sin(a.ang) * a.spd;
     return;
   }
   if (a.path === 'boomer') {
@@ -555,6 +710,7 @@ const TECH = [
   { id: 'bit:hook',      req: null },
   { id: 'bit:speedup',   req: null },
   { id: 'bit:fan',       req: null },
+  { id: 'bit:fist',      req: null },
   // tier 1: one step off a root
   { id: 'tool:recurve',  req: 'tool:shortbow' },
   { id: 'tool:hornbow',  req: 'tool:sling' },
@@ -563,6 +719,7 @@ const TECH = [
   { id: 'bit:log',       req: 'bit:barb' },
   { id: 'bit:flame',     req: 'bit:speedup' },
   { id: 'bit:twin',      req: 'bit:fan' },
+  { id: 'bit:axe',       req: 'bit:fist' },
   // tier 2: the end of each branch
   { id: 'tool:longbow',  req: 'tool:recurve' },
   { id: 'bit:lance',     req: 'bit:care' },
@@ -570,6 +727,7 @@ const TECH = [
   { id: 'bit:longshot',  req: 'bit:wisp' },
   { id: 'bit:pyre',      req: 'bit:flame' },  // the fire line, escalated
   { id: 'bit:cinder',    req: 'bit:twin' },   // ...and the multiplying line, ending in one
+  { id: 'bit:warp',      req: 'bit:axe' },    // ...and the closing line, which stops throwing the blow and throws YOU
 ];
 const TECH_BY_ID = {};
 for (const n of TECH) TECH_BY_ID[n.id] = n;
@@ -655,7 +813,10 @@ function giveLoadout(p) {
 // rest of the match carrying a longbow in its backpack.
 //
 // It only takes bits that fly TOWARD what they were aimed at - a bot cannot
-// read a boomerang or an orbit, so it leaves those for someone who can.
+// read a boomerang or an orbit, so it leaves those for someone who can - and
+// nothing marked `bot: false`, which is the same refusal written on a kind
+// whose PATH is fine but whose point is not (a fist that must be thrown at
+// arm's length, a request whose whole payoff is deciding where to stand).
 function botFitLoadout(p) {
   const cur = heldTool(p);
   if (cur) {
@@ -665,7 +826,8 @@ function botFitLoadout(p) {
       const id = s && bitIdOf(s.type);
       if (!id) continue;
       const b = BITS[id];
-      if (b.proj && (b.weight > tens || (b.path !== 'line' && b.path !== 'zig' && b.path !== 'lob'))) continue;
+      if (b.proj && (b.weight > tens || b.bot === false ||
+        (b.path !== 'line' && b.path !== 'zig' && b.path !== 'lob'))) continue;
       let free;
       while (s.n > 0 && (free = cur.bits.indexOf(null)) >= 0) {
         cur.bits[free] = id;
@@ -828,6 +990,24 @@ const BIT_ART = {
     'f...f...', '.f.f..f.', '..FfF...', '.FfhfF.f',
     '..FfF...', '.f.f....', 'f..f..f.', '....f...',
   ],
+  // BIG FIST: a hand closed and thrown to the right - the knuckles are the
+  // jagged right edge, the fold line is where the fingers close, and the cuff
+  // is the dark leather down the left
+  fist: [
+    '..KKKK..', '.KKKKKK.', 'wKKkKKKK', 'wKKkKKK.',
+    'wKKkKKKK', 'wKKkKKK.', '.KKKKKK.', '..KKKK..',
+  ],
+  // BIG AXE: a bearded head on a haft, the edge to the right
+  axe: [
+    'W.......', 'WSs.....', 'wSSSs...', 'wSSSSSs.',
+    'wSSSs...', 'wSs.....', 'W.......', 'W.......',
+  ],
+  // TELEPORT REQUEST: two halves of somewhere else, pinching onto a core -
+  // deliberately not a shaft, because what it does is not shooting
+  warp: [
+    '.u....u.', 'uU...uU.', '.uU.uU..', '..uUUu..',
+    '..uUUu..', '.uU.uU..', 'uU...uU.', '.u....u.',
+  ],
 };
 const BIT_PAL = {
   '.': null, o: '#241a12', s: '#cfd8e8', S: '#8b93a8',
@@ -835,6 +1015,8 @@ const BIT_PAL = {
   w: '#6b4a30', W: '#a3794f', v: '#d9ad72',
   i: '#8fd8ff', I: '#4a90e2', g: '#f2cc6a', G: '#ffe08a',
   n: '#5fd18a', p: '#a259e6', P: '#d6b6ff',
+  K: '#e8b98a', k: '#b8845c',   // a fist: knuckles and the shade off them
+  u: '#8f4ad6', U: '#c58fff',   // ...and the two violets nothing else in the world wears
 };
 // paint a char grid onto its own canvas, the one-off bake this file shares
 function bakeGrid(rows, pal, w) {

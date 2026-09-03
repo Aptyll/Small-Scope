@@ -171,8 +171,11 @@ for nothing ([the counter](gameplay.md#the-merchants-counter) - half the price i
 and a tool carries its loaded bits into that sum). A **tool** needs `rof`/`cap`/`tensile`/`tier`
 and an `art` key — reuse one of
 the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
-**projectile bit** needs `weight`/`path`/`solid`/`ff`/`life`/`speed`/`dmg`/`col` and an
-8×8 grid in `BIT_ART`; a **modifier bit** needs `proj: false` and a `mod(m)` that edits the
+**projectile bit** needs `weight`/`path`/`solid`/`ff`/`kb`/`life`/`speed`/`dmg`/`col` and an
+8×8 grid in `BIT_ART` — `kb` being KNOCKBACK, a *multiplier* on the shove that kind of body
+takes anyway, where 1 is the ordinary blow and a missing one means the same
+([knockback](gameplay.md#knockback-one-number-thrown-at-three-weights)); a **modifier bit** needs
+`proj: false` and a `mod(m)` that edits the
 envelope in `toolMods` — and, because cells fold in whatever order they sit in, that `mod` must
 write order-independent values (a max or a set, never a multiply of what is already there), or two
 of them in one tool give different tools depending on which cell holds which. Both need a `name`
@@ -184,14 +187,19 @@ them back out of `toolMods` rather than restating them.
 **It also needs a `TECH` node**, or the tech screen never shows it — the loot pool rolls it either
 way, since the pool is every kind at or under a tier, but a kind missing from the page is a kind
 nobody can read the numbers of. Give it a `req` naming the node beneath it (null only on the
-tier-0 row), and keep each lineage to a root plus at most two children — the tech screen's 7×3 grid
-derives its rows from `TECH` and a fourth column would draw off the page. The screen and its
+tier-0 row), and keep each lineage to a root plus at most two children — the tech screen's 8×3 grid
+derives its rows from `TECH` and a fourth column would draw off the page. A ninth *lineage* is
+the other way off it: the rows have to fall between the tier names and the ESC line, so adding one
+means retuning `TECH_ROWH`/`y0` (js/menu.js) as the eighth did. The screen and its
 tooltip both follow from that one row.
 
 A brand-new `path` is the only thing that is not table-driven: it needs a
-branch in `steerBit`, and a body of its own in the shots pass (`drawTumbler`/`drawMote`,
-js/render.js) if the arrow silhouette would misread it — plus a line in `drawAimLine`'s honesty
-rule, which refuses to draw a straight line for a path that does not fly straight.
+branch in `steerBit` — plus a line in `drawAimLine`'s honesty
+rule, which refuses to draw a straight line for a path that does not fly straight. A new **body**
+is table-driven again: name it in the bit's `body` and add that name to `BIT_BODY`
+(js/render.js), which is the only place the names mean anything. Same for a new **impact** —
+what the shot does where it *lands* — one `impact` on the bit and one row in `BIT_IMPACT`
+(js/tools.js), which the arrow update calls only when the shot ended on something.
 
 **Putting something on the merchant's counter** — nothing, if it is a tool, a bit or a card: the
 stock is rolled off `TOOLS`/`BITS`/`CARD_RARITIES` themselves (`shopRestock`,
@@ -402,6 +410,12 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 
 ## Known drift
 
+- **Three bit blurbs are wider than the tooltip** (measured 2.74 against `TIP_MAXW` 168, which
+  "wraps nothing; long lines are authored to fit"): FLAME 223, CINDER BURST 227 and PYRE 247 px.
+  The panel is sized to the cap, so the tail of each runs off its own frame. The three new bits
+  of the [closing line](gameplay.md#the-closing-line-three-bits-that-are-not-archery) were cut to
+  fit when the same measurement caught them; these three are the author's own copy and were left
+  alone. `pixelTextWidth(BITS[id].blurb)` in the console is the whole check.
 - **`rootUnit`/`markUnit` currently have no caster** (intentional dead code since the hunter's
   2.47 rework retired the snare trap and the falcon): the two setters, their `drawUnitStates`
   tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are

@@ -39,8 +39,13 @@ function makeRobot(sp) {
 // A worker is a 12x10 body standing on its treads at b.y + 4, so its middle
 // sits a pixel above the anchor. Same radius as a player: a bot in the open
 // is as shootable as the rival who built it.
-function robotHit(b, x, y) { return Math.hypot(b.x - x, b.y - 1 - y) < 7; }
+// `pad` is a shot's own `reach` - extra px for a bit with a BODY rather than
+// a shaft's tip (the fist, the axe; js/tools.js). Absent for everything else.
+function robotHit(b, x, y, pad) { return Math.hypot(b.x - x, b.y - 1 - y) < 7 + (pad || 0); }
 
+// px/s a chassis is shoved by an ordinary blow. hurtUnit writes over it for
+// anything carrying a shove of its own or a KNOCKBACK multiplier.
+const ROBOT_KB = 40;
 // an arrow landing on a worker - and a turret bolt too, since bolts ride the
 // same pipeline. src is the shooter, for the feed line on the kill. Reached
 // only through hurtUnit, which asks unitAlive first, so a merchant never
@@ -55,7 +60,7 @@ function hurtRobot(b, dmg, nx, ny, src) {
   if (src && src.team !== b.team && flagOf(b)) { b.mad = src; b.madT = ROBOT_MAD; b.madX = b.x; b.madY = b.y; }
   b.hp -= dmg;
   b.flash = 0.12;
-  b.kbx = nx * 40; b.kby = ny * 40;
+  b.kbx = nx * ROBOT_KB; b.kby = ny * ROBOT_KB;
   addDmgFloater(b.x, b.y - 12, dmg);
   burst(b.x, b.y - 2, '#c3c9d3', 6, 45, 0.35, true);
   burst(b.x, b.y - 2, '#ffb347', 3, 40, 0.3, true); // sparks off the plating

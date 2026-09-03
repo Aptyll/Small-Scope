@@ -613,9 +613,16 @@ const landmarks = []; // named points of interest, placed by worldgen (see the l
 // of grace every hit hands out would swallow the whole burn.
 const DOT_CAUSE = { fire: true };
 
+// The shove a blow lands on a body, in px/s. It is the BASELINE, not the
+// whole story: `kb` is a multiplier on it, so a projectile bit's KNOCKBACK
+// (js/tools.js) scales a slot's shove exactly as it scales an animal's or a
+// worker's, and the ordinary blow is 1.
+const HIT_KB = 110;
+
 // src: the player who dealt it (kill credit + the log line), null for the
-// world; cause: a DEATH_CAUSE key naming what the world did, when src is null
-function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
+// world; cause: a DEATH_CAUSE key naming what the world did, when src is null;
+// kb: the multiplier on HIT_KB (hurtUnit's `kbMul`, undefined = an ordinary shove)
+function damagePlayer(p, dmg, dx, dy, src, cause, crit, kb) {
   const dot = !!DOT_CAUSE[cause];
   if (p.dead || (p.invuln > 0 && !dot)) return;
   dmg = Math.max(1, dmg - kitOf(p).dr); // IRONHIDE flattens every hit, but never to zero
@@ -625,7 +632,10 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit) {
     p.invuln = 0.7;
     // a juggernaut takes the damage and none of the shove (js/abilities.js)
     if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
-    else { p.kbx = dx * 110; p.kby = dy * 110; }
+    else {
+      const k = HIT_KB * (kb === undefined ? 1 : kb);
+      p.kbx = dx * k; p.kby = dy * k;
+    }
   }
   risePlayer(p); // nobody stays buried through a hit: the cover is blown with the body
   breakEat(p);   // ...and the meal goes with it - that is what makes the channel a channel

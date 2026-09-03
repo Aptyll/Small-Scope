@@ -420,6 +420,44 @@ function nearestDryTile(x, y, p) {
   return (p || player).spawn;
 }
 
+// ONE chop into a standing tree, live or dead: the gold for the bite, the
+// stump and the fell payout, the loot roll and the rare pine's jackpot. Two
+// things land it - an E swing through hitObject, and a BIG AXE bit thrown
+// into the treeline (BIT_IMPACT.chop, js/tools.js) - and they are the same
+// blow on purpose: an axe in the air is still an axe, and nothing about what
+// a tree is worth should depend on which of them felled it.
+function chopTree(o, p) {
+  const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
+  const near = nearPlayer(ox, oy);
+  const dead = o.type === 'deadTree'; // the rookery's cover: quicker, same gold
+  o.flash = 0.1;
+  o.shake = 0.22;
+  o.hp--;
+  if (near) SFX.chop();
+  awardGold(p, dead ? YIELD.deadTreeHit : YIELD.treeHit, ox, oy);
+  burst(ox, oy - 10, '#eef4fb', dead ? 5 : 6, 40, 0.5, true);
+  burst(ox, oy - 12, dead ? '#6b5a48' : '#3f7a5c', 3, 30, 0.4, true);
+  if (o.hp > 0) return;
+  objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
+  if (near) SFX.treeFall();
+  if (p === player) state.shake = Math.max(state.shake, dead ? 2 : 2.5);
+  // PACKMULE / FORAGER fatten the fell
+  awardGold(p, Math.round((dead ? YIELD.deadTreeFall : YIELD.treeFall) * kitOf(p).harvestMul), ox, oy - 6);
+  burst(ox, oy - 8, '#eef4fb', dead ? 12 : 14, 55, 0.7, true);
+  burst(ox, oy - 8, dead ? '#6b5a48' : '#2f5c4b', dead ? 6 : 8, 45, 0.6, true);
+  if (dead) {
+    flushBirds(landmarkAt(ox, oy), { x: ox, y: oy }); // felling a perch scatters the flock in it
+    return;
+  }
+  dropLoot(ox, oy - 6, 0, TREE_DROP); // the rare one: something was living in it
+  if (o.rare) {
+    awardGold(p, YIELD.treeRare, ox, oy - 12);
+    burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
+    addFloater(ox, oy - 32, 'JACKPOT!', '#f2cc6a');
+    if (near) SFX.coin();
+  }
+}
+
 function hitObject(o, p) {
   p = p || player;
   const ox = o.tx * TILE + 8, oy = o.ty * TILE + 8;
@@ -434,44 +472,8 @@ function hitObject(o, p) {
   }
   o.flash = 0.1;
   o.shake = 0.22;
-  if (o.type === 'tree') {
-    o.hp--;
-    if (near) SFX.chop();
-    awardGold(p, YIELD.treeHit, ox, oy);
-    burst(ox, oy - 10, '#eef4fb', 6, 40, 0.5, true);
-    burst(ox, oy - 12, '#3f7a5c', 3, 30, 0.4, true);
-    if (o.hp <= 0) {
-      objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
-      if (near) SFX.treeFall();
-      if (p === player) state.shake = Math.max(state.shake, 2.5);
-      awardGold(p, Math.round(YIELD.treeFall * kitOf(p).harvestMul), ox, oy - 6); // PACKMULE / FORAGER fatten the fell
-      burst(ox, oy - 8, '#eef4fb', 14, 55, 0.7, true);
-      burst(ox, oy - 8, '#2f5c4b', 8, 45, 0.6, true);
-      dropLoot(ox, oy - 6, 0, TREE_DROP); // the rare one: something was living in it
-      if (o.rare) {
-        awardGold(p, YIELD.treeRare, ox, oy - 12);
-        burst(ox, oy - 8, '#f2cc6a', 10, 50, 0.6, true);
-        addFloater(ox, oy - 32, 'JACKPOT!', '#f2cc6a');
-        if (near) SFX.coin();
-      }
-    }
-  } else if (o.type === 'deadTree') {
-    // the rookery's cover: quicker than a live pine, same gold, and felling
-    // a perch scatters the flock that was sitting in it
-    o.hp--;
-    if (near) SFX.chop();
-    awardGold(p, YIELD.deadTreeHit, ox, oy);
-    burst(ox, oy - 10, '#eef4fb', 5, 40, 0.5, true);
-    burst(ox, oy - 12, '#6b5a48', 3, 30, 0.4, true);
-    if (o.hp <= 0) {
-      objects[idx(o.tx, o.ty)] = { type: 'stump', tx: o.tx, ty: o.ty, flash: 0, shake: 0 };
-      if (near) SFX.treeFall();
-      if (p === player) state.shake = Math.max(state.shake, 2);
-      awardGold(p, Math.round(YIELD.deadTreeFall * kitOf(p).harvestMul), ox, oy - 6);
-      burst(ox, oy - 8, '#eef4fb', 12, 55, 0.7, true);
-      burst(ox, oy - 8, '#6b5a48', 6, 45, 0.6, true);
-      flushBirds(landmarkAt(ox, oy), { x: ox, y: oy });
-    }
+  if (o.type === 'tree' || o.type === 'deadTree') {
+    chopTree(o, p);
   } else if (o.type === 'rock') {
     o.hp--;
     if (near) SFX.mine();
@@ -685,17 +687,30 @@ function unitsHit(src, x, y, r) {
 // otherwise the type's own. Everything an ability or a tool lands comes
 // through here; the three per-kind functions under it stay for what is
 // genuinely per-kind (a den waking, a worker turning on whoever hit it).
+//
+// KNOCKBACK is the one number written in TWO ways, because the callers mean
+// two different things by it. `kb` is an absolute px/s an ability picks for a
+// particular blow; `kbMul` is a MULTIPLIER on whatever shove that kind takes
+// anyway - a slot's HIT_KB, a worker's ROBOT_KB, an animal's own curve - and
+// it is what a projectile bit's `kb` field rides in on (js/tools.js), so one
+// number on a bit means the same thing thrown at any of the three.
 function hurtUnit(e, dmg, nx, ny, src, o) {
   if (!unitAlive(e)) return;
   o = o || {};
   const ty = DMG_TYPES[o.type] || DMG_TYPES.blunt;
+  const km = o.kbMul === undefined ? 1 : o.kbMul;
   if (e instanceof Player) {
-    damagePlayer(e, dmg, nx, ny, src, o.cause || null, o.crit);
+    damagePlayer(e, dmg, nx, ny, src, o.cause || null, o.crit, km);
   } else if (isAnimalUnit(e)) {
-    hurtAnimal(e, dmg, nx, ny, o.kb === undefined ? 30 : o.kb, src ? src.id : undefined, o.ambush);
+    hurtAnimal(e, dmg, nx, ny, (o.kb === undefined ? 30 : o.kb) * km, src ? src.id : undefined, o.ambush);
   } else {
     hurtRobot(e, dmg, nx, ny, src);
-    if (o.kb !== undefined) { e.kbx = nx * o.kb; e.kby = ny * o.kb; }
+    // the chassis takes its own shove inside hurtRobot; anything that names
+    // one of its own, or scales the one it has, writes over it here
+    if (o.kb !== undefined || km !== 1) {
+      const k = (o.kb === undefined ? ROBOT_KB : o.kb) * km;
+      e.kbx = nx * k; e.kby = ny * k;
+    }
   }
   if (ty.spark) burst(e.x, unitMidY(e), ty.spark, 6, 50, 0.45);
   // fire outlives its own blow: the shot's `burn` seconds if it named any,

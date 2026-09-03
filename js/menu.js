@@ -24,9 +24,10 @@ const MENU_BW = 132, MENU_BH = 24, MENU_PITCH = 30;
 // fifth plank arrived, so the seed row still lands clear of the corner tags.
 const MENU_Y0 = 88;
 const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the planks
-const PATCH_TXT = 'PATCH 2.73'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.74'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.74', 'EVERY SHOT NOW CARRIES A KNOCKBACK, AND THREE BITS THAT ARE NOT ARCHERY JOIN THE ARSENAL - A BIG FIST THAT THROWS BODIES, A BIG AXE THAT CURVES AND FELLS THE TREES IT LANDS AMONG, AND A TELEPORT REQUEST THAT PUTS YOU WHEREVER IT STICKS.'],
   ['2.73', 'DROPPING A BIT ONTO A LOADED CELL SWAPS THE TWO NOW - WHAT IT PUSHES OUT GOES BACK WHERE YOUR HAND CAME FROM - AND A MODIFIER WEARS A HATCHED PLATE THAT TELLS IT FROM A SHOT ANYWHERE IT SITS.'],
   ['2.72', 'THE COUNTER MOVES ITS SELL WELL TO A FULL-WIDTH STRIP ALONG THE BOTTOM THAT SAYS SELL, AND ANYTHING PRICED PAST YOUR PURSE NOW GOES RED AND GREYS OUT INSTEAD OF QUIETLY DIMMING.'],
   ['2.71', 'BOTH EAGLES KEEP A SHOP NOW - THE MERCHANT SELLS TOOLS, BITS AND CARDS THAT TURN OVER EVERY TWO MINUTES, BUYS ANYTHING IN YOUR PACK BACK, AND RUNS A FISH AND BERRY MARKET WHOSE PRICE SWINGS ALL DAY.'],
@@ -2233,13 +2234,16 @@ function renderGear(now, a) {
 // drop all of it for anybody - so this page is not a shop and nothing on it
 // is bought: it is the arsenal you can be handed, in one picture. `TECH`
 // (js/tools.js) already carries the only edge in the graph - each node's
-// `req` - and it happens to lay out as seven clean lineages of at most three,
-// so the page is a 7x3 grid: one ROW per lineage, one COLUMN per tier, and
+// `req` - and it happens to lay out as eight clean lineages of at most three,
+// so the page is an 8x3 grid: one ROW per lineage, one COLUMN per tier, and
 // every edge is a horizontal line from a kind to the kind a step above it.
 // Nothing here is written down but the three tier names; a node's identity
 // and its stats are read through the tooltip (bottom left) that any hover
 // raises, which is the whole reason that panel exists.
-const TECH_CELL = 20, TECH_COLW = 96, TECH_ROWH = 24;
+// The row pitch is what the page can spend: TECH_ROWS.length rows have to
+// fall between the tier names above them and the ESC line at toy+254, so a
+// new lineage tightens the pitch rather than running off the bottom.
+const TECH_CELL = 20, TECH_COLW = 96, TECH_ROWH = 22;
 // the lineages, built once from TECH: a tier-0 root, then whatever it opens
 const TECH_ROWS = (() => {
   const kids = {};
@@ -2254,7 +2258,7 @@ function techLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
   const x0 = cx - Math.round((2 * TECH_COLW + TECH_CELL) / 2);
-  const y0 = toy + 76;
+  const y0 = toy + 66;
   return { toy, cx, x0, y0 };
 }
 function techNodeRect(row, col) {

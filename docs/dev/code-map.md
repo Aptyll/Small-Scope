@@ -134,6 +134,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | what a click / E / space actually does | `clickAction`, `tryWork`, `workTarget`, `tryDodge`, `hitObject`, `crackIce` (what a click FIRES: `fireTool`, tools.js) | `actions` |
+| one chop into a standing tree - gold, stump, fell payout, loot roll, jackpot - whatever landed it | `chopTree` | `actions` (above `hitObject`; its other caller is `BIT_IMPACT.chop`, tools.js) |
 | the tuning for everything a player does: the three SWING tools, the shot trail, E's reach, the roll, prone | `SWING_TOOLS`/`SWING_*`, `BOW_Y`, `ARROW_*`, `WORK_REACH`, `STRUCT_HIT_DMG`, `ROLL_*`/`TACKLE_*`, `PRONE_*`, `AMBUSH_MUL` | `actions` (its head; the two kit baselines `BOW_CHARGE`/`BOW_NOCK`: `players`, player.js; the weapon's own tuning: `TOOLS`/`BITS`, tools.js) |
 | the roll as a hit: the sweep and the tackle | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg` | `actions` › `the roll as a hit` |
 | going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` |
@@ -160,7 +161,10 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | moving a tool onto a key or a bit into a cell (the two the drag goes through) | `slotPut`, `bitPut` | `tools & bits` › `equipping` |
 | what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
 | the catch pose: its clock, the cancel every press and hit call (WASD is held for its first second, then a cancel), which of its three frames is up | `CATCH_T`, `CATCH_WALK`, `startCatch`, `cancelCatch`, `catchFrame` | `tools & bits` - after `spearFish` (ticked in `updatePlayer`, sim.js; drawn by `drawPlayer`, draw-world.js; the net take in `updateStructures`, structures.js) |
-| how each bit flies, and the numbers behind the four non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL` | `tools & bits` › `how a bit flies` |
+| how each bit flies, and the numbers behind the five non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL`, `CURVE_TURN` | `tools & bits` › `how a bit flies` |
+| what a shot does where it LANDS, and the two that do anything | `BIT_IMPACT`, `bitImpact`, `AXE_CHOP_R`, `WARP_BACK` | `tools & bits` › `what a bit does where it lands` (called from the arrow update: `update`, sim.js) |
+| the teleport itself: the jump, and the silhouettes it strings across it | `warpPlayer`, `updateWarps`, `warps`, `WARP_FLASH_T`/`WARP_STEP`/`WARP_MAX` | `tools & bits` › `the teleport` (drawn by `drawWarps`, render.js; aged in `updateFx`, sim.js) |
+| how hard a shot shoves what it hits | `kb` on each `BITS` row (`HIT_KB` player.js, `ROBOT_KB` robots.js, `o.kbMul` in `hurtUnit`) | `tools & bits` (beside `BITS`) |
 | where tools and bits come from, and how often | `dropLoot`, `LOOT_POOL`, `rebuildLootPool`, `ROCK_DROP`, `TREE_DROP`, `CHEST_TOOL`, `LOOT_TOOL` | `tools & bits` › `loot` (its callers: `hitObject`, actions.js) |
 | the tech tree: the graph every kind hangs off, all of it unlocked | `TECH`, `TECH_BY_ID`, `noteSeen` | `tools & bits` › `the tech tree` (storage: `PROFILE.techSeen`, profile.js; the page: `main menu`, menu.js) |
 | what each class flies in with | `CLASS_LOADOUT`, `giveLoadout` | `tools & bits` › `starting loadouts` (the weapon rides the gear pop-up's preview: `drawGearPreview`, menu.js) |
@@ -239,6 +243,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the F3 readout: fps, coords, seed | `drawTags` | `render` |
 | the `.` overlay: hitboxes, the model centre column, and its 1px ring/box/line rasterisers | `drawHitboxes`, `hbRing`, `hbBox`, `hbDot`, `hbLine`, `hbMid`, `HB_*` | `debug overlays` |
 | the `.` overlay's routes: waypoints + goal tile, a bird's perch line, a fish's heading arrow | `drawNavPaths`, `hbArrow` | `debug overlays` |
+| which body a bit flies as, and the four that are not the arrow | `BIT_BODY`, `drawTumbler`, `drawMote`, `drawSwungBody`/`FIST_MAP`/`AXE_MAP`/`BIT_INK`, `drawWarpShot` | `render` (after the shots pass; the names they answer to: `body` on `BITS`, tools.js) |
+| the silhouettes a teleport strings across its jump | `drawWarps` | `render` › `the teleport's flash` (the flash itself: `warpPlayer`/`warps`, tools.js) |
 | pointer state and the bow aim line | `cursorInfo`, `drawCursor`, `drawAimLine` | `cursor & aim line` |
 
 ## js/ui.js
@@ -304,7 +310,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the practice plank's breakable ice, and entering/leaving the arena | `menuFrozen`, `iceRefuse`, `breakPracticeIce`, `beginPractice`, `leavePractice` | `main menu` (the standing cracks: `menu.iceMarks`, drawn in `drawMenuButton`) |
 | the patch tag and its notes panel | `PATCH_TXT`, `PATCH_NOTES`, `buildPatchPanel`, `patchTagRect` | `main menu` |
 | picking variants pre-match: the pop-up over class select - live preview, stat ledger with hover deltas, twelve 32×32 icon wells, the equip flash | `gearLayout`, `gearScreenHit`, `pickGear`, `renderGear`, `drawGearWell`, `drawGearPreview`, `gearPreviewKit`, `GEAR_STATS`, `GEAR32`/`gearIcon32`, `beginGear`/`leaveGear` | `main menu` › `the gear pop-up` (the numbers' base: `baseKit`, player.js) |
-| the tech tree page: its 7x3 grid, the edges, and a node lit in its tier | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
+| the tech tree page: its 8x3 grid, the edges, and a node lit in its tier | `TECH_ROWS`, `TECH_CELL`/`TECH_COLW`/`TECH_ROWH`, `techLayout`, `techNodeRect`, `techHit`, `techFlat`, `techKey`, `techClick`, `drawTechNode`, `renderTech`, `beginTech`/`leaveTech` | `main menu` › `the tech tree screen` (the graph itself: `TECH`, tools.js) |
 
 ## js/screens.js
 

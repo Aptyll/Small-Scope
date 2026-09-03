@@ -364,9 +364,11 @@ half and ends on whether this profile has ever held one.
 
 `m.screen = 'tech'`, entered from the main menu's TECH TREE plank and eased in on its own `techT`
 (the chrome ducks under it the way it does under class select). The `TECH` table already
-carries the only edge in the graph, and it lays out as seven lineages of at most three, so the
-page is a **7×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
-from a node to the one it opens.
+carries the only edge in the graph, and it lays out as eight lineages of at most three, so the
+page is an **8×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
+from a node to the one it opens. The row pitch is what the page can spend: `TECH_ROWH` (22) and
+`y0` were both tightened when the eighth lineage arrived, so the rows still fall between the tier
+names and the ESC line.
 
 Every node is unlocked, so there is one node state and it is the lit one: the full tier plate the
 same item wears in a bag cell (`tierPlate`, plus `tierShine` on the top tier), rimmed in the

@@ -1346,6 +1346,12 @@ window.DBG = {
   // the draw curve: 0..1 off a slot's chargeT, and the flight and damage it buys a bit
   drawPow, shotFlight, drawDmgMul, DRAW_RANGE_MIN, DRAW_SPEED_MIN, DRAW_DMG_MIN,
   toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
+  // the closing line's three bits: what a shot does where it LANDS, the
+  // teleport with no shot to fire it, the flashes it strings across the jump,
+  // and the chop a thrown axe lands - so a driver can prove an arrival or a
+  // fell without waiting for one to connect
+  BIT_IMPACT, warps, WARP_FLASH_T, AXE_CHOP_R, chopTree,
+  warpPlayer: (x, y, p) => warpPlayer(p || player, x, y),
   // the class abilities: the table, a keypress by hand, and the entity lists
   // an ability leaves in the world - so a driver can stage a crater or a net
   // without walking a bot into one

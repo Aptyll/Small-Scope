@@ -278,7 +278,7 @@ function updatePlay(dt) {
         if (o && o.type === 'eagle' && o.team !== a.team) {
           hurtEagle(state.drop.eagles[o.team], EAGLE_ARROW_DMG, players[a.owner], a.x, a.y); // a flat spook, not the body damage
           if (a.ambush) ambushFx(a.x, a.y);
-          dead = true;
+          dead = true; a.struck = true;
         }
       }
     }
@@ -295,6 +295,7 @@ function updatePlay(dt) {
       if (dm && !(a.pierce && a.pierceHit.includes(dm))) {
         hitDummy(dm, a.dmg, a.x, a.y);
         if (a.ambush) ambushFx(a.x, a.y);
+        a.struck = true;
         if (a.pierce) a.pierceHit.push(dm); // the pierce keeps flying
         else dead = true;
       }
@@ -308,7 +309,7 @@ function updatePlay(dt) {
           hitPTarget(t); // the face explodes on contact
           a.ptHit = true; // this shot keeps the consecutive-hit run alive
           if (a.ambush) ambushFx(a.x, a.y);
-          dead = true;
+          dead = true; a.struck = true;
           break;
         }
       }
@@ -317,7 +318,7 @@ function updatePlay(dt) {
     // whole of "never hits ground", and the only reason a wisp can circle you
     // through a treeline
     if (!dead && a.solid !== false && isSolidTile(Math.floor(a.x / TILE), Math.floor(a.y / TILE))) {
-      dead = true;
+      dead = true; a.struck = true;
       burst(a.x, a.y, '#cfd8e8', 3, 25, 0.25, true);
       if (a.burn > 0) burst(a.x, a.y, '#ff9440', 7, 50, 0.5);
     }
@@ -326,11 +327,16 @@ function updatePlay(dt) {
     // hurtUnit (js/actions.js) hands them to a slot, a deer or a worker bot
     // alike. Only the hit test below differs per kind - a raised shield, a
     // chassis, a small animal high on its own altitude.
-    const blow = (t, kb) => {
+    // `base` is the px/s shove this KIND of body takes from a shot; the bit's
+    // own KNOCKBACK (a.kb) scales it - and scales a slot's HIT_KB too, which
+    // is the whole reason it travels as a multiplier (js/tools.js).
+    const blow = (t, base) => {
       hurtUnit(t, a.dmg, nx, ny, players[a.owner], {
-        type: a.type, burn: a.burn, burnDps: a.burnDps, ambush: a.ambush, kb,
+        type: a.type, burn: a.burn, burnDps: a.burnDps, ambush: a.ambush,
+        kb: base, kbMul: a.kb,
       });
       if (a.ambush) ambushFx(a.x, a.y);
+      a.struck = true;
     };
     if (!dead) {
       // players first: the same shot that drops a deer drops a rival. A bit
@@ -343,14 +349,14 @@ function updatePlay(dt) {
         if ((a.team === t.team && !a.ff) || t.id === a.owner ||
             !t.active || t.dead || inAir(t) || t.invuln > 0) continue;
         if (a.pierce && a.pierceHit.includes(t)) continue;
-        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < ARROW_HIT_R) {
+        if (Math.hypot(t.x - a.x, t.y - 6 - a.y) < ARROW_HIT_R + (a.reach || 0)) {
           // a raised tower shield eats any shot flying into its front arc -
           // bolts included - before the body behind it is ever asked
           if (abShieldBlocks(t, nx, ny)) {
             burst(a.x, a.y, '#c8d2e4', 6, 45, 0.35, true);
             burst(a.x, a.y, '#f4f7ff', 3, 30, 0.3, true);
             if (nearPlayer(a.x, a.y)) SFX.hit();
-            dead = true;
+            dead = true; a.struck = true;
             break;
           }
           blow(t);
@@ -367,8 +373,8 @@ function updatePlay(dt) {
       for (const b of robots) {
         if ((a.team === b.team && !a.ff) || !unitAlive(b)) continue;
         if (a.pierce && a.pierceHit.includes(b)) continue;
-        if (robotHit(b, a.x, a.y)) {
-          blow(b, 40);
+        if (robotHit(b, a.x, a.y, a.reach)) {
+          blow(b, ROBOT_KB);
           if (a.pierce) { a.pierceHit.push(b); continue; }
           dead = true;
           break;
@@ -379,7 +385,7 @@ function updatePlay(dt) {
       for (const an of animals) {
         if (an.dead) continue;
         if (a.pierce && a.pierceHit.includes(an)) continue;
-        if (animalHit(an, a.x, a.y)) {
+        if (animalHit(an, a.x, a.y, a.reach)) {
           blow(an, 25 + 45 * a.pow);
           if (a.pierce) { a.pierceHit.push(an); continue; }
           dead = true;
@@ -400,6 +406,10 @@ function updatePlay(dt) {
       } else if (a.burn > 0) {
         burst(a.x, a.y, '#ff9440', 8, 55, 0.55);
       }
+      // ...and what the BIT does where it ends, but only if it ended ON
+      // something rather than simply running out over open snow: that
+      // distinction is the teleport request's whole rule (js/tools.js).
+      if (a.impact && a.struck) bitImpact(a);
       // a practice shot that ends any way but in a target face breaks the
       // range's consecutive-hit run (agStreak, js/world.js) - minigame or not
       if (PRACTICE && !a.ptHit) agStreak = 0;
@@ -1136,6 +1146,7 @@ function updateFx(dt) {
     f.t += dt;
     if (f.t > 0.9) floaters.splice(i, 1);
   }
+  updateWarps(dt); // the silhouettes a teleport request left behind (js/tools.js)
   if (bagFlash > 0) bagFlash -= dt; // the backpack's refusal red is chrome: wall time
   if (toolFlash > 0) toolFlash -= dt; // ... and the weapon well's, beside it
   for (let i = footprints.length - 1; i >= 0; i--) {

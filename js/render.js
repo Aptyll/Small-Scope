@@ -537,17 +537,21 @@ function render() {
     const nx = a.vx / vd, ny = a.vy / vd;
     const hx = Math.round(a.x - ex), hy = Math.round(a.y - ey);
     if (hx < -22 || hx > WV_W + 22 || hy < -22 || hy > WV_H + 22) continue;
-    // Not everything a tool fires is a shaft. A thrown log tumbles as a block
-    // and a conjured mote is a glow with no bearing at all, so those two get
-    // bodies of their own; every other bit is the arrow silhouette, wearing
-    // the bit's own colour on the collar behind the head.
-    if (a.path === 'lob') { drawTumbler(a, hx, hy); continue; }
-    if (a.path === 'orbit') { drawMote(a, hx, hy, now); continue; }
+    // Not everything a tool fires is a shaft. A log tumbles as a block, a
+    // conjured mote is a glow with no bearing at all, a fist and an axe are
+    // swung bodies and a teleport request is not a shape at all - so a bit
+    // may name a BODY of its own (`body`, js/tools.js) and the table below is
+    // where that name is answered. Everything else is the arrow silhouette,
+    // wearing the bit's own colour on the collar behind the head.
+    const bd = a.body && BIT_BODY[a.body];
+    if (bd) { bd(a, hx, hy, now); continue; }
     ARROW_PX.length = 0;
     arrowBodyPx(ARROW_PX, a.x - ex, a.y - ey, nx, ny, 0, ARROW_LEN,
       TEAMS[skin(a.team)].mark, TEAMS[skin(a.team)].coatD, a.col || ARROW_INK.G, 0);
     paintArrowPx(ARROW_PX);
   }
+
+  drawWarps(ex, ey); // the silhouettes a teleport request strung across its jump
 
   // airborne ability bodies: the spinning net, and the grapple's rope
   // between a reeling body and its anchor - with the arrows, over the entities
@@ -700,6 +704,123 @@ function drawMote(a, hx, hy, now) {
   ctx.fillRect(hx - r + 1, hy - r + 1, r * 2 - 1, r * 2 - 1);
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(hx, hy, 1, 1);
+}
+
+// ---- the swung bodies ----------------------------------------------------
+// The BIG FIST and the BIG AXE are ASCII maps in the arrow's own language -
+// i runs 0 (the leading edge) back along the flight, j across it - but they
+// are drawn as a BLOCK rather than a spine, because they are wide bodies
+// rather than shafts: every cell is stamped at its own offset and the whole
+// map wears one dark rim (paintRimmed, js/draw-world.js), so the shape reads
+// at any bearing without the DDA a one-pixel-thin shaft needs.
+// The leading edge ALTERNATES between i 0 and i 1 down the rows: that jagged
+// front is the knuckles, and it is the whole reason the shape reads as a fist
+// rather than as a rock. `k` is the fold the fingers close on, `w` the cuff.
+const FIST_MAP = [
+  '.KKKkKKw.',
+  'KKKKkKKww',
+  '.KKKkKKww',
+  'KKKKkKKww',
+  '.KKKkKKww',
+  'KKKKkKKww',
+  '.KKKkKKw.',
+];
+// ...and the axe is a WEDGE on a long haft: four px of head, tapering from a
+// white edge back through steel, and six of wood behind it. A head as deep as
+// it is tall reads as a thrown stone, which is what the first pass drew.
+const AXE_MAP = [
+  '..WsS......',
+  '.WssS......',
+  'WsssS......',
+  'WsssShhhhhh',
+  'WsssS......',
+  '.WssS......',
+  '..WsS......',
+];
+const BIT_INK = {
+  K: '#e8b98a', k: '#b8845c', w: '#6b4a30',                  // the fist
+  W: '#f4f7ff', s: '#cfd8e8', S: '#8b93a8', h: '#a3794f',    // ...and the axe
+};
+// [i, j, key] triples, parsed once per map the way ARROW_BODY is
+function bitBody(rows) {
+  const out = [];
+  const mid = (rows.length - 1) >> 1;
+  for (let r = 0; r < rows.length; r++)
+    for (let i = 0; i < rows[r].length; i++)
+      if (rows[r][i] !== '.') out.push(i, r - mid, rows[r][i]);
+  return out;
+}
+const FIST_BODY = bitBody(FIST_MAP), AXE_BODY = bitBody(AXE_MAP);
+function drawSwungBody(a, hx, hy, px) {
+  const vd = Math.hypot(a.vx, a.vy) || 1;
+  const nx = a.vx / vd, ny = a.vy / vd, qx = -ny, qy = nx;
+  const body = new Map();
+  for (let k = 0; k < px.length; k += 3) {
+    const i = px[k], j = px[k + 1];
+    body.set(Math.round(hx - nx * i + qx * j) + ',' + Math.round(hy - ny * i + qy * j),
+      BIT_INK[px[k + 2]]);
+  }
+  paintRimmed(body);
+}
+// TELEPORT REQUEST: not a shape at all. Three bars snap to a fresh set of
+// angles every WARP_FLICK s over a white core, so the thing crossing the snow
+// visibly does not obey it - which is the only warning the world gives that
+// whoever fired it is about to be standing here.
+const WARP_FLICK = 0.03;
+function drawWarpShot(a, hx, hy) {
+  const q = Math.floor(a.t / WARP_FLICK);
+  const body = new Map();
+  for (let b = 0; b < 3; b++) {
+    const ang = q * 0.9 + b * 2.094 + Math.sin(q * 1.7 + b) * 0.6;
+    const cx = Math.cos(ang), cy = Math.sin(ang);
+    for (let r = -3; r <= 3; r++) {
+      body.set(Math.round(hx + cx * r) + ',' + Math.round(hy + cy * r),
+        (r & 1) ? '#8f4ad6' : '#c58fff');
+    }
+  }
+  body.set(hx + ',' + hy, '#ffffff');
+  paintRimmed(body);
+}
+// Which body a bit flies as. A kind names one in its own table row (`body`,
+// js/tools.js) and this is the only place those names mean anything - so a
+// new silhouette is one row there and one row here, never an `if` in the
+// shots pass.
+const BIT_BODY = {
+  tumble: drawTumbler,
+  mote: drawMote,
+  fist: (a, hx, hy) => drawSwungBody(a, hx, hy, FIST_BODY),
+  axe: (a, hx, hy) => drawSwungBody(a, hx, hy, AXE_BODY),
+  warp: drawWarpShot,
+};
+
+// ---- the teleport's flash ------------------------------------------------
+// What a jump leaves behind: the character stamped as a flat silhouette every
+// WARP_STEP px of the line it crossed (js/tools.js owns the flash itself),
+// all of them fading together. It is the tell that makes a teleport read as a
+// PATH rather than as a body blinking out of one place and into another - the
+// same tinted-scratch trick the empty-slot ghost is drawn with, and the
+// stamps nearest the origin are the faintest, so the trail reads as a
+// direction rather than a smear. The ARRIVAL is never stamped: the body is
+// already standing there, and a silhouette over it only whites it out.
+function drawWarps(ex, ey) {
+  for (const w of warps) {
+    const k = 1 - w.t / WARP_FLASH_T;
+    for (let i = 0; i < w.n; i++) {
+      const f = i / w.n;   // 0 where the jump began, never 1
+      const x = w.x0 + (w.x1 - w.x0) * f, y = w.y0 + (w.y1 - w.y0) * f;
+      const px = Math.round(x - 8 - ex), py = Math.round(y - 12 - ey);
+      if (px < -20 || px > WV_W + 20 || py < -20 || py > WV_H + 20) continue;
+      sctx.clearRect(0, 0, 32, 32);
+      sctx.globalCompositeOperation = 'source-over';
+      sctx.drawImage(w.spr, 0, 0);
+      sctx.globalCompositeOperation = 'source-in';
+      sctx.fillStyle = w.col;
+      sctx.fillRect(0, 0, 32, 32);
+      ctx.globalAlpha = Math.max(0, k * (0.2 + 0.5 * f));
+      ctx.drawImage(scratch, 0, 0, w.spr.width, w.spr.height, px, py, w.spr.width, w.spr.height);
+    }
+  }
+  ctx.globalAlpha = 1;
 }
 
 function drawTags() {
@@ -1161,9 +1282,10 @@ function drawCursor(info, now) {
 // never flies.
 //
 // A bit that does not fly in a straight line gets NO line, because the only
-// honest straight line for a boomerang or an orbit is none: what those do is
-// shown by the shot itself the moment it leaves. A lob gets the first part of
-// its flight, up to where it starts falling away from the bearing.
+// honest straight line for a boomerang, an orbit or an axe's arc is none:
+// what those do is shown by the shot itself the moment it leaves. A lob gets
+// the first part of its flight, up to where it starts falling away from the
+// bearing.
 function drawAimLine(ex, ey, now) {
   if (!player.charging || state.mode !== 'play') return;
   const full = drawPow(player) >= 1;
@@ -1192,7 +1314,7 @@ function drawAimLine(ex, ey, now) {
   const bi = peekBit(cell);
   if (bi < 0) return;
   const bit = BITS[cell.bits[bi]];
-  if (bit.path === 'boomer' || bit.path === 'orbit') return;
+  if (bit.path === 'boomer' || bit.path === 'orbit' || bit.path === 'curve') return;
   const m = toolMods(cell);
   // the flight THIS draw buys, right now: shotFlight is emitBit's own
   // envelope, so the line grows out of the bow as the string comes back and

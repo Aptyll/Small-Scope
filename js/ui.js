@@ -2195,7 +2195,10 @@ function tipBase(type, title, kind) {
     icon: ITEMS[type] && SPRITES[ITEMS[type].icon], plate: tp.plate, rim: tp.rim, type,
   };
 }
-const TIP_PATH = { line: 'STRAIGHT', zig: 'ZIG-ZAG', orbit: 'ORBIT', boomer: 'BOOMERANG', lob: 'ARCS DOWN' };
+const TIP_PATH = { line: 'STRAIGHT', zig: 'ZIG-ZAG', orbit: 'ORBIT', boomer: 'BOOMERANG', lob: 'ARCS DOWN', curve: 'CURVES' };
+// KNOCKBACK is the one bit number that is a multiple rather than a quantity
+// (see BITS, js/tools.js), so it prints as one - 'x1' is the ordinary shove
+const TIP_KB = (kb) => 'x' + (Math.round((kb === undefined ? 1 : kb) * 10) / 10);
 // A TOOL: the three numbers that are the whole of what a tool is, and then
 // what is loaded in it - which is the other half of "what will this do".
 function tipTool(cell) {
@@ -2229,6 +2232,7 @@ function tipBit(id, cell) {
     d.rows.push(['DAMAGE', String(b.dmg), '#e0637a']);
     d.rows.push(['WEIGHT', String(b.weight) + (over ? ' - TOO HEAVY' : ''), over ? '#e0637a' : '#f2cc6a']);
     d.rows.push(['SPEED', String(b.speed), '#f4f7ff']);
+    d.rows.push(['KNOCKBACK', TIP_KB(b.kb), '#cfe0f2']);
     d.rows.push(['LIFESPAN', tipSec(b.life), '#f4f7ff']);
     d.rows.push(['FLIGHT', TIP_PATH[b.path] || b.path, b.col]);
     // the flags, only when they are true: an absent line is the default, and
@@ -2236,6 +2240,9 @@ function tipBit(id, cell) {
     if (b.solid === false) d.notes.push(['PASSES THROUGH WALLS', '#8fd8ff']);
     if (b.ff) d.notes.push(['HITS YOUR OWN TEAM TOO', '#e0637a']);
     if (b.lit) d.notes.push(['LIGHTS THE GROUND IT PASSES', '#ffd95c']);
+    // what it does where it LANDS, when that is more than damage (BIT_IMPACT)
+    if (b.impact === 'warp') d.notes.push(['LAND IT ON ANYTHING AND YOU ARE THERE', '#c58fff']);
+    if (b.impact === 'chop') d.notes.push(['CHOPS EVERY TREE IT LANDS AMONG', '#8fe08a']);
   } else {
     d.rows.push(['WEIGHT', 'NONE', TIP_DIM]);
     // A fire modifier is chosen on two numbers - how long the burn runs and

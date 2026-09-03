@@ -40,8 +40,10 @@ function makeAnimal(kind, x, y) {
 
 // the body an arrow (and the aim line) tests against. Birds ride their alt
 // and are a smaller mark - that is most of what makes them a hard shot.
-function animalHit(a, x, y) {
-  const r = a.kind === 'bird' ? 5 : 8;
+// `pad` is a shot's own `reach`: extra px for a bit with a BODY rather than a
+// shaft's tip (the fist, the axe; js/tools.js). Absent for everything else.
+function animalHit(a, x, y, pad) {
+  const r = (a.kind === 'bird' ? 5 : 8) + (pad || 0);
   return Math.hypot(a.x - x, a.y - (a.alt || 0) - 3 - y) < r;
 }
 

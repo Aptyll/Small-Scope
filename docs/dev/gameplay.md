@@ -164,8 +164,28 @@ One entry in the `BITS` table, and there are two kinds of them, told apart by `p
 
 A **projectile bit** is one shot: `weight` (what the tool has to be strong enough to throw),
 `path` (how it flies), `solid` (whether a wall stops it), `ff` (whether it will hurt your own
-side), and `life`/`speed`/`dmg` as baselines. Optional `lit` is a light radius it carries in
-flight. A spent shot is simply gone — nothing lands to be picked back up.
+side), `kb` ([knockback](#knockback-one-number-thrown-at-three-weights)), and
+`life`/`speed`/`dmg` as baselines. Optional `lit` is a light radius it carries in
+flight; optional `reach` widens every hit test past the tip (a bit with a *body* — the fist, the
+axe); optional `body` names the silhouette the shots pass draws it as (`BIT_BODY`, js/render.js);
+optional `impact` names what it does where it *lands* (`BIT_IMPACT`, js/tools.js); and
+`bot: false` marks a kind no AI slot will load. A spent shot is simply gone — nothing lands to be
+picked back up.
+
+#### Knockback: one number thrown at three weights
+
+`kb` is a **multiplier**, not a speed, and 1 is the ordinary shove. It has to be, because the
+three kinds of unit are already pushed at three different weights — a slot at `HIT_KB` (110 px/s,
+js/player.js), a worker at `ROBOT_KB` (40, js/robots.js), an animal on a curve off the draw
+(25–70) — and one number written on a bit has to mean the same thing thrown at any of them. It
+rides to `hurtUnit` as `o.kbMul`, which scales whatever shove that kind takes; `o.kb` beside it
+is still the absolute px/s an *ability* picks for a particular blow. A shot with no `kb` at all
+pushes exactly as hard as it always did, which is what kept turret bolts untouched.
+
+The spread across the table is the point of the number: a WISP barely nudges (×0.3), an ARROW is
+the baseline (×1), an ICE LANCE staggers (×1.6), a THROWING LOG flattens (×2.4) and a BIG FIST
+throws a body across the snow (×4). The tooltip prints it as `x4`, the one bit row that is a
+multiple rather than a quantity.
 
 A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
 **every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
@@ -191,6 +211,41 @@ What a burn then does is [status effects](#status-effects-one-set-for-every-unit
 
 A tool holding only modifiers fires nothing, the same as one holding only bits too heavy for it.
 
+#### The closing line: three bits that are not archery
+
+BIG FIST → BIG AXE → TELEPORT REQUEST is a lineage about *arriving* rather than about shooting,
+and all three are deliberately hostile to range.
+
+| bit | tier | what it is |
+| --- | --- | --- |
+| **BIG FIST** | WORN | a punch: `FIST_T` (0.2 s) of flight at 300 px/s — about a body length — 16 damage and `kb` ×4. The short life is the whole trick: it is gone before it reads as a projectile, so the left button looks like a melee swing. `reach` 5 gives it a body rather than a tip |
+| **BIG AXE** | KEEN | the same brief flight on the `curve` path, 20 damage, `kb` ×2, `reach` 6 — and `impact: 'chop'`, which is what makes it more than a heavy fist |
+| **TELEPORT REQUEST** | GILDED | 620 px/s and 6 damage, a body that is not a shape at all, and `impact: 'warp'` |
+
+All three carry `bot: false`: a bot has no pointer and cannot read a weapon whose point is
+*where you end up standing*, the same refusal that already keeps boomerangs and orbits out of
+its hands.
+
+**What a bit does where it lands** is one row in `BIT_IMPACT` (js/tools.js), called from the arrow
+update only when the shot ended **on** something (`a.struck` — a wall, a tree, a body, the roost,
+a dummy, a target face) rather than merely running out of life over open snow. That distinction
+is the teleport's whole rule: a request that hits nothing takes you nowhere.
+
+- **`warp`** — the shooter is standing where the shot stopped, rewound `WARP_BACK` (0.02 s) of
+  flight so it lands *short* of what it hit. The spot is pulled onto a tile a body can stand on
+  (`nearestDryTile`), so a request buried in a treeline puts you beside the tree rather than
+  inside it; the jump rises you out of the snow and drops the fish hoist, the way any hit does.
+  The tell is `warps` — the character stamped as a flat violet silhouette every `WARP_STEP` (11
+  px) of the line crossed, up to `WARP_MAX` (14) of them, fading together over `WARP_FLASH_T`
+  (0.34 s) and **never at the arrival**, because the body is already standing there
+  (`drawWarps`, js/render.js; aged in `updateFx`). Without the trail a teleport reads as a body
+  blinking out of existence rather than as a path.
+- **`chop`** — one chop into every tree within `AXE_CHOP_R` (26 px) of where the head stopped,
+  the struck tile included. It is the same blow an E swing lands (`chopTree`, js/actions.js —
+  gold, stump, fell payout, loot roll and the rare pine's jackpot), routed through `contest()`
+  on the same `work:` key, so an axe and a swing on one tile in one step are one chop. Three
+  throws fell a pine, and they fell its neighbours with it.
+
 ### Firing
 
 `fireTool(p)` is the one entry point — the falling edge of `input.fire`, for every slot alike:
@@ -213,8 +268,8 @@ scales the whole sum** (`drawDmgMul`, [The draw](#the-draw)) and then the modifi
 so gear, cards and levels all still matter to a weapon they know nothing about, and a spammed
 level-twelve bow is still a weak one. Speed and life come from `shotFlight(b, m, pw)`, the same
 envelope the aim line measures. The shot goes into the same `arrows` array as before, carrying
-`path`, `solid`, `ff`, `type`, `burn`, `burnDps`, `cinder`, `lit` and `col` alongside the old
-fields.
+`path`, `solid`, `ff`, `kb`, `reach`, `body`, `impact`, `type`, `burn`, `burnDps`, `cinder`,
+`lit` and `col` alongside the old fields.
 
 `toolReady(p)` is the only refusal besides the cycle: an empty slot and a tool with no bit light
 enough to throw are both dry, and `updatePlayer` refuses the draw on both the same way
@@ -233,6 +288,7 @@ carries no `path` and falls straight through.
 | `lob` | drag on both axes plus `LOB_FALL` gravity: a heavy throw that arcs down and lands |
 | `boomer` | out on the bearing slowing to nothing, then hauled back to whoever threw it; the flight ends when it gets home |
 | `orbit` | a ring of `ORBIT_R` around the shooter, eased out over the first 0.25 s and swept at its own speed |
+| `curve` | the bearing sweeps one way at `CURVE_TURN` (3.4 rad/s): a scythe, the way a thrown axe goes |
 
 Three per-bit rules land in the arrow update in `updatePlay`: `a.solid !== false` gates the tile
 test (that is the whole of "never hits ground"), `a.ff` lifts the team check on players and worker
@@ -469,8 +525,8 @@ req      the node beneath this one; null on the tier-0 row
 
 That is the whole graph, and nothing at runtime reads it — the edge exists so the arsenal draws as
 lineages rather than as a heap. Because each lineage happens to be one root plus at most two
-children, it lays out as a 7×3 grid — one **row** per lineage, one **column** per tier, and every
-edge a horizontal line. The seven lineages:
+children, it lays out as an 8×3 grid — one **row** per lineage, one **column** per tier, and every
+edge a horizontal line. The eight lineages:
 
 | root (WORN) | KEEN | GILDED |
 | --- | --- | --- |
@@ -481,6 +537,7 @@ edge a horizontal line. The seven lineages:
 | HOOKSHOT | WISP | LONGSHOT |
 | SPEEDUP | FLAME | PYRE |
 | SPLITTER | DUPLICATE | CINDER BURST |
+| BIG FIST | BIG AXE | TELEPORT REQUEST |
 
 **`LOOT_POOL` is every kind at or under a tier**, split into tools and bits, and it is built once
 by `rebuildLootPool()` at boot rather than filtered per roll, because a drop happens in the middle
@@ -617,9 +674,16 @@ the cycle still to run before the next — dealt by the shot itself rather than 
 what a player sees (a stubby line, a pale meter) is exactly what they get. Bots read the same
 curve: `updateAI` holds to `bowCharge × k` before loosing.
 
-A shot in flight is drawn in its own pass (using `ex`/`ey`). Two bits have bodies of their own —
-a `lob` tumbles as a spinning 5×5 block (`drawTumbler`) and an `orbit` is a breathing rimmed core
-with no bearing at all (`drawMote`) — and everything else is **the one arrow body**: `ARROW_MAP`
+A shot in flight is drawn in its own pass (using `ex`/`ey`). A bit may name a **body** of its own
+and `BIT_BODY` (js/render.js) is the only place those names mean anything, so a new silhouette is
+one row in `BITS` and one row there rather than an `if` in the shots pass: `tumble` is a spinning
+5×5 block (`drawTumbler`, the log), `mote` a breathing rimmed core with no bearing at all
+(`drawMote`, the wisp), `fist` and `axe` are ASCII maps in the arrow's own language stamped as a
+**block** rather than a spine (`FIST_MAP`/`AXE_MAP` → `drawSwungBody`, rimmed by `paintRimmed` —
+the fist's jagged leading edge is its knuckles, the axe is a four-px wedge on a six-px haft), and
+`warp` is not a shape at all: three bars snapping to fresh angles every `WARP_FLICK` (0.03 s)
+over a white core, so the thing crossing the snow visibly does not obey it. Everything else is
+**the one arrow body**: `ARROW_MAP`
 (js/actions.js), an ASCII master parsed once into `ARROW_BODY` — a white tip, a tapered flint
 head, a 1 px collar in the bit's own `col` (the bit is readable from the collar; the shaft never
 recolours), a single-gold shaft, and swept swallow-tail feathers in `TEAMS[a.team].mark` edged
@@ -744,7 +808,7 @@ is not a coincidence to be re-established per feature; it is what these funnels 
 
 | Reach for | When |
 | --- | --- |
-| `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, cause, ambush, crit, burn, burnDps }`. Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
+| `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, kbMul, cause, ambush, crit, burn, burnDps }` — `kb` the absolute px/s of shove an ability picks, `kbMul` the multiplier on whatever shove that kind takes anyway ([knockback](#knockback-one-number-thrown-at-three-weights)). Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
 | `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — slots, wildlife **and** bots in one list |
 | `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps. A lasting ground *condition* (a crater) wants `unitsNear` — a condition is not a hit, and is not dodged by having just taken one |
 | `stunUnit` `rootUnit` `slowUnit` `netUnit` `markUnit` `igniteUnit` | the one place each state is written. Each takes the worse/longer of what is already on the body |
