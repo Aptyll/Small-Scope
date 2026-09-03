@@ -2365,13 +2365,13 @@ function tipClassAb(i, cls) {
   if (cls == null) d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
   return d;
 }
-// A TECH NODE on the title screen's tree - the one tooltip that is not about
-// something you are holding, so it describes the KIND itself and ends on the
+// A KIND on the wiki's ARSENAL page - the one tooltip that is not about
+// something you are holding, so it describes the kind itself and ends on the
 // one thing the page knows about you: whether you have ever held one.
-function tipTech(id) {
+function tipKind(id) {
   const cell = toolIdOf(id) ? makeTool(toolIdOf(id)) : null;
   const d = cell ? tipTool(cell) : tipBit(bitIdOf(id), null);
-  // A tree node describes the KIND, not a tool somebody is holding, so the
+  // A wiki row describes the KIND, not a tool somebody is holding, so the
   // "what is loaded in it" half goes: no bit list, and the slot count is the
   // capacity rather than 0-out-of-capacity.
   d.notes.length = 0;
@@ -2391,9 +2391,9 @@ function tipAt(mx, my) {
   if (window.DBG.hideUI || !mouse.inside) return null;
   if (state.mode === 'title') {
     const m = state.menu;
-    if (m.screen === 'tech' && m.techT >= 1) {
-      const t = techHit(mx, my);
-      return t ? tipTech(t) : null;
+    if (m.screen === 'wiki' && m.wikiT >= 1) {
+      const h = wikiHit(mx, my);
+      return h && h.kind === 'row' ? tipKind(h.id) : null;
     }
     // the stage's ability wells on class select: the strip's own tooltip,
     // readable before the class is ever locked

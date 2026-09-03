@@ -386,7 +386,7 @@ So the bottom tier lies around loose and the good stuff is in the treeline's che
 comes out **empty** — its bits are the next thing to find.
 
 The pool a roll draws from is the **whole table** at or under that tier: every kind is unlocked for
-every profile alike, so any match can roll any of them. See [the tech tree](#the-tech-tree).
+every profile alike, so any match can roll any of them. See [the wiki](#the-wiki).
 
 ### Tiers, and how a find reads
 
@@ -507,48 +507,50 @@ caster has since gone down credits nobody (`abCredit`) rather than a corpse. Bot
 a held key and a terrain read the ladder does not try to fake). The strip's ability wells (icons,
 cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.md).
 
-## The tech tree
+## The wiki
 
-Every tool and every bit is a node, and **every node is unlocked**. The tree is not a shop, not a
-skill tree and not a gate: it is the picture of the arsenal the map is allowed to hand you, and the
-map is allowed to hand you all of it — a profile on its first flight rolls exactly what one five
-hundred matches old rolls, which is the point (**PATCH 2.08**; before it, nodes were researched
-with lifetime gold and a fresh profile played out of a much smaller pool). It is reached from the
-main menu's **TECH TREE** plank (`m.screen = 'tech'`, its own `techT` ease, ESC back); the page
-itself is in [rendering.md](rendering.md#the-tech-tree-screen).
+The main menu's **WIKI** plank (`m.screen = 'wiki'`, its own `wikiT` ease, ESC back) opens the
+game written down: one surface, a tab bar of **pages**, each a scrolling column of blocks. The
+page itself — the slab, the tabs, the blocks, the rail — is in
+[rendering.md](rendering.md#the-wiki-screen); this section is what the pages *say* and where
+the numbers come from. Every number on a page is read off the constant the sim spends, never
+typed twice, so a retune can never leave the wiki lying.
 
-The table is `TECH` in [js/tools.js](../../js/tools.js), and it carries exactly one edge per node:
+- **BEASTS** — the meadow's four kinds, each drawn wearing the frame it wears in the snow; a
+  legend naming the frame's parts once (the level plate, health, the stamina bar that is a
+  wolf's threat bar, the `!` noticed mark); and per kind a line of what it does and a growth
+  table — HEALTH and KILL GOLD at levels 1, 6 and 12 (`WIKI_LEVELS`) — from `ANIMAL_HP` /
+  `ANIMAL_LV_HP` and `YIELD` / `ANIMAL_LV_GOLD` through the same arithmetic `makeAnimal` and
+  `animalDies` use ([Wildlife](#wildlife)). The frames on the page wear the level a spawn would
+  be dealt right now (`animalLevel()`).
+- **ARSENAL** — every tool and bit, and **every one is unlocked**: the page is not a shop, not a
+  skill tree and not a gate but the picture of what the map may hand you, and it may hand you
+  all of it — a profile on its first flight rolls exactly what one five hundred matches old
+  rolls (**PATCH 2.08**; before it, kinds were researched with lifetime gold and a fresh profile
+  played out of a much smaller pool). Three tables — TOOLS (rate of fire, bit slots, max
+  weight), BITS (damage, weight, speed, lifespan, flight) and MODIFIERS (the first sentence of
+  the blurb) — worn to gilded, each kind's icon on its own tier plate with the blue pip for "you
+  have held one" (`PROFILE.techSeen`), and a hover raising the full card in the tooltip
+  (`tipKind`, ui.js). Until PATCH 2.90 this plank was a **TECH TREE**: the same kinds as an 8×3
+  grid of lineages, nothing written down but the tier names, every number read one hover at a
+  time. The table replaced it because a page for learning is a page for reading numbers.
 
-```
-req      the node beneath this one; null on the tier-0 row
-```
-
-That is the whole graph, and nothing at runtime reads it — the edge exists so the arsenal draws as
-lineages rather than as a heap. Because each lineage happens to be one root plus at most two
-children, it lays out as an 8×3 grid — one **row** per lineage, one **column** per tier, and every
-edge a horizontal line. The eight lineages:
-
-| root (WORN) | KEEN | GILDED |
-| --- | --- | --- |
-| SHORTBOW | RECURVE BOW | LONGBOW |
-| SLING | HORN BOW | — |
-| ARROW | CARE ARROW | ICE LANCE |
-| BARBED SHOT | THROWING LOG | HEFT |
-| HOOKSHOT | WISP | LONGSHOT |
-| SPEEDUP | FLAME | PYRE |
-| SPLITTER | DUPLICATE | CINDER BURST |
-| BIG FIST | BIG AXE | TELEPORT REQUEST |
+The `TECH` table in [js/tools.js](../../js/tools.js) still carries the kinds and exactly one
+edge per node — `req`, the node beneath it, null on the tier-0 row. Nothing at runtime reads the
+edge: it is the arsenal's lineage on paper (each root plus at most two children — SHORTBOW →
+RECURVE BOW → LONGBOW, ARROW → CARE ARROW → ICE LANCE, BARBED SHOT → THROWING LOG → HEFT, and so
+on), the ARSENAL page lists kinds in its order, and a future page may want to draw it.
 
 **`LOOT_POOL` is every kind at or under a tier**, split into tools and bits, and it is built once
 by `rebuildLootPool()` at boot rather than filtered per roll, because a drop happens in the middle
 of a swing. Nothing narrows it and nothing can empty it, so the tier is the only thing a roll asks
 about; `dropLoot` still returns null on an empty pool rather than throwing.
 
-`PROFILE.markSeen(id)` is all a profile still remembers about the tree, and it gates **nothing**:
-it is fired for the local player only (`noteSeen(p, type)`) from the drop pickup and from the
-loadout they fly in with, and it puts a blue pip on the node. The page doubles as a record of what
-you have actually met in the snow — which, with nothing to research, is the only thing on it that
-is about you.
+`PROFILE.markSeen(id)` is all a profile still remembers about the arsenal, and it gates
+**nothing**: it is fired for the local player only (`noteSeen(p, type)`) from the drop pickup and
+from the loadout they fly in with, and it puts the blue pip on the ARSENAL row. The page doubles
+as a record of what you have actually met in the snow — which, with nothing to research, is the
+only thing on it that is about you.
 
 Storage is [js/profile.js](../../js/profile.js) and nothing here writes a key — see
 [architecture.md](architecture.md#profilejs).

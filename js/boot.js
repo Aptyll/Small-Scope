@@ -1366,7 +1366,10 @@ window.DBG = {
   // match drops from - which is the whole arsenal, the same for every profile.
   // `wipeTech` forgets what this profile has HELD (the blue pips), which is
   // all a profile still remembers about the tree.
-  TECH, TECH_ROWS, techNodeRect, techHit, rebuildLootPool, LOOT_POOL,
+  TECH, rebuildLootPool, LOOT_POOL,
+  // the wiki: its pages, the live layout (tabs, rows, window, rail), what is
+  // under a point, the open page's scroll, and the way in from the plank
+  WIKI_PAGES, wikiLayout, wikiHit, wikiScrollBy, wikiSetTab, beginWiki, leaveWiki,
   wipeTech: () => PROFILE.clearTech(),
   // The merchant's counter (js/shop.js): the live market and its two goods,
   // the rolled stock, the panel's geometry, and every trade without the

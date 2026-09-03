@@ -57,11 +57,12 @@ cast the body visibly performs, and effects drawn plainly for both sides: the ga
 first, sneaky second. [Class abilities](gameplay.md#class-abilities-keys-1-4),
 [Classes](multiplayer.md#classes).
 
-**The whole arsenal is on the table from the first match.** A **tech tree** on the main menu lays
-every tool and bit out in its lineages, and all of it is unlocked: what your fiftieth match may
+**The whole arsenal is on the table from the first match.** A **wiki** on the main menu writes
+every tool and bit down with its numbers, and all of it is unlocked: what your fiftieth match may
 drop is exactly what your first one may drop, so a new player and a veteran play the same game and
-a find is a find because of what it *is*, never because of what you have ground out.
-[The tech tree](gameplay.md#the-tech-tree).
+a find is a find because of what it *is*, never because of what you have ground out. The same
+wiki is where the game explains itself — the beasts, what a level does to them — one page a
+subject, so the snow never has to. [The wiki](gameplay.md#the-wiki).
 
 **The draw is the ammunition.** There is no quiver: what a shot is worth — how far, how fast, how
 hard — is how long the string was held, and the tool's own cycle is all that sits between one

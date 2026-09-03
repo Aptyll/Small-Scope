@@ -144,17 +144,17 @@ const state = {
     // class, per-portrait hover eases (a seed pair - updateTitle's `|| 0`
     // grows it with the roster, since CLASSES loads after this file), swap
     // pop, lock-in hold.
-    // screen: 'menu' | 'select' | 'gear' | 'tech'. 'gear' is the pop-up over
+    // screen: 'menu' | 'select' | 'gear' | 'wiki'. 'gear' is the pop-up over
     // the still-lit select screen (gearT its ease, grow the keyboard row,
-    // gearFxT/gearFxSlot the equip flash); the tech tree is a surface of its
-    // own on techT, with tsel the keyboard cursor into its flat node list.
+    // gearFxT/gearFxSlot the equip flash); the wiki is a surface of its own
+    // on wikiT, with wikiTab the open page (menu.js `the wiki`).
     screen: 'menu', screenT: 0, csel: 0, chover: [0, 0], cswapT: 1, lockT: 0,
     // countT: seconds left of PLAY's countdown to the eagle (0 = not counting),
     // countN the last whole second it ticked on (-1 = never pressed, 0 = it
     // ran out); dhover the three difficulty notches' hover eases (menu.js
     // `class select`)
     countT: 0, countN: -1, dhover: [0, 0, 0],
-    gearT: 0, grow: 0, gearFxT: 0, gearFxSlot: 0, techT: 0, tsel: 0 },
+    gearT: 0, grow: 0, gearFxT: 0, gearFxSlot: 0, wikiT: 0, wikiTab: 0 },
   intro: 0,            // seconds left of the title -> drop / landing -> play transition (0 = none)
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from

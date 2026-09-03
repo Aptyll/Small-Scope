@@ -338,14 +338,14 @@ compares numbers. It is a carve-out and not a licence — every well still has t
 with the panel shut, which is what the tier plates, the bit column's pips and the cooldown wipes are for.
 
 It is bottom **left** because that is the corner the pointer is furthest from while it hovers the
-backpack, the weapon strip or a tech node, so the panel never sits under the hand reading it.
+backpack, the weapon strip or a wiki row, so the panel never sits under the hand reading it.
 
 **`tipAt(mx, my)` is the only source**, and it asks the same hit-testers, in the same order, that
 the mousedown handler does — the character panel's gear wells, then the bit column, then the
 weapon strip, then the backpack —
 so what the panel describes and what a click would do can never be two different things. A live
 drag outranks all of them: whatever is on the cursor describes itself. It answers in two modes
-only, `play` and `title` (the tech tree); every other mode returns null.
+only, `play` and `title` (the wiki's ARSENAL rows); every other mode returns null.
 
 `tipResolve()` runs **once per frame in `render()`, before `renderUI`**, because the event feed
 lays itself out around the result: `renderEventLog` steps up by `tipLift()` exactly as it already
@@ -363,31 +363,43 @@ The builders, one per kind: `tipTool` (rate of fire, bit slots, max weight, then
 then only the flags that are *true*, because four rows of NO would drown the three that matter),
 `tipStack` (food, cards), `tipGear`, `tipClassAb` (a strip
 ability well in play, or class select's stage wells with `cls` passed — the in-play cooldown
-and cast-hint rows only appear in play), and `tipTech`, which strips the "what is loaded in it"
+and cast-hint rows only appear in play), and `tipKind` (a wiki row), which strips the "what is loaded in it"
 half and ends on whether this profile has ever held one.
 
-### The tech tree screen
+### The wiki screen
 
-`m.screen = 'tech'`, entered from the main menu's TECH TREE plank and eased in on its own `techT`
-(the chrome ducks under it the way it does under class select). The `TECH` table already
-carries the only edge in the graph, and it lays out as eight lineages of at most three, so the
-page is an **8×3 grid**: one row per lineage, one column per tier, every edge a horizontal line
-from a node to the one it opens. The row pitch is what the page can spend: `TECH_ROWH` (22) and
-`y0` were both tightened when the eighth lineage arrived, so the rows still fall between the tier
-names and the ESC line.
+`m.screen = 'wiki'`, entered from the main menu's WIKI plank and eased in on its own `wikiT`
+(the chrome ducks under it the way it does under class select). One surface: the title and its
+gold rule, then a translucent frost slab (`drawMenuSlab`, up to `WIKI_W_MAX` = 400 wide,
+`WIKI_H` = 200 tall, centred, narrowing with the view) with a **tab bar** of pages under its top
+edge in the settings slab's navbar grammar — the open page in gold over a gold underline, the
+rest dim until hovered — and a **content window** under a rule that the open page scrolls
+through when it outgrows it: the wheel, up/down (W/S), and an iron rail on the right with a gilt
+thumb (`drawWikiRail`; clicking the rail pages). Left/right (A/D) or a click switch pages; ESC
+leaves. What the pages say is [gameplay.md](gameplay.md#the-wiki).
 
-Every node is unlocked, so there is one node state and it is the lit one: the full tier plate the
-same item wears in a bag cell (`tierPlate`, plus `tierShine` on the top tier), rimmed in the
-tier's own ink under the pointer or the keyboard cursor and lifted a pixel under the pointer. A
-blue pip in the corner is `PROFILE.techSeen` — "you have held one of these" — the only thing on the
-page that is about you rather than about the arsenal. Every edge is gold with a bead running the
-wire, because every lineage is live.
+A page is data. `WIKI_PAGES` is `{ id, label, build() }` and `build` returns the page's
+**blocks** top to bottom — `line` (a sentence), `rule` (a gold rule), `head` (a section name
+with its column heads over their columns), `row` (a kind on its tier plate with its numbers in
+the columns, `WIKI_TOOL_COLS` / `WIKI_BIT_COLS` / `WIKI_MOD_COLS` naming each column's label,
+width and getter), `legend` (the deer wearing the overhead frame, a leader from each part of it
+to its name) and `beast` (a kind standing on its snow beside its growth table, `WIKI_BEASTS`) —
+each with a fixed height, built once (`wikiBlocks`). `wikiLayout()` is the single source of
+every rect: the slab, the tab cells, the window, each block's y (pre-scroll), the scroll bound,
+the rail and its thumb; `wikiHit(mx, my)` reads it back as a tab, a row (carrying its kind id,
+which is what the tooltip asks for) or the rail, so the hover, the click and the tooltip can
+never disagree. Per-page scroll lives in `wikiScroll` beside the settings slab's `setScroll`;
+the open page is `menu.wikiTab`. A new page is one table entry and one builder.
 
-Nothing on the page is written down but the three tier names: a node's identity and its stats are
-read through the **tooltip** any hover raises, which is a large part of why that panel exists.
-Nothing here is bought — a click only walks the keyboard cursor over to the node the pointer is
-already reading. `techHit` is shared by the hover, the click and the tooltip, so the three can
-never point at different nodes.
+`drawWikiBeast` draws a kind exactly as `drawAnimal` hangs its frame in the world — the same
+`drawHealthBar`, `drawLevelBadge` and `drawSenseMark` calls at the same offsets over the same
+sprite, on a low snow mound — so the page teaches the frame by showing it, and a change to the
+frame in the world changes it on the page. A wolf's threat bar is shown part-filled, since bare
+track says nothing; a bird wears nothing, as in the world. An ARSENAL row is the kind's icon on
+the tier plate a bag cell wears (`tierPlate`, `modPlate`, `tierShine`), rimmed and lifted a pixel
+under the pointer, the blue pip for `PROFILE.techSeen`, its name in the tier's ink, a dotted
+leader to its numbers. Nothing here is bought or pressed: a click only opens a tab or pages the
+rail.
 
 ### The hud strip
 
@@ -1027,7 +1039,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 `BORDER_MAX + 6` tiles clear of the forest. Everything lives in the `main menu` banner and on
 `state.menu`:
 
-- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / TECH TREE / SETTINGS —
+- **Items** `MENU_ITEMS` (SINGLEPLAYER / MULTIPLAYER / PRACTICE TOOL / WIKI / SETTINGS —
   `menuFrozen(i)` is true for MULTIPLAYER always, and for PRACTICE TOOL until the profile has
   broken it open: frozen planks are drawn sealed under an ice glaze by
   `drawMenuButton(..., frozen)`, never selectable or activatable;
@@ -1046,7 +1058,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   plank is a live item whose activation is `beginPractice()` (the reroll's whiteout onto
   `?practice=1`, the [practice arena](world.md#the-practice-arena)). SINGLEPLAYER leads
   the column as the first live way in; MULTIPLAYER sits as a quiet coming-soon block;
-  [TECH TREE](#the-tech-tree-screen) and SETTINGS are the two live utilities at the foot) plus
+  [WIKI](#the-wiki-screen) and SETTINGS are the two live utilities at the foot) plus
   the seed row (`SEED N` + an 11×11 die) as one more selectable, stacked
   `MENU_PITCH` apart from `MENU_Y0`. **`menu.hover` has one cell per rect** — items *plus* the
   seed row — and its length is a literal in core.js, a file that loads before `MENU_ITEMS`

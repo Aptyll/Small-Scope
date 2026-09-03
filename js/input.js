@@ -247,6 +247,7 @@ canvas.addEventListener('wheel', (e) => {
   if (state.mode === 'title') {
     if (state.menu.panel === 'patch') { e.preventDefault(); patchScrollBy(e.deltaY > 0 ? 16 : -16); }
     else if (state.menu.panel === 'settings') { e.preventDefault(); settingsScrollBy(e.deltaY > 0 ? 14 : -14); }
+    else if (state.menu.screen === 'wiki' && state.menu.wikiT >= 1) { e.preventDefault(); wikiScrollBy(e.deltaY > 0 ? 14 : -14); }
     return;
   }
   if (state.mode !== 'play') return;

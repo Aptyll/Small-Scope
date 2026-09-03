@@ -54,7 +54,7 @@ lifetime stats, which kinds it has ever held, and the settings that live under i
 goes through `PROFILE`, so putting the profile on a server stays a one-file change; never read or
 write a storage key directly. **A match reads nothing back out of a profile**: the whole arsenal is
 unlocked for everybody, so `LOOT_POOL` is the same on a first flight as on a five-hundredth
-([tech tree](docs/dev/gameplay.md#the-tech-tree)).
+([the wiki](docs/dev/gameplay.md#the-wiki)).
 
 All game state lives in module-scope singletons (`state`, `settings`, `players`) and the entity
 arrays beside them; `player`/`inv` are the **local slot only**, and carried goods are `player.bag`.

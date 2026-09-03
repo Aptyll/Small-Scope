@@ -71,7 +71,7 @@ eagle, gating the scripted first flight that rides the landing), the one-shot `p
 knocks at the title, after which the plank stays a live menu item), `bestLap`
 (`bestLap()`/`setBestLap()`: the ice parkour's all-time record, the one thing the practice
 arena writes — [world.md](world.md#the-practice-arena)), the
-[tech tree](gameplay.md#the-tech-tree)'s `tech.seen` (`tech.done` rides along unread) and the
+[arsenal](gameplay.md#the-wiki)'s `tech.seen` (the wiki's "held one" pips; `tech.done` rides along unread) and the
 `settings` object that used to live under a key of its own — as one JSON blob under
 `softfall.profile`. **It is the only file in the project that touches `localStorage`**, and that
 is the whole point of it: swapping the private `read()` / `write()` pair for requests turns the

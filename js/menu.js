@@ -11,7 +11,7 @@
 const INTRO_T = 1.6;    // title -> play: tint dissolves, camera settles, HUD slides in
 const HUD_IN_T = 0.7;   // the HUD slide occupies the last part of the intro
 const PANEL_SLIDE_T = 0.32;
-const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'TECH TREE', 'SETTINGS'];
+const MENU_ITEMS = ['SINGLEPLAYER', 'MULTIPLAYER', 'PRACTICE TOOL', 'WIKI', 'SETTINGS'];
 // sealed under ice until they exist: inert to hover, keys and clicks.
 // MULTIPLAYER (1) is solid ice - a coming-soon plank. PRACTICE TOOL (2) is
 // sealed the same way but its ice is BREAKABLE, and it says so: one crack web
@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.89'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.90'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.90', 'THE TECH TREE PLANK IS NOW A WIKI: A BEASTS PAGE SHOWS EVERY ANIMAL WEARING ITS FRAME WITH ITS HEALTH AND KILL GOLD AT LEVELS 1, 6 AND 12, AND AN ARSENAL PAGE LISTS EVERY TOOL AND BIT WITH ITS NUMBERS WRITTEN DOWN.'],
   ['2.89', 'A KILL PAYS FOR THE ANIMAL\'S LEVEL: A TENTH MORE GOLD A LEVEL, SO A LATE MEADOW IS RICHER AS WELL AS HARDER.'],
   ['2.88', 'EVERY RABBIT, DEER AND WOLF WEARS A LEVEL PLATE AND POPS A "!" THE MOMENT IT SEES YOU, THE MEADOW RESTOCKS AT THE TABLE\'S LEVEL, AND A HOVERED DEN SHOWS THE CLOCK TO ITS NEXT WOLF.'],
   ['2.87', 'PRESS PLAY AGAIN DURING THE CLASS SELECT COUNTDOWN AND THE EAGLE COMES AT ONCE - THE SECOND PRESS SKIPS THE COUNT.'],
@@ -342,7 +343,7 @@ function menuActivate(i) {
   SFX.unlock();
   if (i === 0) beginSelect();
   else if (i === 2) beginPractice();
-  else if (i === 3) beginTech();
+  else if (i === 3) beginWiki();
   else if (i === 4) openMenuPanel('settings');
   else if (i === MENU_ITEMS.length) rerollWorld();
 }
@@ -403,7 +404,7 @@ function menuKey(e) {
   const m = state.menu;
   const k = e.key.toLowerCase();
   if (state.fade) return; // a reroll is already leaving
-  if (m.screen === 'tech') { if (m.techT >= 1) techKey(k); return; }
+  if (m.screen === 'wiki') { if (m.wikiT >= 1) wikiKey(k); return; }
   if (m.screen === 'gear') { if (m.gearT >= 1) gearKey(k); return; }
   if (m.screen === 'select') { if (m.screenT >= 1 && m.gearT <= 0) selectKey(k); return; }
   if (m.panel) {
@@ -423,7 +424,7 @@ function menuClick() {
   const m = state.menu;
   SFX.unlock();
   if (state.fade) return;
-  if (m.screen === 'tech') { techClick(); return; }
+  if (m.screen === 'wiki') { wikiClick(); return; }
   if (m.screen === 'gear') { gearClick(); return; }
   if (m.screen === 'select') { selectClick(); return; }
   if (m.panel) {
@@ -530,9 +531,9 @@ function updateTitle(dt) {
   m.screenT = Math.max(0, Math.min(1, m.screenT + (st ? 1 : -1) * dt / 0.35));
   const gt = m.screen === 'gear' ? 1 : 0;
   m.gearT = Math.max(0, Math.min(1, m.gearT + (gt ? 1 : -1) * dt / 0.3));
-  // the tech tree is a surface of its own, not a third state of the pick
-  // pair - it eases in over the same chrome on a clock of its own
-  m.techT = Math.max(0, Math.min(1, m.techT + (m.screen === 'tech' ? 1 : -1) * dt / 0.35));
+  // the wiki is a surface of its own, not a third state of the pick pair -
+  // it eases in over the same chrome on a clock of its own
+  m.wikiT = Math.max(0, Math.min(1, m.wikiT + (m.screen === 'wiki' ? 1 : -1) * dt / 0.35));
   m.cswapT = Math.min(1, m.cswapT + dt / 0.22);
   const sh = m.screen === 'select' && m.screenT >= 1 ? selectHit() : -1;
   for (let i = 0; i < CLASSES.length; i++) {
@@ -2270,157 +2271,338 @@ function renderGear(now, a) {
   ctx.globalAlpha = 1;
 }
 
-// ---- the tech tree screen: the whole arsenal, laid out -------------------
-// Entered from the TECH TREE plank. Every node is unlocked - the world may
-// drop all of it for anybody - so this page is not a shop and nothing on it
-// is bought: it is the arsenal you can be handed, in one picture. `TECH`
-// (js/tools.js) already carries the only edge in the graph - each node's
-// `req` - and it happens to lay out as eight clean lineages of at most three,
-// so the page is an 8x3 grid: one ROW per lineage, one COLUMN per tier, and
-// every edge is a horizontal line from a kind to the kind a step above it.
-// Nothing here is written down but the three tier names; a node's identity
-// and its stats are read through the tooltip (bottom left) that any hover
-// raises, which is the whole reason that panel exists.
-// The row pitch is what the page can spend: TECH_ROWS.length rows have to
-// fall between the tier names above them and the ESC line at toy+254, so a
-// new lineage tightens the pitch rather than running off the bottom.
-const TECH_CELL = 20, TECH_COLW = 96, TECH_ROWH = 22;
-// the lineages, built once from TECH: a tier-0 root, then whatever it opens
-const TECH_ROWS = (() => {
-  const kids = {};
-  for (const n of TECH) if (n.req) (kids[n.req] = kids[n.req] || []).push(n.id);
-  return TECH.filter((n) => !n.req).map((root) => {
-    const row = [root.id];
-    for (let cur = root.id; kids[cur] && kids[cur].length; cur = kids[cur][0]) row.push(kids[cur][0]);
-    return row;
-  });
-})();
-function techLayout() {
+// ---- the wiki: the game written down, one page a subject -----------------
+// Entered from the WIKI plank. One surface eased in over the chrome on its
+// own clock (wikiT), a tab bar of PAGES under the title (the settings slab's
+// navbar grammar), and under that a content window the open page scrolls
+// through when it outgrows it - wheel, up/down, the rail on the right.
+// A page is data: WIKI_PAGES is {id, label, build()}, build returning the
+// page's BLOCKS top to bottom (a heading, a line, a rule, a beast card, a
+// table row), each with a fixed height, so the layout, the draw, the hit
+// test and the scroll bound all read one list and a new page is one table
+// entry and one builder, never new plumbing. Nothing here is bought, unlocked
+// or researched. The ARSENAL page is what the tech tree was for: every kind
+// in a table with its numbers written down, tools then bits then modifiers,
+// worn to gilded, every one of them droppable from the first match (LOOT_POOL
+// is built off the tier alone); a hover still raises the full card in the
+// tooltip. The BEASTS page is the meadow's four kinds - each drawn wearing
+// the frame it wears in the snow - and what a level does to their health
+// and to the gold a kill pays, at levels 1, 6 and 12, read off the same
+// constants the sim spends (ANIMAL_HP, ANIMAL_LV_HP, YIELD, ANIMAL_LV_GOLD,
+// js/wildlife.js and js/core.js), so the page can never disagree with the
+// game.
+const WIKI_W_MAX = 400;
+const WIKI_H = 200;           // the slab; the window is inside it
+const WIKI_LEVELS = [1, 6, 12]; // the three columns a beast's growth is shown at
+const wikiScroll = {};        // px scrolled per page id
+
+// the beast cards: kind, the frame's bar width (drawAnimal's), a line of
+// what it does - every number in it read off the sim's own constants
+const WIKI_BEASTS = [
+  { kind: 'rabbit', name: 'RABBIT', bw: 8,
+    line: () => 'BOLTS AT ' + FLEE_SIGHT.rabbit + ' PX. ONE JINK CHARGE EVERY ' + RABBIT_DODGE_CD + ' S. DROPS A BERRY.' },
+  { kind: 'deer', name: 'DEER', bw: 16,
+    line: () => 'BOLTS AT ' + FLEE_SIGHT.deer + ' PX. SPRINTS ' + DEER_SPRINT_T + ' S AT ' + DEER_SPRINT + ', THEN ' + PREY_RUN.deer + '.' },
+  { kind: 'wolf', name: 'WOLF', bw: 12,
+    line: () => 'A PACK OF 4. BITES ' + WOLF_BITE_DMG + ' +' + WOLF_LV_DMG + ' A LEVEL. SEES ' + WOLF_SIGHT + ' PX, ' + Math.round(WOLF_SIGHT * 1.75) + ' AT NIGHT.' },
+  { kind: 'bird', name: 'BIRD', bw: 0,
+    line: () => 'A FLOCK OF 9. UP AT ' + BIRD_FLUSH + ' PX. NO BARS - EVERY HIT IS A KILL.' },
+];
+// what a beast is at a level: the sim's own arithmetic (makeAnimal, animalDies)
+function wikiBeastHp(kind, lv) { return (ANIMAL_HP[kind] || 8) + (ANIMAL_LV_HP[kind] || 0) * (lv - 1); }
+function wikiBeastGold(kind, lv) { const y = YIELD[kind]; return Math.round(y.coins * y.each * (1 + ANIMAL_LV_GOLD * (lv - 1))); }
+
+// the arsenal tables: one column set per kind of thing, each column a label,
+// a width and how to read the number off the kind's own record
+const WIKI_TOOL_COLS = [
+  { label: 'RATE', w: 30, get: (id) => tipSec(TOOLS[id].rof * TOOL_ROF_STEP) },
+  { label: 'SLOTS', w: 28, get: (id) => String(TOOLS[id].cap) },
+  { label: 'MAX WT', w: 32, get: (id) => String(TOOLS[id].tensile), col: '#f2cc6a' },
+];
+const WIKI_BIT_COLS = [
+  { label: 'DMG', w: 22, get: (id) => String(BITS[id].dmg), col: '#e0637a' },
+  { label: 'WT', w: 18, get: (id) => String(BITS[id].weight), col: '#f2cc6a' },
+  { label: 'SPD', w: 22, get: (id) => String(BITS[id].speed) },
+  { label: 'LIFE', w: 30, get: (id) => tipSec(BITS[id].life) },
+  { label: 'FLIGHT', w: 44, get: (id) => TIP_PATH[BITS[id].path] || BITS[id].path, colOf: (id) => BITS[id].col },
+];
+const WIKI_MOD_COLS = [
+  { label: 'EFFECT', w: 180, get: (id) => BITS[id].blurb.split('. ')[0].replace(/\.$/, ''), col: TIP_DIM },
+];
+// every kind of one sort, worn to gilded, in the order the TECH table names them
+function wikiKinds(sort) {
+  const ids = TECH.map((n) => n.id).filter((id) => sort === 'tool' ? !!toolIdOf(id)
+    : sort === 'bit' ? !!bitIdOf(id) && BITS[bitIdOf(id)].proj : !!bitIdOf(id) && !BITS[bitIdOf(id)].proj);
+  return ids.sort((p, q) => itemTier(p) - itemTier(q));
+}
+
+const WIKI_PAGES = [
+  { id: 'beasts', label: 'BEASTS', build() {
+    const b = [];
+    b.push({ kind: 'line', h: 9, text: 'EVERY BEAST IS DEALT THE TABLE\'S AVERAGE HERO LEVEL WHEN IT SPAWNS, AND KEEPS IT.', col: '#cfe0ff' });
+    b.push({ kind: 'line', h: 9, text: 'A LEVEL IS MORE HEALTH TO SHOOT THROUGH, AND MORE GOLD FOR THE KILL.', col: TIP_DIM });
+    b.push({ kind: 'legend', h: 58 });
+    b.push({ kind: 'rule', h: 8 });
+    for (const bs of WIKI_BEASTS) b.push({ kind: 'beast', h: 46, beast: bs });
+    return b;
+  } },
+  { id: 'arsenal', label: 'ARSENAL', build() {
+    const b = [];
+    b.push({ kind: 'line', h: 9, text: 'EVERY TOOL AND EVERY BIT DROPS FOR EVERYBODY FROM THE FIRST MATCH. NOTHING IS RESEARCHED.', col: '#cfe0ff' });
+    b.push({ kind: 'line', h: 9, text: 'A TOOL THROWS THE BITS LOADED IN IT, IN ORDER, AS FAST AS ITS RATE ALLOWS.', col: TIP_DIM });
+    for (const [title, sort, cols] of [['TOOLS', 'tool', WIKI_TOOL_COLS], ['BITS', 'bit', WIKI_BIT_COLS], ['MODIFIERS', 'mod', WIKI_MOD_COLS]]) {
+      b.push({ kind: 'gap', h: 4 });
+      b.push({ kind: 'head', h: 12, text: title, cols });
+      for (const id of wikiKinds(sort)) b.push({ kind: 'row', h: 14, id, cols });
+    }
+    return b;
+  } },
+];
+const wikiBuilt = {}; // a page's blocks, built once - the content is constant
+function wikiBlocks(pageId) {
+  if (!wikiBuilt[pageId]) wikiBuilt[pageId] = WIKI_PAGES.find((p) => p.id === pageId).build();
+  return wikiBuilt[pageId];
+}
+function wikiPage() { return WIKI_PAGES[Math.max(0, Math.min(WIKI_PAGES.length - 1, state.menu.wikiTab))]; }
+
+// everything positioned on the page comes from here: the slab, the tab
+// cells, the content window, the rail, and the open page's blocks each
+// carrying the y it draws at (pre-scroll). Draw and hit test both read it.
+function wikiLayout() {
   const toy = Math.round((VIEW_H - 270) / 2);
   const cx = Math.round(VIEW_W / 2);
-  const x0 = cx - Math.round((2 * TECH_COLW + TECH_CELL) / 2);
-  const y0 = toy + 66;
-  return { toy, cx, x0, y0 };
+  const w = Math.min(WIKI_W_MAX, VIEW_W - 24), x = cx - (w >> 1);
+  const y = toy + 46, h = WIKI_H;
+  const n = WIKI_PAGES.length, cw = Math.floor((w - 24) / n);
+  const tabs = WIKI_PAGES.map((p, i) => ({ id: p.id, label: p.label, x: x + 12 + i * cw, y: y + 7, w: cw, h: 9 }));
+  const winY = y + 22, winH = h - 28;
+  const page = wikiPage();
+  const blocks = wikiBlocks(page.id);
+  let by = winY + 4, total = 4;
+  const rows = blocks.map((bl) => { const r = { bl, y: by }; by += bl.h; total += bl.h; return r; });
+  const maxScroll = Math.max(0, total + 4 - winH);
+  const scroll = Math.max(0, Math.min(maxScroll, wikiScroll[page.id] || 0));
+  wikiScroll[page.id] = scroll;
+  const rail = { x: x + w - 9, y: winY + 2, w: 5, h: winH - 4 };
+  const th = Math.max(8, Math.round(rail.h * winH / (total + 8)));
+  const thumb = { x: rail.x, y: rail.y + Math.round((rail.h - th) * (maxScroll ? scroll / maxScroll : 0)), w: rail.w, h: th };
+  return { toy, cx, x, y, w, h, tabs, winY, winH, rows, scroll, maxScroll, rail, thumb, page,
+    left: x + 12, right: x + w - 16 }; // the content's own margins, clear of the rail
 }
-function techNodeRect(row, col) {
-  const { x0, y0 } = techLayout();
-  return { x: x0 + col * TECH_COLW, y: y0 + row * TECH_ROWH, w: TECH_CELL, h: TECH_CELL };
-}
-// the node id under (mx, my), or null. Shared by the hover, the click and the
-// tooltip, so the three can never point at different nodes.
-function techHit(mx, my) {
-  for (let r = 0; r < TECH_ROWS.length; r++) {
-    for (let c = 0; c < TECH_ROWS[r].length; c++) {
-      const n = techNodeRect(r, c);
-      if (mx >= n.x - 2 && mx < n.x + n.w + 2 && my >= n.y - 2 && my < n.y + n.h + 2) return TECH_ROWS[r][c];
-    }
+// what is under (mx, my): a tab, a table row (carrying its kind id, for the
+// tooltip), the rail, or nothing. Shared by the hover, the click and the
+// tooltip, so the three can never point at different things.
+function wikiHit(mx, my) {
+  const L = wikiLayout();
+  for (let i = 0; i < L.tabs.length; i++) {
+    const t = L.tabs[i];
+    if (mx >= t.x && mx < t.x + t.w && my >= t.y - 3 && my < t.y + t.h + 3) return { kind: 'tab', i };
+  }
+  if (L.maxScroll > 0 && mx >= L.rail.x - 2 && mx < L.rail.x + L.rail.w + 2 && my >= L.rail.y && my < L.rail.y + L.rail.h) return { kind: 'rail', y: my };
+  if (my < L.winY || my >= L.winY + L.winH || mx < L.left || mx >= L.right) return null;
+  for (const r of L.rows) {
+    if (r.bl.kind !== 'row') continue;
+    const ry = r.y - L.scroll;
+    if (my >= ry && my < ry + r.bl.h) return { kind: 'row', id: r.bl.id };
   }
   return null;
 }
-function beginTech() {
+function beginWiki() {
   const m = state.menu;
-  m.screen = 'tech';
-  m.tsel = 0;
+  m.screen = 'wiki';
   SFX.place();
 }
-function leaveTech() { state.menu.screen = 'menu'; SFX.pickup(); }
-// every node in one flat list, for the keyboard cursor
-function techFlat() {
-  const out = [];
-  for (let r = 0; r < TECH_ROWS.length; r++) for (let c = 0; c < TECH_ROWS[r].length; c++) out.push({ r, c, id: TECH_ROWS[r][c] });
-  return out;
+function leaveWiki() { state.menu.screen = 'menu'; SFX.pickup(); }
+function wikiScrollBy(d) {
+  const L = wikiLayout();
+  wikiScroll[L.page.id] = Math.max(0, Math.min(L.maxScroll, L.scroll + d));
 }
-function techKey(k) {
+function wikiSetTab(i) {
   const m = state.menu;
-  const flat = techFlat();
-  if (k === 'escape' || k === 'backspace') { leaveTech(); return; }
-  const cur = flat[Math.min(m.tsel, flat.length - 1)];
-  const move = (dr, dc) => {
-    const r = Math.max(0, Math.min(TECH_ROWS.length - 1, cur.r + dr));
-    const c = Math.max(0, Math.min(TECH_ROWS[r].length - 1, cur.c + dc));
-    const i = flat.findIndex((n) => n.r === r && n.c === c);
-    if (i >= 0 && i !== m.tsel) { m.tsel = i; SFX.pickup(); }
-  };
-  if (k === 'arrowup' || k === 'w') move(-1, 0);
-  else if (k === 'arrowdown' || k === 's') move(1, 0);
-  else if (k === 'arrowleft' || k === 'a') move(0, -1);
-  else if (k === 'arrowright' || k === 'd') move(0, 1);
+  const t = Math.max(0, Math.min(WIKI_PAGES.length - 1, i));
+  if (t !== m.wikiTab) { m.wikiTab = t; SFX.pickup(); }
 }
-// nothing is bought here, so a click only walks the cursor over to what the
-// pointer is already reading - the mouse and the keyboard stay on one node
-function techClick() {
+function wikiKey(k) {
   const m = state.menu;
-  if (m.techT < 1) return;
-  const id = techHit(mouse.x, mouse.y);
-  if (!id) return;
-  const flat = techFlat();
-  const i = flat.findIndex((n) => n.id === id);
-  if (i >= 0 && i !== m.tsel) { m.tsel = i; SFX.pickup(); }
+  if (k === 'escape' || k === 'backspace') { leaveWiki(); return; }
+  if (k === 'arrowleft' || k === 'a') wikiSetTab(m.wikiTab - 1);
+  else if (k === 'arrowright' || k === 'd') wikiSetTab(m.wikiTab + 1);
+  else if (k === 'arrowup' || k === 'w') wikiScrollBy(-12);
+  else if (k === 'arrowdown' || k === 's') wikiScrollBy(12);
 }
-// one node. Every kind is unlocked, so every plate is lit in its own tier
-// exactly as it would be in a bag cell - the page states a tier the one way
-// the game states it everywhere - and hover lights the rim exactly the way a
-// hovered bag cell lights, in the tier's own ink, over a plate lifted a pixel.
-// The blue pip is "you have held one of these", which is the only thing on
-// the page that is about you rather than about the arsenal.
-function drawTechNode(id, r, c, hot, focused, now) {
-  const n = techNodeRect(r, c);
-  const tp = tierPlate(id, hot || focused);
-  const y = n.y - (hot ? 1 : 0);
-  ctx.fillStyle = 'rgba(4,6,18,0.55)';
-  ctx.fillRect(n.x + 2, n.y + 2, n.w, n.h);
-  ctx.fillStyle = tp.rim;
-  ctx.fillRect(n.x, y, n.w, n.h);
-  ctx.fillStyle = tp.plate;
-  ctx.fillRect(n.x + 1, y + 1, n.w - 2, n.h - 2);
-  modPlate(id, n, y);
-  tierShine(n, y, id, now);
+// a click: a tab opens its page, the rail pages the window; a row is read,
+// not pressed - the tooltip is already up over it
+function wikiClick() {
+  const m = state.menu;
+  if (m.wikiT < 1) return;
+  const h = wikiHit(mouse.x, mouse.y);
+  if (!h) return;
+  if (h.kind === 'tab') wikiSetTab(h.i);
+  else if (h.kind === 'rail') {
+    const L = wikiLayout();
+    wikiScrollBy(h.y < L.thumb.y ? -L.winH : h.y >= L.thumb.y + L.thumb.h ? L.winH : 0);
+  }
+}
+
+// One beast standing on its snow, wearing exactly the frame drawAnimal hangs
+// over it in the world - health, the second bar, the level plate, the
+// noticed mark - so the page teaches the frame by showing it, not naming it.
+// A wolf shows its threat bar part-filled, since bare track says nothing.
+function drawWikiBeast(bs, cx, baseY, level, now) {
+  const spr = SPRITES[bs.kind].right[0];
+  // the snow it stands on: a low pale mound with a shaded rim
+  ctx.fillStyle = '#c9dcee'; ctx.fillRect(cx - 13, baseY - 1, 26, 3);
+  ctx.fillStyle = '#eef4fb'; ctx.fillRect(cx - 11, baseY - 2, 22, 3);
+  ctx.fillStyle = 'rgba(110,130,170,0.35)'; ctx.fillRect(cx - (bs.bw ? bs.bw >> 1 : 3), baseY, bs.bw || 6, 2);
+  const px = cx - (spr.width >> 1), py = baseY + 2 - spr.height - (bs.kind === 'bird' ? BIRD_ALT >> 1 : 0);
+  ctx.drawImage(spr, px, py);
+  if (!bs.bw) return; // a bird wears nothing
+  const wolf = bs.kind === 'wolf';
+  const bx = Math.round(cx - bs.bw / 2);
+  drawHealthBar(cx, py - 8, 1, 1, bs.bw);
+  if (wolf) drawHealthBar(cx, py - 5, 0.6, 1, bs.bw, undefined, THREAT_COL);
+  else drawHealthBar(cx, py - 5, 1, 1, bs.bw, undefined, STAM_COL);
+  drawLevelBadge(bx - 1, py - 9, level);
+  drawSenseMark(cx, py - 16, { senseT: 1 }, wolf ? THREAT_COL : STAM_COL);
+}
+// a label tied to a point on the figure by a thin leader
+function wikiLeader(x0, y0, x1, y1, text, col) {
+  ctx.fillStyle = '#4a5480';
+  ctx.fillRect(Math.min(x0, x1), y0, Math.abs(x1 - x0) + 1, 1);
+  if (y1 !== y0) ctx.fillRect(x1, Math.min(y0, y1), 1, Math.abs(y1 - y0) + 1);
+  drawPixelTextShadow(ctx, text, x1 > x0 ? x1 + 3 : x1 - 3 - pixelTextWidth(text), y1 - 2, col, '#0a0e23');
+}
+// the rail: only there when the page outgrows the window; the thumb's place
+// is the whole affordance
+function drawWikiRail(L) {
+  if (!L.maxScroll) return;
+  const { rail, thumb } = L;
+  ctx.fillStyle = '#0a0e23'; ctx.fillRect(rail.x - 1, rail.y - 1, rail.w + 2, rail.h + 2);
+  ctx.fillStyle = '#1c2750'; ctx.fillRect(rail.x, rail.y, rail.w, rail.h);
+  ctx.fillStyle = '#0f1632'; ctx.fillRect(rail.x + 2, rail.y, 1, rail.h);
+  ctx.fillStyle = '#0a0e23'; ctx.fillRect(thumb.x - 1, thumb.y - 1, thumb.w + 2, thumb.h + 2);
+  ctx.fillStyle = '#c89a3c'; ctx.fillRect(thumb.x, thumb.y, thumb.w, thumb.h);
+  ctx.fillStyle = '#ffd95c'; ctx.fillRect(thumb.x, thumb.y, thumb.w, 1); ctx.fillRect(thumb.x, thumb.y, 1, thumb.h);
+  ctx.fillStyle = '#8a6a2a'; ctx.fillRect(thumb.x, thumb.y + thumb.h - 1, thumb.w, 1); ctx.fillRect(thumb.x + thumb.w - 1, thumb.y, 1, thumb.h);
+}
+// one arsenal row: the kind's icon on its own tier plate - lit the way a bag
+// cell lights, rimmed and lifted under the pointer, the blue pip for "you have
+// held one" - its name in the tier's ink, and its numbers in the columns
+function drawWikiRow(r, L, hot, now) {
+  const id = r.bl.id, y = r.y - L.scroll;
+  const n = { x: L.left, y: y + (hot ? 0 : 1), w: 12, h: 12 };
+  const tp = tierPlate(id, hot);
+  ctx.fillStyle = tp.rim; ctx.fillRect(n.x, n.y, n.w, n.h);
+  ctx.fillStyle = tp.plate; ctx.fillRect(n.x + 1, n.y + 1, n.w - 2, n.h - 2);
+  modPlate(id, n, n.y);
+  tierShine(n, n.y, id, now);
   const im = SPRITES[ITEMS[id].icon];
-  ctx.drawImage(im, n.x + ((n.w - im.width) >> 1), y + ((n.h - im.height) >> 1));
-  if (PROFILE.techSeen(id)) { ctx.fillStyle = '#8fd8ff'; ctx.fillRect(n.x + 2, y + 2, 2, 2); }
+  ctx.drawImage(im, n.x + ((n.w - im.width) >> 1), n.y + ((n.h - im.height) >> 1));
+  if (PROFILE.techSeen(id)) { ctx.fillStyle = '#8fd8ff'; ctx.fillRect(n.x + 1, n.y + 1, 2, 2); }
+  const tool = toolIdOf(id), bit = bitIdOf(id);
+  const name = tool ? TOOLS[tool].name : BITS[bit].name;
+  const ink = TOOL_TIERS[itemTier(id)].ink;
+  const nx = L.left + 17, ty = y + 4;
+  drawPixelTextShadow(ctx, name, nx, ty, hot ? '#ffffff' : ink, '#0a0e23');
+  // the columns, right to left off the content's right margin, each value
+  // right-aligned under its head; a dotted leader ties the name to the first
+  let rx = L.right;
+  let firstX = rx;
+  for (let i = r.bl.cols.length - 1; i >= 0; i--) {
+    const c = r.bl.cols[i], key = tool || bit;
+    const v = c.get(key), vw = pixelTextWidth(v);
+    drawPixelTextShadow(ctx, v, rx - vw, ty, c.colOf ? c.colOf(key) : c.col || '#f4f7ff', '#0a0e23');
+    firstX = rx - vw;
+    rx -= c.w;
+  }
+  ctx.fillStyle = '#2c3560';
+  for (let px = nx + pixelTextWidth(name) + 3; px < firstX - 3; px += 2) ctx.fillRect(px, ty + 4, 1, 1);
 }
-function renderTech(now, a) {
+function renderWiki(now, a) {
   const m = state.menu;
-  const { toy, cx, x0, y0 } = techLayout();
+  const L = wikiLayout();
   const slideIn = 1 - a;
   ctx.globalAlpha = a;
-  const t0 = 'TECH TREE';
-  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), toy + 24 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
-  drawGoldRule(cx, toy + 39 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
-  // tier names over their columns; the plate colour under each node repeats it
-  for (let c = 0; c < TOOL_TIERS.length; c++) {
-    const nm = TOOL_TIERS[c].name;
-    drawPixelTextShadow(ctx, nm, x0 + c * TECH_COLW + Math.round((TECH_CELL - pixelTextWidth(nm)) / 2),
-      y0 - 12, TOOL_TIERS[c].ink, '#0a0e23');
+  const t0 = 'WIKI';
+  drawPixelTextShadow(ctx, t0, Math.round((VIEW_W - pixelTextWidth(t0, 2)) / 2), L.toy + 24 - Math.round(slideIn * 20), '#ffd95c', '#3c2a1e', 2);
+  drawGoldRule(L.cx, L.toy + 39 - Math.round(slideIn * 20), Math.round(pixelTextWidth(t0, 2) / 2) + 8, a);
+  drawMenuSlab(L.x, L.y, L.w, L.h, a);
+  const hit = m.wikiT >= 1 && mouse.inside ? wikiHit(mouse.x, mouse.y) : null;
+  // the tab bar: the open page in gold over a gold underline, the rest dim
+  // until hovered - the underline is the whole "you are here"
+  for (let i = 0; i < L.tabs.length; i++) {
+    const t = L.tabs[i], active = i === m.wikiTab;
+    const col = active ? '#ffd95c' : hit && hit.kind === 'tab' && hit.i === i ? '#cfe0ff' : '#7a8bb8';
+    drawPixelTextShadow(ctx, t.label, Math.round(t.x + (t.w - pixelTextWidth(t.label)) / 2), t.y, col, 'rgba(8,12,28,0.9)');
+    if (active) { ctx.fillStyle = '#ffd95c'; ctx.fillRect(t.x + 4, t.y + 8, t.w - 8, 1); }
   }
-  // edges first, under the nodes: every wire is live, since every kind is
-  for (let r = 0; r < TECH_ROWS.length; r++) {
-    for (let c = 0; c + 1 < TECH_ROWS[r].length; c++) {
-      const from = techNodeRect(r, c);
-      const ly = from.y + (TECH_CELL >> 1);
-      ctx.fillStyle = '#0a0e23';
-      ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 2);
-      ctx.fillStyle = '#c89a3c';
-      ctx.fillRect(from.x + from.w, ly, TECH_COLW - TECH_CELL, 1);
-      // a bead running the wire, so the lineage reads as a lineage
-      const t = (now * 0.6 + r * 0.3) % 1;
-      ctx.fillStyle = '#ffd95c';
-      ctx.fillRect(from.x + from.w + Math.round(t * (TECH_COLW - TECH_CELL - 2)), ly - 1, 2, 3);
+  ctx.fillStyle = '#2c3a68';
+  ctx.fillRect(L.x + 10, L.winY - 3, L.w - 20, 1);
+  // the open page, clipped to the window and shifted by its scroll
+  ctx.save();
+  ctx.beginPath(); ctx.rect(L.x + 2, L.winY, L.w - 4, L.winH); ctx.clip();
+  const level = animalLevel();
+  for (const r of L.rows) {
+    const bl = r.bl, y = r.y - L.scroll;
+    if (y + bl.h < L.winY || y > L.winY + L.winH) continue;
+    if (bl.kind === 'line') drawPixelTextShadow(ctx, bl.text, L.left, y, bl.col, '#0a0e23');
+    else if (bl.kind === 'rule') drawGoldRule(L.cx, y + 3, Math.round(L.w / 2) - 24, a);
+    else if (bl.kind === 'head') {
+      // a section: its name in gold with a dotted rule, the column heads over
+      // their columns on the same line
+      drawPixelTextShadow(ctx, bl.text, L.left, y + 2, '#ffd95c', '#0a0e23');
+      let rx = L.right;
+      for (let i = bl.cols.length - 1; i >= 0; i--) {
+        const c = bl.cols[i];
+        drawPixelTextShadow(ctx, c.label, rx - pixelTextWidth(c.label), y + 2, TIP_LABEL, '#0a0e23');
+        rx -= c.w;
+      }
+      ctx.fillStyle = '#2c3a68';
+      ctx.fillRect(L.left, y + 10, L.right - L.left, 1);
+    } else if (bl.kind === 'row') drawWikiRow(r, L, hit && hit.kind === 'row' && hit.id === bl.id, now);
+    else if (bl.kind === 'legend') {
+      // the frame, labelled: one deer, and a leader from each part of the
+      // frame to what it is. Every beast on the page wears this same frame.
+      const fx = L.left + 40, base = y + 52;
+      const spr = SPRITES.deer.right[0], py = base + 2 - spr.height;
+      drawWikiBeast(WIKI_BEASTS[1], fx, base, level, now);
+      wikiLeader(fx - 12, py - 6, fx - 26, py - 6, 'LEVEL', '#f2cc6a');
+      wikiLeader(fx + 10, py - 7, fx + 30, py - 12, 'HEALTH', BAR_NEUTRAL);
+      wikiLeader(fx + 10, py - 4, fx + 30, py - 1, 'STAMINA - A WOLF\'S THREAT', STAM_COL);
+      wikiLeader(fx + 3, py - 14, fx + 30, py - 22, 'SEES YOU', '#f4f7ff');
+    } else if (bl.kind === 'beast') {
+      const bs = bl.beast;
+      drawWikiBeast(bs, L.left + 26, y + 40, level, now);
+      const nx = L.left + 60;
+      drawPixelTextShadow(ctx, bs.name, nx, y + 4, '#ffd95c', '#0a0e23');
+      drawPixelTextShadow(ctx, bs.line(), nx, y + 13, TIP_DIM, '#0a0e23');
+      // the growth table: LV heads over three columns, HEALTH and KILL GOLD
+      // under them, a dotted leader from each label to its first number
+      const colW = 30, cx0 = L.right - colW * WIKI_LEVELS.length;
+      WIKI_LEVELS.forEach((lv, i) => {
+        const t = 'LV ' + lv;
+        drawPixelTextShadow(ctx, t, cx0 + (i + 1) * colW - pixelTextWidth(t), y + 4, TIP_LABEL, '#0a0e23');
+      });
+      const rowsT = [['HEALTH', (lv) => String(wikiBeastHp(bs.kind, lv)), BAR_NEUTRAL], ['KILL GOLD', (lv) => String(wikiBeastGold(bs.kind, lv)), '#f2cc6a']];
+      rowsT.forEach(([label, get, col], k) => {
+        const ry = y + 24 + k * 9;
+        drawPixelTextShadow(ctx, label, nx, ry, TIP_LABEL, '#0a0e23');
+        let firstX = L.right;
+        WIKI_LEVELS.forEach((lv, i) => {
+          const v = get(lv), vw = pixelTextWidth(v), vx = cx0 + (i + 1) * colW - vw;
+          if (i === 0) firstX = vx;
+          drawPixelTextShadow(ctx, v, vx, ry, col, '#0a0e23');
+        });
+        ctx.fillStyle = '#2c3560';
+        for (let px = nx + pixelTextWidth(label) + 3; px < firstX - 3; px += 2) ctx.fillRect(px, ry + 4, 1, 1);
+      });
     }
   }
-  const hov = m.techT >= 1 && mouse.inside ? techHit(mouse.x, mouse.y) : null;
-  const flat = techFlat();
-  const cur = flat[Math.min(m.tsel, flat.length - 1)];
-  for (let r = 0; r < TECH_ROWS.length; r++) {
-    for (let c = 0; c < TECH_ROWS[r].length; c++) {
-      const id = TECH_ROWS[r][c];
-      ctx.globalAlpha = a;
-      drawTechNode(id, r, c, hov === id, cur && cur.id === id, now);
-    }
-  }
+  ctx.restore();
   ctx.globalAlpha = a;
+  drawWikiRail(L);
   const t3 = 'ESC BACK';
-  drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), toy + 254, '#5a6690', 'rgba(15,22,50,0.9)');
+  drawPixelTextShadow(ctx, t3, Math.round((VIEW_W - pixelTextWidth(t3)) / 2), L.toy + 254, '#5a6690', 'rgba(15,22,50,0.9)');
   ctx.globalAlpha = 1;
 }
 
@@ -2432,7 +2614,7 @@ function renderTitle(now) {
   if (tintA > 0.005) drawTitleBackdrop(tintA);
   const out = easeOut(outQ / 0.22);           // menu chrome drops away first
   const sc = easeInOut(m.screenT);             // class select cross-fade
-  const tc = easeInOut(m.techT);               // ...and the tech tree's own
+  const tc = easeInOut(m.wikiT);               // ...and the wiki's own
   const pan = Math.max(m.panel ? easeOut(m.panelT) : 0, sc, tc); // chrome ducks under a panel or either full screen
   const { toy, rects } = menuLayout();
   const cx = Math.round(VIEW_W / 2);
@@ -2529,7 +2711,7 @@ function renderTitle(now) {
   const gc = easeInOut(state.menu.gearT);
   if (sc > 0.005) renderSelect(now, sc * (1 - out));
   if (sc > 0.005 && gc > 0.005) renderGear(now, sc * (1 - out) * gc);
-  if (tc > 0.005) renderTech(now, tc * (1 - out));
+  if (tc > 0.005) renderWiki(now, tc * (1 - out));
 
   // sub-panels slide up from the bottom edge over the still-visible world
   if (m.panel) {

@@ -63,10 +63,13 @@ declare victory. The three affordances:
   [drop brief](rendering.md#eagle-drop-mode-drop). `DBG.PROFILE` is the store and
   `DBG.openNamePanel()` opens the name editor. See
   [architecture.md](architecture.md#profilejs).
-- **The [tech tree](gameplay.md#the-tech-tree) needs no staging** — every kind is unlocked for
+- **The arsenal needs no staging** — every kind is unlocked for
   every profile, so `DBG.LOOT_POOL` is the same on a fresh install as on a played-in one, and
   reading it back is how you prove what a match may drop. `DBG.wipeTech()` still forgets which
-  kinds this profile has *held*, which is all the page's blue pips are.
+  kinds this profile has *held*, which is all the [wiki](gameplay.md#the-wiki)'s blue pips are.
+  The wiki itself is driven headlessly by `DBG.beginWiki()`, `wikiSetTab(i)`, `wikiScrollBy(px)`,
+  `wikiLayout()` (tabs, rows, the window, the rail) and `wikiHit(x, y)`; the ease takes 0.35 s
+  of real frames, so wait for `state.menu.wikiT` to read 1 before hovering anything.
 - **`POST /shot`** in [app/server.js](../../app/server.js#L14) writes a base64 PNG body to `shot.png` in the
   repo root, for a headless driver doing `canvas.toDataURL()` → POST. Nothing in the client calls
   it; `shot.png` is gitignored.
