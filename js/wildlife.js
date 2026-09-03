@@ -17,6 +17,14 @@ const FLEE_SIGHT = { rabbit: 26, deer: 46 };
 const FLEE_TIME = { rabbit: [0.6, 1.1], deer: [1.1, 1.9] };
 const PREY_SPD = { rabbit: 42, deer: 26 };   // px/s grazing
 const PREY_RUN = { rabbit: 80, deer: 92 };   // px/s bolting
+// A deer's sprint: the first stretch of a flight goes at DEER_SPRINT, well
+// over any walk or slide, off a stamina bar it always wears (a.sprint, 0..1);
+// the bar drains over DEER_SPRINT_T of running and refills over
+// DEER_SPRINT_REGEN of grazing, so a deer that has just been run is the one
+// you can catch, and the bar says which
+const DEER_SPRINT = 170;      // px/s while the bar lasts
+const DEER_SPRINT_T = 2.5;    // s of sprint in a full bar
+const DEER_SPRINT_REGEN = 10; // s from empty to full, grazing
 
 function makeAnimal(kind, x, y) {
   const hp = ANIMAL_HP[kind] || 8;
@@ -26,6 +34,7 @@ function makeAnimal(kind, x, y) {
     goal: null, idleT: rand(0.5, 2.5), mvx: 0, mvy: 0, moving: false,
     animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
     fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
+    sprint: 1,                           // deer: the stamina bar its sprint runs off (0..1)
     home: null,                          // the landmark it belongs to, if any
     target: null, biteCd: 0, threat: 0, // wolf: its quarry, its bite rhythm, and how close it is to charging (0..1)
     perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
@@ -387,7 +396,7 @@ function updatePrey(a, dt) {
     a.goal = null; navClear(a); // the graze is off
   }
 
-  let moving = false;
+  let moving = false, sprinting = false;
   if (a.fleeT > 0) {
     a.fleeT -= dt;
     const from = scare || player;
@@ -395,7 +404,10 @@ function updatePrey(a, dt) {
     // away from the threat; a leg that fails or arrives hands over to the next
     if (!a.fleeGoal) a.fleeGoal = fleeGoal(a, from);
     if (a.fleeGoal) {
-      const n = navStep(a, a.fleeGoal.x, a.fleeGoal.y, r, PREY_RUN[a.kind], dt);
+      // a deer with sprint left in the bar spends it here, and runs for it
+      sprinting = !rabbit && a.sprint > 0;
+      if (sprinting) a.sprint = Math.max(0, a.sprint - dt / DEER_SPRINT_T);
+      const n = navStep(a, a.fleeGoal.x, a.fleeGoal.y, r, sprinting ? DEER_SPRINT : PREY_RUN[a.kind], dt);
       if (!n.ok || n.d < 6) a.fleeGoal = null;
       moving = true;
     } else {
@@ -418,8 +430,11 @@ function updatePrey(a, dt) {
     }
   }
 
+  // the sprint comes back on its own once the deer has stopped running
+  if (!rabbit && a.fleeT <= 0) a.sprint = Math.min(1, a.sprint + dt / DEER_SPRINT_REGEN);
+
   if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
-  a.animT += dt * (moving ? (rabbit ? 10 : 7) : 0);
+  a.animT += dt * (moving ? (rabbit ? 10 : sprinting ? 12 : 7) : 0);
   a.moving = moving;
 }
 

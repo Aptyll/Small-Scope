@@ -580,8 +580,10 @@ read the same two golds, so "full draw" is one colour everywhere).
 building — **painted by side** (`barCol`): the team's `mark` through `skin()`, so it is blue over
 you and your allies and red over rivals on your screen, and neutral gold (`BAR_NEUTRAL`, the WoW
 grammar) over wildlife, the practice dummy and anything handed no team; `col` overrides the side
-for the one bar that is not health — a wolf's threat (`THREAT_COL` red, over its health bar,
-only while it is above zero: [gameplay.md](gameplay.md#wolves-the-first-enemy)). How full it is carries the
+for the two bars that are not health, both stacked on the health bar the way a player's stamina is
+(3 rows up, sharing a frame wall): a wolf's threat (`THREAT_COL` red, only while it is above zero:
+[gameplay.md](gameplay.md#wolves-the-first-enemy)) and a deer's sprint (`STAM_COL` white, always
+worn: [gameplay.md](gameplay.md#wildlife)). How full it is carries the
 health. The old green → amber → red drain spent the rival's colour on "hurt", so a hurt ally
 read as an enemy at a glance. **Birds are the one exception** — 3 hp means every hit is a kill, and
 a bar over something that small is all bar; `drawBird` draws the sprite lifted off its own shadow

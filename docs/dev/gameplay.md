@@ -1019,6 +1019,13 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
   tiles off, as straight away from the threat as the ground allows (fanning out, then sideways,
   then past it), the first it can route to; a leg that arrives or fails hands over to the next,
   and an animal with nowhere to run stops fleeing.
+- **A deer's sprint.** A deer always wears a second bar over its health — stamina white
+  (`STAM_COL`), stacked the way a player's is (`drawAnimal`) — and spends it on the first stretch
+  of every flight: while `a.sprint` (0..1) is above zero the legs run at `DEER_SPRINT` (170 px/s,
+  past any walk or slide) and the bar drains over `DEER_SPRINT_T` (2.5 s of running); empty, the
+  flight drops to `PREY_RUN` (92) and the deer is catchable on foot. It refills over
+  `DEER_SPRINT_REGEN` (10 s) whenever the deer is not fleeing, so the bar is the hunt's read:
+  a full one means the deer will simply leave, a low one means run it again now.
 
 A kill pays its `YIELD` gold straight to whoever landed the final blow (`a.lastHit`, through
 `awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
