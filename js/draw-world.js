@@ -1249,17 +1249,18 @@ function drawAnimal(a, ex, ey, now) {
   // netted, snared, alight, marked: the same four tells a player wears, at
   // this body's size (drawUnitStates, js/abilities.js)
   drawUnitStates(a, px, py, spr.width, spr.height, now);
-  // health on top, always - a deer's and a wolf's sits 3 rows higher than a
-  // rabbit's to leave room for the second bar under it, the way a player's
-  // stamina hangs under the health, the two frames sharing a wall: a wolf's
-  // threat, from the first flicker of interest to the full bar it charges
-  // on (updateWolf, js/wildlife.js), none at rest, so the slot is empty
-  // then and the health never moves; a deer's sprint (updatePrey), always
-  // worn, in stamina white - it is one
-  drawHealthBar(a.x - ex, py - (rabbit ? 4 : 8), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
-  if (wolf && a.threat > 0) drawHealthBar(a.x - ex, py - 5, a.threat, 1, 12, undefined, THREAT_COL);
-  else if (!rabbit && !wolf) drawHealthBar(a.x - ex, py - 5, a.sprint, 1, 16, undefined, STAM_COL);
-  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : 13), a, 4);
+  // health on top, always, with the second bar hung 3 rows under it the way
+  // a player's stamina hangs under the health, the two frames sharing a
+  // wall: a wolf's threat, from the first flicker of interest to the full
+  // bar it charges on (updateWolf, js/wildlife.js), none at rest, so the
+  // slot is empty then and the health never moves; a deer's sprint and a
+  // rabbit's jink charge (updatePrey), always worn, in stamina white - each
+  // is one, spent on the run and on the dash
+  const bw = rabbit ? 8 : wolf ? 12 : 16;
+  drawHealthBar(a.x - ex, py - 8, a.hp, a.maxHp, bw);
+  if (wolf) { if (a.threat > 0) drawHealthBar(a.x - ex, py - 5, a.threat, 1, bw, undefined, THREAT_COL); }
+  else drawHealthBar(a.x - ex, py - 5, rabbit ? a.dodge : a.sprint, 1, bw, undefined, STAM_COL);
+  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - 13, a, 4);
 }
 
 // The only thing in the world that leaves the ground: the sprite lifts off

@@ -33,6 +33,9 @@ declare victory. The three affordances:
   after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
   cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
   player will quietly shoot it dead mid-capture, so park its bow with `setNock(1e9, p)` first.
+  And `warp` checks nothing: a slot dropped into a pine's tile has every shot it fires die in the
+  tile it spawned in (the arrow loop strikes the solid it starts inside), which reads as "the bow
+  is broken" - test `objects[ty * WORLD + tx]` for the stand tile and the line of fire first.
 - **The counter needs a merchant, and a merchant needs a roost**: `startGame()`, step until
   `DBG.merchants.length` is 2 and the mode is `play`, step out the `state.dropBrief`, `hopOff()`,
   then `warp` beside `DBG.merchants[i]` — it is a working NPC and wanders off its post, so re-warp

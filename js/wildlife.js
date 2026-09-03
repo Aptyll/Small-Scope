@@ -25,6 +25,19 @@ const PREY_RUN = { rabbit: 80, deer: 92 };   // px/s bolting
 const DEER_SPRINT = 170;      // px/s while the bar lasts
 const DEER_SPRINT_T = 2.5;    // s of sprint in a full bar
 const DEER_SPRINT_REGEN = 10; // s from empty to full, grazing
+// A rabbit's jink: the same bar under its health (a.dodge, 0..1) holds ONE
+// charge, ready only when full, and spends it the instant a shot is coming
+// at it - an arrow inside RABBIT_DODGE_SIGHT, still flying toward the rabbit,
+// on a line that passes within RABBIT_DODGE_MISS of its body - on a dash
+// straight off that line, sideways, at RABBIT_DODGE_SPD for RABBIT_DODGE_T,
+// and then a bolt away from the shooter: the zig, then the zag. The charge
+// comes back over RABBIT_DODGE_CD, and until it does the rabbit is the shot
+// it always was - so the second arrow is the one that lands.
+const RABBIT_DODGE_SIGHT = 90; // px an arrow is noticed from (the fastest bit, 620 px/s, still gives the dash time)
+const RABBIT_DODGE_MISS = 14;  // px off the body's centre a shot's line must pass inside to be coming AT it
+const RABBIT_DODGE_SPD = 260;  // px/s of the jink
+const RABBIT_DODGE_T = 0.11;   // s it lasts: ~29 px, well clear of the 8 px disc an arrow lands in
+const RABBIT_DODGE_CD = 10;    // s for the charge to come back
 
 function makeAnimal(kind, x, y) {
   const hp = ANIMAL_HP[kind] || 8;
@@ -35,6 +48,7 @@ function makeAnimal(kind, x, y) {
     animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
     fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
     sprint: 1,                           // deer: the stamina bar its sprint runs off (0..1)
+    dodge: 1, dashT: 0, dashX: 0, dashY: 0, // rabbit: its one jink charge (0..1, ready at 1) and the dash it is on
     home: null,                          // the landmark it belongs to, if any
     target: null, biteCd: 0, threat: 0, // wolf: its quarry, its bite rhythm, and how close it is to charging (0..1)
     perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
@@ -317,7 +331,7 @@ function updateAnimal(a, dt) {
     a.stunT = Math.max(0, a.stunT - dt);
     a.moving = false;
     if (Math.abs(a.kbx) + Math.abs(a.kby) > 1) moveEntity(a, a.kbx * dt, a.kby * dt, unitRadius(a));
-    if (a.stunT <= 0) { a.goal = null; a.fleeGoal = null; navClear(a); a.idleT = 0.3; }
+    if (a.stunT <= 0) { a.goal = null; a.fleeGoal = null; a.dashT = 0; navClear(a); a.idleT = 0.3; }
   } else if (a.kind === 'wolf') updateWolf(a, dt);
   else if (a.kind === 'bird') updateBird(a, dt);
   else updatePrey(a, dt);
@@ -376,10 +390,60 @@ function preyWander(a) {
   return wanderGoal(a, rng() * Math.PI * 2, Math.PI, 3, 6);
 }
 
+// the shot a rabbit jinks from: the nearest arrow in flight inside
+// RABBIT_DODGE_SIGHT that is still flying toward it, on a line that passes
+// within RABBIT_DODGE_MISS of its body (the disc animalHit tests, 3 px above
+// the feet). A shot already past, or flying wide, is nothing to it.
+function arrowAtRabbit(a) {
+  let best = null, bd = RABBIT_DODGE_SIGHT;
+  for (const s of arrows) {
+    const dx = a.x - s.x, dy = a.y - 3 - s.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= bd) continue;
+    const vd = Math.hypot(s.vx, s.vy);
+    if (vd < 1) continue;
+    if (dx * s.vx + dy * s.vy <= 0) continue;                 // past it, or flying away
+    if (Math.abs(dx * s.vy - dy * s.vx) / vd > RABBIT_DODGE_MISS) continue; // wide of it
+    best = s; bd = d;
+  }
+  return best;
+}
+
+// the jink itself: the charge goes, the rabbit dashes straight off the
+// shot's line - to the side it already leans to, or the other if that one
+// is a wall - and the bolt that follows the dash is the ordinary flight
+// (updatePrey), so the whole thing reads as a zig-zag from the bow
+function rabbitDodge(a, s) {
+  const vd = Math.hypot(s.vx, s.vy);
+  const px = -s.vy / vd, py = s.vx / vd;                      // one perpendicular to the shot
+  const cross = (a.x - s.x) * s.vy - (a.y - 3 - s.y) * s.vx;  // which side of the line the body sits
+  let side = Math.abs(cross) < 1 ? (rng() < 0.5 ? 1 : -1) : cross < 0 ? 1 : -1;
+  const len = RABBIT_DODGE_SPD * RABBIT_DODGE_T;
+  if (!navLineClear(a.x, a.y, a.x + px * side * len, a.y + py * side * len, 2.5) &&
+      navLineClear(a.x, a.y, a.x - px * side * len, a.y - py * side * len, 2.5)) side = -side;
+  a.dashX = px * side; a.dashY = py * side; a.dashT = RABBIT_DODGE_T;
+  a.dodge = 0;
+  const t = FLEE_TIME.rabbit;
+  a.fleeT = rand(t[0], t[1]);
+  a.fleeGoal = null; a.goal = null; navClear(a);
+  burst(a.x, a.y, '#eef2fa', 5, 30, 0.3); // the snow it kicks off
+}
+
 // rabbits and deer: wander, nibble, and bolt from anyone who gets close
 function updatePrey(a, dt) {
   const rabbit = a.kind === 'rabbit';
   const r = rabbit ? 2.5 : 5;
+
+  // a rabbit's jink charge comes back on the clock whatever it is doing, and
+  // a rabbit holding one spends it on the first shot coming at it (a rooted
+  // or netted one cannot move, so it does not waste the charge trying)
+  if (rabbit) {
+    a.dodge = Math.min(1, a.dodge + dt / RABBIT_DODGE_CD);
+    if (a.dodge >= 1 && a.dashT <= 0 && unitMoveMul(a) > 0) {
+      const s = arrowAtRabbit(a);
+      if (s) rabbitDodge(a, s);
+    }
+  }
 
   // both prey bolt from a player who gets close - the deer from further out
   // than the rabbit. The ring is what the player is SEEN at, so GHOSTSTEP
@@ -396,8 +460,16 @@ function updatePrey(a, dt) {
     a.goal = null; navClear(a); // the graze is off
   }
 
-  let moving = false, sprinting = false;
-  if (a.fleeT > 0) {
+  let moving = false, sprinting = false, dashing = false;
+  if (a.dashT > 0) {
+    // the jink: a hand-steered dash, so unitMoveMul is folded in here the
+    // way navStep folds it into every routed step
+    a.dashT -= dt;
+    const spd = RABBIT_DODGE_SPD * unitMoveMul(a);
+    a.mvx = a.dashX; a.mvy = a.dashY;
+    moveEntity(a, (a.dashX * spd + a.kbx) * dt, (a.dashY * spd + a.kby) * dt, r);
+    moving = dashing = true;
+  } else if (a.fleeT > 0) {
     a.fleeT -= dt;
     const from = scare || player;
     // the flight is a chain of routed legs a few tiles long, each picked
@@ -434,7 +506,7 @@ function updatePrey(a, dt) {
   if (!rabbit && a.fleeT <= 0) a.sprint = Math.min(1, a.sprint + dt / DEER_SPRINT_REGEN);
 
   if (moving && Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
-  a.animT += dt * (moving ? (rabbit ? 10 : sprinting ? 12 : 7) : 0);
+  a.animT += dt * (moving ? (dashing ? 16 : rabbit ? 10 : sprinting ? 12 : 7) : 0);
   a.moving = moving;
 }
 

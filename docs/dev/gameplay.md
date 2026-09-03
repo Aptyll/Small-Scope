@@ -1026,6 +1026,17 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
   flight drops to `PREY_RUN` (92) and the deer is catchable on foot. It refills over
   `DEER_SPRINT_REGEN` (10 s) whenever the deer is not fleeing, so the bar is the hunt's read:
   a full one means the deer will simply leave, a low one means run it again now.
+- **A rabbit's jink.** A rabbit wears the same white bar (`a.dodge`, 0..1), but it is one
+  **dodge charge**, ready only when full. `arrowAtRabbit` looks at every shot in flight each step:
+  one inside `RABBIT_DODGE_SIGHT` (90 px), still flying *toward* the rabbit, on a line that passes
+  within `RABBIT_DODGE_MISS` (14 px) of its body, is a shot coming at it, and `rabbitDodge` spends
+  the charge on a hand-steered dash straight off that line — sideways, to the side the body already
+  leans to (the other if that one is a wall, `navLineClear`), at `RABBIT_DODGE_SPD` (260 px/s) for
+  `RABBIT_DODGE_T` (0.11 s, ~29 px, clear of the 8 px disc `animalHit` tests) — and then an ordinary
+  bolt (`fleeT`) away from the shooter: the zig, then the zag. The charge comes back over
+  `RABBIT_DODGE_CD` (10 s) whatever the rabbit is doing, so an empty bar is the read that the
+  next arrow lands; a rooted or netted rabbit never spends it. A shot already past or flying
+  wide is nothing to it, and a stun drops a dash mid-jink like any other move.
 
 A kill pays its `YIELD` gold straight to whoever landed the final blow (`a.lastHit`, through
 `awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
@@ -1111,7 +1122,7 @@ rather than a different resource (the League model: one number, many ways to ear
 | dead tree (3 hp) | `deadTreeFall` 1 | a tree, but only at a rookery |
 | rare tree (8%) | + `treeRare` 3 → 4 | jackpot roll, see `treeRare()` |
 | rock (5 hp) | `rockBreak` 3 | better per swing than a pine, back-loaded, and 1 in 5 hides a tier-0 tool or bit |
-| rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached |
+| rabbit | `rabbit` 2 coins × 5 → 10 (+1 berry) | bolts when approached; jinks one shot per 10 s |
 | deer | `deer` 3 coins × 6 → 18 | the big mobile target |
 | wolf | `wolf` 3 coins × 8 → 24 | the biggest kill, and it bites back |
 | bird | `bird` 2 coins × 4 → 8 | tiny, airborne, nine per rookery |
