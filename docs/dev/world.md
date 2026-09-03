@@ -324,7 +324,10 @@ the crowd cap and its refill pace — easy is slow, large and sparse, hard fast,
 crowded) — each worth points on the harder-shot-pays-more rule (base 10; small, pop-up and
 fast/medium pay more, speed scored by **class** so the bonus means the same thing on every
 difficulty's table; the floater at the face says what it paid). A TIME / SCORE / HITS plate
-rides top-centre (`drawAgameUI` — a practice instrument, the dummy meter's carve-out), timing
+rides top-centre (`drawAgameUI` — a practice instrument, the dummy meter's carve-out), every
+live face outside the view gets a gold chevron pinned to the screen edge on the archer's line to
+it (`drawAgMarkers`, draw-world.js — the shooter's off-screen marker, eight baked pixel
+arrowheads, and none at all while every face is in view), timing
 out ends the round with the final score standing large, and BEST / LAST hang
 on a frost plate over the bell (`drawAgame`). **BEST is the profile's all-time record**
 (`PROFILE.bestRange()`/`setBestRange` — whole points, only a strictly higher score writes), the

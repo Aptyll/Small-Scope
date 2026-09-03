@@ -697,6 +697,94 @@ function drawAgame(ex, ey, now) {
   }
 }
 
+// Off-screen targets: while the round runs, every live face outside the view
+// gets a chevron pinned to the screen edge on the line from the archer to it
+// - the shooter's off-screen threat marker - and nothing at all while every
+// face is in view, so a full field stays clean. Eight 7x7 pixel arrowheads
+// (a filled triangle for the four sides, a corner triangle for the four
+// diagonals - the same two masks turned) baked once with a 1px dark rim, in
+// the round's gold; the tip rests AG_MARK_INSET px in from the edge, and a
+// marker that would land under the TIME/SCORE plate drops beneath it, one
+// that would land on the minimap steps off its disc, and one that would land
+// on the hud strip rises above it - the chrome is never covered.
+const AG_MARK_INSET = 6;
+const AG_MARK_SIDE = [   // pointing east; turned clockwise for S, W, N
+  '.#.....',
+  '.##....',
+  '.###...',
+  '.####..',
+  '.###...',
+  '.##....',
+  '.#.....',
+];
+const AG_MARK_CORNER = [ // pointing north-east; turned clockwise for SE, SW, NW
+  '..#####',
+  '...####',
+  '....###',
+  '.....##',
+  '......#',
+  '.......',
+  '.......',
+];
+let agMarkCv = null; // the 8-frame atlas, 9x9 a frame, baked on first use
+function agMarkAtlas() {
+  if (agMarkCv) return agMarkCv;
+  const turn = (g) => g.map((_, r) => g.map((_, c) => g[6 - c][r]).join('')); // 90 degrees clockwise
+  const E = AG_MARK_SIDE, NE = AG_MARK_CORNER;
+  const S = turn(E), W = turn(S), N = turn(W);
+  const SE = turn(NE), SW = turn(SE), NW = turn(SW);
+  const frames = [E, SE, S, SW, W, NW, N, NE]; // index = round(angle / 45 deg), screen y down
+  const cv = document.createElement('canvas');
+  cv.width = 9 * 8; cv.height = 9;
+  const g = cv.getContext('2d');
+  frames.forEach((m, i) => {
+    const ox = i * 9 + 1;
+    // the rim first, the mask stamped at the eight neighbours, then the fill
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      g.fillStyle = '#0f1632';
+      for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (m[r][c] === '#') g.fillRect(ox + c + dx, 1 + r + dy, 1, 1);
+    }
+    g.fillStyle = '#ffd95c';
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (m[r][c] === '#') g.fillRect(ox + c, 1 + r, 1, 1);
+  });
+  agMarkCv = cv;
+  return cv;
+}
+function drawAgMarkers() {
+  const px = wToSX(player.x), py = wToSY(player.y - 8); // the archer's chest, in view px
+  const x0 = AG_MARK_INSET, y0 = AG_MARK_INSET, x1 = VIEW_W - 1 - AG_MARK_INSET, y1 = VIEW_H - 1 - AG_MARK_INSET;
+  const cxm = Math.round(VIEW_W / 2), plateW = 62, plateB = 8 + 25; // drawAgameUI's plate
+  const atlas = agMarkAtlas();
+  for (const t of ptargets) {
+    if (!ptLive(t)) continue;
+    const tx = wToSX(t.x), ty = wToSY(t.y - 12); // the face, not the rail
+    const m = 10 * zoomCur; // a face half in view counts as in view: no marker
+    if (tx >= -m && tx <= VIEW_W + m && ty >= -m && ty <= VIEW_H + m) continue;
+    const dx = tx - px, dy = ty - py;
+    if (!dx && !dy) continue;
+    // where the archer-to-face line leaves the inset rect
+    let s = Infinity;
+    if (dx > 0) s = Math.min(s, (x1 - px) / dx); else if (dx < 0) s = Math.min(s, (x0 - px) / dx);
+    if (dy > 0) s = Math.min(s, (y1 - py) / dy); else if (dy < 0) s = Math.min(s, (y0 - py) / dy);
+    if (!(s > 0) || s === Infinity) continue;
+    let mx = Math.max(x0, Math.min(x1, px + dx * s)), my = Math.max(y0, Math.min(y1, py + dy * s));
+    if (my < plateB + 4 && Math.abs(mx - cxm) < (plateW >> 1) + 6) my = plateB + 4;
+    // the minimap (top-right, with its clock row underneath): a marker inside
+    // its square slides along the edge it is on - down past the clock row if
+    // it came off the right edge, left past the disc if it came off the top
+    const mq = MM_R + 8;
+    if (Math.abs(mx - MM_CX) < mq && my < MM_CY + mq + 12) {
+      if (mx >= x1 - 1) my = Math.max(my, MM_CY + mq + 12); else mx = MM_CX - mq - 1;
+    }
+    // the hud strip (bottom-centre), at the HUD SIZE it is drawn at
+    const R = hudStripRect(), hs = hudSc(), top = VIEW_H - (R.h + 4) * hs;
+    if (my > top - 5 && Math.abs(mx - VIEW_W / 2) < (R.w / 2 + 4) * hs + 6) my = top - 5;
+    mx = Math.max(x0, Math.min(x1, mx)); my = Math.max(y0, Math.min(y1, my));
+    const dir = ((Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) % 8) + 8) % 8;
+    ctx.drawImage(atlas, dir * 9, 0, 9, 9, Math.round(mx) - 4, Math.round(my) - 4, 9, 9);
+  }
+}
+
 // The round's live layer, drawn in UI space (render.js, after renderUI): the
 // 3-2-1 countdown in the eagle drop's own big-number language, GO as the
 // window opens, the TIME / SCORE / HITS plate top-centre while the clock
@@ -719,6 +807,7 @@ function drawAgameUI(now) {
     return;
   }
   if (G.phase === 'play') {
+    drawAgMarkers(); // under the plate and the GO, so neither is ever covered
     if (G.t < 0.6) { // GO flashes as the window opens
       ctx.globalAlpha = Math.min(1, (0.6 - G.t) / 0.25);
       drawPixelTextOutline(ctx, 'GO', Math.round(cxm - pixelTextWidth('GO', 4) / 2),

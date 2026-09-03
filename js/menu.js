@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.78'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.79'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.79', 'THE ARCHERY ROUND MARKS EVERY LIVE TARGET OFF SCREEN WITH A GOLD CHEVRON AT THE EDGE OF THE VIEW, AND SHOWS NONE WHILE EVERY TARGET IS IN SIGHT.'],
   ['2.78', 'A PICKED BERRY BUSH SHOWS ITS REGROWTH ON THE PLANT - BARE, THEN PALE BUDS, THEN DULL BERRIES, THEN RIPE - SO YOU CAN TELL WHETHER TO WAIT OR MOVE ON.'],
   ['2.77', 'HOUSEKEEPING ONLY - TWO STRAY CARRIAGE RETURNS HIDING INSIDE THESE NOTES ARE GONE, SO GIT STORES THE MENU FILE AS TEXT AGAIN AND A ONE-LINE CHANGE TO IT NO LONGER DIFFS AS ALL 2500 LINES, AND NOTHING IN THE GAME CHANGED.'],
   ['2.76', 'THE PRACTICE PLANK\'S ICE WEARS A CRACK AT REST, SO THE PICTURE SAYS WHICH SHEET GIVES BEFORE ANYONE KNOCKS ON IT.'],
