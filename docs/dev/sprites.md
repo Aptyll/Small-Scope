@@ -125,7 +125,11 @@ sharing a `deerHead` upper body), wolves are 16×13 (a shared `wolfBody` plus th
 frame, the deer's trick), birds are 9×6 (perched) / 9×5 (two wing frames) — and left variants are
 `flipH` of the right-facing grids. The two [landmark](world.md#landmarks) props are
 `deadTree` (two 16×24 snags on `DTPAL`, the footprint the pine used to share so they draw in the same
-band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock).
+band) and `den` (one 16×12 mound on `DNPAL`, drawn at `py + 4` like a rock). The berry bush is
+four frames on `BPAL` — `bush`, `bushEmpty`, `bushBud`, `bushRipen` — one silhouette in which only
+the four berry pixels change (ripe, gone, pale `b` buds, dull `d` berries), because the frames are
+a clock the player reads at a glance and a bush that seemed to move would read as a different
+plant ([the regrow stages](world.md#the-tile-world)).
 Anything drawn through `drawSpriteFlash` must stay within 64×64.
 
 **New sprites bake beside the code that draws them, not here.** The treasure chest (`CHEST_SPR`,

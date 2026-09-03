@@ -418,7 +418,11 @@ function render() {
         ctx.restore();
       } else drawAgBell(o, px + sh, py, now);
     } else if (o.type === 'bush') {
-      const spr = o.berries > 0 ? SPRITES.bush : SPRITES.bushEmpty;
+      // the plant is its own regrow clock (BUSH_BUD_T / BUSH_RIPEN_T, world.js):
+      // bare, then buds, then dull berries, then ripe
+      const spr = o.berries > 0 ? SPRITES.bush
+        : o.regrow <= BUSH_RIPEN_T ? SPRITES.bushRipen
+        : o.regrow <= BUSH_BUD_T ? SPRITES.bushBud : SPRITES.bushEmpty;
       // a bare bush never rims: workTarget's `ready` gate already refuses it,
       // so the rim only ever lands on berries worth picking
       if (fadeP && o === fadeWkO) drawTargetRim(spr, 0, 0, spr.width, spr.height, px + sh, py + 4, now);

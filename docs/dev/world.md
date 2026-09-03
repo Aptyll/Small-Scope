@@ -49,7 +49,12 @@ anything that must stay stable per tile.
   `bots`, `respawnT`/`respawnTotal`, `door`), and every live one is also referenced from the module-scope `structures`
   array so `updateStructures()` never scans the 53,824-tile grid. (`updatePlay` does: one
   unconditional pass over all of `objects` every step, ticking `flash`/`shake` and bush regrow —
-  that loop, not the structure tick, is where a full-grid frame cost actually lives.) The first
+  that loop, not the structure tick, is where a full-grid frame cost actually lives.) A picked
+  bush regrows in `BUSH_REGROW` (70 s) and **wears its own clock**: `bushEmpty` until ripening is
+  `BUSH_BUD_T` away, then `bushBud` (pale buds where the berries will be), `bushRipen` (the
+  berries back but dull) inside `BUSH_RIPEN_T`, then `bush` — chosen in `render()`'s bush
+  branch, so a player reads wait-or-move-on off the plant with no bar and no number; `ready`
+  still refuses E until the berries are ripe, so neither in-between frame ever rims. The first
   three have three tiers; the spawner
   (the bot bay) has one and a **3×2 footprint** — `STRUCTS.spawner.w/h`, with `footprint()`,
   `structCenter()` and `structMouth()` (the ground point in front of the doorway) as the geometry

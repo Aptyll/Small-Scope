@@ -73,6 +73,16 @@ const OBJECTS = {
 // handful of shared arrays rather than a fresh one: buildWorldMapImg walks
 // every tile in the world on every frame the map is open.
 const MAP_BUSH_RIPE = [170, 72, 80], MAP_BUSH_BARE = [118, 128, 98];
+// A picked bush regrows on its own clock (`regrow`, counted down with the
+// object timers in js/sim.js; the pick sets it, hitObject in js/actions.js),
+// and the plant IS the clock: bare for the first stretch, pale BUDS where
+// the berries will be once ripening is within BUSH_BUD_T seconds, the
+// berries back but dull inside BUSH_RIPEN_T, ripe at zero (the frames:
+// bushEmpty / bushBud / bushRipen / bush, picked in render.js) - so a player
+// reads "wait" or "move on" off the bush itself, with no bar and no number.
+const BUSH_REGROW = 70;   // s from a pick to the next two berries
+const BUSH_BUD_T = 35;    // s left when the buds show
+const BUSH_RIPEN_T = 12;  // s left when the berries come in dull
 const MM_EAGLE_RED = [224, 85, 72], MM_EAGLE_BLUE = [106, 168, 232];
 const MAP_EAGLE_RED = [196, 74, 64], MAP_EAGLE_BLUE = [92, 140, 200];
 const MAP_TREE_RIM = [116, 144, 104], MAP_TREE_DEEP = [44, 66, 50],

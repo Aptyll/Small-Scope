@@ -1518,6 +1518,8 @@
     'R': '#f2707a', // berry shine
     'w': '#eef4fb',
     's': '#c9dcee',
+    'b': '#b9d9a4', // bud: pale, unripe
+    'd': '#7b2c3a', // berry coming in: dull, no shine yet
   };
 
   const bush = [
@@ -1537,6 +1539,30 @@
     '..ogGgGGggGo....',
     '..oGgGGgGgGgo...',
     '..ogGgGgGGgGo...',
+    '...ogGgGgGgo....',
+    '....ssssss......',
+  ];
+  // the regrow clock, read off the plant (BUSH_BUD_T / BUSH_RIPEN_T,
+  // js/world.js): pale buds where the berries will be, then the berries
+  // back but dull, then `bush` again. Same silhouette, only the four berry
+  // pixels change, so the stage reads without the bush seeming to move.
+  const bushBud = [
+    '................',
+    '....owwwso......',
+    '...ogwGgGgo.....',
+    '..ogGbGGgbGo....',
+    '..oGgGGgGgGgo...',
+    '..ogGgGbGbgGo...',
+    '...ogGgGgGgo....',
+    '....ssssss......',
+  ];
+  const bushRipen = [
+    '................',
+    '....owwwso......',
+    '...ogwGgGgo.....',
+    '..ogGdGGgdGo....',
+    '..oGgdGgGgGgo...',
+    '..ogGgGdGdgGo...',
     '...ogGgGgGgo....',
     '....ssssss......',
   ];
@@ -3234,6 +3260,8 @@
     mine: bake(mine, MIPAL),
     bush: bake(bush, BPAL),
     bushEmpty: bake(bushEmpty, BPAL),
+    bushBud: bake(bushBud, BPAL),
+    bushRipen: bake(bushRipen, BPAL),
     rabbit: {
       right: [bake(rabbitSit, RBPAL), bake(rabbitHop, RBPAL), bake(rabbitSit, RBPAL)],
       left: [flipH(bake(rabbitSit, RBPAL)), flipH(bake(rabbitHop, RBPAL)), flipH(bake(rabbitSit, RBPAL))],

@@ -503,7 +503,7 @@ function hitObject(o, p) {
   } else if (o.type === 'bush') {
     if (o.berries > 0) {
       o.berries = 0;
-      o.regrow = 70;
+      o.regrow = BUSH_REGROW;
       if (near) SFX.stash();
       spawnDrop(ox, oy, 'berry'); spawnDrop(ox, oy, 'berry');
       burst(ox, oy - 4, '#4c8560', 5, 35, 0.4, true);

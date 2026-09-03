@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.77'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.78'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.78', 'A PICKED BERRY BUSH SHOWS ITS REGROWTH ON THE PLANT - BARE, THEN PALE BUDS, THEN DULL BERRIES, THEN RIPE - SO YOU CAN TELL WHETHER TO WAIT OR MOVE ON.'],
   ['2.77', 'HOUSEKEEPING ONLY - TWO STRAY CARRIAGE RETURNS HIDING INSIDE THESE NOTES ARE GONE, SO GIT STORES THE MENU FILE AS TEXT AGAIN AND A ONE-LINE CHANGE TO IT NO LONGER DIFFS AS ALL 2500 LINES, AND NOTHING IN THE GAME CHANGED.'],
   ['2.76', 'THE PRACTICE PLANK\'S ICE WEARS A CRACK AT REST, SO THE PICTURE SAYS WHICH SHEET GIVES BEFORE ANYONE KNOCKS ON IT.'],
   ['2.75','A MEAL YOU CANNOT EAT - NONE IN THE BAG, THE CLOCK STILL UP, FULL HEALTH - REDDENS AND SHAKES ITS BUTTON, THE WAY THE PACK AND THE WEAPON WELL ALREADY REFUSE.'],
