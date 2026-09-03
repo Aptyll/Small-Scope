@@ -1033,21 +1033,25 @@ They are not shown on the minimap or world map.
 
 A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
 
-- **Sight.** A wolf watches the nearest player inside `WOLF_SIGHT` (96 px) — scaled by
-  `1 + darkness * 0.75`, so at full night it sees ~168 px and the den is a different proposition
-  after sunset. It only ever considers players within `WOLF_LEASH` (190 px) **of its den**, so a
-  den is a place you walk into, not a patrol that follows you home.
-- **The threat bar.** Nothing charges on sight. A wolf that sees you stops its patrol, squares up
-  (faces you, stands) and fills `a.threat` (0..1) — the red bar over its health bar
-  (`THREAT_COL`, `drawAnimal`), drawn only while it is above zero — at `1 / WOLF_THREAT_T` per
-  second (2.5 s to fill) at the edge of its sight and three times that at its nose, so a walk
-  past the edge shows a flicker and a walk up to the den is a charge in under a second. Step out
-  of its sight before it fills and the bar drains over `WOLF_THREAT_DECAY` (3 s), and the wolf
-  goes back to its patrol. Full, the den charges: `wakePack(w, target)` hands the find to every
-  wolf of the same den at threat 1 and plays `SFX.howl()`. An arrow skips the bar — a hit is
-  `wakePack` at once (a wolf shot from cover does **not** flee like a deer; the den comes for
-  the shooter). Once it has charged, only leaving the leash drains the bar: the pack holds at the
-  leash edge facing you while it empties, then goes home — walk back in and it is on you again.
+- **One circle.** `WOLF_SIGHT` (96 px around the wolf — scaled by `1 + darkness * 0.75`, so at
+  full night it is ~168 px and the den is a different proposition after sunset; `seenAt` shrinks
+  it for a GHOSTSTEP or a buried body) is the only radius a wolf has. Inside it the threat bar
+  fills; outside it the bar drains. There is **no leash** — a wolf chases as far as it takes.
+- **The threat bar.** Nothing charges on sight. A wolf with someone inside its circle stops its
+  patrol, squares up (faces them, stands) and fills `a.threat` (0..1) — the red bar stacked on
+  its health bar the way a player's stamina is (`THREAT_COL`, `drawAnimal`; 3 rows up, sharing
+  a frame wall), drawn only while it is above zero — at `1 / WOLF_THREAT_T` per second (2.5 s
+  to fill) at the edge of the circle and three times that at its nose, so a walk past the edge
+  shows a flicker and a walk up to the den is a charge in under a second. Step out before it
+  fills and the bar drains over `WOLF_THREAT_DECAY` (3 s), and the wolf goes back to its
+  patrol. Full, the den charges: `wakePack(w, target)` hands the find to every wolf of the same
+  den at threat 1 and plays `SFX.howl()`. An arrow skips the bar — a hit is `wakePack` at once
+  (a wolf shot from cover does **not** flee like a deer; the den comes for the shooter). A
+  chasing wolf's bar holds full while you are inside its circle and drains while you are out of
+  it, and **it keeps coming while the bar drains** — the hunt ends only when the bar is empty,
+  and then it walks home. Since it outruns a walk, opening 96 px and holding it for 3 s is a job
+  for the momentum system; a pack-mate that never saw you gets threat 1 from the howl and runs
+  in, and joins for good once it has you in its own circle.
 - **The chase.** `WOLF_SPD` (96 px/s) is faster than the 72 px/s walk and slower than a slide or
   the ice cap, so the answer is the momentum system, not distance — and the wolf routes around
   trees and water ([Pathfinding](#pathfinding)), so a treeline is not cover; a quarry it cannot

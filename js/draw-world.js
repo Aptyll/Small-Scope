@@ -1250,11 +1250,13 @@ function drawAnimal(a, ex, ey, now) {
   // this body's size (drawUnitStates, js/abilities.js)
   drawUnitStates(a, px, py, spr.width, spr.height, now);
   drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
-  // a wolf's threat, over its health, from the first flicker of interest to
-  // the full bar it charges on (updateWolf, js/wildlife.js); none at rest
+  // a wolf's threat, stacked on its health the way a player's stamina is -
+  // 3 rows up, the two frames sharing a wall - from the first flicker of
+  // interest to the full bar it charges on (updateWolf, js/wildlife.js);
+  // none at rest
   const threat = wolf && a.threat > 0;
-  if (threat) drawHealthBar(a.x - ex, py - 10, a.threat, 1, 12, undefined, THREAT_COL);
-  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : threat ? 15 : 10), a, 4);
+  if (threat) drawHealthBar(a.x - ex, py - 8, a.threat, 1, 12, undefined, THREAT_COL);
+  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : threat ? 13 : 10), a, 4);
 }
 
 // The only thing in the world that leaves the ground: the sprite lifts off
