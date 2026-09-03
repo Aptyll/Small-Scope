@@ -98,7 +98,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the tuning for everything wild: the holes cut down to the fish, the shoal itself, the pack, the flock | `ICE_HOLE_HITS`, `HOLE_FALL_DMG`/`HOLE_FALL_T`, `FISH_CATCH_R`, `FISH_MAX`/`FISH_MIN`/`FISH_SPAWN_FAST`/`FISH_EMERGE_*`, `WOLF_*`, `BIRD_*` | `fish` (the ice and shoal half) and above `wolves` (the pack and the flock); `FISH_SPAWN_T` alone stays in core.js |
 | an animal taking a hit from anything (arrow or roll): flee/wake, floater, knockback, kill credit | `hurtAnimal` | `animals` |
 | where an animal walks next: the graze/patrol goal, and the bolt away from a player | `wanderGoal`, `preyWander`, `fleeGoal` | `animals` |
-| the pack: waking the den, the hunt, the leash, the bite | `wakePack`, `updateWolf` | `wolves` |
+| the pack: the threat bar that fills while you linger in sight, waking the den, the hunt, the leash, the bite | `WOLF_THREAT_T`/`WOLF_THREAT_DECAY` (above the banner), `wakePack`, `updateWolf` | `wolves` |
 | the flock: the flush, the circuit, the perch | `flushBirds`, `updateBird` | `birds` |
 | fish shoal and ice holes | `updateFish`, `fishClear`, `fishWater`, `spawnFish` | `fish` |
 | where new fish come from, and why one is invisible until it is under the ice | `spawnEmerger`, `buildEmergeSites`, `fishVis`, `f.born`/`f.vis`, `FISH_MAX`/`FISH_MIN`, `state.fishT` | `fish` |
@@ -225,7 +225,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the snow over a buried body, its row spans, and the bury meter | `drawSnowCover`, `poseBounds`, `poseSpans`, `drawBuryRing` | `entity draw` |
 | worn gear on the 16×16 sprite | `GEAR_MARKS`, `drawGearMarks` | `entity draw` |
 | the stun tell: orbiting sparks, and the plate that carries them on a player's frame while it lasts | `drawStunStars`, the overhead block inside `drawPlayer` | `entity draw` |
-| the overhead frame and the name over it: where the stack sits, the three bars' palette (health by side, stamina white, the draw meter's two golds), and centring odd-width text on a model | `FRAME_DX`, `BAR_NEUTRAL`/`barCol`, `STAM_COL`/`STAM_GHOST`, `DRAW_COL`/`DRAW_FULL_COL`/`DRAW_FULL_FLASH`, `NOCK_COL`/`EAT_COL`, `drawHealthBar`, `centreTextX` | `entity draw` |
+| the overhead frame and the name over it: where the stack sits, the three bars' palette (health by side, stamina white, the draw meter's two golds), and centring odd-width text on a model | `FRAME_DX`, `BAR_NEUTRAL`/`barCol`, `STAM_COL`/`STAM_GHOST`, `DRAW_COL`/`DRAW_FULL_COL`/`DRAW_FULL_FLASH`, `NOCK_COL`/`EAT_COL`, `THREAT_COL` (a wolf's threat bar), `drawHealthBar`, `centreTextX` | `entity draw` |
 | the turret's rotating gun, its bolts, its aim line and muzzle flash | `drawTurretHead`, `drawBolt`, `drawTurretFx`, `paintRimmed` | `entity draw` |
 | which sway frame a pine is wearing (off the wind field) | `treeFrame` | `entity draw` |
 | one baked speck (mote, star, flake) at a quantised brightness, and the atlas behind it | `bakeSpecks`, `drawSpeck` | `light & weather` |

@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.80'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.81'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.81', 'A WOLF NO LONGER CHARGES THE MOMENT YOU STEP NEAR: A RED BAR OVER ITS HEAD FILLS WHILE YOU LINGER IN ITS SIGHT, IT CHARGES WHEN THE BAR IS FULL, AND IT GOES HOME ONCE YOU HAVE BACKED OFF LONG ENOUGH FOR THE BAR TO DRAIN.'],
   ['2.80', 'HOVER A PICKED BERRY BUSH AND A BAR OVER IT SHOWS HOW CLOSE THE BERRIES ARE TO GROWING BACK.'],
   ['2.79', 'THE ARCHERY ROUND MARKS EVERY LIVE TARGET OFF SCREEN WITH A GOLD CHEVRON AT THE EDGE OF THE VIEW, AND SHOWS NONE WHILE EVERY TARGET IS IN SIGHT.'],
   ['2.78', 'A PICKED BERRY BUSH SHOWS ITS REGROWTH ON THE PLANT - BARE, THEN PALE BUDS, THEN DULL BERRIES, THEN RIPE - SO YOU CAN TELL WHETHER TO WAIT OR MOVE ON.'],

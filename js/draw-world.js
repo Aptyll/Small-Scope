@@ -971,18 +971,20 @@ const BAR_NEUTRAL = '#f2cc6a';
 const STAM_COL = '#f4f7ff', STAM_GHOST = '#9aa4c0'; // the fill, and the dimmer chunk just spent draining into place
 const DRAW_COL = '#ffd95c', DRAW_FULL_COL = '#fff3c4', DRAW_FULL_FLASH = 0.12; // s of white the peak blinks for
 const NOCK_COL = '#6f7ca8', EAT_COL = '#8fe08a'; // reloading; eating (the heal colour the floater lands in)
+const THREAT_COL = '#ff6a6a'; // a wolf's threat bar: the red it already wears on the debug overlay
 function barCol(team) { return team === undefined || team === null ? BAR_NEUTRAL : TEAMS[skin(team)].mark; }
 
 // small overhead bar shared by every living unit, in its side's colour
-// (barCol - pass nothing for a thing with no side)
-function drawHealthBar(cxp, topY, hp, maxHp, w, team) {
+// (barCol - pass nothing for a thing with no side); col overrides it for a
+// bar that is not health at all (a wolf's threat)
+function drawHealthBar(cxp, topY, hp, maxHp, w, team, col) {
   const x = Math.round(cxp - w / 2), y = Math.round(topY);
   const frac = Math.max(0, Math.min(1, hp / maxHp));
   ctx.fillStyle = 'rgba(12,18,42,0.78)';
   ctx.fillRect(x - 1, y - 1, w + 2, 4);
   ctx.fillStyle = '#3a3448';
   ctx.fillRect(x, y, w, 2);
-  ctx.fillStyle = barCol(team);
+  ctx.fillStyle = col || barCol(team);
   ctx.fillRect(x, y, Math.max(1, Math.round(w * frac)), 2);
 }
 
@@ -1248,7 +1250,11 @@ function drawAnimal(a, ex, ey, now) {
   // this body's size (drawUnitStates, js/abilities.js)
   drawUnitStates(a, px, py, spr.width, spr.height, now);
   drawHealthBar(a.x - ex, py - (rabbit ? 4 : 5), a.hp, a.maxHp, rabbit ? 8 : wolf ? 12 : 16);
-  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : 10), a, 4);
+  // a wolf's threat, over its health, from the first flicker of interest to
+  // the full bar it charges on (updateWolf, js/wildlife.js); none at rest
+  const threat = wolf && a.threat > 0;
+  if (threat) drawHealthBar(a.x - ex, py - 10, a.threat, 1, 12, undefined, THREAT_COL);
+  if (a.stunT > 0) drawStunStars(Math.round(a.x - ex), py - (rabbit ? 9 : threat ? 15 : 10), a, 4);
 }
 
 // The only thing in the world that leaves the ground: the sprite lifts off

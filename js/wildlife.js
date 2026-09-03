@@ -27,7 +27,7 @@ function makeAnimal(kind, x, y) {
     animT: rng() * 2, flash: 0, kbx: 0, kby: 0,
     fleeT: 0, fleeGoal: null, nav: null,  // prey: its flight; any walker: its route (see pathfinding)
     home: null,                          // the landmark it belongs to, if any
-    target: null, biteCd: 0,           // wolf: its quarry and its bite rhythm
+    target: null, biteCd: 0, threat: 0, // wolf: its quarry, its bite rhythm, and how close it is to charging (0..1)
     perch: null, flyT: 0, fa: 0, alt: 0, // bird: its tree, its flight, its height
     dead: false,
   };
@@ -463,25 +463,32 @@ const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a sl
 const WOLF_BITE_R = 13;    // px reach of a bite
 const WOLF_BITE_DMG = 9;
 const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
+const WOLF_THREAT_T = 2.5;   // s lingering at the edge of its sight before a wolf charges; three times as fast at its nose
+const WOLF_THREAT_DECAY = 3; // s for a full threat bar to drain once nobody is in sight - then the wolf goes home
 const BIRD_FLUSH = 34;     // px: a player this close puts the whole rookery up
 const BIRD_SPD = 112;      // px/s in flight
 const BIRD_ALT = 15;       // px a perched bird sits above its tile; flight climbs past it
 
 // ------------------------------------------------------------ wolves
-// A wolf holds station at its den and wakes when a player comes inside its
-// sight (much further after dark), runs them down at WOLF_SPD - faster than a
-// walk, slower than a slide, so the answer is momentum, not distance - and
-// bites on its own cooldown. damagePlayer's i-frames are what stops four
-// wolves shredding anyone instantly: the pack is pressure, not burst. Waking
-// one wakes the den, which is what makes it a place instead of four animals.
+// A wolf holds station at its den and watches anyone who comes inside its
+// sight (much further after dark): its threat bar fills while they linger -
+// faster the closer they stand - and when it is full the wolf charges, runs
+// them down at WOLF_SPD - faster than a walk, slower than a slide, so the
+// answer is momentum, not distance - and bites on its own cooldown. Back off
+// out of its sight before it fills and the bar drains; once it has charged,
+// only leaving the leash drains it, and when it is empty the wolf goes home.
+// A hit skips the bar: the den comes for a shooter at once. damagePlayer's
+// i-frames are what stops four wolves shredding anyone instantly: the pack is
+// pressure, not burst. Waking one wakes the den, which is what makes it a
+// place instead of four animals.
 function wakePack(w, t) {
   if (!t) return;
-  if (!w.home) { w.target = t; return; }
+  if (!w.home) { w.target = t; w.threat = 1; return; }
   let howl = false;
   for (const o of animals) {
     if (o.dead || o.kind !== 'wolf' || o.home !== w.home) continue;
     if (!o.target) howl = true;
-    o.target = t;
+    o.target = t; o.threat = 1;
   }
   if (howl && nearPlayer(w.x, w.y, 260)) SFX.howl();
 }
@@ -491,34 +498,56 @@ function updateWolf(a, dt) {
   const hx = L ? (L.tx + 0.5) * TILE : a.x, hy = L ? (L.ty + 0.5) * TILE : a.y;
   a.biteCd = Math.max(0, a.biteCd - dt);
 
-  // keep the current quarry while it is still worth keeping, else look around
-  let t = a.target;
+  const sight = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
   const leashed = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_LEASH;
-  if (t && (!t.active || t.dead || inAir(t) || !leashed(t))) { t = null; navClear(a); }
-  if (!t) {
-    const sight = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
-    let bd = sight;
-    for (const p of players) {
-      if (!p.active || p.dead || inAir(p) || !leashed(p)) continue;
-      const d = Math.hypot(p.x - a.x, p.y - a.y);
-      // GHOSTSTEP - and lying buried in the snow - shorten how far this
-      // particular quarry is noticed from
-      if (d < bd && d < seenAt(p, sight)) { bd = d; t = p; }
-    }
-    if (t) wakePack(a, t);
+  // the nearest slot this wolf can see right now, inside its leash. GHOSTSTEP
+  // - and lying buried in the snow - shorten how far a particular one is
+  // noticed from
+  let near = null, nd = sight;
+  for (const p of players) {
+    if (!p.active || p.dead || inAir(p) || !leashed(p)) continue;
+    const d = Math.hypot(p.x - a.x, p.y - a.y);
+    if (d < nd && d < seenAt(p, sight)) { nd = d; near = p; }
   }
+
+  // keep the current quarry while the bar holds, else watch whoever is near
+  let t = a.target;
+  if (t && (!t.active || t.dead || inAir(t))) { t = null; a.threat = 0; navClear(a); }
+  let held = false; // hunting, and the quarry is still inside the leash - the whole den keeps a find, seen or not
+  if (t) {
+    held = leashed(t);
+    if (held) a.threat = 1;
+    else {
+      a.threat = Math.max(0, a.threat - dt / WOLF_THREAT_DECAY);
+      if (a.threat <= 0) { t = null; navClear(a); } // the quarry got away; home
+    }
+  } else if (near) {
+    // lingering in sight fills the bar, three times as fast at the wolf's
+    // nose as at the edge of its sight; full, the whole den charges
+    a.threat = Math.min(1, a.threat + dt / WOLF_THREAT_T * (1 + 2 * (1 - nd / sight)));
+    if (a.threat >= 1) { wakePack(a, near); t = near; held = true; }
+  } else a.threat = Math.max(0, a.threat - dt / WOLF_THREAT_DECAY);
   a.target = t;
 
   let moving = false;
-  if (t) {
-    a.goal = null; // the patrol is off; the quarry is the route now
-    // run the route to the quarry; with no route (it is out over water, or
-    // the pack has it pinned) hold and face it
-    const n = navStep(a, t.x, t.y, 4.5, WOLF_SPD, dt);
-    const d = n.d || 1;
-    if (!n.ok) { a.mvx = (t.x - a.x) / d; a.mvy = (t.y - a.y) / d; }
-    moving = n.ok;
-    if (d < WOLF_BITE_R && a.biteCd <= 0) {
+  const watch = t || (a.threat > 0 && near); // whoever the wolf is squared up to
+  if (watch) {
+    if (a.goal) { a.goal = null; navClear(a); } // the patrol is off
+    let d = Math.hypot(watch.x - a.x, watch.y - a.y) || 1;
+    if (held) {
+      // run the route to the quarry; with no route (it is out over water, or
+      // the pack has it pinned) hold and face it
+      const n = navStep(a, t.x, t.y, 4.5, WOLF_SPD, dt);
+      d = n.d || 1;
+      if (!n.ok) { a.mvx = (t.x - a.x) / d; a.mvy = (t.y - a.y) / d; }
+      moving = n.ok;
+    } else {
+      // squared up: a wolf whose bar is filling, or draining after a quarry
+      // slipped its sight, stands and faces them - the warning before the charge
+      a.mvx = (watch.x - a.x) / d; a.mvy = (watch.y - a.y) / d;
+      if (Math.abs(a.mvx) > 0.05) a.dir = a.mvx > 0 ? 'right' : 'left';
+    }
+    if (t && d < WOLF_BITE_R && a.biteCd <= 0) {
       a.biteCd = WOLF_BITE_CD;
       damagePlayer(t, WOLF_BITE_DMG, a.mvx, a.mvy, null, 'wolf');
       burst(a.x + a.mvx * 6, a.y - 4, '#e04a54', 5, 40, 0.35);
