@@ -1393,7 +1393,7 @@ const AB_W = (AB_N + 1) * AB_CELL + (AB_N + 1) * AB_GAP + FOOD_CELL;
 const AB_PAD = 2, AB_XP = 5, AB_SEGS = 10; // AB_SEGS: xp bar notches
 const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
-const AB_COVER = 'rgba(8,12,30,0.82)';
+const AB_COVER = 'rgba(8,12,30,0.82)'; // the MEAL clock's wipe - the only one left on the strip (drawFoodClock; every other well sweeps, see drawSweepCover)
 // The weapon well's half of the refusal the backpack already has: a bit that
 // will not fit in the tool reddens and shakes the WELL, exactly as one that
 // will not fit in the pack reddens and shakes the frame (bagDenied) - so the
@@ -1919,78 +1919,22 @@ function drawItemIcon(type, r, y, g) {
 }
 
 // ---- drawing the strip, the bit column and the carried item -------------
-function drawToolCell(i, now, hov) {
-  const p = player;
-  const cell = p.tools[i];
-  const sel = p.toolSel === i;
-  const r = toolCellRect(i);
-  const y = r.y - (sel ? 1 : 0);
-  const dry = sel && !toolReady(p);
-  const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
-  // "it does not fit in here": a red band all the way round the well and the
-  // pack's own 1px shake, so the two containers refuse in one language
-  const red = toolFlash > 0;
-  if (red) {
-    ctx.save();
-    ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
-    ctx.fillStyle = '#c2465a';
-    ctx.fillRect(r.x - 2, y - 2, r.w + 4, r.h + 4);
-  }
-  // the rim is the selection: one lit well, three quiet ones. A selected tool
-  // that cannot answer the button goes red instead - the old dry-bow tell.
-  ctx.fillStyle = red ? '#c2465a' : dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
-  ctx.fillRect(r.x, y, r.w, r.h);
-  ctx.fillStyle = dry ? '#241028' : tp.plate;
-  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
-  if (cell) {
-    tierShine(r, y, cell.type, now);
-    // the 12px tool art doubled: the weapon well leads the strip
-    // and reads at the ability icons' size, not the bag's
-    const im = ITEMS[cell.type] && SPRITES[ITEMS[cell.type].icon];
-    if (im) {
-      ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + 1 + ((r.h - im.height * 2) >> 1),
-        im.width * 2, im.height * 2);
-    }
-    // the wipe IS the rate of fire: a slow tool covers its well for longer
-    if (p.nockT > 0 && sel) {
-      const cov = Math.round(Math.min(1, p.nockT / Math.max(0.01, toolCycle(p))) * (r.h - 2));
-      if (cov > 0) {
-        ctx.fillStyle = AB_COVER;
-        ctx.fillRect(r.x + 1, y + 1, r.w - 2, cov);
-        if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, y + cov, r.w - 2, 1); }
-      }
-    }
-    // ...and the "!" when the column weighs more than one press can spend
-    if (toolOver(cell)) drawOverWarn(r, y, now);
-  }
-  if (red) ctx.restore();
-}
-// An ability well says everything without a word: the 32px icon is the
-// ability, a SWEEP round the well is its cooldown (drawSweepCover below - the
-// long clocks turn, the short ones still wipe; see there), the rim goes white while the
-// body performs the cast, an ACTIVE ability (the shield up, the fury running)
-// pulses the rim in its own colour and drains a bar of it along the bottom
-// edge, and the well pops white the frame a cooldown comes home. The big
-// digit bottom-left is the key (the keybind-indicator carve-out). Along the
-// top inner edge, gear's buy pips - fat ones, this is the strip's main
-// progress readout - count the POINTS in the key, one seat per level; the ASK
-// lives off the well entirely, on the floating plate above it
-// (drawAbBuyPlate), so the well's rim carries combat states only.
+// THE STRIP'S COOLDOWN SWEEP - League's radial clock cut to a SQUARE, and
+// the one readout the weapon well and the four ability wells share. The
+// veil fills the well and retreats CLOCKWISE FROM 12 O'CLOCK, so the dark
+// that is left is the wait that is left, and the hand's angle is the
+// fraction at a glance - which a top-down wipe cannot say, because a bar
+// three quarters down and a bar half down look alike in the corner of your
+// eye. One grammar over the whole strip: the weapon's rate of fire and an
+// ability's cooldown are the same question asked of different clocks, so
+// they are answered in the same shape and only the speed of the hand tells
+// a 0.4 s bow from a 20 s fury.
 //
-// A key with no point in it is LOCKED, and the well says so exactly the way a
-// meal button with nothing behind it does: dark rim, the icon at LOCK_DIM,
-// the pips all empty and the key digit dim - grey, not absent, so the strip
-// never rearranges and you can read what you have not bought yet. A press on
-// one reddens it (abDenied above).
-const LOCK_DIM = 0.28; // the locked icon's alpha - the meal button's grammar, one shade darker
-// The ability cooldown, League's sweep cut to a SQUARE: the cover fills the
-// well and retreats CLOCKWISE FROM 12 O'CLOCK, so the dark that is left is
-// the wait that is left, and the hand's angle is the fraction at a glance -
-// which a top-down wipe cannot say on a 20 s clock, because a bar three
-// quarters down and a bar half down look alike in the corner of your eye.
-// It is the long clocks only: the weapon's rate of fire and the meal timer
-// are one-second affairs where a wipe reads faster than a hand, and they keep
-// theirs.
+// The two MEAL buttons keep the wipe. They are half-height cells (14px of
+// inside), where a hand is three pixels of stair-step and a wedge is mush -
+// and the pair run off ONE shared clock (drawFoodClock), which two bars
+// falling together say and two hands turning in two different squares do
+// not.
 //
 // Rasterised A PIXEL AT A TIME for the reason every minimap curve is
 // (mmRing): canvas paths anti-alias, and a soft diagonal across a 32px well
@@ -2006,7 +1950,7 @@ const LOCK_DIM = 0.28; // the locked icon's alpha - the meal button's grammar, o
 // ones to a blue-grey, so the waiting wedge is a different MATERIAL rather
 // than merely a darker one, which is the thing League's grey veil is actually
 // doing.
-const AB_SWEEP = 'rgba(40,50,86,0.74)';
+const CD_SWEEP = 'rgba(40,50,86,0.74)';
 const CD_EDGE = '#9fb6d8'; // the hand: the 1px line the veil retreats behind
 function drawSweepCover(x, y, w, h, frac, col, edge) {
   if (frac <= 0) return;
@@ -2041,6 +1985,69 @@ function drawSweepCover(x, y, w, h, frac, col, edge) {
     ctx.fillRect(Math.floor(cx + hx * s), Math.floor(cy + hy * s), 1, 1);
   }
 }
+function drawToolCell(i, now, hov) {
+  const p = player;
+  const cell = p.tools[i];
+  const sel = p.toolSel === i;
+  const r = toolCellRect(i);
+  const y = r.y - (sel ? 1 : 0);
+  const dry = sel && !toolReady(p);
+  const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
+  // "it does not fit in here": a red band all the way round the well and the
+  // pack's own 1px shake, so the two containers refuse in one language
+  const red = toolFlash > 0;
+  if (red) {
+    ctx.save();
+    ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
+    ctx.fillStyle = '#c2465a';
+    ctx.fillRect(r.x - 2, y - 2, r.w + 4, r.h + 4);
+  }
+  // the rim is the selection: one lit well, three quiet ones. A selected tool
+  // that cannot answer the button goes red instead - the old dry-bow tell.
+  ctx.fillStyle = red ? '#c2465a' : dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
+  ctx.fillRect(r.x, y, r.w, r.h);
+  ctx.fillStyle = dry ? '#241028' : tp.plate;
+  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+  if (cell) {
+    tierShine(r, y, cell.type, now);
+    // the 12px tool art doubled: the weapon well leads the strip
+    // and reads at the ability icons' size, not the bag's
+    const im = ITEMS[cell.type] && SPRITES[ITEMS[cell.type].icon];
+    if (im) {
+      ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + 1 + ((r.h - im.height * 2) >> 1),
+        im.width * 2, im.height * 2);
+    }
+    // the SWEEP is the rate of fire, the same hand the ability wells turn
+    // (drawSweepCover above): a slow tool holds its well longer, and the two
+    // clocks a press waits on read in one shape. The lift the selected well
+    // takes is in `y`, so the hand turns about the well you can see.
+    if (p.nockT > 0 && sel) {
+      drawSweepCover(r.x + 1, y + 1, r.w - 2, r.h - 2,
+        Math.min(1, p.nockT / Math.max(0.01, toolCycle(p))), CD_SWEEP, CD_EDGE);
+    }
+    // ...and the "!" when the column weighs more than one press can spend
+    if (toolOver(cell)) drawOverWarn(r, y, now);
+  }
+  if (red) ctx.restore();
+}
+// An ability well says everything without a word: the 32px icon is the
+// ability, a SWEEP round the well is its cooldown (drawSweepCover above - the
+// weapon well turns the same hand), the rim goes white while the
+// body performs the cast, an ACTIVE ability (the shield up, the fury running)
+// pulses the rim in its own colour and drains a bar of it along the bottom
+// edge, and the well pops white the frame a cooldown comes home. The big
+// digit bottom-left is the key (the keybind-indicator carve-out). Along the
+// top inner edge, gear's buy pips - fat ones, this is the strip's main
+// progress readout - count the POINTS in the key, one seat per level; the ASK
+// lives off the well entirely, on the floating plate above it
+// (drawAbBuyPlate), so the well's rim carries combat states only.
+//
+// A key with no point in it is LOCKED, and the well says so exactly the way a
+// meal button with nothing behind it does: dark rim, the icon at LOCK_DIM,
+// the pips all empty and the key digit dim - grey, not absent, so the strip
+// never rearranges and you can read what you have not bought yet. A press on
+// one reddens it (abDenied above).
+const LOCK_DIM = 0.28; // the locked icon's alpha - the meal button's grammar, one shade darker
 let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
 function drawClassAbCell(i, now, on) {
   const p = player, ab = CLASS_AB[p.cls][i];
@@ -2077,7 +2084,7 @@ function drawClassAbCell(i, now, on) {
   // drop anyway, so a hand turning under a raised shield would be a lie)
   if (cd > 0 && act <= 0) {
     drawSweepCover(r.x + 1, r.y + 1, r.w - 2, r.h - 2,
-      Math.min(1, cd / abCdOf(p, i)), AB_SWEEP, CD_EDGE);
+      Math.min(1, cd / abCdOf(p, i)), CD_SWEEP, CD_EDGE);
   }
   // the level, as gear's buy pips along the top inner edge - fat blocks with a
   // dark seat, so the bought count reads from across the screen. ONE SEAT PER

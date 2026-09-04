@@ -495,10 +495,12 @@ tier is stated once and stated the same way everywhere (`tierPlate`, and `tierSh
 highlight across the top tier's plate); the 12px tool art is drawn doubled, so the lead
 weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
 weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
-tell. And the **cooldown wipe** covers the whole well for exactly
-`toolCycle`, so the rate of fire is the shape of the wipe rather than a number — and the wipe
+tell. And the **cooldown sweep** ([below](#the-cooldown-sweep)) turns once through exactly
+`toolCycle`, so the rate of fire is the speed of the hand rather than a number — and the veil
 clearing IS the bow being ready, since nothing else gates the draw
-([the cycle](gameplay.md#the-cycle)). What is loaded
+([the cycle](gameplay.md#the-cycle)). It is the same hand the ability wells turn: a press waits on
+the weapon's clock and on the key's, and the two are one question asked of different clocks, so
+they are answered in one shape. What is loaded
 stays out of the resting well — the hover-raised bit column is where the build is read and
 edited.
 
@@ -547,14 +549,20 @@ cooldown, level and next-level price, the blurb, nothing the well itself already
 
 #### The cooldown sweep
 
-`drawSweepCover(x, y, w, h, frac, col, edge)` is League's radial cooldown **cut to a square**: the
+`drawSweepCover(x, y, w, h, frac, col, edge)` is League's radial cooldown **cut to a square**, and
+the **one readout the weapon well and the four ability wells share**: the
 veil fills the well and retreats **clockwise from 12 o'clock**, so the dark that is left is the
 wait that is left and the hand's angle is the fraction at a glance. That is the whole reason it
-replaced a top-down wipe on these wells: on a 20 s clock a bar three quarters down and a bar half
+replaced the top-down wipe: on a 20 s clock a bar three quarters down and a bar half
 down look alike in the corner of an eye mid-fight, while a hand at 4 o'clock and one at 7 do not.
-It is for the **long** clocks only — the weapon well's rate of fire (`drawToolCell`) and the meal
-timer (`drawFoodClock`) are one-second affairs where a wipe reads faster than a hand, and they
-keep theirs and keep `AB_COVER`.
+One grammar over the whole strip — the weapon's rate of fire and an ability's cooldown are the
+same question asked of different clocks, so only the speed of the hand tells a 0.8 s bow from a
+20 s fury.
+
+The two **meal buttons** keep the wipe (and keep `AB_COVER`, now the only one left on the strip).
+They are half-height cells — 14px of inside, where a hand is three pixels of stair-step and a
+wedge is mush — and the pair run off ONE shared clock (`drawFoodClock`), which two bars falling
+together say and two hands turning in two different squares do not.
 
 Two things it does not do the obvious way. It is **rasterised a pixel at a time**, for the reason
 `mmRing` rasterises every curve of the minimap ([UI panels are baked once](#ui-panels-are-baked-once)):
@@ -563,9 +571,10 @@ other edge is hard. Unlike the minimap's chrome this one **cannot be baked** —
 frame — so it pays the two costs that made `mmRing` the game's largest single cost, and dodges them
 on size: the well is 32×32 (1024 angle tests, not a 68px disc's 4624 × several rings), each row is
 walked once and its covered pixels coalesced into ONE `fillRect` per run instead of one per pixel,
-and only a well actually on cooldown is walked at all. Measured on the bake path: **37 µs a well,
-0.15 ms with all four turning** — under 1% of a 60fps frame, against `mmRing`'s old 1.6 ms.
-And the veil is **not** the wipe's near-black `AB_COVER` but a translucent slate (`AB_SWEEP`):
+and only a well actually on cooldown is walked at all. Measured on the bake path over repeated
+runs: **28–37 µs a well, 0.14–0.19 ms with all five turning** — around 1% of a 60fps frame,
+against `mmRing`'s old 1.6 ms.
+And the veil is **not** the wipe's near-black `AB_COVER` but a translucent slate (`CD_SWEEP`):
 the well's ground is `#080b1c` and half of every icon is nearly as dark, so a darker-still wash
 over it changes nothing the eye can find, and the sweep would be a bare line turning over a well
 that never dims. The slate drags an icon's lit pixels down and lifts its dark ones to a blue-grey,
