@@ -145,13 +145,18 @@ function updateMarket(dt) {
 // top-right, hard under the minimap beside the clock and the alive count.
 //
 // One shape, three notices, read left to right with no sentence in it: the
-// merchant's GOLD SACK (SPRITES.goldSack, the same mark on every plate - this
-// is the shop talking - turning over its six frames the whole time the plate
-// is up), then what it is about (the good's own item icon and the price it
-// landed on at 2x, or NEW STOCK for a turnover), then one glyph carrying
-// WHICH WAY - an arrow up, an arrow down, or a crate. The plate's frame and
-// ink carry the same green/red/gold the feed line does, so the two readouts
-// of one event never disagree.
+// MARK of what the news IS (the merchant's GOLD SACK, SPRITES.goldSack,
+// turning over its six frames the whole time a PRICE plate is up - and a
+// wooden CRATE, SPRITES.crate, when the counter itself has turned over,
+// because a sack of coin is what a price is worth and a crate is what a
+// delivery is), then what it is about (the good's own item icon beside the
+// price it landed on, both at the SAME scale - an 8 px icon against a 10 px
+// number reads as a footnote to it, and these two are one reading - or NEW
+// STOCK for a turnover), then one glyph carrying WHICH WAY - an arrow up or
+// an arrow down. A stock plate has no tail: its crate has already said which
+// kind of news this is, so the headline takes that room instead. The plate's
+// frame and ink carry the same green/red/gold the feed line does, so the two
+// readouts of one event never disagree.
 const NOTE_MAX = 3;      // plates on screen at once; the oldest falls off the bottom
 const NOTE_LIFE = 8;     // s from arrival to gone
 // The arrival is a BEAT, not a fade-in: the plate flies in off the right edge
@@ -165,27 +170,29 @@ const NOTE_FLASH = 0.45; // ...and the white flash pulsing over it
 const NOTE_OUT = 1.2;    // departure: fades while sliding back out right
 const NOTE_SLIDE = 30;   // px it travels, in and out
 const NOTE_FR = 0.11;    // s per frame of the sack's six
-const NOTE_W = 68, NOTE_H = 22, NOTE_PITCH = 26;
+// 78 wide is what the content well needs: 16 px of icon, 3 of gap and the 22
+// of "60G" at 2x is 41, over the 30 the mark's well and the tail's gutter take,
+// and the rest is the air that keeps the price off the arrow.
+const NOTE_W = 78, NOTE_H = 22, NOTE_PITCH = 26;
 const NOTE_GAP = 18;     // below the disc's alive/clock row, which ends 14px under it
 const notices = [];      // {kind, txt, good, t}; ageNotices runs the clock
-// the tails: which way the price went, or a crate for a counter that just
-// turned over. 8x8, the item icons' own grid, so the good beside it and the
-// tail after it read as one rank.
+// the tails: which way the price went. 8x8, the item icons' own grid, so the
+// good beside it and the tail after it read as one rank. A kind with no tail
+// (stock) has said its piece with its mark already.
 const NOTE_TAILS = {
   up: ['........', '...aa...', '..ahha..', '.ahhhha.', 'aahhhhaa', '..ahha..', '..ahha..', '..ahha..'],
   down: ['..ahha..', '..ahha..', '..ahha..', 'aahhhhaa', '.ahhhha.', '..ahha..', '...aa...', '........'],
-  crate: ['oooooooo', 'owwwwwwo', 'obwbbwbo', 'obwbbwbo', 'obwbbwbo', 'obwbbwbo', 'owwwwwwo', 'oooooooo'],
 };
-const NOTE_CRATE_PAL = { '.': null, o: '#3a2a16', b: '#8a6a34', w: '#c49a56' };
 // One palette per kind, worn by the plate AND handed to logEvent for the feed
 // line: bg/edge/fg are exactly the keys logEvent's `o` override reads, so the
-// two cannot drift apart.
+// two cannot drift apart. `mark` is the 16x16 stamp in the plate's left well -
+// a SPRITES key for a still one, or null for the sack's six turning frames.
 const NOTE_KIND = {
-  spike: { bg: '#14351f', edge: '#8fe08a', fg: '#b8f0b0', tail: 'up',
+  spike: { bg: '#14351f', edge: '#8fe08a', fg: '#b8f0b0', mark: null, tail: 'up',
     tp: { '.': null, a: '#5aa85e', h: '#b8f0b0' } },
-  crash: { bg: '#3a1420', edge: '#e0637a', fg: '#ff9a8a', tail: 'down',
+  crash: { bg: '#3a1420', edge: '#e0637a', fg: '#ff9a8a', mark: null, tail: 'down',
     tp: { '.': null, a: '#a83c50', h: '#ff9a8a' } },
-  stock: { bg: '#2a2340', edge: '#c9a227', fg: '#f2cc6a', tail: 'crate', tp: NOTE_CRATE_PAL },
+  stock: { bg: '#2a2340', edge: '#c9a227', fg: '#f2cc6a', mark: 'crate', tail: null },
 };
 
 // raise one. `good` is a GOODS/ITEMS key whose icon rides beside the text, or
@@ -239,23 +246,32 @@ function renderNotices() {
     const y = Math.round(r.y - (k ? (1 - push) * NOTE_PITCH : 0));
     ctx.globalAlpha = a;
     noteCard(x, y, K, a, e.t);
-    // the merchant's sack, turning over its six frames the whole time it is
-    // up, sunk into a well of its own so it reads as a stamp on the card
+    // the kind's mark, sunk into a well of its own so it reads as a stamp on
+    // the card: the merchant's sack, turning over its six frames the whole
+    // time a price plate is up, or the crate that means new stock - one still
+    // frame, because a delivery on a counter is a thing sitting there.
     ctx.fillStyle = 'rgba(3,5,14,0.5)';
     ctx.fillRect(x + 1, y + 3, 18, 16);
-    ctx.drawImage(SPRITES.goldSack[Math.floor(e.t / NOTE_FR) % SPRITES.goldSack.length], x + 2, y + 3);
-    // What it is about, centred in the well between the sack and the tail: a
-    // price rides beside the good's own icon at 2x where it fits, and a
-    // headline with no good to name (NEW STOCK) drops to 1x rather than wrap.
-    const cx0 = x + 20, cw = NOTE_W - 30;
+    ctx.drawImage(K.mark ? SPRITES[K.mark]
+      : SPRITES.goldSack[Math.floor(e.t / NOTE_FR) % SPRITES.goldSack.length], x + 2, y + 3);
+    // What it is about, centred in the well between the mark and the tail: the
+    // good's own icon and the price it landed on, sized TOGETHER - the icon is
+    // drawn at the text's own scale, so the pair reads as one number with a
+    // face on it rather than as a number with a speck beside it, and both drop
+    // to 1x together if a headline is too long for 2x. A notice with no good to
+    // name (NEW STOCK) is text alone, and its plate has no tail, so the well
+    // runs the tail's 8 px out to the frame.
+    const tail = NOTE_TAILS[K.tail];
+    const cx0 = x + 20, cw = NOTE_W - 22 - (tail ? 8 : 0);
     const im = e.good && ITEMS[e.good] && SPRITES[ITEMS[e.good].icon];
     const sh = 'rgba(4,6,18,0.9)'; // the plate is opaque and it fades: shadow font, not outline
-    const iw = im ? im.width + 3 : 0;
-    const ts = iw + pixelTextWidth(e.txt, 2) <= cw ? 2 : 1;
-    const bx = cx0 + Math.max(0, (cw - iw - pixelTextWidth(e.txt, ts)) >> 1);
-    if (im) ctx.drawImage(im, bx, y + ((NOTE_H - im.height) >> 1));
-    drawPixelTextShadow(ctx, e.txt, bx + iw, y + ((NOTE_H - ts * 5) >> 1), K.fg, sh, ts);
-    stampGrid(NOTE_TAILS[K.tail], K.tp, x + NOTE_W - 10, y + 7, 1);
+    const runW = (s) => (im ? im.width * s + 3 : 0) + pixelTextWidth(e.txt, s);
+    const ts = runW(2) <= cw ? 2 : 1;
+    const bx = cx0 + Math.max(0, (cw - runW(ts)) >> 1);
+    if (im) ctx.drawImage(im, bx, y + ((NOTE_H - im.height * ts) >> 1), im.width * ts, im.height * ts);
+    drawPixelTextShadow(ctx, e.txt, bx + (im ? im.width * ts + 3 : 0),
+      y + ((NOTE_H - ts * 5) >> 1), K.fg, sh, ts);
+    if (tail) stampGrid(tail, K.tp, x + NOTE_W - 10, y + 7, 1);
     // The flash, last and over everything: three pulses under a decay, so the
     // first is a near-white card and the two after it are the plate blinking
     // as it slides home. The frame goes white whole while the field only

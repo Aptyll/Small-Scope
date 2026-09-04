@@ -2611,6 +2611,41 @@
     '................................',
   ];
 
+  // ------------------------------------------------------------------- crate
+  // What a TURNOVER looks like: the mark on the market's `NEW STOCK` plate
+  // (the `market notices` banner, js/shop.js), where the gold sack says the
+  // PRICE of a thing and this says there is new stock on the counter. Authored
+  // at the 16 it is drawn at rather than at 32 like the sack - it is a still
+  // object with no sparkle to lose, and native pixels keep its braces crisp.
+  // Lit from above: a hot top rail, an X of pale bracing over mid plank, and
+  // the base rail dropping into shade.
+  const CRATE_PAL = {
+    '.': null,
+    'o': '#2a1a08', // outline and the rails' seams
+    'd': '#6b4620', // plank, in shade
+    'm': '#9c7038', // plank
+    'l': '#caa25c', // the bracing, and the lit base rail
+    'h': '#e8c47e', // the top rail catching the light
+  };
+  const crate = [
+    '.oooooooooooooo.',
+    '.ohhhhhhhhhhhho.',
+    '.ollllllllllllo.',
+    '.oooooooooooooo.',
+    '.olmmmmmmmmmmlo.',
+    '.ommlmmmmmmlmmo.',
+    '.ommmlmmmmlmmmo.',
+    '.ommmmmllmmmmmo.',
+    '.ommmmmllmmmmmo.',
+    '.ommmlmmmmlmmmo.',
+    '.ommlmmmmmmlmmo.',
+    '.olmmmmmmmmmmlo.',
+    '.oooooooooooooo.',
+    '.ollllllllllllo.',
+    '.oddddddddddddo.',
+    '.oooooooooooooo.',
+  ];
+
   // ---------------------------------------------------------------- gear icons
   // One 12x12 glyph PER VARIANT (12 total), baked once per material - leather /
   // iron / steel / gold - into SPRITES.gearIcons[slot][variant][material], so
@@ -3563,6 +3598,8 @@
     // 32 and baked at 16 (bakeHalf): the market plate it rides is HUD chrome
     // and 16 is the size that reads there.
     goldSack: [sackA, sackB, sackC, sackD, sackE, sackF].map((f) => bakeHalf(f, SACKPAL)),
+    // the same 16px stamp, but for the plate that is about STOCK not price
+    crate: bake(crate, CRATE_PAL),
     itemCardWhite: bake(itemCard, CARD_PALS.white),
     itemCardGreen: bake(itemCard, CARD_PALS.green),
     itemCardBlue: bake(itemCard, CARD_PALS.blue),

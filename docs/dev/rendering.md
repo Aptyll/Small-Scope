@@ -345,18 +345,29 @@ put in the [event feed](#scoreboard-and-event-feed): the feed is the record of w
 somebody, and a price is not that — it is the state of the world your bag is about to be sold
 into, so it belongs where the clock and the alive count already are.
 
-**One shape, read left to right, with no sentence in it**: the merchant's **gold sack**
-(`SPRITES.goldSack`, six frames — the same mark on every plate, this is the shop talking, not the
-world — turning over on `NOTE_FR` (0.11 s) the whole time the plate is up, so the coin keeps
-catching the light), then what it is about (the good's own 8×8 item icon and the price it landed
-on, at 2× where it fits and 1× where it does not — `NEW STOCK` is the one that does not), then one
-8×8 glyph carrying which way — an arrow up, an arrow down, or a crate.
+**One shape, read left to right, with no sentence in it**: the **mark** of what the news is, then
+what it is about, then one 8×8 glyph carrying which way — an arrow up or an arrow down.
 
-The plate is a fixed `NOTE_W`×`NOTE_H` (68×22) card, and `noteCard` is the whole
+The mark is the kind's own (`NOTE_KIND[k].mark`, a `SPRITES` key or null), 16×16 in a sunken well:
+the merchant's **gold sack** (`SPRITES.goldSack`, six frames turning over on `NOTE_FR` (0.11 s) the
+whole time a **price** plate is up, so the coin keeps catching the light) and a still wooden
+**crate** (`SPRITES.crate`) when the counter itself has turned over — a sack of coin is what a
+price is worth, a crate is what a delivery *is*. A stock plate has **no tail**: its crate has
+already said which kind of news this is, so the headline takes that 8 px instead.
+
+What it is about is the good's own item icon and the price it landed on, **sized together** —
+`runW(s)` measures the pair at a scale and the icon is drawn at the text's own, so a 2× price
+carries a 16×16 icon and both drop to 1× together if a headline is too long for 2×. An 8 px icon
+against a 10 px number reads as a footnote to it, and these two are one reading. `NEW STOCK` names
+no good, so it is text alone.
+
+The plate is a fixed `NOTE_W`×`NOTE_H` (78×22) card — 78 is what the content well needs, 16 px of
+icon and 3 of gap and the 22 of `60G` at 2× over the 30 the mark's well and the tail's gutter take
+— and `noteCard` is the whole
 of what makes it read as a stamped tag rather than as a rectangle: a shadow offset under it,
 **corners notched** off (`noteBox`, which draws the shape as three bands), a lit top edge and a
 shaded bottom one for the bevel, an opaque dark base under the kind's wash, a 1 px frame in its
-accent (`noteFrame`), a sunken well behind the sack, and the kind's ink **draining along the base**
+accent (`noteFrame`), a sunken well behind the mark, and the kind's ink **draining along the base**
 as the plate's own remaining life — the only place its 8 s is written down, and it is written as a
 length. Text is the `drawPixelTextShadow` font, because the whole plate fades and an outline
 stamped under a `globalAlpha` goes blotchy ([CLAUDE.md](../../CLAUDE.md#hard-rules)). `NOTE_KIND`

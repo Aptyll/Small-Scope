@@ -128,6 +128,14 @@ than blitting the canvas down, because a plain half-size blit throws away three 
 on art whose whole animation is a 1 px sparkle moving about that *is* the animation thrown away.
 Edit the grids at 32; what ships is the average of them.
 
+**The crate is the other mark on that plate, and it is hand-drawn.** `SPRITES.crate` is the 16×16
+`crate` grid on `CRATE_PAL` (five colours: an outline, plank in shade and in light, the pale X of
+bracing, and the top rail's highlight), `bake`d 1:1 at the size it is drawn — a still box has no
+sparkle to lose, so there is nothing for a 32 px authoring pass to preserve. It replaces the sack
+on the plate whose news is a **turnover** rather than a price (`NOTE_KIND.stock.mark`,
+[the plates](rendering.md#market-notices-the-plates-under-the-minimap)): same 16×16 stamp, same
+sunken well, so the column reads as one column whichever kind lands in it.
+
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not
 baked at all: `drawTurretHead()` in draw-world.js rasterises them pixel by pixel at the live bearing and
