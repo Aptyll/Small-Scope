@@ -604,9 +604,9 @@ const landmarks = []; // named points of interest, placed by worldgen (see the l
 // local slot's ending puts up.
 
 // Causes that are a BURN rather than a blow (see updateBurn, js/actions.js).
-// A bite of one is not a hit: it goes through i-frames (a roll does not put a
-// fire out), grants none of its own, and never shoves - otherwise the 0.7 s
-// of grace every hit hands out would swallow the whole burn.
+// A bite of one is not a hit: it goes through the i-frames a body DOES have
+// (a roll does not put a fire out, and neither does a respawn) and never
+// shoves - a burn is a condition on the body, not a blow landing on it.
 const DOT_CAUSE = { fire: true };
 
 // The shove a blow lands on a body, in px/s. It is the BASELINE, not the
@@ -615,6 +615,11 @@ const DOT_CAUSE = { fire: true };
 // worker's, and the ordinary blow is 1.
 const HIT_KB = 110;
 
+// A hit grants NO i-frames. `invuln` is only ever set by something DELIBERATE -
+// the dodge roll, a respawn, the drop's landing, scrambling out of a hole - so
+// two arrows arriving in the same step both land, both shove and both light
+// their fire, rather than the second being eaten by the first's grace.
+//
 // src: the player who dealt it (kill credit + the log line), null for the
 // world; cause: a DEATH_CAUSE key naming what the world did, when src is null;
 // kb: the multiplier on HIT_KB (hurtUnit's `kbMul`, undefined = an ordinary shove)
@@ -625,7 +630,6 @@ function damagePlayer(p, dmg, dx, dy, src, cause, crit, kb) {
   p.hp -= dmg;
   p.hurtT = 0.25;
   if (!dot) {
-    p.invuln = 0.7;
     // a juggernaut takes the damage and none of the shove (js/abilities.js)
     if (p.jugT > 0) { p.kbx = 0; p.kby = 0; }
     else {

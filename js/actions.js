@@ -673,7 +673,8 @@ function unitsNear(src, x, y, r) {
 // The same list minus anyone whose i-frames are up: the one a BLOW sweeps,
 // since a rival mid-roll is untouchable. A lasting ground CONDITION (the
 // crater's deep snow, the falcon's eye) wants unitsNear - neither is a hit,
-// and neither is dodged by having just taken one.
+// and a roll should not shrug one off. Taking a hit grants nothing here: only
+// the roll, a respawn and the landing ever set invuln (damagePlayer).
 function unitsHit(src, x, y, r) {
   return unitsNear(src, x, y, r).filter((e) => !(e.invuln > 0));
 }

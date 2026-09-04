@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 3.00'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.01'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.01', 'A HIT NO LONGER GRANTS INVINCIBILITY - EVERY BIT OF A VOLLEY LANDS ITS OWN DAMAGE, SHOVE AND FIRE - AND THE WIKI READS TO ITS OWN SONG, WHISPERING WOODS, LOOPING FROM THE MOMENT IT OPENS.'],
   ['3.00', 'ONE CLICK NOW FIRES EVERY BIT YOUR TOOL CAN AFFORD - A TOOLS TENSILE IS A WEIGHT BUDGET SPENT UP THE COLUMN, A MODIFIER ONLY CHANGES THE SHOTS ABOVE IT AND TWO OF A KIND COMPOUND, AND A TOOL CARRYING MORE THAN IT CAN SWING WEARS A ! WARNING.'],
   ['2.99', 'THE COUNTER IS THE SHOP NOW - A BIG HANGING SIGN, SMALLER GOODS, AIR UNDER A SHIMMERING SELL STRIP, AND A ROAD ALONG THE BOTTOM WHERE THE MERCHANTS WAGON DRIVES OUT AND BACK AGAINST A COUNTDOWN TO THE NEXT RESTOCK.'],
   ['2.98', 'THE MARKET PLATES ARE HALF AGAIN AS BIG AND FLASH WHITE AS THEY FLY IN, CARRYING AN ANIMATED SACK OF GOLD, AND A SPIKE NOW DINGS WHERE A CRASH SIGHS.'],
@@ -2286,6 +2287,9 @@ function renderGear(now, a) {
 // own clock (wikiT), a tab bar of PAGES under the title (the settings slab's
 // navbar grammar), and under that a content window the open page scrolls
 // through when it outgrows it - wheel, up/down, the rail on the right.
+// It takes the music layer outright the way class select does, not as a hold:
+// WHISPERING WOODS loops under it from the moment it opens (beginWiki), and
+// the title track comes back on the way out (leaveWiki).
 // A page is data: WIKI_PAGES is {id, label, build()}, build returning the
 // page's BLOCKS top to bottom (a heading, a line, a rule, a beast card, a
 // table row), each with a fixed height, so the layout, the draw, the hit
@@ -2456,8 +2460,13 @@ function beginWiki() {
   const m = state.menu;
   m.screen = 'wiki';
   SFX.place();
+  SFX.music.play('wiki', { in: 0.6, out: 0.5 }); // WHISPERING WOODS, from the moment it opens
 }
-function leaveWiki() { state.menu.screen = 'menu'; SFX.pickup(); }
+function leaveWiki() {
+  state.menu.screen = 'menu';
+  SFX.pickup();
+  SFX.music.play('intro', { in: 0.6, out: 0.5 }); // ...and the title takes its own back
+}
 function wikiScrollBy(d) {
   const L = wikiLayout();
   wikiScroll[L.page.id] = Math.max(0, Math.min(L.maxScroll, L.scroll + d));

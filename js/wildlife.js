@@ -611,7 +611,9 @@ const WOLF_SPD = 96;       // px/s hunting: faster than a walk, slower than a sl
 const WOLF_BITE_R = 13;    // px reach of a bite
 const WOLF_BITE_DMG = 9;
 const WOLF_LV_DMG = 1;     // bite dmg a level over WOLF_BITE_DMG (the level: animalLevel, the animals banner)
-const WOLF_BITE_CD = 1;    // s between one wolf's bites (damagePlayer's i-frames cap the pack)
+// s between ONE wolf's bites. Nothing caps the PACK any more - a hit grants no
+// i-frames (damagePlayer), so four wolves on you is four bites a second.
+const WOLF_BITE_CD = 1;
 const WOLF_THREAT_T = 2.5;   // s lingering at the edge of its sight before a wolf charges; three times as fast at its nose
 const WOLF_THREAT_DECAY = 3; // s for a full threat bar to drain off the ground - then the wolf goes home
 const BIRD_FLUSH = 34;     // px: a player this close puts the whole rookery up

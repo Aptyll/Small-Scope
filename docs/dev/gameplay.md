@@ -565,7 +565,11 @@ cooldown wipes) are the HUD's half and live with it in [rendering.md](rendering.
 ## The wiki
 
 The main menu's **WIKI** plank (`m.screen = 'wiki'`, its own `wikiT` ease, ESC back) opens the
-game written down: one surface, a tab bar of **pages**, each a scrolling column of blocks. The
+game written down: one surface, a tab bar of **pages**, each a scrolling column of blocks.
+WHISPERING WOODS (`TRACKS.wiki`) loops under it from the moment it opens — an ordinary
+`music.play` the way class select takes the layer, not the counter's hold, because the wiki is
+a surface you sit in rather than a window over a running match; `leaveWiki()` puts `intro` back
+([Audio](#audio)). The
 page itself — the slab, the tabs, the blocks, the rail — is in
 [rendering.md](rendering.md#the-wiki-screen); this section is what the pages *say* and where
 the numbers come from. Every number on a page is read off the constant the sim spends, never
@@ -819,7 +823,9 @@ for a weapon.
 `input.mx/my` (facing direction if nothing is held): an impulse of
 `max(DODGE_SPEED (215), current speed)` into `p.vx/vy`
 for `DODGE_T` (0.28 s), with i-frames for the roll only (`p.invuln` — momentum carried
-past the roll gets no i-frames). Two charges (`DODGE_CHARGES`), refilling **one at a time**
+past the roll gets no i-frames). It is the **only** i-frame a fight produces: taking a hit grants
+none ([i-frames](#i-frames-only-something-deliberate-grants-them)), so the roll is the whole answer
+to a volley. Two charges (`DODGE_CHARGES`), refilling **one at a time**
 every `DODGE_CD` (3.5 s); state lives on the player as `dodgeT/dodgeVX/dodgeVY/dodgeCharges/
 dodgeRegenT/dodgeDustT` (`dodgeVX/VY` exist only for the spin/ghost render — movement runs on
 `vx/vy`). While rolling, movement input, friction, footprints, walk animation, and the held
@@ -877,7 +883,7 @@ is not a coincidence to be re-established per feature; it is what these funnels 
 | --- | --- |
 | `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, kbMul, cause, ambush, crit, burn, burnDps }` — `kb` the absolute px/s of shove an ability picks, `kbMul` the multiplier on whatever shove that kind takes anyway ([knockback](#knockback-one-number-thrown-at-three-weights)). Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
 | `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — slots, wildlife **and** bots in one list |
-| `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps. A lasting ground *condition* (a crater) wants `unitsNear` — a condition is not a hit, and is not dodged by having just taken one |
+| `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps, so a rival mid-roll is untouchable. A lasting ground *condition* (a crater) wants `unitsNear` — a condition is not a hit, and a roll should not shrug one off |
 | `stunUnit` `rootUnit` `slowUnit` `netUnit` `markUnit` `igniteUnit` | the one place each state is written. Each takes the worse/longer of what is already on the body |
 | `unitMoveMul(e)` | what is left of a non-player's speed — `abilityMoveMul`'s twin. Spent inside `navStep`, so one edit slows every walker; the two movers that steer themselves rather than route (a loitering bot, a bird in flight) fold it in by hand |
 | `clearUnitStatus(e)` / `douseUnit(e)` | a fresh body, and a fire put out. Called by `Player.reset`, `die`, `makeAnimal`, `makeRobot` |
@@ -888,6 +894,33 @@ everybody's fair game — exactly how the world already treated a deer. `sideOf(
 lists the side of a **thing in the world** — a net, a shot in flight — rather than a living
 caster, so a net outlives the hunter who threw it and still knows whose it was; `abCredit(w)`
 (js/abilities.js) is its other half, and pays a kill to nobody once that caster is down.
+
+### I-frames: only something deliberate grants them
+
+`p.invuln` (players only — an animal or a worker bot has no such field and never had) counts down
+in `updatePlayer` and is read by every picker at once: the arrow loop skips a slot that has it,
+`unitsHit` drops one, `rollSweep` passes over one, and `damagePlayer` returns early on one. **A hit
+sets it nowhere.** As of **PATCH 3.01** the only things that grant it are deliberate:
+
+| Granted by | For | Why |
+| --- | --- | --- |
+| `tryDodge` | `DODGE_T` + 0.05 s | the roll *is* the dodge — [Dodge roll](#dodge-roll) |
+| `Player.reset` — so `respawnPlayer` | 3 s (0 on the very first spawn) | nobody is spawn-camped |
+| `landPlayer`, `practiceRevive` | 2 s | a beat of grace while the snow settles |
+| the ice-hole scramble (`updatePlayer`, js/sim.js) | 0.8 s | you climb out; you are not bitten climbing out |
+| the drop briefing (`js/boot.js`) | 0.4 s, refreshed | the lesson is not a fight |
+
+`rollTackle` **drops** them first, because the tackle is the one hit a roll cannot dodge.
+
+Before PATCH 3.01 every blow also handed the body 0.7 s of grace, which meant the second of two
+shots arriving in the same step was silently thrown away — and since **PATCH 3.00** one press puts
+a whole volley in the air ([tools and bits](#tools-and-bits)), so a close-range column landing two
+or three bits on one body was paying for one. Now each lands its own damage, its own shove and its
+own fire. Two consequences worth knowing: the **wolf pack** lost its cap
+([Wolves](#wolves-the-first-enemy)), and
+a body can take several hits in one frame — `SFX.hurt()`’s 0.03 s `gap` collapses the oofs into
+one so they do not phase, while the damage floaters, the red flash, the shove and the shake are
+per hit. Knockback does not accumulate: the last blow of a step writes `kbx`/`kby` outright.
 
 The six states, and what each does to a body:
 
@@ -927,9 +960,11 @@ credit, `DEATH_CAUSE.fire` — "BURNED IN THE SNOW").
 
 Two rules make the burn behave like fire rather than like a stream of small arrows:
 
-- **`DOT_CAUSE`** (js/player.js) — a bite of fire is *not a blow*. It goes **through** i-frames (a
-  roll does not put a fire out), grants none of its own, and never shoves. Without that, the 0.7 s
-  of grace every hit hands out would swallow the whole burn. It still breaks cover and the meal:
+- **`DOT_CAUSE`** (js/player.js) — a bite of fire is *not a blow*. It goes **through** the i-frames
+  a body does have — a roll does not put a fire out, and neither does a respawn — and never shoves:
+  a burn is a condition on the body, not a blow landing on it. (Before **PATCH 3.01** it also had
+  to dodge the 0.7 s of grace every hit granted, which would have swallowed the whole burn — see
+  [i-frames](#i-frames-only-something-deliberate-grants-them).) It still breaks cover and the meal:
   you cannot lie hidden, or eat, while you are alight.
 - **The tick's own damage type is `burn`, not `fire`** — otherwise the bite would relight the fire
   dealing it and nothing would ever go out.
@@ -1173,9 +1208,12 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   route to (out on a hole) it holds and faces. Bites do `WOLF_BITE_DMG` (9, plus
   `WOLF_LV_DMG` — 1 — for every level past the wolf's first)
   inside `WOLF_BITE_R` (13 px) every `WOLF_BITE_CD` (1 s) per wolf, through
-  `damagePlayer(t, dmg, dx, dy, null, 'wolf')` — whose own 0.7 s of i-frames is what keeps four
-  wolves from deleting anyone: measured, standing in a den costs ~9 hp/s, so a level-1 slot has
-  ~10 s to get out. Death reads `WENT TO THE WOLVES` in the feed
+  `damagePlayer(t, dmg, dx, dy, null, 'wolf')`. **Nothing caps the pack.** Until **PATCH 3.01**
+  the 0.7 s of i-frames a hit granted did — standing in a den measured ~9 hp/s, about 10 s for a
+  level-1 slot — but a hit grants none now
+  ([i-frames](#i-frames-only-something-deliberate-grants-them)), so all four bites land and a den
+  costs up to ~36 hp/s: under three seconds for a 92 hp hunter. `WOLF_BITE_CD` is the only dial
+  left on it. Death reads `WENT TO THE WOLVES` in the feed
   ([multiplayer.md](multiplayer.md#kills-and-the-event-feed)).
 - **Off duty** it patrols its den on routed legs from the same `wanderGoal` the prey graze with
   (2–5 tiles); once it drifts past `r * 0.8` the arc narrows to 0.5 rad straight back at the den,
@@ -2351,6 +2389,7 @@ victory, the lobby) can never be undone by a release arriving after it. The
 | `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
 | `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |
 | `village` — FOREST VILLAGE LOOP | `openShop()`, as a **hold**; `closeShop()` releases it | yes |
+| `wiki` — WHISPERING WOODS | `beginWiki()`, as an ordinary **play**; `leaveWiki()` puts `intro` back | yes |
 | `victory` — DROP THE ICE | `endMatch('won')` | yes |
 | `defeat` — SLEEPY GAME SAVE | `endMatch('lost')` | yes |
 

@@ -296,13 +296,15 @@ player somewhere the player can read (a map dot, an icon), gate that on
 `rootUnit`, `slowUnit`, `netUnit`, `markUnit`, `igniteUnit`). One call, and a slot, a deer and a
 worker bot all take it; the three per-kind functions under `hurtUnit` exist for what is genuinely
 per-kind and are not the entry point. For an **area** effect sweep `unitsHit(src, x, y, r)` (a blow:
-i-framed slots dropped) or `unitsNear` (a lasting ground condition, which is not dodged by having
-just taken a hit) rather than writing a loop per kind — that loop is exactly how wildlife and bots
+a slot mid-roll or fresh off a respawn is dropped) or `unitsNear` (a lasting ground condition,
+which a roll should not shrug off) rather than writing a loop per kind — that loop is exactly how wildlife and bots
 fall out of a feature. Still pass the attacker as `src` (or, when the world did it, a `DEATH_CAUSE`
 key as `o.cause`): miss it and the kill is uncredited on the TAB scoreboard and the event feed
 reports the death as an accident. A **new damage type** is one row in `DMG_TYPES`; if it lingers on
-the body the way `fire` does, it also needs a `DOT_CAUSE` key, or every bite is eaten by the 0.7 s
-of i-frames the previous one granted. See
+the body the way `fire` does, it also needs a `DOT_CAUSE` key, or a roll or a respawn puts the
+fire out. **A hit grants no i-frames** — two shots landing in the same step both count, which is
+what makes a volley worth its weight; only something deliberate (the roll, a respawn, the landing)
+ever sets `p.invuln`. See
 [gameplay.md](gameplay.md#status-effects-one-set-for-every-unit) and
 [multiplayer.md](multiplayer.md#kills-and-the-event-feed).
 
@@ -499,7 +501,8 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   `p.swing` value, and `SPRITES.itemBow` itself is live on the end screen's kills plate.
 - `SFX.nightSting` in [js/audio.js](../../js/audio.js) is unreferenced since the raider removal
   (`SFX.monsterDie` is live again — every animal death plays it).
-- `audio/music/` is now exactly the six files `TRACKS` names — the alternate takes and album art
+- `audio/music/` is again exactly the files `TRACKS` names — nine, since WHISPERING WOODS was
+  wired to the wiki in `PATCH 3.01`. The alternate takes and album art
   that sat beside them (34 MB, nothing loading them) were deleted in `PATCH 1.53`; recover one with
   `git show ee284a0:"audio/music/<name>"` if a cue ever wants it. A track is live only once it is in
   `TRACKS`. `app/server.js`'s `.ogg`/`.wav` MIME rows are forward-looking — every asset in the repo
