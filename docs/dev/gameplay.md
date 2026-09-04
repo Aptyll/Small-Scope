@@ -149,8 +149,14 @@ One entry in the `TOOLS` table (`shortbow`, `sling`, `recurve`, `hornbow`, `long
 | --- | --- |
 | `rof` | game steps between shots. `toolRof(p, cell)` turns it into seconds and scales it by `kit.nock / BOW_NOCK`, so QUICKDRAW, the LOOSE ability rank and QUICK HANDS all still quicken it |
 | `cap` | how many bit cells it has (2–5) |
-| `tensile` | the heaviest bit it can throw; anything heavier sits in its cell as dead weight and is skipped |
+| `tensile` | **the weight budget one press has to spend on those cells** — reset at the top of every activation and spent bottom-up, and the first cell that would push the running total past it ends the press there ([firing](#firing)) |
 | `tier` / `art` | which of the three `TOOL_TIERS` palettes it wears, and which 12×12 silhouette |
+
+`cap` and `tensile` are the two halves of a tool: **cap is how much you may hang on it, tensile
+how much of that it can swing at once.** The tiers grow the two together at roughly four weight a
+cell — SHORTBOW 9/2, SLING 7/2, RECURVE 13/3, HORN BOW 15/4, LONGBOW 22/5 — so a build that fits
+its cap and busts its budget is not refused, it is *truncated*, and the weapon well wears a
+[**"!"**](rendering.md#the-bit-column) to say so.
 
 A tool is **instanced**: its bag cell *is* the tool, `bits` array and all (`makeTool`), so it is
 moved between bag, slot and drop rather than rebuilt from its type name — see the hard rule in
@@ -162,9 +168,13 @@ up later" work with no code: `spawnDrop`'s `it` payload is the same object the b
 
 One entry in the `BITS` table, and there are two kinds of them, told apart by `proj`.
 
-A **projectile bit** is one shot: `weight` (what the tool has to be strong enough to throw),
-`path` (how it flies), `solid` (whether a wall stops it), `ff` (whether it will hurt your own
-side), `kb` ([knockback](#knockback-one-number-thrown-at-three-weights)), and
+**Every bit has a `weight`**, projectile and modifier alike, because weight is what a press
+*spends* out of the tool's tensile budget. A heavy bit is not dead weight any more — it is
+expensive, and what it costs is whatever is stacked after it.
+
+A **projectile bit** is one shot: `path` (how it flies), `solid` (whether a wall stops it), `ff`
+(whether it will hurt your own side), `kb`
+([knockback](#knockback-one-number-thrown-at-three-weights)), and
 `life`/`speed`/`dmg` as baselines. Optional `lit` is a light radius it carries in
 flight; optional `reach` widens every hit test past the tip (a bit with a *body* — the fist, the
 axe); optional `body` names the silhouette the shots pass draws it as (`BIT_BODY`, js/render.js);
@@ -187,13 +197,25 @@ the baseline (×1), an ICE LANCE staggers (×1.6), a THROWING LOG flattens (×2.
 throws a body across the snow (×4). The tooltip prints it as `x4`, the one bit row that is a
 multiple rather than a quantity.
 
-A **modifier bit** (`proj: false`) never flies and has no weight. Its `mod(m)` edits the envelope
-**every projectile bit on the same tool** is fired through, folded once per press by `toolMods`:
-`spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot becomes N in a spread), `twin` (fire the
-next two projectile bits in one press), `lit`, and the fire quartet below. Cells fold **in whatever
-order they sit in**, so a `mod` must write values that do not depend on that order — a max or a set,
-never a multiply of what is already there. Eight exist: SPEEDUP, SPLITTER, DUPLICATE, HEFT,
-LONGSHOT, and the three that carry fire.
+A **modifier bit** (`proj: false`) never flies, but it costs weight like anything else. Its
+`mod(m)` edits the shot envelope — `spdMul`, `dmgMul`, `dmgAdd`, `lifeMul`, `fan` (one shot
+becomes N in a spread), `dup` (the whole fan fired again), `lit`, and the fire quartet below.
+
+Two rules govern it, and both are load-bearing:
+
+- **It applies forward and only forward.** A modifier changes every projectile *after* it in the
+  list and none before it, so where a modifier sits is the whole of what it is worth and a FLAME
+  in the top cell sets nothing alight. Once a press has reached one it stays in the envelope for
+  the rest of that press — there is no per-shot expiry. That is why the WARRIOR flies in with its
+  HEFT *under* its arrow.
+- **It compounds with whatever is already there.** Every `mod` composes with the value it is
+  handed — `*=` a multiplier, `+=` a quantity — and must never `=` or `Math.max` it. Two SPEEDUPs are
+  four times the speed, two SPLITTERs nine shots, two FLAMEs twice as long at twice the rate
+  (which is exactly a PYRE). **Every modifier added from here follows that rule**; the only field
+  that is set rather than composed is `m.type`, because a damage type is a category and not a
+  magnitude. `toolPlan` walking forward rather than folding a set is what makes it possible.
+
+Eight exist: SPEEDUP, SPLITTER, DUPLICATE, HEFT, LONGSHOT, and the three that carry fire.
 
 #### Fire on a shot
 
@@ -207,9 +229,10 @@ What a burn then does is [status effects](#status-effects-one-set-for-every-unit
 | --- | --- | --- |
 | **FLAME** | KEEN, under SPEEDUP | `type: 'fire'`, `BURN_T` 3 s at `BURN_DPS` 6, `dmgAdd += 2`, `lit` 30. The flat bonus is small on purpose: the burn is where the damage went |
 | **PYRE** | GILDED, under FLAME | the same fire, `PYRE_T` 6 s at `PYRE_DPS` 12 — twice as long and twice as hot |
-| **CINDER BURST** | GILDED, under DUPLICATE | plain fire, plus `m.cinder` — a `CINDER_R` (26 px) ring lit where the shot **ends**, hit or miss. The multiplying lineage's finish: SPLITTER multiplies the shot, DUPLICATE the press, CINDER the impact |
+| **CINDER BURST** | GILDED, under DUPLICATE | plain fire, plus `m.cinder` — a `CINDER_R` (26 px) ring lit where the shot **ends**, hit or miss. The multiplying lineage's finish: SPLITTER multiplies one bit's arms, DUPLICATE fires the fan again, CINDER multiplies the impact |
 
-A tool holding only modifiers fires nothing, the same as one holding only bits too heavy for it.
+A tool holding only modifiers fires nothing, the same as one whose very first cell is already
+heavier than the body can swing.
 
 #### The closing line: three bits that are not archery
 
@@ -248,6 +271,10 @@ is the teleport's whole rule: a request that hits nothing takes you nowhere.
 
 ### Firing
 
+**One press is the whole tool, resolved in one frame.** Nothing cycles between presses: a press
+spends the tensile budget up the column and everything it can afford leaves together, so a tool
+whose budget covers all of it fires all of it at once.
+
 `fireTool(p)` is the one entry point — the falling edge of `input.fire`, for every slot alike:
 
 1. Read the cover first (`ambushReady`), before anything below can break it.
@@ -255,12 +282,28 @@ is the teleport's whole rule: a request that hits nothing takes you nowhere.
    in `FISH_CATCH_R`, spears through the sheet instead of loosing. It takes the press and the
    cycle.
 3. No tool on the selected slot → `dryFire(p)` and stop.
-4. `toolMods(cell)`; DUPLICATE makes the press consume two bits instead of one.
-5. Per shot: `nextBit(cell)` (walk forward from `cell.idx`, wrapping
-   once, and take the first bit that is a projectile **and** light enough — the index tracker
-   lands one past what it found, which is what makes the list cycle), then `emitBit`.
-6. Nothing fired at all → `dryFire`. Otherwise `p.nockT = toolRof(...)`, one `SFX.arrow`, and
-   `risePlayer` (the shot is what breaks cover).
+4. `toolPlan(cell)` — the one function the whole weapon runs on, below.
+5. No shots in the plan → `dryFire`. Otherwise `emitBit` for each, then `p.nockT = toolRof(...)`,
+   one `SFX.arrow`, and `risePlayer` (the shot is what breaks cover).
+
+#### `toolPlan`: one activation, in one pass
+
+`toolPlan(cell)` walks the cells from 0 up and returns `{ shots, used, cut, load, tensile }`. It is
+the *only* place the arithmetic lives, and the press, the [aim line](#the-draw) and the
+[bit column](rendering.md#the-bit-column) all read it — so the three can never disagree about what
+the button is about to do.
+
+- An empty cell costs nothing and stops nothing.
+- Otherwise the cell's weight is added to `load` (the whole column's weight, which is what the
+  "!" reads) and, while the press is still running, tested against the budget: if
+  `used + weight > tensile` the walk records `cut` and fires nothing further. Everything before
+  the cut has already gone.
+- A projectile inside the budget is pushed onto `shots` **with a snapshot of the envelope as it
+  stands right now**; a modifier inside the budget folds into the envelope for everything after.
+
+`peekBit(cell)` is `shots[0].i` — the lead shot, which is what the column's caret marks and what
+the aim line is drawn for. `toolLoad(cell)` and `toolOver(cell)` are the column's weight and
+whether it exceeds the budget.
 
 `emitBit` is where the player is folded back in: the bit's own damage leads, the class kit's
 `dmgBase`/`dmgPow`, the kit's speed bonus (`spdDmg`) and the hero level add to it, **the draw
@@ -271,9 +314,15 @@ envelope the aim line measures. The shot goes into the same `arrows` array as be
 `path`, `solid`, `ff`, `kb`, `reach`, `body`, `impact`, `type`, `burn`, `burnDps`, `cinder`,
 `lit` and `col` alongside the old fields.
 
-`toolReady(p)` is the only refusal besides the cycle: an empty slot and a tool with no bit light
-enough to throw are both dry, and `updatePlayer` refuses the draw on both the same way
+`toolReady(p)` is the only refusal besides the cycle: an empty slot, and a tool whose budget
+reaches no projectile at all (nothing loaded, only modifiers, or a first cell already too heavy
+for the body), are both dry, and `updatePlayer` refuses the draw on both the same way
 (`dryFire`, the slack-string tell).
+
+Every bit a press can afford leaves in the **same frame**, so no two of them may be stacked inside
+one another: each bit past the first is nudged `SHOT_SKEW` (0.05 rad) off the aim, alternating
+sides, and a DUPLICATE's repeats `DUP_SKEW` (0.07) — per *bit* and per *repeat*, never per arm of
+a SPLITTER's fan, which already spreads its own arms.
 
 ### Flight paths
 
@@ -308,8 +357,9 @@ derived from the pointer every read, never stored: open over the well, kept open
 pointer is on the risen column itself, and forced open while a **bit is being carried** anywhere
 (the column is where a bit goes, so picking one up presents the destination). Cell 0 is at the
 **bottom**, nearest the tool, because that is
-what fires first; a gold caret on the left edge marks what the next press will fire and climbs as
-the tool cycles. While the column is up the backpack is open too (`bagOpenNow`), because
+what fires first; a gold caret on the left edge marks the lead shot, the budget bar over the top
+cell says what the press spends of the tool's strength, and every cell past the cut goes
+red-rimmed and washed out. While the column is up the backpack is open too (`bagOpenNow`), because
 customising a tool means dragging bits between the two. It is a hover, not a mode.
 
 The drag is one mechanism shared by the grid, the weapon slot and the column
@@ -414,16 +464,21 @@ says its tier, so three 12×12 silhouettes cover five tools across three tiers �
 
 A bot has no bit column and no pointer, so `botFitLoadout(p)` (called from `updateAI`'s step 8 on
 a 2.5 s timer) does by hand what a person does with a drag: push loose bits into the tool it is
-firing, and put a spare tool on a free key — or over a strictly worse body, which then takes the
-bag cell the new one came out of. It only takes bits that fly *toward* what they were aimed at; a
-bot cannot read a boomerang or an orbit and leaves those for someone who can.
+firing **while they still fit inside its tensile budget**, sort the build so its modifiers sit
+under the shots they are meant to change (a stable sort, no rng), and put a spare tool on a free
+key — or over a strictly worse body, which then takes the bag cell the new one came out of. It
+only takes bits that fly *toward* what they were aimed at; a bot cannot read a boomerang or an
+orbit and leaves those for someone who can.
 
 ### Starting loadouts
 
 `CLASS_LOADOUT` gives each class a tool and its bits, and `giveLoadout(p)` is called from
 `Player.reset()` and from `setClass()` — so the weapon is part of picking a class, every AI
 slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
-BARBED SHOT; the WARRIOR with a SLING loaded ARROW + HEFT. Death **spills the equipped tool** with
+BARBED SHOT (7 of its 9 strength, both firing); the WARRIOR with a SLING loaded **HEFT then
+ARROW** — the fitting under the shot, filling the sling's 7 exactly. The order in `bits` is the
+firing order, and a starting kit that fitted a modifier *above* its only shot would teach the
+forward-only rule backwards on the first press of the match. Death **spills the equipped tool** with
 the bag (`spillInventory`), so a build lies where its owner fell and the bird hands back the
 starting one — you come back armed, but not as the player you were. The gear pop-up's preview
 shows the weapon at the body's side (`drawGearPreview`, js/menu.js) — the other half of what a
@@ -535,9 +590,9 @@ typed twice, so a retune can never leave the wiki lying.
   skill tree and not a gate but the picture of what the map may hand you, and it may hand you
   all of it — a profile on its first flight rolls exactly what one five hundred matches old
   rolls (**PATCH 2.08**; before it, kinds were researched with lifetime gold and a fresh profile
-  played out of a much smaller pool). Three tables — TOOLS (rate of fire, bit slots, max
-  weight), BITS (damage, weight, speed, lifespan, flight) and MODIFIERS (the first sentence of
-  the blurb) — worn to gilded, each kind's icon on its own tier plate with the blue pip for "you
+  played out of a much smaller pool). Three tables — TOOLS (rate of fire, bit slots, tensile),
+  BITS (damage, weight, speed, lifespan, flight) and MODIFIERS (weight, and the first sentence
+  of the blurb) — worn to gilded, each kind's icon on its own tier plate with the blue pip for "you
   have held one" (`PROFILE.techSeen`), and a hover raising the full card in the tooltip
   (`tipKind`, ui.js). Until PATCH 2.90 this plank was a **TECH TREE**: the same kinds as an 8×3
   grid of lineages, nothing written down but the tier names, every number read one hover at a
@@ -625,7 +680,8 @@ never hit structures — a building is broken by hand with E, not shot. However 
 `p.fireArmed` is what makes the draw survive a tool that isn't ready. It is set on the press edge,
 cleared on release and at every point that cancels a draw (`tryWork`, falling in a hole, an
 overlay opening in `sampleHumanInput`, changing slot, `die`), and the draw begins on the first
-step where it is set *and* `nockT <= 0` *and* `toolReady(p)`. Requiring a fresh press instead
+step where it is set *and* `nockT <= 0` *and* `toolReady(p)` (a tool whose budget reaches at
+least one projectile). Requiring a fresh press instead
 would deadlock every controller that simply holds the button down — which is every AI slot:
 `updateAI` sets `inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight back to
 true and no second edge ever arrives. `p.chargeT` is the raw seconds held and is **never
@@ -646,7 +702,7 @@ cooldown a different length from the one running (the overhead bar used to divid
 because there is nothing to refill.
 
 Three indicators carry it, and none is a word (the hud strip's weapon well only reddens its rim
-when the selected tool cannot answer — an empty slot, or nothing light enough to throw):
+when the selected tool cannot answer — an empty slot, or a tensile budget that reaches no shot):
 
 - **The weapon well** (`drawToolCell`) — the top-down cooldown wipe, the same cover every
   ability well cools by, over exactly `toolCycle`. When the wipe is gone, the bow is ready.
@@ -732,7 +788,8 @@ shot spawns) — not the feet — so the line and the flight pass exactly throug
 of running parallel a few px above it.
 
 The line is **truthful, not decorative**, and it is truthful about the **bit that is up next**
-(`peekBit`) at the **draw held right now**, not about a bow in general: it runs exactly as far
+(`toolPlan`'s lead shot) at the **draw held right now**, not about a bow in general: it runs
+exactly as far
 as that bit would fly if loosed this instant (`shotFlight` — speed × life through the tool's
 modifiers and the draw curve, so it grows out of the bow as the string comes back, and a tap's
 line is a stub), and only stops at an `isSolidTile` if that
@@ -2125,9 +2182,22 @@ red × when it is off. While muted all three sound dials draw grey rather than g
 (`drawSliderRow`'s `dim`), so what the speaker silences reads off the page without a word of
 text. **N** still toggles the same flag from anywhere.
 
-The CONTROLS page is the hotkey listing in two columns, baked once into `controlsCv`
-(`bakeControls`, panels.js) and blitted into the content window at the page's scroll. The title
-screen's TUTORIAL panel carries the same keys under `1-4 CLASS ABILITIES`.
+The CONTROLS page is the hotkey listing in two columns and, under a rule, **THE WEAPON** — the
+one thing about the left button a new player cannot work out by pressing it, drawn rather than
+explained (`drawToolPrimer`). Both are baked once into `controlsCv` (`bakeControls`, panels.js)
+and blitted into the content window at the page's scroll, which is now long enough that the
+page's scroll track appears.
+
+The primer is a **real HORN BOW carrying a real overload** — ARROW 2, FLAME 4, ARROW 2, THROWING
+LOG 8 against a tensile of 15 — run through `toolPlan` at bake time, so every number on it is the
+game's own arithmetic and the picture cannot drift from the weapon. The cells, the hatch on the
+modifier, the weight pips, the budget track and the "!" are the **same marks** the bit column and
+the weapon well draw in play (`modPlate` / `drawOverWarn`, ui.js, both of which take the context
+to paint so a bake can borrow them) — that is the whole point: what is learned here is recognised
+there. A gold arrow up the left edge is the firing order, each cell is annotated in its own bit's
+colour with the log's cell red and washed out, and two lines close it: one press fires every bit
+the tool can afford, and two of one modifier compound. The title screen's TUTORIAL panel carries
+the same keys under `1-4 CLASS ABILITIES`.
 
 `settings.info` (one INFO DISPLAY toggle row in the ESC menu, **or F3**, minecraft-style — the
 keydown handler flips it in any mode and suppresses the browser's find bar; default off) shows

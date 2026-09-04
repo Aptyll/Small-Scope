@@ -1379,7 +1379,7 @@ function tipShop(h) {
     const o = shopOffer(h.sec, h.i);
     if (!o) return null;
     const d = o.kind === 'tool' ? tipTool(makeTool(o.id))
-      : o.kind === 'bit' ? tipBit(o.id, heldTool(player))
+      : o.kind === 'bit' ? tipBit(o.id)
       : tipStack({ type: o.type, n: 1 });
     d.rows.unshift(['PRICE', o.price + ' GOLD', player.inv.gold >= o.price ? RES_COLORS.gold : '#e0637a']);
     d.notes.push(['CLICK TO BUY ONE', TIP_DIM]);

@@ -185,19 +185,31 @@ with no other edit. Both need a `price`, or the merchant sells it for nothing an
 for nothing ([the counter](gameplay.md#the-merchants-counter) - half the price is what it fetches,
 and a tool carries its loaded bits into that sum). A **tool** needs `rof`/`cap`/`tensile`/`tier`
 and an `art` key — reuse one of
-the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. A
-**projectile bit** needs `weight`/`path`/`solid`/`ff`/`kb`/`life`/`speed`/`dmg`/`col` and an
+the three 12×12 silhouettes in `TOOL_ART` (it is baked once per tier) or add a fourth. `tensile`
+is the **weight budget one press spends**, not a ceiling on one bit: price it against `cap` at
+roughly four weight a cell, or the tool either cannot fire what it holds or never has to choose.
+
+**Every bit needs a `weight`**, both kinds, because weight is what the press spends. A
+**projectile bit** also needs `path`/`solid`/`ff`/`kb`/`life`/`speed`/`dmg`/`col` and an
 8×8 grid in `BIT_ART` — `kb` being KNOCKBACK, a *multiplier* on the shove that kind of body
 takes anyway, where 1 is the ordinary blow and a missing one means the same
 ([knockback](gameplay.md#knockback-one-number-thrown-at-three-weights)); a **modifier bit** needs
-`proj: false` and a `mod(m)` that edits the
-envelope in `toolMods` — and, because cells fold in whatever order they sit in, that `mod` must
-write order-independent values (a max or a set, never a multiply of what is already there), or two
-of them in one tool give different tools depending on which cell holds which. Both need a `name`
-and a `blurb` — the tooltip prints them, and they are the only words the kind ever gets. A modifier
-that carries a **damage type** sets `m.type` (see `DMG_TYPES`, js/actions.js) and the arrow carries
-it to `hurtUnit` with no per-kind code; add its numbers to `tipBit`'s modifier branch, which reads
-them back out of `toolMods` rather than restating them.
+`proj: false` and a `mod(m)` that edits the envelope `toolPlan` walks forward.
+
+**A `mod` MUST COMPOSE with the value it is handed** — `*=` a multiplier, `+=` a quantity — and
+must never `=` or `Math.max` it. A modifier only reaches the projectiles *after* it, so the fold
+is ordered by design and two of a kind are meant to stack: two SPEEDUPs are ×4 speed, two FLAMEs
+burn twice as long at twice the rate. A `mod` that sets a value silently makes the second copy
+worthless, which is the one bug the whole
+[forward walk](gameplay.md#toolplan-one-activation-in-one-pass) exists to prevent — and it is not
+visible in the tool that holds one. The single exception is `m.type`, a category rather than a
+magnitude.
+
+Both need a `name` and a `blurb` — the tooltip prints them, and they are the only words the kind
+ever gets; a modifier's blurb says "EVERY SHOT AFTER IT …", because that is what it does. A
+modifier that carries a **damage type** sets `m.type` (see `DMG_TYPES`, js/actions.js) and the
+arrow carries it to `hurtUnit` with no per-kind code; add its numbers to `tipBit`'s modifier
+branch, which reads them back out of `bitMods` rather than restating them.
 
 **It also needs a `TECH` node**, or the tech screen never shows it — the loot pool rolls it either
 way, since the pool is every kind at or under a tier, but a kind missing from the page is a kind
@@ -428,12 +440,6 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 
 ## Known drift
 
-- **Three bit blurbs are wider than the tooltip** (measured 2.74 against `TIP_MAXW` 168, which
-  "wraps nothing; long lines are authored to fit"): FLAME 223, CINDER BURST 227 and PYRE 247 px.
-  The panel is sized to the cap, so the tail of each runs off its own frame. The three new bits
-  of the [closing line](gameplay.md#the-closing-line-three-bits-that-are-not-archery) were cut to
-  fit when the same measurement caught them; these three are the author's own copy and were left
-  alone. `pixelTextWidth(BITS[id].blurb)` in the console is the whole check.
 - **`rootUnit`/`markUnit` currently have no caster** (intentional dead code since the hunter's
   2.47 rework retired the snare trap and the falcon): the two setters, their `drawUnitStates`
   tells (the sprung jaws, the gold chevrons) and mark's `seenAt` bypass all stay, because they are

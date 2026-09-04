@@ -143,7 +143,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the tuning for everything a player does: the three SWING tools, the shot trail, E's reach, the roll, prone | `SWING_TOOLS`/`SWING_*`, `BOW_Y`, `ARROW_*`, `WORK_REACH`, `STRUCT_HIT_DMG`, `ROLL_*`/`TACKLE_*`, `PRONE_*`, `AMBUSH_MUL` | `actions` (its head; the two kit baselines `BOW_CHARGE`/`BOW_NOCK`: `players`, player.js; the weapon's own tuning: `TOOLS`/`BITS`, tools.js) |
 | the roll as a hit: the sweep and the tackle | `rollSweep`, `rollTackle`, `tackleObject`, `tackleObjAhead`, `rollPow`, `rollDmg` | `actions` › `the roll as a hit` |
 | going to ground and getting back up | `tryProne`, `risePlayer` | `actions` › `prone` |
-| the empty-press tell (an empty slot, nothing light enough to throw) | `dryFire` | `actions` › `the empty press` |
+| the empty-press tell (an empty slot, or a budget that reaches no shot) | `dryFire` | `actions` › `the empty press` |
 | one blow against a building on another team (E swing and worker axe alike) | `hurtStruct`, `STRUCT_HIT_DMG`, `destroyStructure` | `actions` (its tail) |
 | every way of hurting the practice dummy (E, every bit, the tackle), and the meter's combo ledger | `hitDummy` | `actions` (its tail; the dummy itself: `practice arena`, world.js; the plate: `drawDummyMeter`, draw-world.js) |
 | **the one blow every kind of unit takes** - a slot, an animal, a worker bot | `hurtUnit` | `status effects` (its per-kind ends: `damagePlayer` player.js, `hurtAnimal` wildlife.js, `hurtRobot` robots.js) |
@@ -160,11 +160,12 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what every weapon and every shot IS: the two tables the whole system is driven from | `TOOLS`, `BITS`, `TOOL_TIERS`, `TOOL_SLOTS` (1 - the one weapon slot) | `tools & bits` (its head) |
 | the tier a find wears, and where that colour is read back | `TOOL_TIERS`, `itemTier`, `TIER_SHINE` (`tierPlate`/`tierShine`, which paint it: `UI`, ui.js) |`tools & bits` |
 | the bag rows that make tools and bits carryable at all | the `ITEMS` / `RES_COLORS` loops at the foot of the file | `tools & bits` › `icons` |
-| a tool instance and the things that read one; the cycle a press starts | `makeTool`, `heldTool`, `bitsIn`, `bitFires`, `toolMods`, `nextBit`, `peekBit`, `toolRof`, `toolCycle`, `toolReady` | `tools & bits` › `a tool instance` |
+| a tool instance and the things that read one; the cycle a press starts | `makeTool`, `heldTool`, `bitsIn`, `toolLoad`, `toolOver`, `newMods`, `bitMods`, `peekBit`, `toolRof`, `toolCycle`, `toolReady` | `tools & bits` › `a tool instance` |
+| **what one press does**: the tensile budget spent up the column, where it runs out, and the envelope each shot is fired through | `toolPlan` (returns `shots`/`used`/`cut`/`load`/`tensile`) — read by `fireTool`, `drawAimLine` (render.js) and `drawBitColumn` (ui.js) alike | `tools & bits` › `a tool instance` |
 | the draw curve: what a hold buys a shot, and the one flight envelope the sim fires and the aim line measures | `DRAW_RANGE_MIN`/`DRAW_SPEED_MIN`/`DRAW_DMG_MIN`, `drawPow`, `drawSpeedMul`/`drawRangeMul`/`drawDmgMul`, `shotFlight` | `tools & bits` › `the draw` |
-| the fire a shot carries, and the three modifier bits that put it there | `BITS.flame`/`pyre`/`cinder`, `PYRE_T`/`PYRE_DPS`/`CINDER_R`, `m.type`/`m.burn`/`m.burnDps`/`m.cinder` in `toolMods` | `tools & bits` (beside `BITS`; what a burn then DOES: `status effects`, actions.js) |
+| the fire a shot carries, and the three modifier bits that put it there | `BITS.flame`/`pyre`/`cinder`, `PYRE_T`/`PYRE_DPS`/`CINDER_R`, `m.type`/`m.burn`/`m.burnDps`/`m.cinder` in `newMods` | `tools & bits` (beside `BITS`; what a burn then DOES: `status effects`, actions.js) |
 | moving a tool onto a key or a bit into a cell (the two the drag goes through) | `slotPut`, `bitPut` | `tools & bits` › `equipping` |
-| what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `spearFish` | `tools & bits` › `what a tool fires` |
+| what a press actually fires, and the shot it puts in the air | `fireTool`, `emitBit`, `offBy`/`SHOT_SKEW`/`DUP_SKEW` (the volley's spread), `spearFish` | `tools & bits` › `what a tool fires` |
 | the catch pose: its clock, the cancel every press and hit call (WASD is held for its first second, then a cancel), which of its three frames is up | `CATCH_T`, `CATCH_WALK`, `startCatch`, `cancelCatch`, `catchFrame` | `tools & bits` - after `spearFish` (ticked in `updatePlayer`, sim.js; drawn by `drawPlayer`, draw-world.js; the net take in `updateStructures`, structures.js) |
 | how each bit flies, and the numbers behind the five non-straight paths | `steerBit`, `ZIG_*`, `ORBIT_R`, `LOB_DRAG`/`LOB_FALL`, `CURVE_TURN` | `tools & bits` › `how a bit flies` |
 | what a shot does where it LANDS, and the two that do anything | `BIT_IMPACT`, `bitImpact`, `AXE_CHOP_R`, `WARP_BACK` | `tools & bits` › `what a bit does where it lands` (called from the arrow update: `update`, sim.js) |
@@ -278,7 +279,8 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the weapon well's "it does not fit in here" red, the backpack's twin | `toolFlash`, `toolDenied` (aged in `updateFx`, sim.js, beside `bagFlash`) | `UI` › `hud strip` (its head, above `hudStripRect`) |
 | the bit column hovering the weapon well raises out of its tool | `BITC_CELL`/`BITC_GAP`/`BITC_LIFT`, `bitColRect`, `bitColHit`, `drawBitColumn` | `UI` › `the bit column` (which slot is up, `bitEditSlot`: `tools & bits`, tools.js) |
 | the plate a tier is stated on, wherever an item sits, and the shine on the top one | `tierPlate`, `tierShine`, `drawItemIcon` | `UI` › `hud strip` (the tiers themselves: `TOOL_TIERS`, tools.js) |
-| the hatch and cut corners that mark a MODIFIER bit apart from a projectile, in every well either sits in | `modPlate` (its callers: `drawBag`, `drawBitColumn`, `drawDragGhost`, `drawTooltip` ui.js, `drawShopWell` shop.js, `drawTechNode` menu.js) | `UI` › `hud strip` (the `proj` flag it reads: `BITS`, tools.js) |
+| the hatch and cut corners that mark a MODIFIER bit apart from a projectile, in every well either sits in | `modPlate` (its callers: `drawBag`, `drawBitColumn`, `drawDragGhost`, `drawTooltip` ui.js, `drawShopWell` shop.js, `drawTechNode` menu.js, `drawToolPrimer` panels.js) | `UI` › `hud strip` (the `proj` flag it reads: `BITS`, tools.js) |
+| the "!" a tool wears when its column weighs more than one press can swing | `drawOverWarn` (from `drawToolCell` and the CONTROLS page's `drawToolPrimer`, panels.js; the answer it draws: `toolOver`, tools.js) | `UI` › `hud strip` |
 
 ## js/shop.js
 
@@ -308,6 +310,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | the TAB standings, the event feed | `logEvent`, `renderEventLog`, `scoreGroups`, `renderScoreboard` | `scoreboard & log` |
 | the M map, and the chart point -> world tile inverse a map order needs | `buildMapPanel`, `buildWorldMapImg`, `renderWorldMap`, `mapTileAt` | `world map (M)` (the parchment's per-tile colour comes from `objMapColor(o, 'map', i, h)`: `world`, world.js) |
 | the ESC menu: its tabbed pages, their rows, the scroll, the layout every reader shares | `SET_TABS`, `settingsLayout`, `settingsScrollBy`, `setTab`/`setScroll`, `buildSettingsPanel`, `bakeControls`/`controlsCv`, `settingsHit`, `settingsMouseDown`, `renderSettings` | `settings menu (ESC)` |
+| the CONTROLS page's weapon primer: the worked build it draws and the marks it borrows from the HUD | `PRIMER`, `PR_CELL`/`PR_GAP`/`PR_X`/`PR_TX`, `drawToolPrimer` (baked once into `controlsCv`) | `settings menu (ESC)` › beside `bakeControls` |
 | the VIDEO page's quality macro over the render-pass toggles | `VID_PRESETS`, `vidPreset` (the flags themselves: `settings.vid*`, core.js; their gates sit at each pass's call site) | `settings menu (ESC)` |
 | the three sound dials, the speaker that mutes them, the grey-when-muted fill, the minimap and HUD size knobs | `applySliderDrag`, `muteBtnRect`, `drawMuteBtn`, `drawSliderRow`, `drawSliderById`, `toggleVal` | `settings menu (ESC)` |
 | practice's exit plank under the slab | `leavePlankRect` (the click: `leavePractice`, menu.js) | `settings menu (ESC)` |

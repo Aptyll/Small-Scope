@@ -1,9 +1,11 @@
 'use strict';
 // The weapon: a TOOL on the ONE weapon slot, loaded with BITS that say what
 // it fires. A tool is a body - how often it can shoot, how many bits it holds,
-// and how heavy a bit it can throw; a bit is a shot, or a modifier that
-// rewrites every shot on the tool it sits in. Both are carried items, both
-// scatter out of the world, and a tool keeps its bits wherever it goes.
+// and how much WEIGHT it can swing in one press; a bit is a shot, or a
+// modifier that rewrites every shot fired after it. One press spends the
+// tool's strength up the column and looses everything it can afford at once.
+// Both are carried items, both scatter out of the world, and a tool keeps its
+// bits wherever it goes.
 // Keys 1-4 are the class abilities now (js/abilities.js), not slot picks.
 // ------------------------------------------------------------ tools & bits
 // Ordering: this file needs ITEMS (js/player.js) and RES_COLORS
@@ -29,9 +31,13 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // ---- bits ----------------------------------------------------------------
 // Two kinds under one table, told apart by `proj`.
 //
-// A PROJECTILE bit is one shot: `weight` is what the tool has to be strong
-// enough to throw (a bit heavier than the tool's tensile is dead weight and is
-// skipped), `path` is how it flies, `solid` whether a wall stops it, `ff`
+// EVERY bit carries a `weight`, projectile and modifier alike, because weight
+// is what a press SPENDS. A tool's `tensile` is a BUDGET reset at the top of
+// every activation and spent cell by cell in order (toolPlan below), so a
+// heavy bit is not dead weight any more - it is expensive, and what it costs
+// is whatever is stacked after it.
+//
+// A PROJECTILE bit is one shot: `path` is how it flies, `solid` whether a wall stops it, `ff`
 // whether it will hurt your own side, `kb` how hard it shoves whatever it
 // lands on, and life/speed/dmg are the baselines the
 // tool, the champion kit, the hero level and any modifier bits scale - and
@@ -63,12 +69,21 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // number on a bit the sim never reads - loot does not consult it and a found
 // bit is worth exactly what a bought one is.
 //
-// A MODIFIER bit (`proj: false`) has no weight and never flies. Its `mod(m)`
-// edits the shot envelope every projectile bit on the SAME tool is fired
-// through, so one FLAME in the list sets the whole tool alight. Cells fold in
-// whatever order they sit in, so a mod must write values that do not depend on
-// the order (a max or a set, never a multiply of what fire is already there) -
-// two fire mods in one tool must give the same tool whichever cell holds which.
+// A MODIFIER bit (`proj: false`) never flies, but it costs weight like
+// everything else. Its `mod(m)` edits the shot envelope - and it edits it for
+// every projectile AFTER it in the list and for NONE before it, so where a
+// modifier sits is the whole of what it is worth, and a FLAME in the top cell
+// sets nothing alight. Once a press has reached a modifier it stays in the
+// envelope for the rest of that press: there is no per-shot expiry.
+//
+// A MOD COMPOUNDS WITH WHAT IS ALREADY IN THE ENVELOPE. Every `mod` must
+// COMPOSE with the value it is handed - `*=` a multiplier, `+=` a quantity -
+// and must never `=` or `Math.max` it: two SPEEDUPs are four times the speed,
+// two FLAMEs burn twice as long at twice the rate, two SPLITTERs are nine
+// shots. That is the rule EVERY new modifier follows, and it is why the fold
+// is a forward walk rather than a set-union. The one field that is set rather
+// than composed is `m.type`, because a damage type is a category and not a
+// magnitude.
 //
 // FIRE is the one damage TYPE a bit can put on a shot (`m.type`, DMG_TYPES in
 // js/actions.js): the hit ignites what it lands on, which then burns for
@@ -148,56 +163,64 @@ const BITS = {
     body: 'warp', impact: 'warp', bot: false,
   },
   // -- modifiers -----------------------------------------------------------
+  // Every one of these COMPOUNDS: it composes with the envelope it is handed
+  // rather than setting a value into it, so a second copy in the same tool is
+  // a second application. Their weights are what a fitting costs the press it
+  // sits in - a modifier is not free any more, and a tool packed with them has
+  // nothing left to throw a shot with.
   speedup: {
-    name: 'SPEEDUP', blurb: 'EVERY SHOT FLIES TWICE AS FAST.', price: 22, tier: 0, proj: false,
-    col: '#8fe08a', mod: (m) => { m.spdMul *= 2; },
+    name: 'SPEEDUP', blurb: 'SHOTS ABOVE IT FLY TWICE AS FAST.', price: 22, tier: 0, proj: false,
+    weight: 3, col: '#8fe08a', mod: (m) => { m.spdMul *= 2; },
   },
   fan: {
-    name: 'SPLITTER', blurb: 'EVERY SHOT BECOMES THREE, EACH WEAKER.', price: 28, tier: 0, proj: false,
-    col: '#cfe0f2', mod: (m) => { m.fan = 3; m.dmgMul *= 0.6; },
+    name: 'SPLITTER', blurb: 'SHOTS ABOVE IT SPLIT IN THREE, WEAKER.', price: 28, tier: 0, proj: false,
+    weight: 4, col: '#cfe0f2', mod: (m) => { m.fan *= 3; m.dmgMul *= 0.6; },
   },
   flame: {
-    name: 'FLAME', blurb: 'EVERY SHOT SETS WHAT IT HITS ALIGHT, AND LIGHTS ITS WAY.', price: 46, tier: 1, proj: false,
-    col: '#ff9440',
+    name: 'FLAME', blurb: 'SHOTS ABOVE IT SET WHAT THEY HIT ALIGHT.', price: 46, tier: 1, proj: false,
+    weight: 4, col: '#ff9440',
     mod: (m) => {
       m.type = 'fire';
-      m.burn = Math.max(m.burn, BURN_T);
-      m.burnDps = Math.max(m.burnDps, BURN_DPS);
+      // ADDITIVE, so a second fire modifier really is a second fire: two
+      // FLAMEs are exactly a PYRE, and a FLAME under a PYRE is nine seconds
+      // at eighteen a second
+      m.burn += BURN_T;
+      m.burnDps += BURN_DPS;
       m.dmgAdd += 2;                    // the flat bonus is small now: the burn is the damage
-      m.lit = Math.max(m.lit, 30);
+      m.lit += 30;
     },
   },
   twin: {
-    name: 'DUPLICATE', blurb: 'FIRES THE NEXT TWO BITS AT ONCE.', price: 60, tier: 1, proj: false,
-    col: '#a259e6', mod: (m) => { m.twin = true; },
+    name: 'DUPLICATE', blurb: 'EVERY SHOT ABOVE IT IS FIRED TWICE.', price: 60, tier: 1, proj: false,
+    weight: 5, col: '#a259e6', mod: (m) => { m.dup *= 2; },
   },
   heft: {
-    name: 'HEFT', blurb: 'MUCH HARDER, RATHER SLOWER.', price: 95, tier: 2, proj: false,
-    col: '#f2cc6a', mod: (m) => { m.dmgMul *= 1.6; m.spdMul *= 0.75; },
+    name: 'HEFT', blurb: 'SHOTS ABOVE IT HIT HARDER, FLY SLOWER.', price: 95, tier: 2, proj: false,
+    weight: 5, col: '#f2cc6a', mod: (m) => { m.dmgMul *= 1.6; m.spdMul *= 0.75; },
   },
   longshot: {
-    name: 'LONGSHOT', blurb: 'EVERY SHOT FLIES MUCH FURTHER.', price: 88, tier: 2, proj: false,
-    col: '#7ac0e8', mod: (m) => { m.lifeMul *= 1.8; m.spdMul *= 1.15; },
+    name: 'LONGSHOT', blurb: 'SHOTS ABOVE IT FLY MUCH FURTHER.', price: 88, tier: 2, proj: false,
+    weight: 4, col: '#7ac0e8', mod: (m) => { m.lifeMul *= 1.8; m.spdMul *= 1.15; },
   },
   pyre: {
-    name: 'PYRE', blurb: 'THE FIRE TAKES HOLD. IT BURNS TWICE AS LONG, AND TWICE AS HOT.', price: 125, tier: 2, proj: false,
-    col: '#ff5a2a',
+    name: 'PYRE', blurb: 'THE FIRE TAKES HOLD. LONGER, AND HOTTER.', price: 125, tier: 2, proj: false,
+    weight: 6, col: '#ff5a2a',
     mod: (m) => {
       m.type = 'fire';
-      m.burn = Math.max(m.burn, PYRE_T);
-      m.burnDps = Math.max(m.burnDps, PYRE_DPS);
-      m.lit = Math.max(m.lit, 34);
+      m.burn += PYRE_T;
+      m.burnDps += PYRE_DPS;
+      m.lit += 34;
     },
   },
   cinder: {
-    name: 'CINDER BURST', blurb: 'EVERY IMPACT THROWS EMBERS. EVERYTHING AROUND IT CATCHES.', price: 135, tier: 2, proj: false,
-    col: '#ffb347',
+    name: 'CINDER BURST', blurb: 'EVERY IMPACT ABOVE IT THROWS EMBERS.', price: 135, tier: 2, proj: false,
+    weight: 6, col: '#ffb347',
     mod: (m) => {
       m.type = 'fire';
-      m.burn = Math.max(m.burn, BURN_T);
-      m.burnDps = Math.max(m.burnDps, BURN_DPS);
-      m.cinder = CINDER_R;              // ...and the ring the shot lights where it ends
-      m.lit = Math.max(m.lit, 30);
+      m.burn += BURN_T;
+      m.burnDps += BURN_DPS;
+      m.cinder += CINDER_R;             // ...and the ring the shot lights where it ends
+      m.lit += 30;
     },
   },
 };
@@ -303,18 +326,27 @@ function updateWarps(dt) {
 
 // ---- tools ---------------------------------------------------------------
 // `rof` is in game steps between shots (the number the HUD's cooldown wipe
-// runs on); `cap` is how many bit cells the tool has; `tensile` is the
-// heaviest bit it can throw; `price` is the merchant's asking price (js/shop.js)
+// runs on); `cap` is how many bit cells the tool has; `tensile` is the WEIGHT
+// BUDGET one press has to spend on them - reset at the top of every
+// activation, spent cell by cell from the bottom up, and the first cell that
+// would push the total PAST it ends that press there (toolPlan). `price` is
+// the merchant's asking price (js/shop.js)
 // and half of it what one fetches sold back - a tool sold with bits in it
 // fetches half of those too, so nothing is ever quietly emptied for gold. `art` picks the 12x12 silhouette, which is baked
 // once per tier - so a tool's shape says which family it is and its colour
 // says how good it is, the way GEAR_MATS tints one gear icon across levels.
+//
+// TENSILE AND CAP ARE THE TWO HALVES OF A TOOL. `cap` is how much you may
+// hang on it and `tensile` is how much of that it can actually swing in one
+// press, and the tiers grow the two together at roughly four weight a cell:
+// a build that fits its cap and busts its budget still fires, it just stops
+// partway up, and the well wears a "!" to say so.
 const TOOLS = {
-  shortbow: { name: 'SHORTBOW',    tier: 0, price: 30,  rof: 55, cap: 2, tensile: 4, art: 'bow' },
-  sling:    { name: 'SLING',       tier: 0, price: 26,  rof: 26, cap: 2, tensile: 3, art: 'sling' },
-  recurve:  { name: 'RECURVE BOW', tier: 1, price: 85,  rof: 40, cap: 3, tensile: 6, art: 'recurve' },
-  hornbow:  { name: 'HORN BOW',    tier: 1, price: 72,  rof: 34, cap: 4, tensile: 5, art: 'bow' },
-  longbow:  { name: 'LONGBOW',     tier: 2, price: 170, rof: 28, cap: 5, tensile: 9, art: 'recurve' },
+  shortbow: { name: 'SHORTBOW',    tier: 0, price: 30,  rof: 55, cap: 2, tensile: 9,  art: 'bow' },
+  sling:    { name: 'SLING',       tier: 0, price: 26,  rof: 26, cap: 2, tensile: 7,  art: 'sling' },
+  recurve:  { name: 'RECURVE BOW', tier: 1, price: 85,  rof: 40, cap: 3, tensile: 13, art: 'recurve' },
+  hornbow:  { name: 'HORN BOW',    tier: 1, price: 72,  rof: 34, cap: 4, tensile: 15, art: 'bow' },
+  longbow:  { name: 'LONGBOW',     tier: 2, price: 170, rof: 28, cap: 5, tensile: 22, art: 'recurve' },
 };
 const TOOL_SLOTS = 1;        // ONE weapon slot: the class weapon, left end of the strip
 const TOOL_ROF_STEP = 1 / 60; // a tool's `rof` is counted in game steps of this length
@@ -347,56 +379,83 @@ function itemTier(type) {
 // cell with a `bits` array of its own. Nothing ever copies it, which is why
 // throwing a loaded tool away throws the bits with it.
 function makeTool(id) {
-  return { type: toolType(id), n: 1, bits: new Array(TOOLS[id].cap).fill(null), idx: 0 };
+  return { type: toolType(id), n: 1, bits: new Array(TOOLS[id].cap).fill(null) };
 }
 // the tool on the slot p is pointing at right now, or null
 function heldTool(p) { return p.tools ? p.tools[p.toolSel] || null : null; }
 // how many bit cells are filled - the pips the HUD counts
 function bitsIn(cell) { let n = 0; for (const b of cell.bits) if (b) n++; return n; }
-// a bit too heavy for the tool it sits in is dead weight: it stays in the
-// cell (you can see it, and see that it is wrong) but is skipped when firing
-function bitFires(cell, i) {
-  const id = cell.bits[i];
-  if (!id) return false;
-  const b = BITS[id];
-  return b.proj && b.weight <= TOOLS[toolIdOf(cell.type)].tensile;
+// what a tool is carrying, whatever it can afford to swing - every bit in it,
+// modifiers included, since a fitting costs weight like anything else
+function toolLoad(cell) {
+  let w = 0;
+  for (const id of cell.bits) if (id) w += BITS[id].weight;
+  return w;
 }
-// The shot envelope: every modifier bit in the tool, folded once. Projectile
-// bits are fired THROUGH this, which is the whole "a modifier affects every
-// projectile on this tool" rule in one function.
-function toolMods(cell) {
-  const m = {
-    spdMul: 1, dmgMul: 1, dmgAdd: 0, lifeMul: 1, fan: 1, twin: false, lit: 0,
-    // the shot's damage TYPE and the fire it carries: 'blunt' until a fire
-    // modifier says otherwise (DMG_TYPES, js/actions.js)
+// ...and whether that is more than one press can spend. This is the "!" over
+// the well (drawOverWarn, js/ui.js): the build still fires, it just stops
+// partway up the column, and the budget bar says where.
+function toolOver(cell) { return toolLoad(cell) > TOOLS[toolIdOf(cell.type)].tensile; }
+// a fresh shot envelope: what a press starts with before a single modifier
+// has touched it. The damage TYPE is 'blunt' until a fire modifier says
+// otherwise (DMG_TYPES, js/actions.js).
+function newMods() {
+  return {
+    spdMul: 1, dmgMul: 1, dmgAdd: 0, lifeMul: 1, fan: 1, dup: 1, lit: 0,
     type: 'blunt', burn: 0, burnDps: 0, cinder: 0,
   };
-  for (const id of cell.bits) {
-    const b = id && BITS[id];
-    if (b && !b.proj && b.mod) b.mod(m);
-  }
+}
+// the envelope ONE modifier writes, on its own - what the tooltip prints, so
+// a retuned FLAME can never disagree with its own panel
+function bitMods(id) {
+  const m = newMods();
+  const b = BITS[id];
+  if (b && !b.proj && b.mod) b.mod(m);
   return m;
 }
-// The firing order, and the index tracker the user sees on the bit column:
-// walk forward from cell.idx, wrapping once, and take the first bit that can
-// actually be thrown. The tracker lands one past what it found, so the next
-// press picks up where this one left off and the list cycles.
-function nextBit(cell) {
-  const n = cell.bits.length;
-  for (let k = 0; k < n; k++) {
-    const i = (cell.idx + k) % n;
-    if (bitFires(cell, i)) { cell.idx = (i + 1) % n; return { id: cell.bits[i], i }; }
+
+// ONE ACTIVATION, RESOLVED IN A SINGLE PASS OVER THE CELLS: what fires, in
+// what order, and through which envelope. This is the whole of the weapon's
+// arithmetic, and the press, the aim line and the bit column all read it, so
+// the three can never disagree about what the button is about to do.
+//
+// TENSILE IS A BUDGET, not a ceiling on one bit. It resets here at the top of
+// every activation and is spent cell by cell from cell 0 up; the first cell
+// whose weight would push the running total PAST it stops the activation
+// there, and everything before it has already gone. So overloading a tool
+// never jams it - it truncates it, and what falls off the end is whatever was
+// hung last. Everything a press can afford leaves in the SAME frame: a tool
+// whose budget covers all of it fires all of it at once.
+//
+// A MODIFIER APPLIES FORWARD AND ONLY FORWARD. Each projectile is fired
+// through a SNAPSHOT of the envelope as it stood when that cell was reached,
+// which is what makes "put the FLAME under the arrow" a real decision - and
+// once a modifier is in the envelope it stays there for every shot after it
+// in the same press. Two of a kind compound, because every `mod` composes
+// with what it is handed (see BITS above).
+function toolPlan(cell) {
+  const T = TOOLS[toolIdOf(cell.type)];
+  const m = newMods();
+  const plan = { shots: [], used: 0, cut: -1, load: 0, tensile: T.tensile };
+  for (let i = 0; i < cell.bits.length; i++) {
+    const id = cell.bits[i];
+    if (!id) continue;                 // a gap costs nothing and stops nothing
+    const b = BITS[id];
+    plan.load += b.weight;             // the load is the WHOLE column: it is what the "!" reads
+    if (plan.cut >= 0) continue;       // past the cut: still carried, never fired
+    if (plan.used + b.weight > T.tensile) { plan.cut = i; continue; }
+    plan.used += b.weight;
+    if (b.proj) plan.shots.push({ id, i, m: Object.assign({}, m) });
+    else if (b.mod) b.mod(m);
   }
-  return null;
+  return plan;
 }
-// what the bit column marks as up next, without advancing anything
+// what the next press puts in the air FIRST - the lead shot, which is what
+// the column's caret marks and what the aim line is drawn for. -1 when the
+// press would put nothing in the air at all.
 function peekBit(cell) {
-  const n = cell.bits.length;
-  for (let k = 0; k < n; k++) {
-    const i = (cell.idx + k) % n;
-    if (bitFires(cell, i)) return i;
-  }
-  return -1;
+  const s = toolPlan(cell).shots;
+  return s.length ? s[0].i : -1;
 }
 // seconds between shots: the tool's own rate, quickened by everything that
 // already quickens a renock (QUICKDRAW, QUICK HANDS, the renock cards)
@@ -414,7 +473,8 @@ function toolCycle(p) {
 }
 
 // Can the button do anything at all right now? A slot with no tool in it and a
-// tool with no bit light enough to throw are both dry, and updatePlayer
+// tool whose budget reaches no projectile - nothing loaded, only modifiers, or
+// a first cell already too heavy for the body - are both dry, and updatePlayer
 // refuses the draw on both the same way. The cycle (`nockT`) is the ONLY other
 // gate: the moment the well's wipe clears, the draw can begin.
 function toolReady(p) {
@@ -485,15 +545,15 @@ function slotPut(p, i, cell) {
 function bitPut(cell, i, id) {
   const was = cell.bits[i];
   cell.bits[i] = id || null;
-  if (cell.idx >= cell.bits.length) cell.idx = 0;
   return was;
 }
 
 // ---- what a tool fires ---------------------------------------------------
-// One press = one activation of the selected tool. The tool's rate of fire
-// sets the gap to the next press (toolRof), the draw sets what the shot is
-// worth (`the draw` above), and DUPLICATE is the one modifier that changes
-// how many bits an activation consumes rather than what they do.
+// One press = one activation of the selected tool, resolved in ONE frame:
+// toolPlan spends the tool's tensile budget down the column and every shot it
+// can afford leaves together. The tool's rate of fire sets the gap to the next
+// press (toolRof) and the draw sets what each shot is worth (`the draw` above).
+// Nothing cycles between presses any more - a press is the whole tool.
 function fireTool(p) {
   cancelCatch(p); // a press is a press: the hoist gives way to the shot (the spear below re-starts it on a catch)
   // the cover is read before anything below can break it - the ambush shot is
@@ -504,17 +564,11 @@ function fireTool(p) {
   if (spearFish(p)) return;
   const cell = heldTool(p);
   if (!cell) { dryFire(p); return; }          // an empty slot has nothing to press
-  const T = TOOLS[toolIdOf(cell.type)];
-  const m = toolMods(cell);
-  const shots = m.twin ? 2 : 1;
-  let fired = 0;
-  for (let s = 0; s < shots; s++) {
-    const nb = nextBit(cell);
-    if (!nb) break;                            // no bit this tool can throw
-    emitBit(p, BITS[nb.id], nb.id, m, amb, s);
-    fired++;
-  }
-  if (!fired) { dryFire(p); return; }          // pressed a tool that cannot answer
+  const plan = toolPlan(cell);
+  if (!plan.shots.length) { dryFire(p); return; } // pressed a tool that cannot answer
+  // the index into the volley is the skew off the aim, so no two bits of one
+  // press leave inside each other
+  plan.shots.forEach((s, k) => emitBit(p, BITS[s.id], s.id, s.m, amb, k));
   p.nockT = toolRof(p, cell);
   if (nearPlayer(p.x, p.y)) SFX.arrow();
   // the loose is what breaks cover - one ambush per burrow, then you are a
@@ -522,9 +576,21 @@ function fireTool(p) {
   risePlayer(p);
 }
 
-// One projectile bit, put into the air. `seq` is which shot of a DUPLICATE
-// pair this is, so the second leaves at a hair of an angle instead of exactly
-// inside the first.
+// Every bit a press can afford leaves in the SAME frame, so no two of them may
+// be stacked inside one another: each one past the first is nudged a hair off
+// the aim, alternating sides, which is what makes a full tool read as a volley
+// rather than as one very thick arrow. It is per BIT and per DUPLICATE, never
+// per arm of a fan - SPLITTER already spreads its own arms, and skewing those
+// as well would drag one side of the spread out with it.
+const SHOT_SKEW = 0.05; // rad between one bit of an activation and the next
+const DUP_SKEW = 0.07;  // ...and between a DUPLICATE's repeats of one bit
+function offBy(k, step) { return k ? (k % 2 ? 1 : -1) * Math.ceil(k / 2) * step : 0; }
+
+// One projectile bit, put into the air, through the envelope the modifiers
+// UNDER it wrote (toolPlan's snapshot). `seq` is this bit's place in the
+// activation, which is all its skew off the aim is. SPLITTER fans one bit into
+// `m.fan` arms and DUPLICATE fires the whole fan `m.dup` times over, and the
+// two multiply because both compound.
 function emitBit(p, b, id, m, amb, seq) {
   const kit = kitOf(p);
   const pw = drawPow(p);
@@ -543,11 +609,13 @@ function emitBit(p, b, id, m, amb, seq) {
   if (amb) dmg = Math.round(dmg * kit.ambushMul);
   const { spd, life } = shotFlight(b, m, pw);
   const lit = Math.max(b.lit || 0, m.lit);
-  // SPLITTER turns one bit into a fan; every other shot is a single arm of it
-  const arms = m.fan;
+  // SPLITTER turns one bit into a fan and DUPLICATE fires the whole fan
+  // again; every other shot is one arm, once
+  const arms = m.fan, reps = m.dup;
   const spread = 0.16;
-  for (let k = 0; k < arms; k++) {
-    const a = base + (arms > 1 ? (k - (arms - 1) / 2) * spread : 0) + (seq ? 0.07 : 0);
+  const skew = offBy(seq, SHOT_SKEW);   // this bit's own place in the volley
+  for (let d = 0; d < reps; d++) for (let k = 0; k < arms; k++) {
+    const a = base + (arms > 1 ? (k - (arms - 1) / 2) * spread : 0) + skew + offBy(d, DUP_SKEW);
     arrows.push({
       x: p.x, y: p.y - BOW_Y,
       vx: Math.cos(a) * spd, vy: Math.sin(a) * spd,
@@ -788,9 +856,13 @@ function dropLoot(x, y, tier, chance) {
 // class's own bits in it, which is what makes the pick a choice rather than
 // a preview: the two classes do not shoot the same thing. Called from
 // initPlayers() and again whenever the local slot changes class at select.
+// The order inside `bits` is the FIRING order, cell 0 first, and a modifier
+// only reaches the shots after it - so the WARRIOR's HEFT sits UNDER its
+// arrow. A starting kit that fitted a modifier above its only shot would
+// teach the rule backwards on the first press of the match.
 const CLASS_LOADOUT = [
   { tool: 'shortbow', bits: ['arrow', 'barb'] }, // HUNTER: the plain shaft, and a heavier one
-  { tool: 'sling',    bits: ['arrow', 'heft'] }, // WARRIOR: close-in, and hitting like a fist
+  { tool: 'sling',    bits: ['heft', 'arrow'] }, // WARRIOR: the fitting first, then the shot it makes land like a fist
 ];
 function giveLoadout(p) {
   p.tools = new Array(TOOL_SLOTS).fill(null);
@@ -821,20 +893,30 @@ function botFitLoadout(p) {
   const cur = heldTool(p);
   if (cur) {
     const tens = TOOLS[toolIdOf(cur.type)].tensile;
+    let load = toolLoad(cur);
     for (let i = 0; i < p.bag.length; i++) {
       const s = p.bag[i];
       const id = s && bitIdOf(s.type);
       if (!id) continue;
       const b = BITS[id];
-      if (b.proj && (b.weight > tens || b.bot === false ||
+      if (b.proj && (b.bot === false ||
         (b.path !== 'line' && b.path !== 'zig' && b.path !== 'lob'))) continue;
       let free;
-      while (s.n > 0 && (free = cur.bits.indexOf(null)) >= 0) {
+      // a bot builds INSIDE the budget: a bit it cannot afford would only
+      // truncate the press it is already firing, so it stays in the pack
+      while (s.n > 0 && load + b.weight <= tens && (free = cur.bits.indexOf(null)) >= 0) {
         cur.bits[free] = id;
+        load += b.weight;
         if (--s.n <= 0) p.bag[i] = null;
       }
       if (cur.bits.indexOf(null) < 0) break;
     }
+    // ...and then sorts the build the way a person would, since a modifier
+    // above the shots it is meant to change is worth nothing: fittings to the
+    // bottom, shots on top of them. A stable sort, no rng - deterministic.
+    const live = cur.bits.filter(Boolean);
+    live.sort((a, c) => (BITS[a].proj ? 1 : 0) - (BITS[c].proj ? 1 : 0));
+    for (let k = 0; k < cur.bits.length; k++) cur.bits[k] = live[k] || null;
   }
   for (let i = 0; i < p.bag.length; i++) {
     const s = p.bag[i];

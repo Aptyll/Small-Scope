@@ -561,10 +561,101 @@ function buildSettingsPanel() {
   drawPixelText(g, hint, Math.round((SET_W - pixelTextWidth(hint)) / 2), 208, '#5a6690');
 }
 
-// The CONTROLS page: the hotkey listing, baked once (it never changes) and
-// blitted into the content window at the page's scroll like any other page.
+// The CONTROLS page: the hotkey listing and, under it, the weapon primer -
+// both baked once (neither changes) and blitted into the content window at the
+// page's scroll like any other page.
 const controlsCv = document.createElement('canvas');
-controlsCv.width = SET_W; controlsCv.height = 84;
+controlsCv.width = SET_W; controlsCv.height = 236;
+
+// THE WEAPON PRIMER: the one thing about the left button a new player cannot
+// work out by pressing it, drawn rather than explained. It is a real HORN BOW
+// carrying a real overload - ARROW 2, FLAME 4, ARROW 2, THROWING LOG 8 against
+// a tensile of 15 - so every number on it is the game's own arithmetic
+// (toolPlan, js/tools.js) and the picture cannot drift from the weapon. The
+// cells, the hatch on the modifier, the weight pips, the budget track and the
+// "!" are the SAME marks the bit column and the weapon well draw in play
+// (modPlate / drawOverWarn, js/ui.js), which is the whole point: what is
+// learned here is recognised there.
+const PRIMER = {
+  tool: 'hornbow',
+  // bottom cell first, exactly as the column stacks and the press spends
+  bits: ['arrow', 'flame', 'arrow', 'log'],
+  notes: [
+    'ARROW 2 - FIRES FIRST, PLAIN',
+    'FLAME 4 - EVERY SHOT ABOVE IT BURNS',
+    'ARROW 2 - FIRES TOO, AND IT BURNS',
+    'THROWING LOG 8 - ONLY 7 LEFT, SO IT SITS',
+  ],
+};
+const PR_CELL = 18, PR_GAP = 2, PR_X = 24, PR_TX = 48; // cell pitch, and the two columns
+function drawToolPrimer(g, y0) {
+  const T = TOOLS[PRIMER.tool];
+  const cell = makeTool(PRIMER.tool);
+  for (let i = 0; i < PRIMER.bits.length; i++) cell.bits[i] = PRIMER.bits[i];
+  const plan = toolPlan(cell);
+  const n = PRIMER.bits.length;
+  const cy = (i) => y0 + 18 + (n - 1 - i) * (PR_CELL + PR_GAP); // cell 0 at the BOTTOM
+  const bar = { x: PR_X, y: y0 + 11, w: PR_CELL };
+
+  g.fillStyle = '#2c3a68';                                   // the section's own rule
+  g.fillRect(12, y0 - 5, SET_W - 24, 1);
+  drawPixelText(g, 'THE WEAPON', 16, y0 - 1, '#ffd95c');
+
+  // the budget track, over the top cell: what the tool can swing, and what
+  // this build actually spends of it
+  const bw = bar.w - 2;
+  let fill = Math.round(bw * Math.min(1, plan.used / T.tensile));
+  if (plan.load > T.tensile) fill = Math.min(fill, bw - 3);
+  g.fillStyle = '#0f1632';
+  g.fillRect(bar.x, bar.y, bar.w, 5);
+  g.fillStyle = TOOL_TIERS[T.tier].ink;
+  g.fillRect(bar.x + 1, bar.y + 1, fill, 3);
+  g.fillStyle = '#c2465a';
+  g.fillRect(bar.x + 1 + fill, bar.y + 1, bw - fill, 3);
+  drawPixelText(g, T.name + ' - STRENGTH ' + T.tensile + ', SPENDS ' + plan.used,
+    PR_TX, bar.y, '#f2cc6a');
+
+  // the firing order, as an arrow up the column's left edge: bottom cell
+  // first, and everything the budget reaches leaves on the one click
+  const aTop = cy(n - 1), aBot = cy(0) + PR_CELL;
+  g.fillStyle = '#f2cc6a';
+  g.fillRect(PR_X - 6, aTop + 3, 1, aBot - aTop - 3);
+  for (let k = 0; k < 3; k++) g.fillRect(PR_X - 6 - k, aTop + 3 + k, 1 + k * 2, 1);
+
+  for (let i = 0; i < n; i++) {
+    const id = PRIMER.bits[i], b = BITS[id];
+    const r = { x: PR_X, y: cy(i), w: PR_CELL, h: PR_CELL };
+    const dead = plan.cut >= 0 && i >= plan.cut;
+    const tp = TOOL_TIERS[b.tier];
+    g.fillStyle = dead ? '#c2465a' : tp.rim;
+    g.fillRect(r.x, r.y, r.w, r.h);
+    g.fillStyle = tp.plate;
+    g.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    if (dead) g.globalAlpha = 0.45;
+    modPlate(bitType(id), r, r.y, PR_CELL, g);
+    drawItemIcon(bitType(id), r, r.y - 2, g);
+    g.fillStyle = dead ? '#e0637a' : '#f2cc6a';                // weight, as pips
+    for (let k = 0; k < b.weight && k < 8; k++) g.fillRect(r.x + 2 + k * 2, r.y + r.h - 3, 1, 2);
+    g.globalAlpha = 1;
+    drawPixelText(g, PRIMER.notes[i], PR_TX, r.y + 7, dead ? '#e0637a' : b.col);
+  }
+
+  // the tool itself under its column, wearing the "!" its load has earned
+  const tr = { x: PR_X - 1, y: cy(0) + PR_CELL + 6, w: 20, h: 24 }; // tall enough that the "!" clears the art
+  g.fillStyle = TOOL_TIERS[T.tier].rim;
+  g.fillRect(tr.x, tr.y, tr.w, tr.h);
+  g.fillStyle = TOOL_TIERS[T.tier].plate;
+  g.fillRect(tr.x + 1, tr.y + 1, tr.w - 2, tr.h - 2);
+  drawItemIcon(toolType(PRIMER.tool), tr, tr.y, g);
+  drawOverWarn(tr, tr.y, 0, g);
+  drawPixelText(g, 'THE TOOL - THE ! IS ITS OVERLOAD', PR_TX, tr.y + 8, '#9fb6d8');
+
+  // and the two rules the picture alone cannot say
+  const foot = tr.y + tr.h + 8;
+  drawPixelText(g, 'ONE CLICK FIRES EVERY BIT THE TOOL CAN AFFORD', 16, foot, '#cfe0f2');
+  drawPixelText(g, 'TWO OF ONE MODIFIER COMPOUND - 2X AND 2X IS 4X', 16, foot + 8, '#8fe08a');
+}
+
 (function bakeControls() {
   const g = controlsCv.getContext('2d');
   const cols = [
@@ -580,6 +671,7 @@ controlsCv.width = SET_W; controlsCv.height = 84;
       y += 8;
     }
   }
+  drawToolPrimer(g, 87);
 })();
 
 function applySliderDrag() {

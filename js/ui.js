@@ -1833,36 +1833,64 @@ function tierShine(r, y, type, now) {
 // be the plate's texture and silhouette: those still read across a whole grid
 // at a glance, without recognising a single glyph on it. Called on the drawn
 // plate, under the icon; (y, h) are the plate's own, since a hovered cell
-// lifts and the counter's plate is shorter than its well.
-function modPlate(type, r, y, h) {
+// lifts and the counter's plate is shorter than its well. `g` is the context
+// to paint - the live HUD's unless a bake hands its own, which is what lets
+// the CONTROLS page's primer stamp this exact mark into a static diagram.
+function modPlate(type, r, y, h, g) {
   const id = type && bitIdOf(type);
   if (!id || !BITS[id] || BITS[id].proj) return;
+  g = g || ctx;
   h = h || r.h;
   const x0 = r.x + 1, y0 = y + 1, x1 = r.x + r.w - 1, y1 = y + h - 1;
-  ctx.globalAlpha = 0.35;
-  ctx.fillStyle = BITS[id].col;
+  g.globalAlpha = 0.35;
+  g.fillStyle = BITS[id].col;
   for (let d = 1 - h; d < r.w; d += 4) { // 1px diagonals, four apart
     for (let k = 0; k < h; k++) {
       const px = r.x + d + k, py = y + k;
-      if (px >= x0 && px < x1 && py >= y0 && py < y1) ctx.fillRect(px, py, 1, 1);
+      if (px >= x0 && px < x1 && py >= y0 && py < y1) g.fillRect(px, py, 1, 1);
     }
   }
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#0a0e23';
+  g.globalAlpha = 1;
+  g.fillStyle = '#0a0e23';
   for (const [cx, sx] of [[r.x, 1], [r.x + r.w - 1, -1]]) {
     for (const [cy, sy] of [[y, 1], [y + h - 1, -1]]) {
-      ctx.fillRect(cx, cy, 1, 1); ctx.fillRect(cx + sx, cy, 1, 1); ctx.fillRect(cx, cy + sy, 1, 1);
+      g.fillRect(cx, cy, 1, 1); g.fillRect(cx + sx, cy, 1, 1); g.fillRect(cx, cy + sy, 1, 1);
     }
   }
 }
+// "!" OVER A TOOL CARRYING MORE THAN ONE PRESS CAN SWING. The build is not
+// broken - it fires as far up the column as the tensile budget reaches and
+// stops - so this is a warning and not a refusal, and the column's budget bar
+// is where you go to see exactly where it stops. A triangle, because a warning
+// triangle is the one glyph nobody has to be taught; it rides the well's
+// top-right corner, clear of the bit column that rises up the middle, and it
+// bobs a pixel so the eye catches it on a strip that is otherwise still.
+// Drawn wherever a loaded tool is: the weapon well and the pack's own grid.
+function drawOverWarn(r, y, now, g) {
+  g = g || ctx;
+  // IN the well's top-right corner, over the rim and clear of the tool's own
+  // art, rather than floating above the well: the raised bit column and its
+  // shadow own every pixel over the rim (BITC_LIFT), and a warning that hides
+  // under the column the moment you go to read it is no warning at all
+  const h = 5, cx = r.x + r.w - 5, y0 = y - 1 + (Math.sin(now * 5) > 0 ? 0 : 1);
+  g.fillStyle = '#0a0e23';                          // the dark seat, one px proud all round
+  for (let d = 0; d <= h; d++) g.fillRect(cx - d, y0 - 1 + d, 1 + d * 2, 1);
+  g.fillRect(cx - h, y0 + h, 1 + h * 2, 1);
+  g.fillStyle = '#ffd95c';
+  for (let d = 0; d < h; d++) g.fillRect(cx - d, y0 + d, 1 + d * 2, 1);
+  g.fillStyle = '#241a12';                          // the stroke, and its dot
+  g.fillRect(cx, y0 + 1, 1, 2);
+  g.fillRect(cx, y0 + 4, 1, 1);
+}
+
 // an item icon centred in a cell of any size (tools are 12x12, everything
 // else 8x8), so one call covers every well the two sizes share
-function drawItemIcon(type, r, y) {
+function drawItemIcon(type, r, y, g) {
   const d = ITEMS[type];
   if (!d) return;
   const im = SPRITES[d.icon];
   if (!im) return;
-  ctx.drawImage(im, r.x + ((r.w - im.width) >> 1), y + ((r.h - im.height) >> 1));
+  (g || ctx).drawImage(im, r.x + ((r.w - im.width) >> 1), y + ((r.h - im.height) >> 1));
 }
 
 // ---- drawing the strip, the bit column and the carried item -------------
@@ -1907,6 +1935,8 @@ function drawToolCell(i, now, hov) {
         if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, y + cov, r.w - 2, 1); }
       }
     }
+    // ...and the "!" when the column weighs more than one press can spend
+    if (toolOver(cell)) drawOverWarn(r, y, now);
   }
   if (red) ctx.restore();
 }
@@ -2092,47 +2122,58 @@ function drawHudScaled(now, slideY, withCol) {
     Math.round(bw * s), Math.round(bh * s));
 }
 
-// The bit column, rising out of the slot whose key is held. Bottom cell is bit
-// 0; the caret on the left edge marks what the next press fires, and it climbs
-// as the tool cycles. Each cell carries the bit's weight as pips along its
-// bottom - gold while the tool can throw it, red when it cannot, which is the
-// whole of "tensile strength" said without the word.
+// The bit column, rising out of the slot whose key is held - and the one place
+// the whole of the weapon's arithmetic is on screen at once. Bottom cell is
+// bit 0 and fires first; one press walks up from there spending the tool's
+// tensile BUDGET, so the column reads bottom-to-top exactly as the press does.
+//
+// Three marks, no words. Every cell carries its weight as pips along its
+// bottom (a modifier costs weight too now, so the pips are on both kinds and
+// the hatched plate is what still tells them apart). Every cell PAST the cut -
+// the first one the budget could not reach - goes red-rimmed and washed out,
+// because it is carried and not thrown. Over the top cell the budget itself is
+// a track, filled in the tier's own ink to what this press spends and capped
+// in red when the load runs past the end of it: the whole of "tensile
+// strength" said without the word. The gold caret marks the lead shot.
 function drawBitColumn(now) {
   const s = bitEditSlot();
   if (s < 0) return;
   const cell = player.tools[s], T = TOOLS[toolIdOf(cell.type)];
-  const up = peekBit(cell);
+  const plan = toolPlan(cell);
+  const up = plan.shots.length ? plan.shots[0].i : -1;
   const hov = mouse.inside ? bitColHit(mouse.x, mouse.y) : -1;
   // the spine: a 1px line from the tool up the column's left edge, so the
-  // stack reads as coming OUT of the slot rather than floating over it
+  // stack reads as coming OUT of the slot rather than floating over it. It
+  // stops at the cut, because that is how far the press gets.
   const c0 = toolCellRect(s), top = bitColRect(s, cell.bits.length - 1);
+  const cutR = plan.cut >= 0 ? bitColRect(s, plan.cut) : null;
   ctx.fillStyle = '#2c3a68';
-  ctx.fillRect(c0.x + (AB_CELL >> 1) - 1, top.y - 2, 2, c0.y - top.y + 2);
+  const spineY = cutR ? cutR.y + cutR.h : top.y - 2;
+  ctx.fillRect(c0.x + (AB_CELL >> 1) - 1, spineY, 2, c0.y - spineY);
   for (let i = 0; i < cell.bits.length; i++) {
     const r = bitColRect(s, i), id = cell.bits[i], b = id && BITS[id];
-    const over = b && b.proj && b.weight > T.tensile;
+    // dead weight is not a property of the bit any more, it is a property of
+    // where the bit SITS: everything from the cut up is carried, not thrown
+    const dead = b && plan.cut >= 0 && i >= plan.cut;
     const tp = b ? tierPlate(bitType(id), hov === i) : { plate: '#171f45', rim: hov === i ? '#8fa0c8' : '#2c3560' };
     ctx.fillStyle = 'rgba(4,6,18,0.55)';
     ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
-    ctx.fillStyle = over ? '#c2465a' : tp.rim;
+    ctx.fillStyle = dead ? '#c2465a' : tp.rim;
     ctx.fillRect(r.x, r.y, r.w, r.h);
     ctx.fillStyle = tp.plate;
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     if (b) {
+      if (dead) ctx.globalAlpha = 0.45; // ...and it is washed out with it
       modPlate(bitType(id), r, r.y);
       tierShine(r, r.y, bitType(id), now);
       drawItemIcon(bitType(id), r, r.y - 2);
-      if (b.proj) { // weight, as pips: gold while this tool can throw it
-        for (let k = 0; k < b.weight; k++) {
-          ctx.fillStyle = over ? '#e0637a' : '#f2cc6a';
-          ctx.fillRect(r.x + 2 + k * 2, r.y + r.h - 3, 1, 2);
-        }
-      } else { // a modifier has no weight and never fires: a bar, not pips
-        ctx.fillStyle = b.col;
-        ctx.fillRect(r.x + 2, r.y + r.h - 3, r.w - 4, 1);
-      }
+      // WEIGHT, as pips, on both kinds - a fitting costs the press what a
+      // shot does, and the hatched plate is what says which kind it is
+      ctx.fillStyle = dead ? '#e0637a' : '#f2cc6a';
+      for (let k = 0; k < b.weight && k < 8; k++) ctx.fillRect(r.x + 2 + k * 2, r.y + r.h - 3, 1, 2);
+      ctx.globalAlpha = 1;
     }
-    if (i === up) { // the caret: what the next press fires
+    if (i === up) { // the caret: the first shot the next press puts in the air
       const bob = Math.round(Math.sin(now * 8));
       ctx.fillStyle = '#0f1632';
       for (let k = 0; k < 3; k++) ctx.fillRect(r.x - 5 + bob, r.y + 6 + k, 3 - k + 1, 1);
@@ -2140,12 +2181,20 @@ function drawBitColumn(now) {
       for (let k = 0; k < 3; k++) ctx.fillRect(r.x - 5 + bob, r.y + 6 + k, 3 - k, 1);
     }
   }
-  // the tool's own ceiling, over the top cell: as many pips as it can throw
+  // the budget, over the top cell: a track as wide as the column, filled to
+  // what this press spends of the tool's strength. When the column carries
+  // more than the tool can swing, the tail of the track stays red - the same
+  // fact the "!" over the well is shouting.
+  const bw = top.w - 2, over = plan.load > T.tensile;
   ctx.fillStyle = '#0f1632';
-  ctx.fillRect(top.x, top.y - 5, top.w, 4);
-  for (let k = 0; k < T.tensile && k < 9; k++) { // 9 is what an 18px plate holds
-    ctx.fillStyle = TOOL_TIERS[T.tier].ink;
-    ctx.fillRect(top.x + 1 + k * 2, top.y - 4, 1, 2);
+  ctx.fillRect(top.x, top.y - 6, top.w, 5);
+  let fill = Math.round(bw * Math.min(1, plan.used / T.tensile));
+  if (over) fill = Math.min(fill, bw - 3); // always leave the overrun showing
+  ctx.fillStyle = TOOL_TIERS[T.tier].ink;
+  ctx.fillRect(top.x + 1, top.y - 5, fill, 3);
+  if (over) {
+    ctx.fillStyle = '#c2465a';
+    ctx.fillRect(top.x + 1 + fill, top.y - 5, bw - fill, 3);
   }
 }
 
@@ -2224,38 +2273,43 @@ const TIP_PATH = { line: 'STRAIGHT', zig: 'ZIG-ZAG', orbit: 'ORBIT', boomer: 'BO
 // KNOCKBACK is the one bit number that is a multiple rather than a quantity
 // (see BITS, js/tools.js), so it prints as one - 'x1' is the ordinary shove
 const TIP_KB = (kb) => 'x' + (Math.round((kb === undefined ? 1 : kb) * 10) / 10);
-// A TOOL: the three numbers that are the whole of what a tool is, and then
-// what is loaded in it - which is the other half of "what will this do".
+// A TOOL: the numbers that are the whole of what a tool is, and then what is
+// loaded in it - which is the other half of "what will this do". The list is
+// the FIRING ORDER, cell 1 first, with each bit's weight beside it and the
+// line where the press runs out of strength marked, because that order and
+// that cut are now the entire build.
 function tipTool(cell) {
   const id = toolIdOf(cell.type), T = TOOLS[id];
   const d = tipBase(cell.type, T.name, TOOL_TIERS[T.tier].name + ' TOOL');
+  const plan = toolPlan(cell);
+  const over = plan.load > T.tensile;
   d.rows.push(['RATE OF FIRE', tipSec(T.rof * TOOL_ROF_STEP), '#f4f7ff']);
   d.rows.push(['BIT SLOTS', bitsIn(cell) + '/' + T.cap, '#f4f7ff']);
-  d.rows.push(['MAX WEIGHT', String(T.tensile), '#f2cc6a']);
-  const up = peekBit(cell);
+  d.rows.push(['TENSILE', String(T.tensile), '#f2cc6a']);
+  d.rows.push(['LOADED WEIGHT', String(plan.load), over ? '#e0637a' : '#f4f7ff']);
+  d.rows.push(['SHOTS A PRESS', String(plan.shots.length), plan.shots.length ? '#8fe08a' : '#e0637a']);
+  const lead = plan.shots.length ? plan.shots[0].i : -1;
   for (let i = 0; i < cell.bits.length; i++) {
     const b = cell.bits[i] && BITS[cell.bits[i]];
     if (!b) continue;
-    const over = b.proj && b.weight > T.tensile;
-    // the firing order is the point, so the list is numbered and the next one
-    // up is marked - the same thing the column's gold caret says
-    d.notes.push([(i === up ? '> ' : '  ') + (i + 1) + ' ' + b.name + (over ? ' - TOO HEAVY' : ''),
-      over ? '#e0637a' : i === up ? '#f2cc6a' : b.col]);
+    const dead = plan.cut >= 0 && i >= plan.cut;
+    d.notes.push([(i === lead ? '> ' : '  ') + (i + 1) + ' ' + b.name + ' ' + b.weight +
+      (dead ? ' - NO STRENGTH LEFT' : ''),
+      dead ? '#e0637a' : i === lead ? '#f2cc6a' : b.col]);
   }
   if (!bitsIn(cell)) d.notes.push(['  NO BITS LOADED', TIP_DIM]);
+  else if (over) d.notes.push(['IT CARRIES MORE THAN IT CAN SWING', '#ffd95c']);
   return d;
 }
 // A BIT: every property the shot carries, because that is exactly the list a
 // player is choosing between when they drag one into a cell.
-function tipBit(id, cell) {
+function tipBit(id) {
   const b = BITS[id];
   const d = tipBase(bitType(id), b.name,
     TOOL_TIERS[b.tier].name + (b.proj ? ' BIT' : ' MODIFIER'));
   if (b.proj) {
-    const T = cell && TOOLS[toolIdOf(cell.type)];
-    const over = T && b.weight > T.tensile;
     d.rows.push(['DAMAGE', String(b.dmg), '#e0637a']);
-    d.rows.push(['WEIGHT', String(b.weight) + (over ? ' - TOO HEAVY' : ''), over ? '#e0637a' : '#f2cc6a']);
+    d.rows.push(['WEIGHT', String(b.weight), '#f2cc6a']);
     d.rows.push(['SPEED', String(b.speed), '#f4f7ff']);
     d.rows.push(['KNOCKBACK', TIP_KB(b.kb), '#cfe0f2']);
     d.rows.push(['LIFESPAN', tipSec(b.life), '#f4f7ff']);
@@ -2269,18 +2323,22 @@ function tipBit(id, cell) {
     if (b.impact === 'warp') d.notes.push(['LAND IT ON ANYTHING AND YOU ARE THERE', '#c58fff']);
     if (b.impact === 'chop') d.notes.push(['CHOPS EVERY TREE IT LANDS AMONG', '#8fe08a']);
   } else {
-    d.rows.push(['WEIGHT', 'NONE', TIP_DIM]);
+    // a fitting costs the press exactly what a shot does: that is the whole
+    // reason where you put one is a decision and not a formality
+    d.rows.push(['WEIGHT', String(b.weight), '#f2cc6a']);
     // A fire modifier is chosen on two numbers - how long the burn runs and
     // how hard it bites - so it prints them, the same reason the projectile
     // rows above exist. Read out of the envelope itself rather than written
     // twice, so a retuned FLAME can never disagree with its own tooltip.
-    const m = toolMods({ bits: [id] });
+    const m = bitMods(id);
     if (m.burn > 0) {
       d.rows.push(['BURNS FOR', tipSec(m.burn), '#ff9440']);
       d.rows.push(['BURN RATE', m.burnDps + '/S', '#ff9440']);
       if (m.cinder > 0) d.rows.push(['EMBER RING', String(m.cinder), '#ffb347']);
     }
-    d.notes.push(['AFFECTS EVERY SHOT ON ITS TOOL', '#8fd8ff']);
+    // the two rules a modifier lives by, and neither is guessable from the art
+    d.notes.push(['CHANGES ONLY THE SHOTS ABOVE IT', '#8fd8ff']);
+    d.notes.push(['A SECOND ONE COMPOUNDS WITH THIS', '#8fe08a']);
     if (m.type === 'fire') d.notes.push(['FIRE KEEPS BURNING WHATEVER IT LANDS ON', '#ff9440']);
   }
   d.notes.push([b.blurb, TIP_DIM]);
@@ -2324,11 +2382,11 @@ function tipSend(d, txt) {
   return d;
 }
 // whatever is in a bag cell, a slot, a bit cell or on the cursor
-function tipCell(s, cell) {
+function tipCell(s) {
   if (!s) return null;
   if (isToolCell(s)) return tipTool(s);
   const b = bitIdOf(s.type);
-  if (b) return tipBit(b, cell);
+  if (b) return tipBit(b);
   return tipStack(s);
 }
 // the two HUD rows that are not items: a gear piece and an ability
@@ -2370,7 +2428,7 @@ function tipClassAb(i, cls) {
 // one thing the page knows about you: whether you have ever held one.
 function tipKind(id) {
   const cell = toolIdOf(id) ? makeTool(toolIdOf(id)) : null;
-  const d = cell ? tipTool(cell) : tipBit(bitIdOf(id), null);
+  const d = cell ? tipTool(cell) : tipBit(bitIdOf(id));
   // A wiki row describes the KIND, not a tool somebody is holding, so the
   // "what is loaded in it" half goes: no bit list, and the slot count is the
   // capacity rather than 0-out-of-capacity.
@@ -2415,7 +2473,7 @@ function tipAt(mx, my) {
   if (state.drag) {
     // what is in hand, and the one thing shift is for: spending the click on a
     // well without putting this down
-    const d = tipCell(state.drag.cell, null);
+    const d = tipCell(state.drag.cell);
     if (d) d.notes.push(['SHIFT CLICK KEEPS THIS IN HAND', TIP_DIM]);
     return d;
   }
@@ -2425,12 +2483,12 @@ function tipAt(mx, my) {
   if (bc >= 0) {
     const cell = player.tools[bitEditSlot()];
     const id = cell.bits[bc];
-    if (id) return tipSend(tipBit(id, cell), 'STOW IT IN THE PACK');
+    if (id) return tipSend(tipBit(id), 'STOW IT IN THE PACK');
     const T = TOOLS[toolIdOf(cell.type)];
     const d = tipBase(cell.type, 'EMPTY BIT CELL', TOOL_TIERS[T.tier].name + ' TOOL');
     d.icon = null; d.tcol = TIP_DIM;
     d.notes.push(['DRAG A BIT IN FROM THE PACK', TIP_DIM]);
-    d.notes.push(['THIS TOOL THROWS UP TO WEIGHT ' + T.tensile, '#f2cc6a']);
+    d.notes.push(['THIS PRESS SPENDS ' + toolPlan(cell).used + ' OF ' + T.tensile, '#f2cc6a']);
     return d;
   }
   const abb = abBuyHit(mx, my);
@@ -2445,7 +2503,7 @@ function tipAt(mx, my) {
   }
   if (sh && sh.kind === 'slot') {
     const cell = player.tools[sh.i];
-    if (cell) return tipSend(tipCell(cell, null), 'STOW IT IN THE PACK');
+    if (cell) return tipSend(tipCell(cell), 'STOW IT IN THE PACK');
     return { title: 'EMPTY SLOT ' + (sh.i + 1), tcol: TIP_DIM, kind: 'WEAPON', rows: [], plate: BAG_WELL, rim: '#35426e',
       notes: [['DRAG A TOOL HERE FROM THE PACK', TIP_DIM]] };
   }
@@ -2460,7 +2518,7 @@ function tipAt(mx, my) {
   }
   if (bh.kind === 'cell') {
     const s = player.bag[bh.i];
-    const d = tipCell(s, null);
+    const d = tipCell(s);
     if (d && isToolCell(s)) tipSend(d, 'TAKE IT IN HAND');
     else if (d && bitIdOf(s.type) && heldTool(player)) tipSend(d, 'LOAD IT IN THE WEAPON');
     // ...and while the counter is up, what it is worth over there

@@ -1328,14 +1328,19 @@ function drawAimLine(ex, ey, now) {
       return;
     }
   }
-  // the bit that is up next, and the envelope its tool would fire it through
+  // The LEAD shot of the next press, and the envelope the modifiers under it
+  // will fire it through - both straight off toolPlan, the same pass the press
+  // itself runs, so the line and the loose can never be measuring two
+  // different shots. A press fires the whole column now; the line is drawn for
+  // the first arm of it, because that is the one aimed where the pointer is.
   const cell = heldTool(player);
   if (!cell) return;
-  const bi = peekBit(cell);
-  if (bi < 0) return;
-  const bit = BITS[cell.bits[bi]];
+  const plan = toolPlan(cell);
+  if (!plan.shots.length) return;
+  const lead = plan.shots[0];
+  const bit = BITS[lead.id];
   if (bit.path === 'boomer' || bit.path === 'orbit' || bit.path === 'curve') return;
-  const m = toolMods(cell);
+  const m = lead.m;
   // the flight THIS draw buys, right now: shotFlight is emitBit's own
   // envelope, so the line grows out of the bow as the string comes back and
   // its cap sits exactly where a shot loosed this instant would end

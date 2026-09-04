@@ -550,12 +550,31 @@ point is spent nowhere else, and nothing else on the strip is ever bought.
 Hovering the weapon well raises its tool's bit cells out of it (`bitEditSlot`, js/tools.js — it
 also stays up while the pointer is on the risen column, or while a bit is being carried), bottom
 to top, joined to the well by a 1 px spine so the stack reads as coming *out* of the slot rather
-than floating over it. Cell 0 is at the bottom because it fires first; a gold caret on the left
-edge marks what the next press fires and climbs as the tool cycles. A cell carries the bit's
-**weight** as pips along its bottom — gold while this tool can throw it, red when it cannot — and
-a modifier, which has no weight, gets a colour bar instead; the tool's own **tensile ceiling** is
-the matching row of pips above the top cell. That, and nothing written down, is the whole of
-"bow tensile strength". It is a hold, not a mode: it is on screen exactly as long as the key is.
+than floating over it. Cell 0 is at the bottom because it fires first, and the column is the one
+place the [whole of a press](gameplay.md#toolplan-one-activation-in-one-pass) is on screen at
+once. Four marks, no words, all off `toolPlan`:
+
+- a **gold caret** on the left edge marks the lead shot;
+- every cell carries its **weight** as pips along its bottom — on modifiers too, since a fitting
+  costs the press what a shot does, and the [hatched plate](gameplay.md#tiers-and-how-a-find-reads) is what still
+  tells the two kinds apart;
+- every cell **past the cut** (the first one the budget could not reach) goes red-rimmed and
+  washed out, and the spine stops under it: it is carried, not thrown. Dead weight is a property
+  of where a bit *sits*, never of the bit;
+- over the top cell the **budget** is a track as wide as the column, filled in the tier's own ink
+  to what this press spends of the tool's tensile and capped in red when the column weighs more
+  than the tool can swing.
+
+That, and nothing written down, is the whole of "bow tensile strength". It is a hold, not a mode:
+it is on screen exactly as long as the pointer is.
+
+**A tool carrying more than one press can swing wears a "!"** (`drawOverWarn`, ui.js) in the
+weapon well's top-right corner — a gold triangle with a dark stroke, bobbing a pixel so the eye
+catches it on a strip that is otherwise still. It is *in* the corner rather than floating above
+the rim because the raised bit column and its shadow own every pixel over the rim
+(`BITC_LIFT`), and a warning that hides under the column the moment you go to read it is no
+warning. It is a warning and not a refusal: the build still fires as far up the column as the
+budget reaches, and the budget bar is where you go to see exactly where it stops.
 
 ### The backpack
 
@@ -1105,7 +1124,7 @@ both the pixel cursor and the browser-cursor fallback read from it. It returns
 - Every reticle in play also carries the **selected tool's own state**, whatever the pointer is
   over, since the crosshair is where the eye already is: `nock` (0→1 over `toolCycle`) draws
   four gold corner marks falling inward onto the ring, and `dry` — an empty slot **or** a tool
-  with no bit light enough to throw — drops the centre
+  whose budget reaches no shot — drops the centre
   pixel and greys the ticks, a hollow crosshair. `amb` (buried, settled: the next shot is worth
   `AMBUSH_MUL`) grows a second segment out along each of the crosshair's **own axes** and warms the
   centre pixel to gold — deliberately on the cross, where the renock's marks are on the diagonals,

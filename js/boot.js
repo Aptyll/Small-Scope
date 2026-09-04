@@ -1341,8 +1341,11 @@ window.DBG = {
   // firing pipeline and the loot roll - so a driver can stage a build without
   // mining for it. `toolCellRect` / `bitColRect` / `bitColHit` are the wells
   // the pointer tests against. bitEditSlot is whether the hover-raised column is up (-1 = down).
-  TOOL_TIERS, TOOL_SLOTS, makeTool, toolType, bitType, toolMods,
-  toolRof, toolCycle, peekBit, nextBit, toolReady, bitFires, dropLoot, giveLoadout, CLASS_LOADOUT,
+  TOOL_TIERS, TOOL_SLOTS, makeTool, toolType, bitType, bitMods, newMods,
+  // toolPlan is the whole press resolved without firing it: what the budget
+  // reaches, through which envelope, and where it runs out (`cut`)
+  toolPlan, toolLoad, toolOver,
+  toolRof, toolCycle, peekBit, toolReady, dropLoot, giveLoadout, CLASS_LOADOUT,
   // the draw curve: 0..1 off a slot's chargeT, and the flight and damage it buys a bit
   drawPow, shotFlight, drawDmgMul, DRAW_RANGE_MIN, DRAW_SPEED_MIN, DRAW_DMG_MIN,
   toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
@@ -1521,8 +1524,10 @@ window.DBG = {
   // the ESC panel: what the pointer is over, the speaker's plate, the open
   // page's row anchors (already scrolled - a row's y is where it is on
   // screen) and the navbar cells - so a driver can click a dial without
-  // guessing at the pitch. setSettingsTab flips the page directly.
-  settingsHit, muteBtnRect, settingsScrollBy,
+  // guessing at the pitch. setSettingsTab flips the page directly, and
+  // controlsCv is the CONTROLS page bake - blit it scaled to read the
+  // weapon primer's pixels without squinting at a 240px page.
+  settingsHit, muteBtnRect, settingsScrollBy, controlsCv,
   setSettingsTab: (id) => { setTab = id; },
   get settingsRows() {
     const L = settingsLayout();

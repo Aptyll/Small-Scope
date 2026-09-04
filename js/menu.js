@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.99'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.00'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.00', 'ONE CLICK NOW FIRES EVERY BIT YOUR TOOL CAN AFFORD - A TOOLS TENSILE IS A WEIGHT BUDGET SPENT UP THE COLUMN, A MODIFIER ONLY CHANGES THE SHOTS ABOVE IT AND TWO OF A KIND COMPOUND, AND A TOOL CARRYING MORE THAN IT CAN SWING WEARS A ! WARNING.'],
   ['2.99', 'THE COUNTER IS THE SHOP NOW - A BIG HANGING SIGN, SMALLER GOODS, AIR UNDER A SHIMMERING SELL STRIP, AND A ROAD ALONG THE BOTTOM WHERE THE MERCHANTS WAGON DRIVES OUT AND BACK AGAINST A COUNTDOWN TO THE NEXT RESTOCK.'],
   ['2.98', 'THE MARKET PLATES ARE HALF AGAIN AS BIG AND FLASH WHITE AS THEY FLY IN, CARRYING AN ANIMATED SACK OF GOLD, AND A SPIKE NOW DINGS WHERE A CRASH SIGHS.'],
   ['2.97', 'THE MARKET NOW SHOUTS: A PRICE SPIKE, A CRASH OR A RESTOCK RAISES A GOLD-SACK PLATE UNDER THE MINIMAP - THE GOOD, THE PRICE AND AN ARROW - OVER A CUE OF ITS OWN, WITH THE WAGON AND ITS BELL FOR NEW STOCK.'],
@@ -2328,7 +2329,7 @@ function wikiBeastGold(kind, lv) { const y = YIELD[kind]; return Math.round(y.co
 const WIKI_TOOL_COLS = [
   { label: 'RATE', w: 30, get: (id) => tipSec(TOOLS[id].rof * TOOL_ROF_STEP) },
   { label: 'SLOTS', w: 28, get: (id) => String(TOOLS[id].cap) },
-  { label: 'MAX WT', w: 32, get: (id) => String(TOOLS[id].tensile), col: '#f2cc6a' },
+  { label: 'TENSILE', w: 34, get: (id) => String(TOOLS[id].tensile), col: '#f2cc6a' },
 ];
 const WIKI_BIT_COLS = [
   { label: 'DMG', w: 22, get: (id) => String(BITS[id].dmg), col: '#e0637a' },
@@ -2338,7 +2339,8 @@ const WIKI_BIT_COLS = [
   { label: 'FLIGHT', w: 44, get: (id) => TIP_PATH[BITS[id].path] || BITS[id].path, colOf: (id) => BITS[id].col },
 ];
 const WIKI_MOD_COLS = [
-  { label: 'EFFECT', w: 180, get: (id) => BITS[id].blurb.split('. ')[0].replace(/\.$/, ''), col: TIP_DIM },
+  { label: 'WT', w: 18, get: (id) => String(BITS[id].weight), col: '#f2cc6a' },
+  { label: 'EFFECT', w: 162, get: (id) => BITS[id].blurb.split('. ')[0].replace(/\.$/, ''), col: TIP_DIM },
 ];
 // the classes page: an ability row's two numbers (the tooltip's own rows,
 // tipClassAb), and the four stats a class card shows as pips - the kit's
