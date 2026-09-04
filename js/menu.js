@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 3.01'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.02'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.02', 'THE FOUR ABILITY KEYS START LOCKED AND DIM - THE FIRST SKILL POINT ON A KEY IS WHAT MAKES IT CASTABLE AT ALL, SO YOU LAND WITH ONE POINT, FOUR DARK KEYS AND A CHOICE.'],
   ['3.01', 'A HIT NO LONGER GRANTS INVINCIBILITY - EVERY BIT OF A VOLLEY LANDS ITS OWN DAMAGE, SHOVE AND FIRE - AND THE WIKI READS TO ITS OWN SONG, WHISPERING WOODS, LOOPING FROM THE MOMENT IT OPENS.'],
   ['3.00', 'ONE CLICK NOW FIRES EVERY BIT YOUR TOOL CAN AFFORD - A TOOLS TENSILE IS A WEIGHT BUDGET SPENT UP THE COLUMN, A MODIFIER ONLY CHANGES THE SHOTS ABOVE IT AND TWO OF A KIND COMPOUND, AND A TOOL CARRYING MORE THAN IT CAN SWING WEARS A ! WARNING.'],
   ['2.99', 'THE COUNTER IS THE SHOP NOW - A BIG HANGING SIGN, SMALLER GOODS, AIR UNDER A SHIMMERING SELL STRIP, AND A ROAD ALONG THE BOTTOM WHERE THE MERCHANTS WAGON DRIVES OUT AND BACK AGAINST A COUNTDOWN TO THE NEXT RESTOCK.'],
@@ -2376,7 +2377,7 @@ const WIKI_PAGES = [
   { id: 'classes', label: 'CLASSES', build() {
     const b = [];
     b.push({ kind: 'line', h: 9, text: 'TWO CLASSES, PICKED ON THE WAY IN. KEYS 1-4 ARE THE CLASS, EACH ON ITS OWN COOLDOWN.', col: '#cfe0ff' });
-    b.push({ kind: 'line', h: 9, text: 'A HERO LEVEL IS A SKILL POINT: ' + Math.round(AB_LV_CD * 100) + '% OFF ONE ABILITY\'S COOLDOWN, UP TO LEVEL ' + AB_LV_MAX + '.', col: TIP_DIM });
+    b.push({ kind: 'line', h: 9, text: 'A SKILL POINT UNLOCKS A KEY; EACH ONE AFTER IS ' + Math.round(AB_LV_CD * 100) + '% OFF THAT ABILITY\'S COOLDOWN, TO LEVEL ' + AB_LV_MAX + '.', col: TIP_DIM });
     CLASSES.forEach((c, cls) => {
       b.push({ kind: cls ? 'rule' : 'gap', h: cls ? 10 : 4 });
       b.push({ kind: 'cls', h: 52, cls });

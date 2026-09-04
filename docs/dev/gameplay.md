@@ -495,23 +495,33 @@ through exactly the key a human presses; `updateAbilities(p, dt)` runs the coold
 cast, and ages every state an ability leaves on a body; `updateAbilityWorld(dt)` (called from
 `updatePlay`) steps what they leave in the world.
 
-**Abilities level on skill points, never gold.** Each key starts at level 1; each level past 1
-costs **one skill point** — the only thing a point buys, one per
-[hero level](multiplayer.md#hero-levels) — and shaves `AB_LV_CD` (12%) off that ability's
-cooldown, the one lever that means something on all eight keys. The 12 points a capped hero
-earns max the four keys' 12 levels exactly.
-The trio: `abLvCanBuy(p, i)` (a point in hand, room on the key),
+**Abilities are bought with skill points, never gold — and a key you have not bought does
+nothing.** Each key starts **LOCKED at level 0**: the class hands you the four actives, not the
+use of them. Every level costs **one skill point** — the only thing a point buys, one per
+[hero level](multiplayer.md#hero-levels). The **first** point on a key unlocks it (`abUnlocked(p,
+i)`, the one gate: `tryAbility` refuses a level-0 key outright and every bot reaches for keys
+through `abReady(p, i)` = bought and off cooldown), and each one after shaves `AB_LV_CD` (12%)
+off that ability's cooldown, the one lever that means something on all eight keys. Four keys ×
+`AB_LV_MAX` is **16 points against the 12 a capped hero earns**, so no build has all of it: four
+keys open and shallow, or one capped and three left dark, is the choice. You land with one point
+and four dark keys, so the first thing a match asks is which ability you want to be.
+The rest of the set: `abLvCanBuy(p, i)` (a point in hand, room on the key),
 `buyAbilityLv(p, i)` (the single entry point, reached through `input.cmd {kind:'ability', i}` →
-`runCmd` by HUD plate click and bots alike), and `abCdOf(p, i)` — which every cooldown-setting
+`runCmd` by HUD plate click and bots alike — the unlock floats `NAME UNLOCKED` and a fatter
+burst, every level after floats the number), and `abCdOf(p, i)` — which every cooldown-setting
 site reads instead of the table's base `cd` (the cast landing, and the shield's comes-down
 reset). `p.abLv` resets with the match like `p.gearLv`. The wells carry the progress — fat
-gear-style buy pips along the top edge — and the ASK floats clear of them: while a point is
-unspent each un-maxed key grows a bobbing gold plus plate in the open screen above its well
-(`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron made a real
+gear-style buy pips along the top edge, **one seat per point the key can hold**, so an empty row
+is a locked ability — and a locked well stands dim (dark rim, the icon at `LOCK_DIM`, a grey key
+digit), exactly as a meal button with nothing behind it does; a press on one reddens and shakes
+it (`abDenied`, the twin of `toolDenied`/`foodDenied`). The ASK floats clear of the wells: while a
+point is unspent each un-maxed key grows a bobbing gold plus plate in the open screen above its
+well (`abBuyRect`/`abBuyHit`/`drawAbBuyPlate`, UI › `hud strip`), gear's old chevron made a real
 button. The plate press buys, any press on the well casts, so the two can never steal each
-other's click; hover lights the plate and the tooltip carries the numbers. Bots spend each free
-point in `updateAI`'s rung 0, lowest ability level first. The cd column in the tables below is
-the level-1 base.
+other's click; hover lights the plate and the tooltip carries the numbers (`LOCKED` and `UNLOCK
+1 SKILL PT` on a dark key). Bots spend each free point in `updateAI`'s rung 0, lowest ability
+level first — which spends their first four unlocking all four keys before any gets a cut. The cd
+column in the tables below is the level-1 base.
 
 **Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the

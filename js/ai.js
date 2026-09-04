@@ -339,7 +339,9 @@ function updateAI(p, dt) {
   const ward = prof.support && !player.dead && !inAir(player) && player !== p ? player : null;
 
   // 0. spend a free skill point before the ladder - waiting on it is leaving
-  //    growth on the table. Lowest ability level first, so the kit rises evenly.
+  //    growth on the table. Lowest ability level first, so the kit rises
+  //    evenly - which spends the first four points UNLOCKING all four keys
+  //    (level 0 casts nothing) before any of them gets a cooldown cut.
   if (p.skillPts > 0 && !inp.cmd) {
     let ba = -1, bl = AB_LV_MAX - 1;
     for (let i = 0; i < AB_KEYS; i++) if (p.abLv[i] - 1 < bl) { bl = p.abLv[i] - 1; ba = i; }
@@ -384,7 +386,7 @@ function updateAI(p, dt) {
   const wolf = foe ? null : aiNearestWolf(p);
   if (p.prone) ai.hideT -= dt;
   const btx = Math.floor(p.x / TILE), bty = Math.floor((p.y + 4) / TILE);
-  const canBury = p.cls === 0 && p.abCd[3] <= 0 && !p.sliding && p.dodgeT <= 0 &&
+  const canBury = p.cls === 0 && abReady(p, 3) && !p.sliding && p.dodgeT <= 0 &&
     inWorld(btx, bty) && ground[idx(btx, bty)] === 0;
   let down = p.prone;
   if (wolf) down = false;
@@ -430,13 +432,13 @@ function updateAI(p, dt) {
       if (p.cls === 0) { // hunter: skewer the open lane, tangle the gap
         // (the grapple is a held key and a terrain read - a hand skill the
         // ladder does not try to fake; snow cover is spent at rung 2)
-        if (p.abCd[0] <= 0 && d > 55 && d < 230 && clear) inp.ability = 0; // lock the piercing draw on them
-        else if (p.abCd[1] <= 0 && d < 110 && clear) inp.ability = 1;      // net the gap
+        if (abReady(p, 0) && d > 55 && d < 230 && clear) inp.ability = 0; // lock the piercing draw on them
+        else if (abReady(p, 1) && d < 110 && clear) inp.ability = 1;      // net the gap
       } else { // warrior: get there, and be unstoppable arriving
-        if (p.abCd[3] <= 0 && d < 110) inp.ability = 3;               // juggernaut into the fight
-        else if (p.abCd[1] <= 0 && d > 36 && d < 120 && clear) inp.ability = 1; // rush the line
-        else if (p.abCd[2] <= 0 && d < 42) inp.ability = 2;           // stomp at arm's length
-        else if (p.abCd[0] <= 0 && d < 150 && p.hp < p.maxHp * 0.75) inp.ability = 0; // shield the arrows
+        if (abReady(p, 3) && d < 110) inp.ability = 3;               // juggernaut into the fight
+        else if (abReady(p, 1) && d > 36 && d < 120 && clear) inp.ability = 1; // rush the line
+        else if (abReady(p, 2) && d < 42) inp.ability = 2;           // stomp at arm's length
+        else if (abReady(p, 0) && d < 150 && p.hp < p.maxHp * 0.75) inp.ability = 0; // shield the arrows
       }
     }
     const side = p.id % 2 ? 1 : -1;

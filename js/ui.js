@@ -1408,6 +1408,18 @@ function toolDenied() {
 function hudStripRect() {
   return { x: Math.round((VIEW_W - AB_W) / 2), y: VIEW_H - AB_H, w: AB_W, h: AB_H };
 }
+// How far the HUD has slid in: 0 while it is away below the screen, 1 once it
+// is home. The intro rides it up (renderUI) - and a ceremony PINS it there,
+// because the drop brief's camera branch holds state.intro for the whole
+// roost tour (js/sim.js), which is how the HUD stays off a cinematic. Every
+// piece that hangs in the open screen ABOVE the strip - the buy plates, whose
+// 40px slide is not enough to carry them off the bottom on their own - asks
+// this before it draws or answers the pointer, or it bobs there alone over a
+// cinematic with no strip under it.
+function hudInT() {
+  return state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
+}
+function hudHome() { return hudInT() >= 1; }
 // The HUD SIZE dial (settings.hudScale, the ESC panel's GAME page). The strip
 // keeps ALL its geometry in this 1x space and drawHudScaled blits the whole
 // widget scaled about its bottom-centre anchor; stripMouse maps the pointer
@@ -1451,6 +1463,19 @@ function foodDenied(type) {
   foodFlashI = i;
   SFX.deny();
 }
+// And the ability wells' share of it: a key nobody has spent a point on is
+// LOCKED (abUnlocked, js/abilities.js), and its well already stands dim with
+// a dark icon - but a press has to answer, so the asked well reddens and
+// shakes in the same red the pack, the weapon well and the meal buttons
+// refuse in. tryAbility is the one caller, so key and click speak alike; a
+// cooldown is NOT this refusal - the wipe already says when it comes home.
+let abFlash = 0, abFlashI = 0;
+function abDenied(i) {
+  if (abFlash > 0 && abFlashI === i) return;
+  abFlash = 0.6;
+  abFlashI = i;
+  SFX.deny();
+}
 // The floating buy plate: an affordable ability level's ask hovers in the
 // open screen ABOVE the well - gear's old chevron grammar, made a real
 // button. The plate is the buy click and the well below stays purely the
@@ -1467,7 +1492,7 @@ function abBuyRect(i) {
 // test is also the appears-then-goes gate - shared by the press, the
 // cursor, the tooltip and the pixels.
 function abBuyHit(mx, my) {
-  if (state.mode !== 'play' || player.dead || state.paused ||
+  if (state.mode !== 'play' || player.dead || state.paused || !hudHome() ||
       state.mapOpen || state.settingsOpen || state.wheel || window.DBG.hideUI) return -1;
   ({ x: mx, y: my } = stripMouse(mx, my));
   for (let i = 0; i < AB_N; i++) {
@@ -1948,19 +1973,36 @@ function drawToolCell(i, now, hov) {
 // edge, and the well pops white the frame a cooldown comes home. The big
 // digit bottom-left is the key (the keybind-indicator carve-out). Along the
 // top inner edge, gear's buy pips - fat ones, this is the strip's main
-// progress readout - count the ability's levels; the ASK lives off the well
-// entirely, on the floating plate above it (drawAbBuyPlate), so the well's
-// rim carries combat states only.
+// progress readout - count the POINTS in the key, one seat per level; the ASK
+// lives off the well entirely, on the floating plate above it
+// (drawAbBuyPlate), so the well's rim carries combat states only.
+//
+// A key with no point in it is LOCKED, and the well says so exactly the way a
+// meal button with nothing behind it does: dark rim, the icon at LOCK_DIM,
+// the pips all empty and the key digit dim - grey, not absent, so the strip
+// never rearranges and you can read what you have not bought yet. A press on
+// one reddens it (abDenied above).
+const LOCK_DIM = 0.28; // the locked icon's alpha - the meal button's grammar, one shade darker
 let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
 function drawClassAbCell(i, now, on) {
   const p = player, ab = CLASS_AB[p.cls][i];
   const r = abCellRect(i);
   const cd = p.abCd[i];
+  const lock = !abUnlocked(p, i);
   if (abCdSeen[i] > 0 && cd <= 0) abReadyFlash[i] = now + 0.3;
   abCdSeen[i] = cd;
   const casting = p.castT > 0 && p.castAb === i;
   const act = ab.activeF ? ab.activeF(p) : 0;
-  const rim = casting ? '#f4f7ff'
+  const red = abFlash > 0 && abFlashI === i;
+  if (red) {
+    ctx.save();
+    ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
+    ctx.fillStyle = '#c2465a';
+    ctx.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
+  }
+  const rim = red ? '#c2465a'
+    : lock ? (on ? '#4a5480' : '#232c52')
+    : casting ? '#f4f7ff'
     : act > 0 ? (Math.sin(now * 9) > 0 ? ab.acol : '#35426e')
     : now < abReadyFlash[i] ? '#f4f7ff'
     : on ? '#8fa0c8'
@@ -1969,7 +2011,9 @@ function drawClassAbCell(i, now, on) {
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = BAG_WELL;
   ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+  if (lock) ctx.globalAlpha = LOCK_DIM;
   ctx.drawImage(classAbIcon(p.cls, i), r.x + 1, r.y + 1);
+  ctx.globalAlpha = 1;
   // a RUNNING ability owns its well: the drain bar is the readout and the
   // wipe waits until the state ends (the shield resets its cooldown on the
   // drop anyway, so a wipe under a raised shield would be a lie)
@@ -1979,13 +2023,16 @@ function drawClassAbCell(i, now, on) {
     ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, cov);
     if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, r.y + cov, r.w - 2, 1); }
   }
-  // the level, as gear's buy pips along the top inner edge - fat 7x3 blocks
-  // with a dark seat, so the bought count reads from across the screen
-  for (let k = 0; k < AB_LV_MAX - 1; k++) {
+  // the level, as gear's buy pips along the top inner edge - fat blocks with a
+  // dark seat, so the bought count reads from across the screen. ONE SEAT PER
+  // POINT the key can hold (AB_LV_MAX of them, the first of which is the
+  // unlock), so an empty row is a locked ability and the row filling up is the
+  // whole ladder in one readout
+  for (let k = 0; k < AB_LV_MAX; k++) {
     ctx.fillStyle = '#0f1632';
-    ctx.fillRect(r.x + 2 + k * 10, r.y + 2, 9, 5);
-    ctx.fillStyle = k < p.abLv[i] - 1 ? '#f2cc6a' : '#2c3560';
-    ctx.fillRect(r.x + 3 + k * 10, r.y + 3, 7, 3);
+    ctx.fillRect(r.x + 2 + k * 8, r.y + 2, 7, 5);
+    ctx.fillStyle = k < p.abLv[i] ? '#f2cc6a' : '#2c3560';
+    ctx.fillRect(r.x + 3 + k * 8, r.y + 3, 5, 3);
   }
   if (act > 0) {
     ctx.fillStyle = '#0f1632';
@@ -2001,15 +2048,18 @@ function drawClassAbCell(i, now, on) {
   }
   const key = String(i + 1);
   drawPixelTextOutline(ctx, key, r.x + 3, r.y + r.h - 13,
-    cd > 0 && !casting && act <= 0 ? '#7a8bb8' : '#f4f7ff', '#0f1632', 2);
+    lock || (cd > 0 && !casting && act <= 0) ? '#7a8bb8' : '#f4f7ff', '#0f1632', 2);
+  if (red) ctx.restore();
 }
 // The floating buy plate over ability i - gear's bobbing chevron made a real
 // button, spending a SKILL POINT (never gold). Drawn only while a point is
-// in hand and the key has room (the same abLvCanBuy gate abBuyHit answers
-// with), bobbing over open screen; hover lights it, and the tooltip carries
-// the numbers.
+// in hand, the key has room, and the strip is HOME (the same abLvCanBuy +
+// hudHome gate abBuyHit answers with - the plate hangs in open screen, so the
+// intro's 40px slide does not take it with the wells and it has to leave on
+// its own), bobbing over open screen; hover lights it, and the tooltip
+// carries the numbers.
 function drawAbBuyPlate(i, now, hot) {
-  if (!abLvCanBuy(player, i)) return;
+  if (!abLvCanBuy(player, i) || !hudHome()) return; // never bobbing over a cinematic the strip is hidden for
   const r = abBuyRect(i);
   const y = r.y + 2 + Math.round(Math.sin(now * 6)); // the bob stays inside the fixed hit rect
   ctx.fillStyle = 'rgba(4,6,18,0.55)';
@@ -2414,13 +2464,17 @@ function tipClassAb(i, cls) {
   d.rows.push(['COOLDOWN', tipSec(cls == null ? abCdOf(player, i) : ab.cd), '#f4f7ff']);
   d.rows.push(['CAST', tipSec(ab.cast), '#f4f7ff']);
   if (cls == null) {
-    d.rows.push(['LEVEL', player.abLv[i] + '/' + AB_LV_MAX, '#f4f7ff']);
-    if (player.abLv[i] < AB_LV_MAX) d.rows.push(['NEXT LEVEL', '1 SKILL PT',
+    const lock = !abUnlocked(player, i);
+    d.rows.push(['LEVEL', lock ? 'LOCKED' : player.abLv[i] + '/' + AB_LV_MAX,
+      lock ? '#e0637a' : '#f4f7ff']);
+    if (player.abLv[i] < AB_LV_MAX) d.rows.push([lock ? 'UNLOCK' : 'NEXT LEVEL', '1 SKILL PT',
       player.skillPts > 0 ? '#f2cc6a' : '#e0637a']);
     if (player.abCd[i] > 0) d.rows.push(['READY IN', tipSec(player.abCd[i]), '#e0637a']);
   }
   for (const s of ab.blurb.split('. ')) d.notes.push([s.replace(/\.$/, ''), TIP_DIM]);
-  if (cls == null) d.notes.push(['PRESS ' + (i + 1) + ' OR CLICK TO CAST', TIP_DIM]);
+  if (cls == null) d.notes.push([abUnlocked(player, i)
+    ? 'PRESS ' + (i + 1) + ' OR CLICK TO CAST'
+    : 'SPEND A SKILL POINT TO UNLOCK IT', TIP_DIM]);
   return d;
 }
 // A KIND on the wiki's ARSENAL page - the one tooltip that is not about
@@ -2606,7 +2660,7 @@ function renderUI(now) {
   // backpack's bottom strip and the hud strip's meal buttons now, which is
   // why nothing slides in from the left any more. Health lives on the
   // in-world bar.
-  const hudIn = state.intro > 0 ? easeOut(Math.max(0, 1 - state.intro / HUD_IN_T)) : 1;
+  const hudIn = hudInT(); // 0 away .. 1 home; a drop brief pins it at 0 for the tour
   const slide = 1 - hudIn;
   const out = state.mode === 'dead'; // the local wallet is moot once you are out
 

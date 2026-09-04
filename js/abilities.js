@@ -10,13 +10,16 @@
 
 // ---- tuning --------------------------------------------------------------
 const AB_KEYS = 4;          // keys 1-4
-// ability levels: the hero's own growth, never the purse's. The class kit is
-// level 1; each level past 1 costs ONE SKILL POINT - the only thing a point
-// buys, one per hero level, so the 12 points a capped hero earns max the
-// four keys' 12 levels exactly. Each level shaves AB_LV_CD off that
-// ability's cooldown - one lever, universally meaningful (more nets in the
-// air, the wall up more often), read back through abCdOf so every
-// cooldown-setting site scales alike.
+// ability levels: the hero's own growth, never the purse's. A key starts
+// LOCKED at level 0 - the kit hands you the four actives, not the use of
+// them - and every level costs ONE SKILL POINT, the only thing a point buys,
+// one per hero level. The FIRST point on a key UNLOCKS it (that is the whole
+// gate: level 1 casts, level 0 refuses); each one after shaves AB_LV_CD off
+// that ability's cooldown - one lever, universally meaningful (more nets in
+// the air, the wall up more often), read back through abCdOf so every
+// cooldown-setting site scales alike. Four keys x AB_LV_MAX is 16 points
+// against the 12 a capped hero earns, so no build has all of it: four keys
+// open and shallow, or one capped and three dark, is the choice.
 const AB_LV_MAX = 4;
 const AB_LV_CD = 0.12;
 // hunter
@@ -119,17 +122,26 @@ const craters = [];  // {x, y, team, t}
 const nets = [];     // {x, y, nx, ny, d, owner, team, spin}
 
 // ---- levelling -----------------------------------------------------------
-// can-buy or not (a point in hand, room on the key), the one entry point a
-// buyer reaches through runCmd (HUD plate click and bots alike), and the
-// effective number the sim reads instead of the table's base
+// Whether the key is bought at all (level 0 = locked: no cast, a dim well and
+// a dim icon on the strip), can-buy or not (a point in hand, room on the
+// key), the one entry point a buyer reaches through runCmd (HUD plate click
+// and bots alike), and the effective cooldown the sim reads instead of the
+// table's base. abUnlocked is the ONE gate - tryAbility and every bot that
+// reaches for a key ask it, so a locked ability is dark for a slot whoever
+// is driving it.
+function abUnlocked(p, i) { return p.abLv[i] > 0; }
+function abReady(p, i) { return p.abLv[i] > 0 && p.abCd[i] <= 0; } // bought AND off cooldown: what a bot reaches for
 function abLvCanBuy(p, i) { return p.skillPts > 0 && p.abLv[i] < AB_LV_MAX; }
-function abCdOf(p, i) { return CLASS_AB[p.cls][i].cd * (1 - AB_LV_CD * (p.abLv[i] - 1)); }
+function abCdOf(p, i) { return CLASS_AB[p.cls][i].cd * (1 - AB_LV_CD * (Math.max(1, p.abLv[i]) - 1)); }
 function buyAbilityLv(p, i) {
   if (!abLvCanBuy(p, i)) { if (p === player) SFX.deny(); return; }
   p.skillPts--;
   p.abLv[i]++;
-  addFloater(p.x, p.y - 18, CLASS_AB[p.cls][i].name + ' ' + p.abLv[i], GEAR_MATS[p.abLv[i] - 1]);
-  burst(p.x, p.y - 8, GEAR_MATS[p.abLv[i] - 1], 8, 40, 0.45);
+  // the first point is the one that changes what you CAN do, so it says so;
+  // every one after is a number going up
+  const nm = CLASS_AB[p.cls][i].name;
+  addFloater(p.x, p.y - 18, p.abLv[i] === 1 ? nm + ' UNLOCKED' : nm + ' ' + p.abLv[i], GEAR_MATS[p.abLv[i] - 1]);
+  burst(p.x, p.y - 8, GEAR_MATS[p.abLv[i] - 1], p.abLv[i] === 1 ? 14 : 8, p.abLv[i] === 1 ? 55 : 40, 0.45);
   if (p === player) SFX.levelUp();
   else if (nearPlayer(p.x, p.y)) SFX.pickup();
 }
@@ -143,6 +155,10 @@ function tryAbility(p, i) {
     p.dodgeT > 0 || p.rushT > 0 || p.grapT > 0 || p.castT > 0 || p.eatT > 0 || inAir(p)) return; // a meal occupies the hands the same way a cast does
   const ab = CLASS_AB[p.cls][i];
   if (!ab) return;
+  // a key nobody has spent a point on is not yours yet: the dim well already
+  // says so, and the press reddens it the way a bit that will not fit reddens
+  // the tool well (abDenied, js/ui.js)
+  if (!abUnlocked(p, i)) { if (p === player) abDenied(i); return; }
   if (ab.id === 'shield' && p.shieldT > 0) { abShieldDown(p, true); return; }
   if (ab.id === 'snow' && p.prone) { risePlayer(p); return; } // rising is free; only going under pays
   if (p.abCd[i] > 0) { if (p === player) SFX.deny(); return; }

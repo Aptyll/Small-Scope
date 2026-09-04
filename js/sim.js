@@ -1151,6 +1151,7 @@ function updateFx(dt) {
   if (bagFlash > 0) bagFlash -= dt; // the backpack's refusal red is chrome: wall time
   if (toolFlash > 0) toolFlash -= dt; // ... and the weapon well's, beside it
   if (foodFlash > 0) foodFlash -= dt; // ... and the meal button's
+  if (abFlash > 0) abFlash -= dt;     // ... and a locked ability well's
   for (let i = footprints.length - 1; i >= 0; i--) {
     const f = footprints[i];
     f.t += dt;

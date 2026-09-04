@@ -151,10 +151,13 @@ meadow and the dens restock at the level the match has reached —
 Each level also grants **one skill point** (`p.skillPts`, starting with one at level 1), and a
 point buys exactly one thing: **a level on one of the four class abilities**
 ([gameplay.md](gameplay.md#class-abilities-keys-1-4)), spent on the hud strip's floating buy
-plates. Twelve points by level 12 max the four keys' twelve levels exactly. (The old kit-skill
+plates. The keys start **locked at level 0** — the first point on one is what makes it castable
+at all — so the four of them hold 16 points against the 12 a level-12 hero earns, and a build
+cannot be everything: you land with one point, four dark keys and a choice. (The old kit-skill
 row — LOOSE/DODGE/AMBUSH/FLETCH ranks in the backpack — was removed with the pack's
 simplification; its passive bonuses live on only as gear variants and cards.) Bots spend each
-free point in `updateAI`'s rung 0, lowest ability level first.
+free point in `updateAI`'s rung 0, lowest ability level first, so their first four unlock all
+four keys.
 
 The level shows as a 7-tall badge in `drawPlayer`, flush against the left edge of the overhead
 bars' backing and spanning the health bar + stamina bar stacked (`py-8 .. py-1`), drawn for every

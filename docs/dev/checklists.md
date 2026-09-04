@@ -259,7 +259,8 @@ new class needs written:
 6. a `CLASS_LOADOUT` entry ([js/tools.js](../../js/tools.js));
 7. a fight rung in `updateAI` ([js/ai.js](../../js/ai.js)) that spends the four keys at the
    ranges the kit is good at — the class branch there is per-class content and the one `if`
-   that must grow.
+   that must grow. Ask **`abReady(p, i)`**, never a bare `p.abCd[i] <= 0`: a key starts locked
+   at level 0 and a bot that skips the check tries to cast something it has not bought.
 
 **Adding a stored profile field** — the field goes in `blank()` in
 [js/profile.js](../../js/profile.js) *and* in the repair loop `PROFILE.load()` runs over an

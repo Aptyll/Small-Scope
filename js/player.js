@@ -482,7 +482,7 @@ class Player {
     // slowed under a net or a crater, mid-reel on the grapple, shielded,
     // mid-rush, or five seconds of juggernaut
     this.abCd = [0, 0, 0, 0];
-    this.abLv = [1, 1, 1, 1];                      // ability levels, 1..AB_LV_MAX - gold buys, fresh every match (js/abilities.js)
+    this.abLv = [0, 0, 0, 0];                      // ability levels, 0 (LOCKED) ..AB_LV_MAX - a skill point each, fresh every match (js/abilities.js)
     this.castAb = -1; this.castT = 0;
     // Every state ANY unit can be under - stun, root, slow and its net
     // drape, the mark, and fire - is written and cleared in one place for

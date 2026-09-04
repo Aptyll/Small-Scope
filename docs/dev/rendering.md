@@ -512,13 +512,27 @@ An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB
 detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
 top-down cover is its cooldown (against the level-cut `abCdOf`, not the table base), and the key
 digit sits big at 2× in the bottom-left corner (the keybind-indicator carve-out). Along the top
-inner edge, fat gear-style **buy pips** on dark seats count the ability's levels
-([gameplay.md](gameplay.md#class-abilities-keys-1-4)). The ASK lives off the well: while a
+inner edge, fat gear-style **buy pips** on dark seats count the points in the key — one seat per
+level it can hold, `AB_LV_MAX` of them, the first being the unlock
+([gameplay.md](gameplay.md#class-abilities-keys-1-4)). A key with no point in it is **locked**,
+and the well says so in the meal button's own grammar: dark rim, the icon at `LOCK_DIM` (0.28),
+an empty pip row and a grey key digit — dim, never absent, so the strip never rearranges and you
+can read what you have not bought. A press on one is refused with the same red band and 1px
+shake the tool well and the meal buttons refuse in (`abDenied`, aged in `updateFx` beside
+`toolFlash`/`foodFlash`); a cooldown is NOT that refusal, because the wipe already says when it
+comes home. The ASK lives off the well: while a
 skill point is unspent and the key has room a **floating buy plate** bobs in the open screen
 above the well
-(`abBuyRect`, a fixed hit rect the drawn bob stays inside; `abBuyHit` gates it on `abLvCanBuy`,
-so the plate's existence IS the appears-then-goes ask; `drawAbBuyPlate` draws it
-— a gold-rimmed plus, lighting on hover, the tooltip carrying the numbers). Pressing the plate buys the level,
+(`abBuyRect`, a fixed hit rect the drawn bob stays inside; `abBuyHit` gates it on `abLvCanBuy`
+AND `hudHome()`, so the plate's existence IS the appears-then-goes ask; `drawAbBuyPlate` draws it
+under the same two gates
+— a gold-rimmed plus, lighting on hover, the tooltip carrying the numbers). The `hudHome()` half
+matters because the plate hangs in open screen ABOVE the strip: the intro's 40px slide is not far
+enough to carry it off the bottom with the wells, and a **drop brief pins `state.intro`** for the
+whole roost tour (the brief's camera branch in js/sim.js never counts it down), so without that
+gate four gold plus plates bob alone along the bottom edge for the length of the cinematic.
+`hudInT()` is the one answer to "how far in is the HUD", shared by `renderUI`'s slide and both
+gates. Pressing the plate buys the level,
 pressing the well casts — two surfaces, so neither can steal the other's click, and the well's
 rim carries combat states only. On top of that it
 tells the ability's moments: the rim goes **white while the body

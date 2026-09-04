@@ -1364,6 +1364,8 @@ window.DBG = {
   // ability levels: gear's ladder on the four keys (js/abilities.js)
   AB_LV_MAX, abLvCanBuy: (i, p) => abLvCanBuy(p || player, i),
   abCdOf: (i, p) => abCdOf(p || player, i),
+  // level 0 is LOCKED: nothing casts off a key no point has been spent on
+  abUnlocked: (i, p) => abUnlocked(p || player, i), abReady: (i, p) => abReady(p || player, i),
   buyAbilityLv: (i, p) => buyAbilityLv(p || player, i), abBuyRect, abBuyHit,
   // the arsenal tree: the graph, the page's own geometry, and the pool a
   // match drops from - which is the whole arsenal, the same for every profile.
