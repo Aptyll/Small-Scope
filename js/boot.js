@@ -262,12 +262,12 @@ function beginDrop() {
   state.mode = 'drop';
   state.menu.panel = null;
   state.menu.screen = 'menu';
-  // the view grows around its centre; ease in from the drift's framing.
-  // The eagle's framing is snapped rather than eased: the ride opens on a
-  // cross-fade from the menu, and a zoom sliding under that reads as a stumble.
-  const ow = WV_W, oh = WV_H;
+  // the view grows around its centre (applyZoom keeps the point under the
+  // screen centre put); ease in from the drift's framing. The eagle's framing
+  // is snapped rather than eased: the ride opens on a cross-fade from the
+  // menu, and a zoom sliding under that reads as a stumble.
   applyZoom(0, true);
-  state.introFrom = { x: camX - (WV_W - ow) / 2, y: camY - (WV_H - oh) / 2 };
+  state.introFrom = { x: camX, y: camY };
   state.intro = INTRO_T; state.introLen = INTRO_T;
   SFX.dawnChime();
   SFX.music.play('eagle');

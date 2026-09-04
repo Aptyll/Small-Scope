@@ -11,15 +11,30 @@ let camX = 0, camY = 0;
 // the zoom back to base to make their fixed-size panels fit. `snap` lands on
 // the target immediately, for the two mode changes that must not be seen
 // easing (boot, and the eagle's fixed framing).
+//
+// The zoom is ABOUT THE CENTRE OF THE VIEW. camX/camY name the view's top-left
+// corner, so resizing the world view on its own pivots the picture about that
+// corner: the point under the middle of the screen slides toward the corner
+// as the view shrinks, and the follow camera (its lerp below runs at 7/s
+// against this ease's 16/s) chases it back over most of a second - measured
+// 55 screen px off centre four frames into a two-notch zoom in. Shifting the
+// camera by half the change in the view keeps the world point under the
+// screen centre exactly where it is through every frame of the ease, and the
+// follow lerp then only has the lean's change to close - and the play camera
+// takes that share too, off the scale this returns (the one it started from).
 function applyZoom(dt, snap) {
   const want = state.mode === 'drop' ? DROP_ZOOM : zoomWantOf();
   const k = 1 - Math.exp(-ZOOM_EASE * dt);
+  const zPrev = zoomCur;
   if (snap) zoomCur = want;
   else {
     zoomCur += (want - zoomCur) * k;
     if (Math.abs(want - zoomCur) < 0.0008) zoomCur = want; // park it, or WV jitters by a px forever
   }
+  const ow = WV_W, oh = WV_H;
   sizeWorldView();
+  camX += (ow - WV_W) / 2;
+  camY += (oh - WV_H) / 2;
   // the minimap rides the same ease off the same constant, so both zooms
   // under one hand feel like one control
   const mw = mmWant();
@@ -28,10 +43,11 @@ function applyZoom(dt, snap) {
     mmCur += (mw - mmCur) * k;
     if (Math.abs(mw - mmCur) < 0.0008) mmCur = mw;
   }
+  return zPrev;
 }
 
 function update(dt) {
-  applyZoom(dt);
+  const zPrev = applyZoom(dt); // the scale this frame started at, for the lean below
   // the wind gusts and the night owl audio.js schedules over its synth bed:
   // on wherever the world is live, off under the death and victory screens,
   // where a song already owns the mix
@@ -148,8 +164,15 @@ function update(dt) {
     const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre
     // the lean is a FRACTION of the view, so it divides by the zoom: the same
     // pointer offset leans the same share of the screen however close you are
-    const lookX = (mouse.x - VIEW_W / 2) / zoomCur * look;
-    const lookY = (mouse.y - VIEW_H / 2) / zoomCur * look;
+    const lookSX = (mouse.x - VIEW_W / 2) * look, lookSY = (mouse.y - VIEW_H / 2) * look;
+    const lookX = lookSX / zoomCur;
+    const lookY = lookSY / zoomCur;
+    // ...which means a zoom step moves the target by itself, by the lean's
+    // change in world px. Take that share at once - applyZoom took the view's
+    // half - so the lerp is left only the player's own motion to chase, and a
+    // zoom under an off-centre pointer holds the hero where it stood
+    camX += lookSX * (1 / zoomCur - 1 / zPrev);
+    camY += lookSY * (1 / zoomCur - 1 / zPrev);
     const tx = vp.x - WV_W / 2 + lookX;
     const ty = vp.y - WV_H / 2 + lookY;
     if (state.intro > 0) {

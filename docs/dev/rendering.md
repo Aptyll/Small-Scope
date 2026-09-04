@@ -97,7 +97,12 @@ not stored as a float at all:
 
 **In motion it is deliberately not exact.** `applyZoom(dt)`, first thing in `update()`, eases
 `zoomCur` toward `kWant / devScale` exponentially at `ZOOM_EASE` 16/s (~0.13 s to 90%,
-frame-rate independent) and parks it exactly on the rung. While the ease runs the blit scale is
+frame-rate independent) and parks it exactly on the rung. **It zooms about the centre of the
+view**: `camX`/`camY` name the top-left corner, so after `sizeWorldView()` it shifts them by
+half the change in `WV_W`/`WV_H`, and the world point under the middle of the screen stays put
+through every frame of the ease. Without that the picture pivots about the corner and the follow
+camera (7/s, against the ease's 16/s) drags it back over most of a second — measured 55 screen
+px off centre four frames into a two-notch zoom in. While the ease runs the blit scale is
 fractional and ~12% of pixels break the grid; nobody reads pixel edges mid-zoom, and it lands
 clean. Measured with a block-uniformity scan over ~270k device px per rung: **0 stray pixels at
 every rung, on both a `devScale` 3 and a `devScale` 4 display; 12.3% mid-glide.**
