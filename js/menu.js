@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 3.04'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.05'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.05', 'THE MEAL CLOCK TURNS THE SAME HAND EVERY OTHER WELL DOES, SO EVERY WAIT IN THE GAME IS NOW ONE SHAPE - AND THE WEAPON WELL DROPS THE WHITE OUTLINE AND THE LIFT IT WORE FOR A SELECTION THAT COULD NEVER CHANGE.'],
   ['3.04', 'THE WEAPON WELL TURNS THE SAME CLOCK HAND THE ABILITIES DO - ONE SHAPE FOR EVERY COOLDOWN A PRESS WAITS ON, WITH ONLY THE SPEED OF THE HAND TELLING A BOW FROM A FURY.'],
   ['3.03', 'AN ABILITY COOLDOWN NOW SWEEPS ROUND ITS WELL LIKE A CLOCK HAND INSTEAD OF WIPING DOWN IT, AND THE FOUR KEYS HOLD TWELVE LEVELS - EXACTLY THE TWELVE POINTS A CAPPED HERO EARNS, SO WHAT A BUILD CHOOSES IS THE ORDER.'],
   ['3.02', 'THE FOUR ABILITY KEYS START LOCKED AND DIM - THE FIRST SKILL POINT ON A KEY IS WHAT MAKES IT CASTABLE AT ALL, SO YOU LAND WITH ONE POINT, FOUR DARK KEYS AND A CHOICE.'],

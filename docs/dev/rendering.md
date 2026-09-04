@@ -493,9 +493,13 @@ The tool well (`drawToolCell`) says three things and carries no words. The **pla
 is the tool's tier colour — the same colour it wears in every other well it ever sits in, so a
 tier is stated once and stated the same way everywhere (`tierPlate`, and `tierShine` sweeps a
 highlight across the top tier's plate); the 12px tool art is drawn doubled, so the lead
-weapon well reads at the ability icons' size. The well wears the lit rim (it is always the live
-weapon); a tool that cannot answer the button goes red instead, which is the old dry-bow
-tell. And the **cooldown sweep** ([below](#the-cooldown-sweep)) turns once through exactly
+weapon well reads at the ability icons' size. The **rim** is that tier, quiet at rest and
+brightened to the tier's ink on hover — the four ability wells' own grammar. It used to go white
+and the whole well used to sit a pixel proud, as the tell for the SELECTED slot; there is one
+weapon slot (`TOOL_SLOTS`), so that highlight could never turn off, and a highlight that is always
+on is not a highlight — it just made the strip's left end shout over four wells that had something
+to say. A tool that cannot answer the button still goes red, which is the old dry-bow
+tell — and now the only reason this well ever leaves its resting colour. And the **cooldown sweep** ([below](#the-cooldown-sweep)) turns once through exactly
 `toolCycle`, so the rate of fire is the speed of the hand rather than a number — and the veil
 clearing IS the bow being ready, since nothing else gates the draw
 ([the cycle](gameplay.md#the-cycle)). It is the same hand the ability wells turn: a press waits on
@@ -559,10 +563,14 @@ One grammar over the whole strip — the weapon's rate of fire and an ability's 
 same question asked of different clocks, so only the speed of the hand tells a 0.8 s bow from a
 20 s fury.
 
-The two **meal buttons** keep the wipe (and keep `AB_COVER`, now the only one left on the strip).
-They are half-height cells — 14px of inside, where a hand is three pixels of stair-step and a
-wedge is mush — and the pair run off ONE shared clock (`drawFoodClock`), which two bars falling
-together say and two hands turning in two different squares do not.
+The **meal clock** turns it too (`drawFoodClock`, and with it the last top-down wipe in the game
+left): both buttons, the bag's food cells and the pack's tally row, all off the one shared
+`p.foodCd`, so the two buttons turn **together** — which is the thing that says it is one clock and
+not two. It scales down further than it looks like it should: a meal button is 14px of inside and
+reads fine, but the tally row's icons are **8px** — about sixty pixels for a wedge — and there the
+hand is four pixels that land ACROSS the berry and read as a scratch on the fruit rather than a
+clock over it. So `drawFoodClock` passes `CD_EDGE` only at `w >= 12`: below that the cell turns
+the **bare veil**, the same wedge sweeping the same way, minus the stroke that would own the icon.
 
 Two things it does not do the obvious way. It is **rasterised a pixel at a time**, for the reason
 `mmRing` rasterises every curve of the minimap ([UI panels are baked once](#ui-panels-are-baked-once)):
@@ -574,18 +582,20 @@ walked once and its covered pixels coalesced into ONE `fillRect` per run instead
 and only a well actually on cooldown is walked at all. Measured on the bake path over repeated
 runs: **28–37 µs a well, 0.14–0.19 ms with all five turning** — around 1% of a 60fps frame,
 against `mmRing`'s old 1.6 ms.
-And the veil is **not** the wipe's near-black `AB_COVER` but a translucent slate (`CD_SWEEP`):
+And the veil is **not** the near-black cover the old top-down wipes used (`rgba(8,12,30,0.82)`,
+deleted with the last of them) but a translucent slate (`CD_SWEEP`):
 the well's ground is `#080b1c` and half of every icon is nearly as dark, so a darker-still wash
 over it changes nothing the eye can find, and the sweep would be a bare line turning over a well
 that never dims. The slate drags an icon's lit pixels down and lifts its dark ones to a blue-grey,
 so the waiting wedge is a different **material** rather than merely a darker one — which is what
-League's grey veil is actually doing. `CD_EDGE` draws the hand itself, centre to rim, the same 1px
-bright line the wiping wells carry at the front of their cover. The pips and the key digit are
+League's grey veil is actually doing. `CD_EDGE` draws the hand itself, centre to rim, in the 1px
+bright line the old wipes carried at the front of their cover; pass `null` instead and the cell
+turns the veil alone (the tally row, above). The pips and the key digit are
 drawn **after** it: the wait is what the veil is for, and what you own is never dimmed by it.
 
 A **meal button** (`drawFoodCell`) is the same grammar pointed at food: the item icon sits high,
 the count bottom-right, the key letter (Q/F) bottom-left — the keybind-indicator carve-out — and
-the shared food clock (`drawFoodClock`, the very function the bag's cells wear) wipes both
+the shared food clock (`drawFoodClock`, the very function the bag's cells wear) sweeps both
 buttons together and lifts the one being chewed white. A meal you have none of keeps its seat
 but dims to 0.35 with no count, so the column never rearranges; the click sets the same
 `eatBerry`/`eatFish` edge-trigger the key does, so `startEat` speaks every refusal and the
@@ -657,7 +667,8 @@ pointer that just used it), and top to bottom it is:
 1. the **inventory grid** (`BAG_CAP` 10 — two rows of five) — a simple inventory, nothing else;
 2. a single 1 px rule, the only line inside the widget;
 3. the **gold row** (`bagStripRect()`), full inner width, hard against the bottom rim — berries
-   and fish from the left, each an icon and a count wearing the shared food-clock wipe, then the
+   and fish from the left, each an icon and a count wearing the shared food clock's bare veil
+   (8px: no room for a hand), then the
    gold hard against the right edge with its coin ahead of it, inked `#f5c542`. The strip lives
    **inside the open pack**: your purse is read by opening the bag, not off a bar that sits on
    screen all match.

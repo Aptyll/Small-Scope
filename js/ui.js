@@ -1196,11 +1196,14 @@ function drawCharPanel(now) {
   }
 }
 
-// The shared meal clock over one food well: the cooldown wiping top-down
-// behind a bright edge, or a white lift while THIS meal is the one being
-// chewed - the two states an ability well already draws, said about food.
-// Shared by the bag cell and the bottom strip so the two can never disagree
-// about what the food is doing. (x, y, w, h) is the well's inner rect.
+// The shared meal clock over one food well: the cooldown SWEEPING round it
+// behind the hand (drawSweepCover, the strip's one cooldown shape), or a white
+// lift while THIS meal is the one being chewed - the two states an ability
+// well already draws, said about food. Shared by the bag cell, the pack's
+// tally row and the bottom strip so the three can never disagree about what
+// the food is doing. (x, y, w, h) is the well's inner rect - 8px on the tally
+// row, 14 on a meal button, 16 in a bag cell, and the hand turns the same way
+// in all three.
 function drawFoodClock(x, y, w, h, type) {
   const p = player;
   if (p.eatT > 0 && p.eatType === type) {
@@ -1211,10 +1214,12 @@ function drawFoodClock(x, y, w, h, type) {
     return;
   }
   if (p.foodCd <= 0) return;
-  const cov = Math.max(1, Math.round(p.foodCd / FOOD_CD * h));
-  ctx.fillStyle = AB_COVER;
-  ctx.fillRect(x, y, w, cov);
-  if (cov < h) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(x, y + cov, w, 1); }
+  // the hand only where there is room for one: on the tally row's 8px icons it
+  // is four pixels long and lands ACROSS the berry, reading as a scratch on
+  // the fruit rather than a clock over it, so the smallest cells turn the bare
+  // veil - the same wedge sweeping the same way, minus the stroke that would
+  // own the icon
+  drawSweepCover(x, y, w, h, Math.min(1, p.foodCd / FOOD_CD), CD_SWEEP, w >= 12 ? CD_EDGE : null);
 }
 
 // ---- the pack's SHIFT plate ---------------------------------------------
@@ -1393,7 +1398,6 @@ const AB_W = (AB_N + 1) * AB_CELL + (AB_N + 1) * AB_GAP + FOOD_CELL;
 const AB_PAD = 2, AB_XP = 5, AB_SEGS = 10; // AB_SEGS: xp bar notches
 const AB_H = AB_PAD + AB_CELL + AB_PAD + AB_XP + AB_PAD;
 const AB_BG = '#0d1229';
-const AB_COVER = 'rgba(8,12,30,0.82)'; // the MEAL clock's wipe - the only one left on the strip (drawFoodClock; every other well sweeps, see drawSweepCover)
 // The weapon well's half of the refusal the backpack already has: a bit that
 // will not fit in the tool reddens and shakes the WELL, exactly as one that
 // will not fit in the pack reddens and shakes the frame (bagDenied) - so the
@@ -1919,22 +1923,23 @@ function drawItemIcon(type, r, y, g) {
 }
 
 // ---- drawing the strip, the bit column and the carried item -------------
-// THE STRIP'S COOLDOWN SWEEP - League's radial clock cut to a SQUARE, and
-// the one readout the weapon well and the four ability wells share. The
-// veil fills the well and retreats CLOCKWISE FROM 12 O'CLOCK, so the dark
-// that is left is the wait that is left, and the hand's angle is the
-// fraction at a glance - which a top-down wipe cannot say, because a bar
-// three quarters down and a bar half down look alike in the corner of your
-// eye. One grammar over the whole strip: the weapon's rate of fire and an
-// ability's cooldown are the same question asked of different clocks, so
-// they are answered in the same shape and only the speed of the hand tells
-// a 0.4 s bow from a 20 s fury.
+// THE COOLDOWN SWEEP - League's radial clock cut to a SQUARE, and now the
+// ONE shape every wait in the game is drawn in: the weapon well, the four
+// ability wells, both meal buttons, and the bag's food cells and tally row
+// through drawFoodClock. The veil fills the well and retreats CLOCKWISE FROM
+// 12 O'CLOCK, so the dark that is left is the wait that is left, and the
+// hand's angle is the fraction at a glance - which a top-down wipe cannot
+// say, because a bar three quarters down and a bar half down look alike in
+// the corner of your eye. A rate of fire, an ability's cooldown and the meal
+// clock are the same question asked of different clocks: answer them in the
+// same shape and only the SPEED of the hand tells a 0.8 s bow from a 20 s
+// fury, and nothing on the HUD has to be learned twice.
 //
-// The two MEAL buttons keep the wipe. They are half-height cells (14px of
-// inside), where a hand is three pixels of stair-step and a wedge is mush -
-// and the pair run off ONE shared clock (drawFoodClock), which two bars
-// falling together say and two hands turning in two different squares do
-// not.
+// It scales down further than it looks like it should. The tally row's food
+// icons are 8x8 - about sixty pixels for a wedge - and the hand there is four
+// pixels of stair-step, which reads because it is the SAME four pixels every
+// clock on screen is turning, and the eye is already reading three bigger
+// ones beside it.
 //
 // Rasterised A PIXEL AT A TIME for the reason every minimap curve is
 // (mmRing): canvas paths anti-alias, and a soft diagonal across a 32px well
@@ -1942,8 +1947,9 @@ function drawItemIcon(type, r, y, g) {
 // and its covered pixels are coalesced into ONE fillRect per run, so a
 // sweeping well costs a few dozen draws rather than a thousand - and only a
 // well actually on cooldown is walked at all.
-// The veil is NOT the wipe's near-black cover (AB_COVER): the well's ground
-// is #080b1c and half of every 32px icon is nearly as dark, so a darker-still
+// The veil is NOT the near-black cover the old top-down wipes used
+// (rgba(8,12,30,0.82), gone with the last of them): the well's ground is
+// #080b1c and half of every 32px icon is nearly as dark, so a darker-still
 // wash over it changes nothing you can see and the sweep would be a bare line
 // turning over a well that never dims. A translucent SLATE reads on both
 // halves at once - it drags the lit pixels of an icon down and lifts its dark
@@ -1990,9 +1996,8 @@ function drawToolCell(i, now, hov) {
   const cell = p.tools[i];
   const sel = p.toolSel === i;
   const r = toolCellRect(i);
-  const y = r.y - (sel ? 1 : 0);
   const dry = sel && !toolReady(p);
-  const tp = cell ? tierPlate(cell.type, sel || hov) : { plate: BAG_WELL, rim: '#232c52' };
+  const tp = cell ? tierPlate(cell.type, hov) : { plate: BAG_WELL, rim: hov ? '#8fa0c8' : '#232c52' };
   // "it does not fit in here": a red band all the way round the well and the
   // pack's own 1px shake, so the two containers refuse in one language
   const red = toolFlash > 0;
@@ -2000,33 +2005,38 @@ function drawToolCell(i, now, hov) {
     ctx.save();
     ctx.translate(((now * 40) | 0) % 2 ? -1 : 1, 0);
     ctx.fillStyle = '#c2465a';
-    ctx.fillRect(r.x - 2, y - 2, r.w + 4, r.h + 4);
+    ctx.fillRect(r.x - 2, r.y - 2, r.w + 4, r.h + 4);
   }
-  // the rim is the selection: one lit well, three quiet ones. A selected tool
-  // that cannot answer the button goes red instead - the old dry-bow tell.
-  ctx.fillStyle = red ? '#c2465a' : dry ? '#7e3346' : sel ? '#f4f7ff' : hov ? '#8fa0c8' : tp.rim;
-  ctx.fillRect(r.x, y, r.w, r.h);
+  // The rim is the TIER, quiet at rest and brightened to the tier's ink on
+  // hover - the four ability wells' own grammar. It used to go white and the
+  // whole well used to sit a pixel proud, as the tell for the SELECTED slot;
+  // there is one weapon slot (TOOL_SLOTS), so that highlight could never turn
+  // off, and a highlight that is always on is not a highlight - it just made
+  // the strip's left end shout over four wells that had something to say. A
+  // tool that cannot answer the button still goes red: the dry-bow tell is
+  // real news, and the only reason this well ever leaves its resting colour.
+  ctx.fillStyle = red ? '#c2465a' : dry ? '#7e3346' : tp.rim;
+  ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = dry ? '#241028' : tp.plate;
-  ctx.fillRect(r.x + 1, y + 1, r.w - 2, r.h - 2);
+  ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
   if (cell) {
-    tierShine(r, y, cell.type, now);
+    tierShine(r, r.y, cell.type, now);
     // the 12px tool art doubled: the weapon well leads the strip
     // and reads at the ability icons' size, not the bag's
     const im = ITEMS[cell.type] && SPRITES[ITEMS[cell.type].icon];
     if (im) {
-      ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + 1 + ((r.h - im.height * 2) >> 1),
+      ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), r.y + 1 + ((r.h - im.height * 2) >> 1),
         im.width * 2, im.height * 2);
     }
     // the SWEEP is the rate of fire, the same hand the ability wells turn
     // (drawSweepCover above): a slow tool holds its well longer, and the two
-    // clocks a press waits on read in one shape. The lift the selected well
-    // takes is in `y`, so the hand turns about the well you can see.
+    // clocks a press waits on read in one shape
     if (p.nockT > 0 && sel) {
-      drawSweepCover(r.x + 1, y + 1, r.w - 2, r.h - 2,
+      drawSweepCover(r.x + 1, r.y + 1, r.w - 2, r.h - 2,
         Math.min(1, p.nockT / Math.max(0.01, toolCycle(p))), CD_SWEEP, CD_EDGE);
     }
     // ...and the "!" when the column weighs more than one press can spend
-    if (toolOver(cell)) drawOverWarn(r, y, now);
+    if (toolOver(cell)) drawOverWarn(r, r.y, now);
   }
   if (red) ctx.restore();
 }
