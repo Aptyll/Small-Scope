@@ -87,8 +87,9 @@ function marketNews(id) {
   const up = d > 0;
   r.news = now;
   r.pop = 3;
-  logEvent(GOODS[id].name + (up ? ' SPIKE ' : ' CRASH ') + now + 'G', null,
-    { bg: up ? '#14351f' : '#3a1420', edge: up ? '#8fe08a' : '#e0637a', fg: up ? '#b8f0b0' : '#ff9a8a' });
+  const k = up ? 'spike' : 'crash';
+  logEvent(GOODS[id].name + (up ? ' SPIKE ' : ' CRASH ') + now + 'G', null, NOTE_KIND[k]);
+  marketNotice(k, now + 'G', id); // ...and the plate under the minimap
   SFX.market(up);
 }
 
@@ -96,6 +97,7 @@ function marketNews(id) {
 // one rather than a flat line that fills in over the first quarter of an hour.
 function initMarket() {
   market.t = 0;
+  notices.length = 0; // a new match starts with a clear corner
   for (const id of MKT_ORDER) {
     const g = GOODS[id];
     const r = { price: g.base, news: g.base, pop: 0, hist: [] };
@@ -129,6 +131,139 @@ function updateMarket(dt) {
   if (market.stockT <= 0) shopRestock(false);
   // the counter shuts itself the moment you walk away from it
   if (state.shop && (player.dead || !inReach(player, state.shop))) closeShop();
+}
+
+// ------------------------------------------------------------ market notices
+// The market's news as something you SEE, not something you read in a log.
+//
+// Every headline here leaves its line in the event feed as well (logEvent,
+// js/panels.js) - the feed is the match's own record and the market belongs
+// in it - but the feed is bottom-left, small, and full of what happened to
+// SLOTS. A price is not something that happened to a slot: it is the state of
+// the world you are about to sell your bag into, and it has to arrive where
+// the other things you glance at mid-fight are. So it also raises a PLATE,
+// top-right, hard under the minimap beside the clock and the alive count.
+//
+// One shape, three notices, read left to right with no sentence in it: the
+// merchant's GOLD SACK (the same mark on every plate - this is the shop
+// talking), then what it is about (the good's own item icon and the price it
+// landed on, or NEW STOCK for a turnover), then one glyph carrying WHICH WAY
+// - an arrow up, an arrow down, or a crate. The plate's frame and ink carry
+// the same green/red/gold the feed line does, so the two readouts of one
+// event never disagree.
+const NOTE_MAX = 3;      // plates on screen at once; the oldest falls off the bottom
+const NOTE_LIFE = 7;     // s from arrival to gone
+const NOTE_IN = 0.3;     // arrival: slides in off the right edge under a white pop
+const NOTE_OUT = 0.8;    // ...and fades over its last stretch
+const NOTE_W = 76, NOTE_H = 18, NOTE_PITCH = 21;
+const NOTE_GAP = 18;     // below the disc's alive/clock row, which ends 14px under it
+const notices = [];      // {kind, txt, good, t}; ageNotices runs the clock
+
+// the merchant's mark: a cinched sack of coin, tied at the neck, with one
+// piece of gold showing on the belly. 12x12 - the plate's whole height less
+// its rim, so the icon IS the left edge of the card
+const NOTE_SACK = [
+  '....o..o....',
+  '...ollllo...',
+  '...otttto...',
+  '..olccccdo..',
+  '.olccccccdo.',
+  'olcccccccddo',
+  'olcccggcccdo',
+  'olccghhgccdo',
+  'olccgkkgccdo',
+  'olcccggcccdo',
+  '.occccccddo.',
+  '..oooooooo..',
+];
+const NOTE_SACK_PAL = { '.': null, o: '#2b1d12', t: '#6f4a26', l: '#e0c088', c: '#c49a56',
+  d: '#8a6a34', g: '#f2cc6a', h: '#ffedb0', k: '#b8912f' };
+// the tails: which way the price went, or a crate for a counter that just
+// turned over. 8x8, the item icons' own grid, so the row reads as one rank.
+const NOTE_TAILS = {
+  up: ['........', '...aa...', '..ahha..', '.ahhhha.', 'aahhhhaa', '..ahha..', '..ahha..', '..ahha..'],
+  down: ['..ahha..', '..ahha..', '..ahha..', 'aahhhhaa', '.ahhhha.', '..ahha..', '...aa...', '........'],
+  crate: ['oooooooo', 'owwwwwwo', 'obwbbwbo', 'obwbbwbo', 'obwbbwbo', 'obwbbwbo', 'owwwwwwo', 'oooooooo'],
+};
+const NOTE_CRATE_PAL = { '.': null, o: '#3a2a16', b: '#8a6a34', w: '#c49a56' };
+// One palette per kind, worn by the plate AND handed to logEvent for the feed
+// line: bg/edge/fg are exactly the keys logEvent's `o` override reads, so the
+// two cannot drift apart.
+const NOTE_KIND = {
+  spike: { bg: '#14351f', edge: '#8fe08a', fg: '#b8f0b0', tail: 'up',
+    tp: { '.': null, a: '#5aa85e', h: '#b8f0b0' } },
+  crash: { bg: '#3a1420', edge: '#e0637a', fg: '#ff9a8a', tail: 'down',
+    tp: { '.': null, a: '#a83c50', h: '#ff9a8a' } },
+  stock: { bg: '#2a2340', edge: '#c9a227', fg: '#f2cc6a', tail: 'crate', tp: NOTE_CRATE_PAL },
+};
+
+// raise one. `good` is a GOODS/ITEMS key whose icon rides beside the text, or
+// null for a notice about the counter itself.
+function marketNotice(kind, txt, good) {
+  notices.push({ kind, txt: String(txt).toUpperCase(), good, t: 0 });
+  while (notices.length > NOTE_MAX * 2) notices.shift();
+}
+
+// Chrome, like the event feed: it ages on WALL time from updateFx (js/sim.js),
+// so a plate fades out while the sim is paused rather than hanging there.
+function ageNotices(dt) {
+  for (let i = notices.length - 1; i >= 0; i--) {
+    notices[i].t += dt;
+    if (notices[i].t > NOTE_LIFE) notices.splice(i, 1);
+  }
+}
+
+// the slot a plate rests in, newest first: k = 0 sits under the disc's clock
+// row, right edge flush with the disc's own. Off MM_* so it follows the
+// minimap wherever the size dial and the view put it.
+function noteRect(k) {
+  return { x: MM_CX + MM_R - NOTE_W, y: MM_CY + MM_R + NOTE_GAP + k * NOTE_PITCH, w: NOTE_W, h: NOTE_H };
+}
+
+// Drawn from renderUI (js/ui.js) after the counter and the character sheet:
+// news that arrives mid-trade must not hide behind the thing it is about.
+function renderNotices() {
+  const n = Math.min(NOTE_MAX, notices.length);
+  if (!n) return;
+  // the newest arrives at the top and pushes the stack down under it, on the
+  // same ease that slides it in - so nothing below it jumps a whole pitch
+  const push = easeOut(notices[notices.length - 1].t / NOTE_IN);
+  // oldest first, so the newest lands ON TOP of the stack it is pushing down:
+  // during the ease the plate below starts under it and slides out from
+  // beneath, which is the motion that reads as a shove rather than a collision
+  for (let k = n - 1; k >= 0; k--) {
+    const e = notices[notices.length - 1 - k], K = NOTE_KIND[e.kind] || NOTE_KIND.stock;
+    const slide = 1 - easeOut(e.t / NOTE_IN);
+    const a = Math.min(1, e.t / (NOTE_IN * 0.5)) * Math.min(1, (NOTE_LIFE - e.t) / NOTE_OUT);
+    if (a <= 0) continue;
+    const r = noteRect(k);
+    const x = r.x + Math.round(slide * 26); // in off the right edge
+    const y = Math.round(r.y - (k ? (1 - push) * NOTE_PITCH : 0));
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(6,9,22,0.8)'; // base: the world must not read through the plate
+    ctx.fillRect(x, y, NOTE_W, NOTE_H);
+    ctx.globalAlpha = a * 0.85;
+    ctx.fillStyle = K.bg;
+    ctx.fillRect(x, y, NOTE_W, NOTE_H);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = K.edge; // a full 1px frame: this is a card, not a feed line
+    ctx.fillRect(x, y, NOTE_W, 1); ctx.fillRect(x, y + NOTE_H - 1, NOTE_W, 1);
+    ctx.fillRect(x, y, 1, NOTE_H); ctx.fillRect(x + NOTE_W - 1, y, 1, NOTE_H);
+    if (slide > 0) { // the arrival pop, as the feed's lines take one
+      ctx.globalAlpha = a * 0.55 * slide * slide;
+      ctx.fillStyle = '#f4f7ff';
+      ctx.fillRect(x + 1, y + 1, NOTE_W - 2, NOTE_H - 2);
+      ctx.globalAlpha = a;
+    }
+    stampGrid(NOTE_SACK, NOTE_SACK_PAL, x + 3, y + 3, 1);
+    let tx = x + 18;
+    const im = e.good && ITEMS[e.good] && SPRITES[ITEMS[e.good].icon];
+    if (im) { ctx.drawImage(im, tx, y + 5); tx += im.width + 2; }
+    // the plate is opaque and it fades, so the shadow font, not the outline
+    drawPixelTextShadow(ctx, e.txt, tx, y + 7, K.fg, 'rgba(6,9,22,0.9)');
+    stampGrid(NOTE_TAILS[K.tail], K.tp, x + NOTE_W - 12, y + 5, 1);
+    ctx.globalAlpha = 1;
+  }
 }
 
 // ------------------------------------------------------------ the counter's stock
@@ -175,8 +310,13 @@ function shopRestock(quiet) {
   market.stockT = SHOP_RESTOCK;
   market.n++;
   if (quiet) return;
-  logEvent('THE MERCHANTS RESTOCK', null, { bg: '#2a2340', edge: '#c9a227', fg: '#f2cc6a' });
-  if (state.shop || merchNear(player)) SFX.place();
+  logEvent('THE MERCHANTS RESTOCK', null, NOTE_KIND.stock);
+  // The plate and its cue are NOT gated on standing at a counter the way the
+  // old blip was: a turnover is the one market event you might want to walk
+  // across the map for, and news you only hear once you are already there is
+  // not news.
+  marketNotice('stock', 'NEW STOCK', null);
+  SFX.restock();
 }
 
 // One offer, resolved from the stock: { kind, id, type, price }. `type` is the

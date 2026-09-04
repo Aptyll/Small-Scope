@@ -17,6 +17,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | --- | --- | --- |
 | the songs, the sampled one-shots, the dials behind them | `SFX.music`, `TRACKS`, `SAMPLES`, `smp`, `trim`, `setAmbience` | its own IIFE — see [gameplay.md](gameplay.md#audio) |
 | BORROWING the music layer and giving it back where it was taken (the trading post's song) | `musicHold`, `musicRelease`, `held`, exposed as `SFX.music.hold`/`release`/`held` | `music` (its one caller: `openShop`/`closeShop`, shop.js) |
+| the market's two notification cues, and the one cue built out of two clips | `SFX.market(up)` (till / thud), `SFX.restock()` (the wagon, then the bell `RESTOCK_RING` behind it), the `spike`/`crash`/`freight`/`restock` rows of `SAMPLES` | its own IIFE (their callers: `marketNews`/`shopRestock`, shop.js) |
 
 ## js/core.js
 
@@ -284,7 +285,9 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | the fish/berry market: the walk, the shocks, the rails, the three-day history, and the market's own rng stream | `GOODS`, `MKT_STEP`/`MKT_DAYS`/`MKT_HIST`/`MKT_REVERT`/`MKT_NEWS`, `mktRng`, `market`, `marketPrice`, `marketHist`, `marketWalk`, `initMarket` (called from boot.js), `updateMarket` (called once a step from `updatePlay`, sim.js) | `market` |
-| a price move worth a feed line | `marketNews` (the good's own `news` gold floor beside `MKT_NEWS`) | `market` (the line itself: `logEvent`'s colour override, panels.js; the cue: `SFX.market`, audio.js) |
+| a price move worth telling everyone about | `marketNews` (the good's own `news` gold floor beside `MKT_NEWS`) | `market` (the feed line: `logEvent`'s colour override, panels.js; the plate: `marketNotice`, below; the cue: `SFX.market`, audio.js) |
+| the market's plates top-right under the minimap: raising one, ageing it, where it sits, its pixels | `NOTE_MAX`/`NOTE_LIFE`/`NOTE_IN`/`NOTE_OUT`/`NOTE_W`/`NOTE_H`/`NOTE_PITCH`/`NOTE_GAP`, `NOTE_KIND` (the palette the feed line shares), `marketNotice`, `ageNotices` (called from `updateFx`, sim.js), `noteRect`, `renderNotices` (called from `renderUI`, ui.js) | `market notices` |
+| the plates' own art: the merchant's gold sack and the three tails | `NOTE_SACK`/`NOTE_SACK_PAL`, `NOTE_TAILS` (up, down, crate), `NOTE_CRATE_PAL` | `market notices` (stamped with `stampGrid`: `the art`, screens.js) |
 | the twelve offers and their turnover | `SHOP_RESTOCK`, `SHOP_COLS`, `SHOP_SECTIONS`, `SHOP_CARD_ODDS`, `shopPick`, `shopRestock`, `shopOffer` | `the counter's stock` |
 | what a thing is worth, both ways | `itemValue`, `cellValue` (a tool carries its loaded bits), `sellValue` (half, except the two goods) | `buying and selling` (the prices themselves: `price` on `TOOLS`/`BITS` tools.js, `CARD_PRICE` player.js) |
 | standing at a counter, and the merchant standing still to serve it | `SHOP_REACH`, `merchNear`, `inReach`, `shopServing` (read by `updateMerchant`, robots.js) | `buying and selling` |

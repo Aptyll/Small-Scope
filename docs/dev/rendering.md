@@ -330,11 +330,45 @@ keeps it flush on every size.
 | Where | What | Function |
 | --- | --- | --- |
 | top left | **nothing** — see the strip below | — |
-| top right | the minimap and its day/night ring, alive count, clock | `renderMinimap` |
+| top right | the minimap and its day/night ring, alive count, clock, and the market's plates under them | `renderMinimap`, `renderNotices` |
 | bottom left | the hover tooltip, with the event feed stacked above it | `drawTooltip`, `renderEventLog` |
 | bottom centre | the segmented plum xp bar over the weapon and ability wells, flush to the bottom; hovering the weapon well raises its bit column out of it | `drawHudStrip`, `drawBitColumn` |
 | bottom right | the pack button alone when shut; the backpack frame (ten-cell grid, gold strip) rising off it when open | `drawBag` |
 | centre, on G | the character panel: the live body, the stat ledger, the four gear pieces | `drawCharPanel` |
+
+### Market notices: the plates under the minimap
+
+The market's own voice on the HUD — the `market notices` banner in [js/shop.js](../../js/shop.js),
+raised by `marketNotice(kind, txt, good)` and drawn by `renderNotices()` from `renderUI`. A price
+spike, a price crash and a counter turning over each raise one, *as well as* the line they already
+put in the [event feed](#scoreboard-and-event-feed): the feed is the record of what happened to
+somebody, and a price is not that — it is the state of the world your bag is about to be sold
+into, so it belongs where the clock and the alive count already are.
+
+**One shape, read left to right, with no sentence in it**: the merchant's **gold sack** (12×12, the
+same mark on every plate — this is the shop talking, not the world), then what it is about (the
+good's own 8×8 item icon and the price it landed on, or `NEW STOCK`), then one 8×8 glyph carrying
+which way — an arrow up, an arrow down, or a crate. The plate is a fixed `NOTE_W`×`NOTE_H` (76×18)
+card: an opaque dark base under the kind's wash, a full 1 px frame in its accent, and the
+`drawPixelTextShadow` font, because the whole plate fades and an outline stamped under a
+`globalAlpha` goes blotchy ([CLAUDE.md](../../CLAUDE.md#hard-rules)). `NOTE_KIND` holds the three
+palettes and is handed straight to `logEvent` as its colour override, so the plate and the feed
+line can never disagree about which way a price went.
+
+`noteRect(k)` places slot `k` off `MM_*` — right edge flush with the disc's own, `NOTE_GAP` (18 px)
+under its rim, so the column follows the minimap wherever the size dial and the view put it and
+never lands on the alive/clock row. **The newest plate is slot 0**, hard under the disc, and its
+arrival pushes the stack down: it slides in off the right edge under a white pop over `NOTE_IN`
+(0.3 s) while the plates below ease down a whole `NOTE_PITCH` on that same curve. They are drawn
+**oldest first** so the newest lands on top of the stack it is shoving, and `ageNotices(dt)` runs
+from `updateFx` on wall time like the feed's lines — `NOTE_LIFE` (7 s), fading over the last
+`NOTE_OUT` (0.8 s), at most `NOTE_MAX` (3) on screen.
+
+They draw **above the counter and the character sheet** (a price that moved while you were
+standing at the shop must not arrive behind the panel it is about) and stay up while you are
+down, like the feed — the market does not stop for a death. They duck under the map and settings
+panels, and the end screens own the frame outright. Each kind carries its own cue:
+[audio](gameplay.md#audio).
 
 ### The hover tooltip
 

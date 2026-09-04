@@ -1275,8 +1275,9 @@ inside it is drawn afterwards, so the buyer is paying for the odds.
 | CARDS | 3 | `rollCardRarity(SHOP_CARD_ODDS)` — kinder than a chest's `CHEST_ODDS`, since a counter you chose to walk to should beat a box you tripped over |
 
 **An offer is a LINE, not a single item**: it can be bought from as often as gold and bag room
-allow until the counter turns over, every `SHOP_RESTOCK` (120 s), announced in the feed and drawn
-as a bar draining under the header. That is what makes the clock matter — what is on the counter
+allow until the counter turns over, every `SHOP_RESTOCK` (120 s), announced in the feed, on a
+plate under the minimap and over a cue of its own (below), and drawn as a bar draining under the
+header. That is what makes the clock matter — what is on the counter
 is a *window*, not a queue — and it is also why nothing here is [contested](multiplayer.md#contested-orders):
 two players at one counter cannot take the same thing from each other.
 
@@ -1330,12 +1331,31 @@ and its high and low printed small at the ends. `initMarket()` **primes the whol
 boot** by walking it forward from the base price, so the counter's graphs are graphs on day one
 rather than a flat line that fills in over the first quarter of an hour.
 
-**A big move makes the feed.** `marketNews` cuts a headline when the price has moved both
-`MKT_NEWS` (30%) *and* the good's own `news` gold since the last one — `FISH SPIKE 34G`,
-`BERRIES CRASH 2G` — green on a rise and red on a fall, over `SFX.market(up)`, a two-note blip
-that rises or falls so the direction is audible with the feed off screen. The absolute floor is
-the half that matters: a berry going 2G → 3G is a 50% "spike", and without it the feed fills with
-small change. The card that made one pulses in the panel for three seconds.
+**A big move makes the news.** `marketNews` cuts a headline when the price has moved both
+`MKT_NEWS` (30%) *and* the good's own `news` gold since the last one — green on a rise and red on
+a fall. The absolute floor is the half that matters: a berry going 2G → 3G is a 50% "spike", and
+without it the feed fills with small change. The card that made one pulses in the panel for three
+seconds.
+
+A headline goes to **two places at once**, and a restock's does too:
+
+- the **event feed**, bottom-left — `FISH SPIKE 34G`, `BERRIES CRASH 2G`, `THE MERCHANTS RESTOCK`
+  — the match's own record, where everything else that happened to somebody already is;
+- a **plate top-right under the minimap** — the `market notices` banner in js/shop.js, drawn by
+  `renderNotices` ([the plates](rendering.md#market-notices-the-plates-under-the-minimap)) —
+  because a price is not something that happened to a slot: it is the state of the world you are
+  about to sell your bag into, and it has to arrive where the clock and the alive count are
+  rather than in a log at the far corner.
+
+Both readouts take their colour from one table (`NOTE_KIND`), handed straight to `logEvent` as its
+palette override, so the two can never disagree about which way a price went.
+
+**Each has its own cue** (js/audio.js): `SFX.market(up)` is a till on a spike and a low thud on a
+crash — two *different* clips rather than one pitched two ways, and unjittered, because this is
+read as a direction and never as a texture — and `SFX.restock()` is the turnover in two beats, a
+wagon pulling in and, `RESTOCK_RING` (0.9 s) behind it, the bell over the new stock. Neither is
+gated on standing at a counter any more: a turnover is the one market event worth walking across
+the map for, and news you only hear once you are already there is not news.
 
 ### The panel
 
@@ -2185,6 +2205,15 @@ one boot per footprint the local slot leaves; `land()` is the same boot dropped 
 low thump, so touching down off the eagle reads as weight rather than as an arrow connecting.
 `yelp()` is a creature crying out under a hit it survived, and `monsterDie(kind)` takes the
 animal's kind — a wolf yelps where a rabbit squeals.
+
+**The market's four are notification cues, not world sounds**, and they are the one place a cue is
+deliberately *not* jittered: `market(up)` plays `spike` (a till) or `crash` (a low thud) whole,
+and `restock()` plays two clips as one cue — `freight`, a wagon pulling in, and `restock`, the
+bell over the new stock, scheduled `RESTOCK_RING` (0.9 s) behind it through `smp`'s own `delay`.
+The wagon runs its full 3.3 s, so it is still rolling under the bell, which is the point: the
+goods arrive, *then* they are laid out. Jitter on either half would blur the two beats into one
+noise, and a spike that could be mistaken for a crash is worse than no cue at all — these say a
+*direction*, like the plates they arrive with ([the market](#the-fish-and-berry-market)).
 
 **Ambience.** `SFX.setAmbience(on, night)` is called every frame from `update()`: on wherever the
 world is live, off under the death and end screens where a song already owns the mix. audio.js

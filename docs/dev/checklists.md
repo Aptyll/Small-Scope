@@ -42,7 +42,12 @@ declare victory. The three affordances:
   before each check unless a counter is open (an open counter pins it: `shopServing`). `DBG.openShop()`,
   `shopHit(x, y)`, `shopBuy/shopSellCell/shopTrade` and `shopLayout()` drive the panel without a
   pointer; `DBG.marketStep(n)` walks the prices n moves on, so a spike is one call rather than
-  three days of waiting, and it ticks the restock clock with them.
+  three days of waiting, and it ticks the restock clock with them. The news it cuts is a
+  [plate under the minimap](rendering.md#market-notices-the-plates-under-the-minimap) as well as a
+  feed line: `DBG.notices` is the live stack, `DBG.noteRect(k)` where slot `k` sits,
+  `DBG.marketNotice(kind, txt, good)` raises one without moving a price, and
+  `DBG.shopRestock(true)` turns the counter over *loudly* (bare, it is the quiet boot roll).
+  A plate ages on wall time in `updateFx`, so `DBG.step` runs its arrival and its fade.
 - **`?seed=N`** pins the world — the same seed twice proves a change is deterministic, two seeds
   prove worldgen still varies. Without it every reload is a different world and A/B screenshots
   are meaningless. The seed prints in the [info stack](gameplay.md#settings) — top quarter of the
@@ -364,8 +369,11 @@ mix against the other cues, not against the file's own loudness — then check i
 the clip holds more than one hit; several of the existing files are a whole loop padded to a fixed
 length. World cues gate on `nearPlayer(x, y)` so a remote base cannot spam the mix; cues only the
 local slot should hear gate on `p === player`. A cue on a repeating tick (`building()` on a
-site's dust timer) needs a wide `jitter` and a `gap`, or it settles into a rhythm.
-See [Audio](gameplay.md#audio).
+site's dust timer) needs a wide `jitter` and a `gap`, or it settles into a rhythm. A
+**notification** cue is the opposite: no jitter at all, and two directions get two *different*
+clips rather than one pitched two ways (`SFX.market`), since it is heard as a meaning and not as
+a texture. Two clips as one cue is one `smp` per clip with a `delay` on the second
+(`SFX.restock`). See [Audio](gameplay.md#audio).
 
 **Adding a song** — one `TRACKS` entry in [js/audio.js](../../js/audio.js) (`f`, `loop`, `vol`,
 and `next` if it should chain into another when it ends), then one `SFX.music.play('key')` at the

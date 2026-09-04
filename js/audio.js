@@ -103,6 +103,7 @@
   // decoded (or if it never does - file://, a missing folder, a codec) smp()
   // returns false and the caller's synth line plays in its place.
   const SFX_DIR = 'audio/sfx/';
+  const RESTOCK_RING = 0.9; // s between the wagon and the bell in SFX.restock
   const SAMPLES = {
     chop: ['wood_chop_#2-1787704670150.mp3'],
     mine: ['stone_on_wood.mp3', 'stone_tap_wood.mp3'],
@@ -124,6 +125,13 @@
     wind: ['gentle_wind_blowing_#1-1787704908517.mp3', 'gentle_wind_blowing_#3-1787704902018.mp3',
       'gentle_wind_blowing__#4-1787704410848.mp3'],
     owl: ['owl_sound_at_night_#2-1787704444687.mp3'],
+    // the market's four, notification cues rather than world sounds: a till
+    // for a price spike, a low thud for a crash, and the wagon and the bell
+    // the counter's turnover is announced by (SFX.restock, below)
+    spike: ['money win notification.mp3'],
+    crash: ['deep base hit.mp3'],
+    freight: ['freigh moving.mp3'],
+    restock: ['market refresh notification.mp3'],
   };
 
   const bank = {};   // key -> [{ buf, s, d, g }], one entry per file that decoded
@@ -611,13 +619,31 @@
     },
     // one number climbing on the victory screen: a dry, quiet blip
     tally() { tone(1320, 0.03, 'square', 0.035); },
-    // the market moving hard (marketNews, js/shop.js): two coin-bright notes,
-    // up for a spike and down for a crash, so the news is legible with the
-    // feed off screen. Synth on purpose - like a menu blip it must be
-    // identical every time, since it is read as a DIRECTION, not a texture.
+    // The market moving hard (marketNews, js/shop.js), under the plate that
+    // rises with it (the `market notices` banner, js/shop.js): a till ringing
+    // on a spike, a low thud on a crash. Two DIFFERENT clips rather than one
+    // pitched two ways, and unjittered, because this is read as a DIRECTION
+    // and not as a texture - a spike must never be mistakable for a crash.
+    // The synth pair underneath is the fallback, and says the same thing.
     market(up) {
+      if (smp(up ? 'spike' : 'crash', { vol: up ? 0.6 : 0.75, jitter: 0 })) return;
       tone(up ? 700 : 990, 0.07, 'square', 0.06);
       tone(up ? 990 : 700, 0.14, 'triangle', 0.07, 0, 0.06);
+    },
+    // The counter turning over (shopRestock, js/shop.js): the wagon pulling
+    // in, and RESTOCK_RING seconds behind it the bell over the new stock -
+    // one cue in two beats, the second landing as the plate settles. The gap
+    // is deliberate and fixed: it is the sound of the goods arriving and THEN
+    // being laid out, and jitter on either half would blur that into one noise.
+    restock() {
+      // both whole: the wagon is 3.3 s and still rolling under the bell,
+      // which is the point - the goods arrive, then they are laid out
+      const a = smp('freight', { vol: 0.5, jitter: 0 });
+      const b = smp('restock', { vol: 0.7, jitter: 0, delay: RESTOCK_RING });
+      if (a || b) return;
+      tone(240, 0.06, 'triangle', 0.2); tone(360, 0.08, 'triangle', 0.18, 0, 0.05);
+      tone(523, 0.1, 'triangle', 0.09, 0, RESTOCK_RING);
+      tone(784, 0.18, 'triangle', 0.09, 0, RESTOCK_RING + 0.09);
     },
     heal() { if (smp('warm', { vol: 0.6, rate: 1.3, jitter: 0.06 })) return; tone(440, 0.1, 'triangle', 0.08); tone(554, 0.12, 'triangle', 0.08, 0, 0.08); },
     splash() { noise(0.28, 0.28, 750); tone(300, 0.22, 'sine', 0.1, -190); noise(0.14, 0.12, 1500, 0.06); },

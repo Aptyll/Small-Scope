@@ -1375,10 +1375,14 @@ window.DBG = {
   // the rolled stock, the panel's geometry, and every trade without the
   // pointer. `marketStep(n)` walks the prices n moves on so a driver can watch
   // a spike without waiting three days for one, and `shopRestock()` turns the
-  // counter over on the spot.
+  // counter over on the spot - quietly, or `shopRestock(true)` with the plate
+  // and the two-beat cue a real turnover raises.
   market, GOODS, MKT_STEP, MKT_HIST, MKT_DAYS, SHOP_RESTOCK, marketPrice, marketHist,
   marketStep: (n) => { for (let i = 0; i < (n || 1); i++) updateMarket(MKT_STEP); return MKT_ORDER.map(marketPrice); },
-  shopRestock: () => shopRestock(true), shopOffer, itemValue, cellValue, sellValue,
+  shopRestock: (loud) => shopRestock(!loud), shopOffer, itemValue, cellValue, sellValue,
+  // the market's plates under the minimap: the live stack, where a slot lands,
+  // and a way to raise one without waiting for the walk to do it
+  notices, noteRect, NOTE_KIND, marketNotice,
   merchNear: (p) => merchNear(p || player),
   openShop: (p) => openShop(merchNear(p || player)), closeShop, shopOpen,
   shopLayout, shopHit: (x, y) => shopHit(x == null ? mouse.x : x, y == null ? mouse.y : y),

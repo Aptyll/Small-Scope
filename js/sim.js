@@ -1162,5 +1162,6 @@ function updateFx(dt) {
     events[i].t += dt;
     if (events[i].t > EVENT_LIFE) events.splice(i, 1);
   }
+  ageNotices(dt); // ...and the market's plates under the minimap (js/shop.js)
 }
 
