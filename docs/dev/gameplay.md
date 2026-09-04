@@ -501,10 +501,12 @@ use of them. Every level costs **one skill point** — the only thing a point bu
 [hero level](multiplayer.md#hero-levels). The **first** point on a key unlocks it (`abUnlocked(p,
 i)`, the one gate: `tryAbility` refuses a level-0 key outright and every bot reaches for keys
 through `abReady(p, i)` = bought and off cooldown), and each one after shaves `AB_LV_CD` (12%)
-off that ability's cooldown, the one lever that means something on all eight keys. Four keys ×
-`AB_LV_MAX` is **16 points against the 12 a capped hero earns**, so no build has all of it: four
-keys open and shallow, or one capped and three left dark, is the choice. You land with one point
-and four dark keys, so the first thing a match asks is which ability you want to be.
+off that ability's cooldown — the one lever that means something on all eight keys, twice at most,
+so a capped key comes back 24% faster than a freshly unlocked one. Four keys × `AB_LV_MAX` is
+**12 points against the 12 a capped hero earns**, so the ladder ends exactly where the hero does:
+every point has a home and nothing is stranded. The choice is the ORDER — you land with one point
+and four dark keys, so the first thing a match asks is which ability you want to be, and a key
+taken to 3 early is three keys still dark at level 4.
 The rest of the set: `abLvCanBuy(p, i)` (a point in hand, room on the key),
 `buyAbilityLv(p, i)` (the single entry point, reached through `input.cmd {kind:'ability', i}` →
 `runCmd` by HUD plate click and bots alike — the unlock floats `NAME UNLOCKED` and a fatter

@@ -509,8 +509,9 @@ the same red and aged in `updateFx` beside it, so the two containers refuse in o
 the one that is full is the one that answers.
 
 An **ability well** (`drawClassAbCell`) is the same grammar pointed at `CLASS_AB[p.cls][i]`: its
-detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, the same
-top-down cover is its cooldown (against the level-cut `abCdOf`, not the table base), and the key
+detailed 32px icon (`classAbIcon`, baked from `AB32` in js/abilities.js) is the ability, a
+**sweep** round the well is its cooldown (against the level-cut `abCdOf`, not the table base —
+see below), and the key
 digit sits big at 2× in the bottom-left corner (the keybind-indicator carve-out). Along the top
 inner edge, fat gear-style **buy pips** on dark seats count the points in the key — one seat per
 level it can hold, `AB_LV_MAX` of them, the first being the unlock
@@ -519,7 +520,7 @@ and the well says so in the meal button's own grammar: dark rim, the icon at `LO
 an empty pip row and a grey key digit — dim, never absent, so the strip never rearranges and you
 can read what you have not bought. A press on one is refused with the same red band and 1px
 shake the tool well and the meal buttons refuse in (`abDenied`, aged in `updateFx` beside
-`toolFlash`/`foodFlash`); a cooldown is NOT that refusal, because the wipe already says when it
+`toolFlash`/`foodFlash`); a cooldown is NOT that refusal, because the sweep already says when it
 comes home. The ASK lives off the well: while a
 skill point is unspent and the key has room a **floating buy plate** bobs in the open screen
 above the well
@@ -537,12 +538,41 @@ pressing the well casts — two surfaces, so neither can steal the other's click
 rim carries combat states only. On top of that it
 tells the ability's moments: the rim goes **white while the body
 performs the cast**, a **running** ability (the shield up, the fury out) pulses the rim in its own
-colour (`acol` in its table row) and drains a bar of it along the bottom edge — the wipe waits
-while that state runs, because the shield resets its cooldown on the drop and a wipe under a
-raised shield would be a lie (`activeF` in the table row is the readout) — and the well **pops
+colour (`acol` in its table row) and drains a bar of it along the bottom edge — the sweep waits
+while that state runs, because the shield resets its cooldown on the drop and a hand turning under
+a raised shield would be a lie (`activeF` in the table row is the readout) — and the well **pops
 white** the frame a cooldown comes home. A click on the well sets `input.ability` exactly as the
 key does (`hudPress`), and hovering it raises the ability tooltip (`tipClassAb` — the live
 cooldown, level and next-level price, the blurb, nothing the well itself already shows better).
+
+#### The cooldown sweep
+
+`drawSweepCover(x, y, w, h, frac, col, edge)` is League's radial cooldown **cut to a square**: the
+veil fills the well and retreats **clockwise from 12 o'clock**, so the dark that is left is the
+wait that is left and the hand's angle is the fraction at a glance. That is the whole reason it
+replaced a top-down wipe on these wells: on a 20 s clock a bar three quarters down and a bar half
+down look alike in the corner of an eye mid-fight, while a hand at 4 o'clock and one at 7 do not.
+It is for the **long** clocks only — the weapon well's rate of fire (`drawToolCell`) and the meal
+timer (`drawFoodClock`) are one-second affairs where a wipe reads faster than a hand, and they
+keep theirs and keep `AB_COVER`.
+
+Two things it does not do the obvious way. It is **rasterised a pixel at a time**, for the reason
+`mmRing` rasterises every curve of the minimap ([UI panels are baked once](#ui-panels-are-baked-once)):
+a canvas path anti-aliases, and a soft diagonal across a 32px well is blur on a screen where every
+other edge is hard. Unlike the minimap's chrome this one **cannot be baked** — the hand moves every
+frame — so it pays the two costs that made `mmRing` the game's largest single cost, and dodges them
+on size: the well is 32×32 (1024 angle tests, not a 68px disc's 4624 × several rings), each row is
+walked once and its covered pixels coalesced into ONE `fillRect` per run instead of one per pixel,
+and only a well actually on cooldown is walked at all. Measured on the bake path: **37 µs a well,
+0.15 ms with all four turning** — under 1% of a 60fps frame, against `mmRing`'s old 1.6 ms.
+And the veil is **not** the wipe's near-black `AB_COVER` but a translucent slate (`AB_SWEEP`):
+the well's ground is `#080b1c` and half of every icon is nearly as dark, so a darker-still wash
+over it changes nothing the eye can find, and the sweep would be a bare line turning over a well
+that never dims. The slate drags an icon's lit pixels down and lifts its dark ones to a blue-grey,
+so the waiting wedge is a different **material** rather than merely a darker one — which is what
+League's grey veil is actually doing. `CD_EDGE` draws the hand itself, centre to rim, the same 1px
+bright line the wiping wells carry at the front of their cover. The pips and the key digit are
+drawn **after** it: the wait is what the veil is for, and what you own is never dimmed by it.
 
 A **meal button** (`drawFoodCell`) is the same grammar pointed at food: the item icon sits high,
 the count bottom-right, the key letter (Q/F) bottom-left — the keybind-indicator carve-out — and

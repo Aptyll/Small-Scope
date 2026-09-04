@@ -17,10 +17,11 @@ const AB_KEYS = 4;          // keys 1-4
 // gate: level 1 casts, level 0 refuses); each one after shaves AB_LV_CD off
 // that ability's cooldown - one lever, universally meaningful (more nets in
 // the air, the wall up more often), read back through abCdOf so every
-// cooldown-setting site scales alike. Four keys x AB_LV_MAX is 16 points
-// against the 12 a capped hero earns, so no build has all of it: four keys
-// open and shallow, or one capped and three dark, is the choice.
-const AB_LV_MAX = 4;
+// cooldown-setting site scales alike. Four keys x AB_LV_MAX is 12 points
+// against the 12 a capped hero earns, so the ladder ends exactly where the
+// hero does: every point has a home, and the order you spend them in - which
+// key you can use at all, and how early - is the whole build.
+const AB_LV_MAX = 3;
 const AB_LV_CD = 0.12;
 // hunter
 const PIERCE_WIND = 0.7;    // s the draw is LOCKED before the shot looses itself

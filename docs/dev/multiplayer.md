@@ -152,8 +152,9 @@ Each level also grants **one skill point** (`p.skillPts`, starting with one at l
 point buys exactly one thing: **a level on one of the four class abilities**
 ([gameplay.md](gameplay.md#class-abilities-keys-1-4)), spent on the hud strip's floating buy
 plates. The keys start **locked at level 0** — the first point on one is what makes it castable
-at all — so the four of them hold 16 points against the 12 a level-12 hero earns, and a build
-cannot be everything: you land with one point, four dark keys and a choice. (The old kit-skill
+at all — and the four of them hold exactly 12 levels, so twelve points by level 12 cap all four
+with nothing stranded; what a build chooses is the ORDER, since you land with one point, four
+dark keys and a match to spend the rest across. (The old kit-skill
 row — LOOSE/DODGE/AMBUSH/FLETCH ranks in the backpack — was removed with the pack's
 simplification; its passive bonuses live on only as gear variants and cards.) Bots spend each
 free point in `updateAI`'s rung 0, lowest ability level first, so their first four unlock all

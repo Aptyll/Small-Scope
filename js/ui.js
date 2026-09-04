@@ -1966,8 +1966,8 @@ function drawToolCell(i, now, hov) {
   if (red) ctx.restore();
 }
 // An ability well says everything without a word: the 32px icon is the
-// ability, the top-down wipe is its cooldown (the same cover every other well
-// cools by, so one grammar reads everywhere), the rim goes white while the
+// ability, a SWEEP round the well is its cooldown (drawSweepCover below - the
+// long clocks turn, the short ones still wipe; see there), the rim goes white while the
 // body performs the cast, an ACTIVE ability (the shield up, the fury running)
 // pulses the rim in its own colour and drains a bar of it along the bottom
 // edge, and the well pops white the frame a cooldown comes home. The big
@@ -1983,6 +1983,64 @@ function drawToolCell(i, now, hov) {
 // never rearranges and you can read what you have not bought yet. A press on
 // one reddens it (abDenied above).
 const LOCK_DIM = 0.28; // the locked icon's alpha - the meal button's grammar, one shade darker
+// The ability cooldown, League's sweep cut to a SQUARE: the cover fills the
+// well and retreats CLOCKWISE FROM 12 O'CLOCK, so the dark that is left is
+// the wait that is left, and the hand's angle is the fraction at a glance -
+// which a top-down wipe cannot say on a 20 s clock, because a bar three
+// quarters down and a bar half down look alike in the corner of your eye.
+// It is the long clocks only: the weapon's rate of fire and the meal timer
+// are one-second affairs where a wipe reads faster than a hand, and they keep
+// theirs.
+//
+// Rasterised A PIXEL AT A TIME for the reason every minimap curve is
+// (mmRing): canvas paths anti-alias, and a soft diagonal across a 32px well
+// is blur on a screen where every other edge is hard. Each row is walked once
+// and its covered pixels are coalesced into ONE fillRect per run, so a
+// sweeping well costs a few dozen draws rather than a thousand - and only a
+// well actually on cooldown is walked at all.
+// The veil is NOT the wipe's near-black cover (AB_COVER): the well's ground
+// is #080b1c and half of every 32px icon is nearly as dark, so a darker-still
+// wash over it changes nothing you can see and the sweep would be a bare line
+// turning over a well that never dims. A translucent SLATE reads on both
+// halves at once - it drags the lit pixels of an icon down and lifts its dark
+// ones to a blue-grey, so the waiting wedge is a different MATERIAL rather
+// than merely a darker one, which is the thing League's grey veil is actually
+// doing.
+const AB_SWEEP = 'rgba(40,50,86,0.74)';
+const CD_EDGE = '#9fb6d8'; // the hand: the 1px line the veil retreats behind
+function drawSweepCover(x, y, w, h, frac, col, edge) {
+  if (frac <= 0) return;
+  if (frac >= 1) { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); return; }
+  const TAU = Math.PI * 2;
+  const cx = x + w / 2, cy = y + h / 2;
+  // the hand has already travelled (1 - frac) of the way round from 12; the
+  // cover is the span from it back round to 12
+  const a0 = -Math.PI / 2 + TAU * (1 - frac), span = TAU * frac;
+  ctx.fillStyle = col;
+  for (let py = 0; py < h; py++) {
+    const dy = y + py + 0.5 - cy;
+    let run = -1;
+    for (let px = 0; px <= w; px++) {
+      let inside = false;
+      if (px < w) {
+        const a = ((Math.atan2(dy, x + px + 0.5 - cx) - a0) % TAU + TAU) % TAU;
+        inside = a < span;
+      }
+      if (inside) { if (run < 0) run = px; }
+      else if (run >= 0) { ctx.fillRect(x + run, y + py, px - run, 1); run = -1; }
+    }
+  }
+  if (!edge) return;
+  // the hand itself, centre to rim along a0 - the same 1px bright line the
+  // wiping wells carry at the front of their cover
+  ctx.fillStyle = edge;
+  const hx = Math.cos(a0), hy = Math.sin(a0);
+  const end = Math.min(Math.abs(hx) > 1e-6 ? (w / 2) / Math.abs(hx) : 1e9,
+                       Math.abs(hy) > 1e-6 ? (h / 2) / Math.abs(hy) : 1e9);
+  for (let s = 0; s <= end; s++) {
+    ctx.fillRect(Math.floor(cx + hx * s), Math.floor(cy + hy * s), 1, 1);
+  }
+}
 let abCdSeen = [0, 0, 0, 0], abReadyFlash = [0, 0, 0, 0];
 function drawClassAbCell(i, now, on) {
   const p = player, ab = CLASS_AB[p.cls][i];
@@ -2015,24 +2073,23 @@ function drawClassAbCell(i, now, on) {
   ctx.drawImage(classAbIcon(p.cls, i), r.x + 1, r.y + 1);
   ctx.globalAlpha = 1;
   // a RUNNING ability owns its well: the drain bar is the readout and the
-  // wipe waits until the state ends (the shield resets its cooldown on the
-  // drop anyway, so a wipe under a raised shield would be a lie)
+  // sweep waits until the state ends (the shield resets its cooldown on the
+  // drop anyway, so a hand turning under a raised shield would be a lie)
   if (cd > 0 && act <= 0) {
-    const cov = Math.max(1, Math.round(Math.min(1, cd / abCdOf(p, i)) * (r.h - 2)));
-    ctx.fillStyle = AB_COVER;
-    ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, cov);
-    if (cov < r.h - 2) { ctx.fillStyle = '#9fb6d8'; ctx.fillRect(r.x + 1, r.y + cov, r.w - 2, 1); }
+    drawSweepCover(r.x + 1, r.y + 1, r.w - 2, r.h - 2,
+      Math.min(1, cd / abCdOf(p, i)), AB_SWEEP, CD_EDGE);
   }
   // the level, as gear's buy pips along the top inner edge - fat blocks with a
   // dark seat, so the bought count reads from across the screen. ONE SEAT PER
   // POINT the key can hold (AB_LV_MAX of them, the first of which is the
   // unlock), so an empty row is a locked ability and the row filling up is the
-  // whole ladder in one readout
+  // whole ladder in one readout. They sit ABOVE the sweep: the wait is what
+  // the cover is for, and what you own is never dimmed by it
   for (let k = 0; k < AB_LV_MAX; k++) {
     ctx.fillStyle = '#0f1632';
-    ctx.fillRect(r.x + 2 + k * 8, r.y + 2, 7, 5);
+    ctx.fillRect(r.x + 2 + k * 10, r.y + 2, 9, 5);
     ctx.fillStyle = k < p.abLv[i] ? '#f2cc6a' : '#2c3560';
-    ctx.fillRect(r.x + 3 + k * 8, r.y + 3, 5, 3);
+    ctx.fillRect(r.x + 3 + k * 10, r.y + 3, 7, 3);
   }
   if (act > 0) {
     ctx.fillStyle = '#0f1632';
