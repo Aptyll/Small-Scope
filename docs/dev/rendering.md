@@ -277,6 +277,13 @@ must be declared there too. The bake draws in panel-relative coordinates (e.g. `
 so a recenter never requires a re-bake — keep any new row's bake-side label and per-frame widget
 expressed the same way.
 
+The [trading post](gameplay.md#the-panel) bakes its chrome the same way but **lazily and per
+team**: `shopChromeCv(ti)` draws the timber frame, its iron corner brackets, the team-striped
+awning with its snow crest, scalloped hem and icicles, and the counter edge into one canvas the
+size of the slab, clears the middle out of it, and caches it under the team index — so the live
+pass blits one image and then owns every well on top of it. Its size is constant (`SHOP_W` ×
+`SHOP_H`), which is why it needs no rebuild on a resize; only the panel's *position* moves.
+
 The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so
 `renderWorldMap()` blits `mapCv` scaled by `MAP_S = MAP_W / WORLD` and every tile-space
 position drawn on top (grid lines, camera rect, player marker) must be multiplied by `MAP_S`.

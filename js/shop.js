@@ -346,43 +346,76 @@ function shopCmd(p, c) {
 }
 
 // ------------------------------------------------------------ the shop panel
-// The counter, in the character sheet's chrome: one slab, the sim running
-// live behind it. It is pinned in the room LEFT of the backpack rather than
-// dead centre, because the pack is open beside it the whole time it is up -
-// a sale is a DRAG out of the grid and into the sell well, so the grid has to
-// be reachable and visible at once.
+// THE TRADING POST: one slab, the sim running live behind it. It is pinned in
+// the room LEFT of the backpack rather than dead centre, because the pack is
+// open beside it the whole time it is up - a sale is a DRAG out of the grid
+// and into the sell well, so the grid has to be reachable and visible at once.
 //
-// LEFT: the four sections of the stock, three wells each, every well wearing
-// its item's own tier plate and its price on a band along the bottom. A well
-// you can afford warms and pulses the way a gear plate does; one you cannot
-// goes flat. RIGHT: the SELL well at the top - pack, arrow, coin, and nothing
-// written on it - and under it the two market cards, each carrying its live
-// price, a three-day graph, and a pair of trade plates whose ARRANGEMENT is
-// the direction: coin into item is a buy, item into coin is a sale.
+// The name is load-bearing. The POST is the shop; the MARKET is one corner of
+// it, under its own rule, and it is the only corner whose prices move. Calling
+// the whole slab a market would say the twelve offers above it were traded
+// goods too, and they are not: every one of them is priced once, on its own def.
+//
+// Top to bottom: the AWNING - a snow-capped, icicled valance in the counter's
+// own team colours, with the shop's sign hung off its hem between two lanterns,
+// the merchant's portrait at one end and the purse at the other; the turnover
+// bar; the four SECTIONS of the stock, three wells each on a recessed board,
+// every well wearing its item's own tier plate with its price on a band along
+// the bottom; the MARKET rule and its two cards, each carrying a live price, a
+// three-day graph and a pair of trade plates whose ARRANGEMENT is the
+// direction; and the SELL well along the counter's edge.
+//
+// Two rules make the stock read as one grid rather than as twelve loose
+// pictures, which is what it looked like before:
+//   - EVERY offer's icon is drawn at exactly SHOP_ICON px. The game keeps its
+//     icons on two grids, 8x8 and 12x12, so 3x and 2x land both of them on 24 -
+//     whole-number scales, square pixels, one silhouette size down the whole
+//     counter, instead of a tool with twice the area of the bit beside it.
+//   - A price band's coin sits at a FIXED offset and its number is right-
+//     aligned to another, so a section's three prices line up as a column
+//     instead of three centred groups sliding about with the digit count.
 //
 // The labelled section headings and the graphs' own numbers are the panel
 // carve-out of CLAUDE.md's UI rule, for the reason the practice instruments
 // have one: reading a market IS reading numbers, and no shape compares a
 // price today against a price yesterday.
+//
 // It is WIDE AND SHORT, and pinned near the TOP EDGE rather than centred,
 // which is the one piece of this layout that is not taste: the tooltip is
 // bottom-left and grows upward off the bottom rim, and a tall centred slab
 // puts its own bottom-left corner exactly where a tall tooltip lands - so
-// hovering the last row of offers would hide the last row of offers. Pinned
-// at the top it ends at 190, and the tooltip that is up while the pointer is
-// on the panel's own bottom row - the sell well's, which is three lines -
-// tops out forty pixels below that. Only the deepest tooltip in the game (a
-// fully loaded tool hovered in the PACK) reaches the strip at all, and that
-// is while reading a price, not while dropping the thing on it.
-const SHOP_W = 290, SHOP_H = 186, SHOP_Y = 4;
-const SHOP_WELL_W = 42, SHOP_WELL_H = 28; // an offer's icon plate...
-const SHOP_BAND = 8;                      // ...and the price band under it
-const SHOP_SEC_W = SHOP_WELL_W * 3 + 8;   // a section: three wells and the gaps between
-const SHOP_SEC_H = 6 + SHOP_WELL_H + SHOP_BAND;  // label + plate + band
-const SHOP_CARD_W = 137, SHOP_CARD_H = 48;       // one market card
-const SHOP_GRAPH_H = 20;
-const SHOP_SELL_H = 16;                   // the sell strip along the bottom rim
+// hovering the last row of offers would hide the last row of offers. Its
+// HEIGHT is spent against the same rule: pinned at the top it ends at 206, and
+// the deepest tooltip a well here can raise tops out around 192 on the 480x270
+// view a full screen gives - so what a tooltip can ever cover is the sell
+// strip's own top edge, never the offers or the cards being read. That is what
+// caps the slab at 202 tall while it grew 46 px wider; the room came out of
+// the width, which has none of that fight, and out of the layout.
+const SHOP_W = 336, SHOP_H = 202, SHOP_Y = 4;
+const SHOP_PAD = 8;        // frame edge to content
+const SHOP_HEAD = 22;      // the awning band, and the sign row hung off its hem
+const SHOP_ICON = 24;      // every offer's icon, whatever grid it was drawn on
+const SHOP_WELL_W = 48, SHOP_WELL_H = 28; // an offer's icon plate...
+const SHOP_BAND = 9;                      // ...and the price band under it
+const SHOP_WELL_GAP = 5;
+const SHOP_SEC_W = SHOP_WELL_W * 3 + SHOP_WELL_GAP * 2; // a section: three wells and the gaps between
+const SHOP_SEC_HEAD = 8;                                // its name, and the rule off it
+const SHOP_SEC_H = SHOP_SEC_HEAD + SHOP_WELL_H + SHOP_BAND;
+const SHOP_CARD_W = 157, SHOP_CARD_H = 46;              // one market card
+const SHOP_GRAPH_H = 22;
+const SHOP_SELL_H = 16;    // the sell strip along the counter's edge
+const SHOP_FOOT = 5;       // that counter edge itself; the frame is 3 on the other three sides
 const SHOP_BG = '#0a0e23', SHOP_IN = '#10173a';
+const SHOP_BOARD = '#0b1030'; // the recess a section's three wells stand on
+// The post's TIMBER: the frame, the corner brackets, the section rules, the
+// market cards and the counter edge are all cut from it, which is what makes
+// the slab read as a shopfront rather than as one more blue HUD panel.
+const SHOP_WOOD_D = '#241a12', SHOP_WOOD = '#5c4226', SHOP_WOOD_L = '#8a6142';
+const SHOP_LABEL = '#c9a874';  // a heading, in the timber's own ink
+const SHOP_SNOW = '#f4f7ff', SHOP_SNOW_D = '#c4d4ea';
+const SHOP_CLOTH = '#e0d3ad', SHOP_CLOTH_L = '#f0e6cc', SHOP_CLOTH_D = '#c9b78d'; // the awning's cream stripe
+const SHOP_LAMP = '#ffd07a', SHOP_LAMP_D = '#c9832a', SHOP_IRON = '#6c7486', SHOP_IRON_L = '#aeb6c4';
+const SHOP_SIGN = 'TRADING POST';
 // A price you cannot pay: the refusal red every other "not enough gold" in the
 // game already speaks (tipGear's next-level row, the bag's own denial flash),
 // said three ways at once on the well so it cannot be missed at a glance -
@@ -398,52 +431,64 @@ function shopOpen() {
   return !!state.shop && state.mode === 'play' && !player.dead && !state.paused &&
     !state.mapOpen && !state.settingsOpen && !state.wheel && !window.DBG.hideUI;
 }
+// The post has a song of its own, and it takes the music layer for exactly as
+// long as the counter is open: SFX.music.hold notes what was playing AND the
+// second it had reached, and the release at the far end puts it back there - so
+// a trip to the shop costs the match's track the bars it covered rather than
+// the whole song (the `music` banner, js/audio.js).
 function openShop(b) {
   if (!b) return false;
   state.shop = b;
   state.charOpen = false; // one slab at a time - they would sit on each other
   SFX.place();
+  SFX.music.hold('village', { in: 0.6, out: 0.5 });
   return true;
 }
 function closeShop() {
   if (!state.shop) return;
   state.shop = null;
   SFX.pickup();
+  SFX.music.release({ in: 0.8, out: 0.5 });
 }
 
-// The whole geometry in one place, top to bottom: a header carrying the
-// portrait and the purse; the turnover bar under it; the four sections as a
-// 2x2 grid of three-well rows; the two market cards side by side; and the
-// SELL strip along the bottom rim, the full width of the slab, because it is
-// a drop target and a drop target should be hard to miss with an item on the
-// cursor.
+// The whole geometry in one place, top to bottom: the sign row hung off the
+// awning, carrying the portrait and the purse; the turnover bar under it; the
+// four sections as a 2x2 grid of three-well rows; the MARKET rule and its two
+// cards side by side; and the SELL strip along the bottom rim, the full width
+// of the slab, because it is a drop target and a drop target should be hard to
+// miss with an item on the cursor.
 function shopLayout() {
   const x = Math.max(2, Math.round((VIEW_W - BAG_W - SHOP_W) / 2));
   const y = SHOP_Y;
+  const cx = x + SHOP_PAD, cw = SHOP_W - SHOP_PAD * 2;
   const secs = [];
   for (let i = 0; i < SHOP_SECTIONS.length; i++) {
-    const sx = x + 6 + (i % 2) * (SHOP_SEC_W + 10);
-    const sy = y + 28 + ((i / 2) | 0) * (SHOP_SEC_H + 2);
+    const sx = cx + (i % 2) * (cw - SHOP_SEC_W); // the two columns pinned to the two edges
+    const sy = y + SHOP_HEAD + 6 + ((i / 2) | 0) * (SHOP_SEC_H + 3);
     const wells = [];
     for (let k = 0; k < SHOP_COLS; k++) {
-      wells.push({ x: sx + k * (SHOP_WELL_W + 4), y: sy + 6, w: SHOP_WELL_W, h: SHOP_WELL_H + SHOP_BAND });
+      wells.push({ x: sx + k * (SHOP_WELL_W + SHOP_WELL_GAP), y: sy + SHOP_SEC_HEAD,
+        w: SHOP_WELL_W, h: SHOP_WELL_H + SHOP_BAND });
     }
     secs.push({ id: SHOP_SECTIONS[i].id, label: SHOP_SECTIONS[i].label, x: sx, y: sy, wells });
   }
+  const mkY = y + SHOP_HEAD + 6 + SHOP_SEC_H * 2 + 3 + 3; // under the second row of sections
   const cards = [];
   for (let i = 0; i < MKT_ORDER.length; i++) {
-    const cx = x + 6 + i * (SHOP_CARD_W + 4), cy = y + 118;
-    cards.push({ id: MKT_ORDER[i], x: cx, y: cy, w: SHOP_CARD_W, h: SHOP_CARD_H,
-      graph: { x: cx + 3, y: cy + 12, w: SHOP_CARD_W - 6, h: SHOP_GRAPH_H },
-      buy: { x: cx + 3, y: cy + 34, w: 64, h: 12 },
-      sell: { x: cx + 70, y: cy + 34, w: 64, h: 12 } });
+    const kx = cx + i * (cw - SHOP_CARD_W), ky = mkY + 8;
+    cards.push({ id: MKT_ORDER[i], x: kx, y: ky, w: SHOP_CARD_W, h: SHOP_CARD_H,
+      graph: { x: kx + 3, y: ky + 11, w: SHOP_CARD_W - 6, h: SHOP_GRAPH_H },
+      buy: { x: kx + 3, y: ky + 34, w: 73, h: 11 },
+      sell: { x: kx + 81, y: ky + 34, w: 73, h: 11 } });
   }
   return {
     panel: { x, y, w: SHOP_W, h: SHOP_H },
-    bar: { x: x + 4, y: y + 24, w: SHOP_W - 8, h: 2 },
+    head: { x: cx, y: y + 11, w: cw, h: 11 }, // the sign row, hung off the awning's hem
+    bar: { x: cx, y: y + SHOP_HEAD + 2, w: cw, h: 2 },
+    mkt: { x: cx, y: mkY, w: cw, h: 8 },
     secs, cards,
-    well: { x: x + 6, y: y + SHOP_H - SHOP_SELL_H - 4, w: SHOP_W - 12, h: SHOP_SELL_H },
-    xr: { x: x + SHOP_W - 14, y: y + 4, w: 10, h: 10 },
+    well: { x: cx, y: y + SHOP_H - SHOP_FOOT - SHOP_SELL_H, w: cw, h: SHOP_SELL_H },
+    xr: { x: x + SHOP_W - SHOP_PAD - 11, y: y + 11, w: 11, h: 11 },
   };
 }
 
@@ -491,34 +536,111 @@ function shopDropSell() {
 }
 
 // ---- drawing -------------------------------------------------------------
+// The post's chrome, baked once a side: the timber frame with its iron corner
+// brackets, the striped awning valance with snow on its crown and icicles off
+// its scalloped hem, and the counter edge along the bottom rim. The middle is
+// CLEARED, so this is a frame and a valance and nothing else and the live pass
+// still owns the slab's own ground and every well on it. Keyed by team, because
+// the awning's stripes are whose counter this is - the one thing on the panel
+// that says it, now the sign carries the shop's name instead.
+function shopChromeCv(ti) {
+  const cache = shopChromeCv.cache || (shopChromeCv.cache = {});
+  if (cache[ti]) return cache[ti];
+  const W = SHOP_W, H = SHOP_H, T = TEAMS[ti];
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  const px = (x, y, w, h, c) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+
+  // the frame: a dark outline, a course of timber inside it lit from the upper
+  // left, and a thicker course along the bottom - the counter's own edge
+  px(0, 0, W, H, SHOP_WOOD_D);
+  px(1, 1, W - 2, H - 2, SHOP_WOOD);
+  px(1, 1, W - 2, 1, SHOP_WOOD_L); px(1, 1, 1, H - 2, SHOP_WOOD_L);
+  px(1, H - 2, W - 2, 1, SHOP_WOOD_D); px(W - 2, 1, 1, H - 2, SHOP_WOOD_D);
+  px(1, H - SHOP_FOOT + 1, W - 2, 1, SHOP_WOOD_L); // the counter's lit lip
+  for (let x = 3; x < W - 3; x += 2) {              // grain along the lip and the head
+    if (hash2(x, 11) > 0.6) px(x, H - SHOP_FOOT + 2, hash2(x, 13) > 0.5 ? 2 : 1, 1, SHOP_WOOD_D);
+    if (hash2(x, 19) > 0.72) px(x, 1, 1, 1, SHOP_WOOD_D);
+  }
+  g.clearRect(3, 3, W - 6, H - 3 - SHOP_FOOT); // the live slab shows through here
+
+  // The awning: a batten, snow along its crown, striped cloth and a scalloped
+  // hem with an icicle off the deepest point of every other scallop. The team
+  // stripe is the coat's LIT tone rather than the coat: the coat itself is
+  // barely a shade off the slab behind it, and a valance that does not read as
+  // cloth is just a row of cream teardrops.
+  const AX = 3, AW = W - 6, CY = 6, CLOTH = 6, SCAL = 3, PITCH = 14, MID = (PITCH - 1) / 2;
+  px(AX, 2, AW, 2, SHOP_WOOD_D);   // the batten the cloth is nailed to
+  px(AX, 2, AW, 1, SHOP_WOOD);
+  px(AX, 4, AW, 2, SHOP_SNOW);     // the crown, and its shaded underside
+  px(AX, 5, AW, 1, SHOP_SNOW_D);
+  for (let x = AX; x < AX + AW; x++) if (hash2(x, 17) > 0.62) px(x, 3, 1, 1, SHOP_SNOW); // lumps over the batten
+  for (let x = AX; x < AX + AW; x++) {
+    const k = (x - AX) % PITCH, s = ((x - AX) / PITCH) | 0, team = s % 2 === 1;
+    const base = team ? T.coatL : SHOP_CLOTH, lit = team ? '#8fb3d6' : SHOP_CLOTH_L, dark = team ? T.coat : SHOP_CLOTH_D;
+    const d = Math.max(0, SCAL - Math.round(Math.abs(k - MID) / MID * SCAL)); // deepest mid-stripe
+    px(x, CY, 1, CLOTH + d, base);
+    if (k === 1 || k === 2) px(x, CY, 1, CLOTH + d, lit);   // the lit fold down each seam...
+    if (k === PITCH - 1) px(x, CY, 1, CLOTH + d, dark);     // ...and the shaded one
+    px(x, CY + CLOTH + d - 1, 1, 1, dark);                  // the hem's own shade
+    px(x, CY + CLOTH + d, 1, 1, 'rgba(4,6,18,0.5)');        // ...and the shadow it throws, which seats it
+    if (d === SCAL && k === Math.round(MID) && s % 2 === 0) {
+      const len = 2 + ((hash2(x, 23) * 3) | 0);             // an icicle off the point, a shoulder then a tip
+      px(x - 1, CY + CLOTH + d, 3, 1, '#bcd0e4');
+      px(x, CY + CLOTH + d, 1, len, '#bcd0e4');
+      px(x, CY + CLOTH + d, 1, Math.max(1, len - 1), SHOP_SNOW);
+    }
+  }
+
+  // iron corner brackets nailed over the timber - the one hard edge on a slab
+  // otherwise made of cloth, snow and wood
+  for (const [bx, sx] of [[1, 1], [W - 2, -1]]) {
+    for (const [by, sy] of [[1, 1], [H - 2, -1]]) {
+      for (let k = 0; k < 6; k++) { px(bx + sx * k, by, 1, 1, SHOP_IRON); px(bx, by + sy * k, 1, 1, SHOP_IRON); }
+      for (let k = 0; k < 5; k++) { px(bx + sx * k, by + sy, 1, 1, SHOP_IRON); px(bx + sx, by + sy * k, 1, 1, SHOP_IRON); }
+      px(bx + sx, by + sy, 1, 1, SHOP_IRON_L);
+      px(bx + sx * 4, by + sy, 1, 1, SHOP_WOOD_D); px(bx + sx, by + sy * 4, 1, 1, SHOP_WOOD_D); // nail heads
+    }
+  }
+  cache[ti] = cv;
+  return cv;
+}
+
+// A lantern hanging off the awning's hem, one either side of the sign. Its
+// flame breathes on its own beat and the glow around it is the only warm light
+// on the panel, which is the whole point of it.
+function drawShopLantern(x, y, now, beat) {
+  const f = 0.72 + 0.28 * (0.5 + 0.5 * Math.sin(now * 3.1 + beat));
+  ctx.globalAlpha = 0.13 * f;
+  ctx.fillStyle = SHOP_LAMP;
+  ctx.fillRect(x - 4, y + 1, 13, 9); ctx.fillRect(x - 2, y - 1, 9, 13);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = SHOP_IRON;
+  ctx.fillRect(x + 2, y - 4, 1, 3);                            // the hook off the hem
+  ctx.fillRect(x, y - 1, 5, 1); ctx.fillRect(x, y + 8, 5, 1);  // cap and base
+  ctx.fillStyle = SHOP_WOOD_D;
+  ctx.fillRect(x, y, 5, 8);
+  ctx.fillStyle = SHOP_LAMP_D;
+  ctx.fillRect(x + 1, y + 1, 3, 6);                            // the glass
+  ctx.fillStyle = SHOP_LAMP;
+  ctx.fillRect(x + 2, y + 3, 1, f > 0.9 ? 4 : 3);              // the flame
+  ctx.fillStyle = SHOP_IRON_L;
+  ctx.fillRect(x, y - 1, 1, 1); ctx.fillRect(x + 4, y - 1, 1, 1);
+}
+
 function drawShopPanel(now) {
   const L = shopLayout(), P = L.panel;
   const h = mouse.inside ? shopHit(mouse.x, mouse.y) : null;
+  const b = state.shop;
+  const ti = skin(b ? b.team : player.team);
   ctx.fillStyle = 'rgba(4,6,18,0.38)';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H);
-  ctx.fillStyle = 'rgba(4,6,18,0.55)'; chamRect(P.x + 3, P.y + 3, P.w, P.h);
-  ctx.fillStyle = SHOP_BG; chamRect(P.x, P.y, P.w, P.h);
-  ctx.fillStyle = SHOP_IN; chamRect(P.x + 1, P.y + 1, P.w - 2, P.h - 2);
-  ctx.fillStyle = '#35426e';
-  ctx.fillRect(P.x + 2, P.y + 1, P.w - 4, 1); ctx.fillRect(P.x + 1, P.y + 2, 1, P.h - 4);
-  ctx.fillStyle = '#080c1c';
-  ctx.fillRect(P.x + 2, P.y + P.h - 2, P.w - 4, 1); ctx.fillRect(P.x + P.w - 2, P.y + 2, 1, P.h - 4);
+  ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(P.x + 3, P.y + 3, P.w, P.h); // a square slab throws a square shadow
+  ctx.fillStyle = SHOP_BG; ctx.fillRect(P.x, P.y, P.w, P.h);
+  ctx.fillStyle = SHOP_IN; ctx.fillRect(P.x + 3, P.y + 3, P.w - 6, P.h - 3 - SHOP_FOOT);
+  ctx.drawImage(shopChromeCv(ti), P.x, P.y); // the frame, the awning and the counter edge
 
-  // the header: whose counter this is, in that side's mark, with the purse
-  // hard against the right edge - the one number the whole panel is spent from
-  const b = state.shop;
-  const mark = b ? TEAMS[skin(b.team)].mark : '#f4f7ff';
-  if (b) {
-    const spr = SPRITES.merchant[skin(b.team)].down[0];
-    ctx.drawImage(spr, P.x + 5, P.y + 2, spr.width, spr.height);
-  }
-  drawPixelTextShadow(ctx, 'MERCHANT', P.x + 23, P.y + 7, mark, SHOP_BG);
-  // the purse, right-aligned into the gap before the X - the one number the
-  // whole panel is spent out of
-  const gold = String(player.inv.gold);
-  const gw = pixelTextWidth(gold), gx = P.x + P.w - 18 - gw;
-  ctx.drawImage(SPRITES.itemGold, gx - 10, P.y + 5);
-  drawPixelTextShadow(ctx, gold, gx, P.y + 7, RES_COLORS.gold, SHOP_BG);
+  drawShopSign(L, ti, now);
 
   // the turnover clock: a bar that empties into the next restock. No number
   // and no word - it is a countdown, and a countdown is a length.
@@ -528,27 +650,95 @@ function drawShopPanel(now) {
   ctx.fillRect(L.bar.x, L.bar.y, Math.round(L.bar.w * fr), L.bar.h);
 
   for (const s of L.secs) drawShopSection(s, h, now);
+  drawShopHeading(L.mkt, 'MARKET', true);
   for (const c of L.cards) drawMarketCard(c, h, now);
   drawSellWell(L.well, h, now);
 
   // the X: the drawn way out (ESC, E and walking away all close too)
   const hot = h === 'x';
-  ctx.fillStyle = hot ? '#8fa0c8' : '#35426e';
+  ctx.fillStyle = hot ? SHOP_LAMP : SHOP_WOOD;
   ctx.fillRect(L.xr.x, L.xr.y, L.xr.w, L.xr.h);
   ctx.fillStyle = '#0f1632';
   ctx.fillRect(L.xr.x + 1, L.xr.y + 1, L.xr.w - 2, L.xr.h - 2);
-  ctx.fillStyle = hot ? '#f4f7ff' : '#8fa8d0';
-  for (let k = 0; k < 4; k++) {
+  ctx.fillStyle = hot ? '#f4f7ff' : SHOP_LABEL;
+  for (let k = 0; k < 5; k++) {
     ctx.fillRect(L.xr.x + 3 + k, L.xr.y + 3 + k, 1, 1);
     ctx.fillRect(L.xr.x + L.xr.w - 4 - k, L.xr.y + 3 + k, 1, 1);
   }
 }
 
-// one section: its name, then its three wells
+// The sign row, hung off the awning's hem: the merchant's own face in a framed
+// portrait at one end, the shop's name on a board between two lanterns, and the
+// purse - the one number the whole panel is spent out of - on a plate at the
+// other. The board carries the SHOP's name and not the merchant's title: whose
+// counter this is is already said, in the awning's colours.
+function drawShopSign(L, ti, now) {
+  const P = L.panel, R = L.head;
+  // the portrait: the merchant's own head off its walking sprite, in a timber
+  // frame - the trader is standing behind the counter, not printed on it
+  const spr = SPRITES.merchant[ti].down[0];
+  ctx.fillStyle = SHOP_WOOD; ctx.fillRect(R.x, R.y - 1, 14, 13);
+  ctx.fillStyle = SHOP_WOOD_L; ctx.fillRect(R.x, R.y - 1, 14, 1);
+  ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(R.x, R.y + 11, 14, 1);
+  ctx.fillStyle = '#080b1c'; ctx.fillRect(R.x + 1, R.y, 12, 11);
+  ctx.drawImage(spr, 2, 0, 12, 11, R.x + 1, R.y, 12, 11);
+
+  // the board: a plank hung off two rings, its name in gold
+  const tw = pixelTextWidth(SHOP_SIGN);
+  const bw = tw + 18, bx = P.x + ((P.w - bw) >> 1), by = R.y - 1, bh = 13;
+  ctx.fillStyle = SHOP_IRON;
+  ctx.fillRect(bx + 5, by - 4, 1, 4); ctx.fillRect(bx + bw - 6, by - 4, 1, 4);
+  ctx.fillStyle = 'rgba(4,6,18,0.5)'; ctx.fillRect(bx + 2, by + 2, bw, bh);
+  ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = SHOP_WOOD; ctx.fillRect(bx + 1, by + 1, bw - 2, bh - 2);
+  ctx.fillStyle = SHOP_WOOD_L; ctx.fillRect(bx + 1, by + 1, bw - 2, 1);
+  ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(bx + 1, by + bh - 2, bw - 2, 1);
+  ctx.fillStyle = '#1c1208'; ctx.fillRect(bx + 3, by + 3, bw - 6, bh - 6);
+  drawPixelTextShadow(ctx, SHOP_SIGN, bx + 9, by + 4, '#f2cc6a', '#1c1208');
+  drawShopLantern(bx - 14, by, now, 0);
+  drawShopLantern(bx + bw + 9, by, now, 1.9);
+
+  // the purse, right-aligned into the gap before the X, on its own plate so the
+  // number reads clear of the cloth behind it
+  const gold = String(player.inv.gold);
+  const pw = pixelTextWidth(gold) + 20, px0 = L.xr.x - 5 - pw;
+  ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(px0, by, pw, bh);
+  ctx.fillStyle = '#141c3c'; ctx.fillRect(px0 + 1, by + 1, pw - 2, bh - 2);
+  ctx.drawImage(SPRITES.itemGold, px0 + 4, by + 3);
+  drawPixelText(ctx, gold, px0 + 15, by + 4, RES_COLORS.gold);
+}
+
+// A heading and the rule that runs off it to the block's right edge - the four
+// section names and the MARKET rule are one object, so they can never drift
+// apart. `sprig` hangs a pine tip off the rule's far end.
+function drawShopHeading(r, label, sprig) {
+  drawPixelTextShadow(ctx, label, r.x, r.y, SHOP_LABEL, SHOP_BG);
+  const lw = pixelTextWidth(label) + 4, x0 = r.x + lw, w = r.w - lw - (sprig ? 10 : 0);
+  if (w > 0) {
+    ctx.fillStyle = SHOP_WOOD; ctx.fillRect(x0, r.y + 2, w, 1);
+    ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(x0, r.y + 3, w, 1);
+  }
+  if (!sprig) return;
+  // a little pine at the rule's end - the frostlands' own tree, the whole
+  // decoration this heading gets
+  const sx = r.x + r.w - 7, sy = r.y - 2;
+  ctx.fillStyle = '#3c5840';
+  for (let k = 0; k < 4; k++) ctx.fillRect(sx + 3 - Math.min(3, k), sy + k * 2, 1 + Math.min(3, k) * 2, 2);
+  ctx.fillStyle = '#4f9c55';
+  for (let k = 1; k < 4; k++) ctx.fillRect(sx + 3 - Math.min(3, k), sy + k * 2, 1, 1);
+  ctx.fillStyle = '#4a3421'; ctx.fillRect(sx + 3, sy + 8, 1, 2);
+  ctx.fillStyle = SHOP_SNOW; ctx.fillRect(sx + 3, sy, 1, 1); ctx.fillRect(sx + 1, sy + 4, 1, 1);
+}
+
+// one section: its name, then its three wells on a recessed board - the board
+// is what groups three offers into a shelf, rather than leaving twelve loose
+// plates floating on one slab
 function drawShopSection(s, h, now) {
-  drawPixelTextShadow(ctx, s.label, s.x, s.y, '#7a8bb8', SHOP_BG);
-  ctx.fillStyle = '#222c55';
-  ctx.fillRect(s.x + pixelTextWidth(s.label) + 4, s.y + 2, SHOP_SEC_W - pixelTextWidth(s.label) - 4, 1);
+  drawShopHeading({ x: s.x, y: s.y, w: SHOP_SEC_W }, s.label, false);
+  const b = { x: s.x - 2, y: s.y + SHOP_SEC_HEAD - 2, w: SHOP_SEC_W + 4, h: SHOP_WELL_H + SHOP_BAND + 4 };
+  ctx.fillStyle = SHOP_BOARD; ctx.fillRect(b.x, b.y, b.w, b.h);
+  ctx.fillStyle = '#070a1e'; ctx.fillRect(b.x, b.y, b.w, 1); ctx.fillRect(b.x, b.y, 1, b.h);
+  ctx.fillStyle = '#182148'; ctx.fillRect(b.x, b.y + b.h - 1, b.w, 1); ctx.fillRect(b.x + b.w - 1, b.y, 1, b.h);
   for (let i = 0; i < s.wells.length; i++) {
     const o = shopOffer(s.id, i);
     const hot = !!h && h.kind === 'buy' && h.sec === s.id && h.i === i;
@@ -577,12 +767,14 @@ function drawShopWell(r, o, hot, now) {
   ctx.fillRect(r.x + 1, y + 1, r.w - 2, iconH - 1);
   modPlate(o.type, r, y, iconH);
   if (!dear) tierShine({ x: r.x, y: r.y, w: r.w, h: iconH }, y, o.type, now); // nothing you cannot buy shines
-  // the icon at 2x: a counter shows its goods bigger than a bag cell does,
-  // and a whole-number scale is the only one that keeps the pixels square
+  // The icon at SHOP_ICON px, whichever grid it was drawn on: the two the game
+  // keeps are 8x8 and 12x12, so 3x and 2x land both of them on the same 24, a
+  // bit is never half the size of the tool in the well beside it, and the scale
+  // is still a whole number, which is the only kind that keeps pixels square.
   const im = SPRITES[ITEMS[o.type].icon];
   if (im) {
-    ctx.drawImage(im, r.x + ((r.w - im.width * 2) >> 1), y + ((iconH - im.height * 2) >> 1),
-      im.width * 2, im.height * 2);
+    const sc = Math.max(1, Math.round(SHOP_ICON / im.width)), iw = im.width * sc, ih = im.height * sc;
+    ctx.drawImage(im, r.x + ((r.w - iw) >> 1), y + ((iconH - ih) >> 1), iw, ih);
   }
   // ...under a wash if it is out of reach, so the GOODS grey back with the
   // price rather than the price greying out alone. The tier plate keeps its
@@ -591,15 +783,18 @@ function drawShopWell(r, o, hot, now) {
     ctx.fillStyle = SHOP_DEAR_WASH;
     ctx.fillRect(r.x + 1, y + 1, r.w - 2, iconH - 1);
   }
-  // the price band, flush along the bottom of the plate
+  // The price band, flush along the bottom of the plate. The coin sits at a
+  // FIXED offset and the number is right-aligned to another, so a section's
+  // three prices read as a column; the centred group this used to be slid
+  // about with the digit count, which is most of what made the counter look
+  // unaligned.
   ctx.fillStyle = dear ? SHOP_DEAR_BAND : '#141c3c';
   ctx.fillRect(r.x + 1, y + iconH, r.w - 2, SHOP_BAND - 1);
   const txt = String(o.price);
-  const cx = r.x + ((r.w - (9 + pixelTextWidth(txt))) >> 1);
   ctx.globalAlpha = dear ? 0.5 : 1;
-  ctx.drawImage(SPRITES.itemGold, cx, y + iconH);
+  ctx.drawImage(SPRITES.itemGold, r.x + 4, y + iconH);
   ctx.globalAlpha = 1;
-  drawPixelText(ctx, txt, cx + 9, y + iconH + 2, dear ? SHOP_DEAR_INK : RES_COLORS.gold);
+  drawPixelText(ctx, txt, r.x + r.w - 4 - pixelTextWidth(txt), y + iconH + 2, dear ? SHOP_DEAR_INK : RES_COLORS.gold);
 }
 
 // The SELL strip: the full width of the slab's bottom rim, a recessed well
@@ -614,12 +809,12 @@ function drawSellWell(r, h, now) {
   const hot = !!h && h.kind === 'sell';
   const live = !!d && hot;
   ctx.fillStyle = 'rgba(4,6,18,0.55)'; ctx.fillRect(r.x + 2, r.y + 2, r.w, r.h);
-  ctx.fillStyle = live ? (Math.sin(now * 10) > 0 ? '#f2cc6a' : '#c9a227') : d ? '#8fa0c8' : '#35426e';
+  ctx.fillStyle = live ? (Math.sin(now * 10) > 0 ? '#f2cc6a' : '#c9a227') : d ? SHOP_LAMP : SHOP_WOOD;
   ctx.fillRect(r.x, r.y, r.w, r.h);
   ctx.fillStyle = BAG_WELL;
   ctx.fillRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
   // the four corner brackets that say "a target", the world's own hover mark
-  ctx.fillStyle = d ? '#f2cc6a' : '#2c3560';
+  ctx.fillStyle = d ? '#f2cc6a' : '#4a3421';
   for (const [cx, cy, dx, dy] of [[r.x + 3, r.y + 3, 1, 1], [r.x + r.w - 4, r.y + 3, -1, 1],
     [r.x + 3, r.y + r.h - 4, 1, -1], [r.x + r.w - 4, r.y + r.h - 4, -1, -1]]) {
     ctx.fillRect(cx, cy, 4 * dx, 1); ctx.fillRect(cx, cy, 1, 4 * dy);
@@ -632,10 +827,10 @@ function drawSellWell(r, h, now) {
   const wide = labW + 6 + (im ? im.width + 4 : 0) + 5 + 4 + 8 + (d ? 4 + pixelTextWidth(txt) : 0);
   let cx = r.x + ((r.w - wide) >> 1);
   const mid = r.y + ((r.h - 5) >> 1);
-  drawPixelTextShadow(ctx, lab, cx, mid, d ? '#ffd95c' : '#9fb6d8', SHOP_BG);
+  drawPixelTextShadow(ctx, lab, cx, mid, d ? '#ffd95c' : SHOP_LABEL, SHOP_BG);
   cx += labW + 6;
   if (im) { ctx.drawImage(im, cx, r.y + ((r.h - im.height) >> 1)); cx += im.width + 4; }
-  drawTradeArrow(cx, r.y + (r.h >> 1), 1, d ? '#f2cc6a' : '#4a5a8c');
+  drawTradeArrow(cx, r.y + (r.h >> 1), 1, d ? '#f2cc6a' : '#8a6142');
   cx += 5 + 4;
   ctx.globalAlpha = d ? 1 : 0.75;
   ctx.drawImage(SPRITES.itemGold, cx, r.y + ((r.h - 8) >> 1));
@@ -650,10 +845,10 @@ function drawTradeArrow(x, y, dir, col) {
   for (let i = 0; i < 3; i++) ctx.fillRect(x + (dir > 0 ? i : 2 - i), y - 2 + i, 1, 5 - i * 2);
 }
 
-// One traded good: the live price, the three days behind it, and the two
-// plates that move it. Nothing here says "buy" or "sell" in words - the coin
-// on the left of an arrow is money going out, the coin on the right is money
-// coming in.
+// One traded good, in a timber card to match the counter it stands on: the
+// live price, the three days behind it, and the two plates that move it.
+// Nothing here says "buy" or "sell" in words - the coin on the left of an
+// arrow is money going out, the coin on the right is money coming in.
 function drawMarketCard(c, h, now) {
   const g = GOODS[c.id], r = market.goods[c.id];
   const col = RES_COLORS[c.id];
@@ -662,18 +857,22 @@ function drawMarketCard(c, h, now) {
   const prev = hist.length > 1 ? hist[hist.length - 2] : r.price;
   const up = r.price >= prev;
   ctx.fillStyle = 'rgba(4,6,18,0.5)'; ctx.fillRect(c.x + 2, c.y + 2, c.w, c.h);
-  ctx.fillStyle = r.pop > 0 ? (Math.sin(now * 8) > 0 ? col : '#35426e') : '#35426e';
+  ctx.fillStyle = r.pop > 0 ? (Math.sin(now * 8) > 0 ? col : SHOP_WOOD) : SHOP_WOOD;
   ctx.fillRect(c.x, c.y, c.w, c.h);
+  ctx.fillStyle = SHOP_WOOD_L; ctx.fillRect(c.x, c.y, c.w, 1);
+  ctx.fillStyle = SHOP_WOOD_D; ctx.fillRect(c.x, c.y + c.h - 1, c.w, 1);
   ctx.fillStyle = '#0d1229';
   ctx.fillRect(c.x + 1, c.y + 1, c.w - 2, c.h - 2);
 
   // name on the left, price on the right in the direction of the last move
-  ctx.drawImage(SPRITES[ITEMS[c.id].icon], c.x + 3, c.y + 2);
-  drawPixelTextShadow(ctx, g.name, c.x + 13, c.y + 3, '#9fb6d8', SHOP_BG);
+  ctx.drawImage(SPRITES[ITEMS[c.id].icon], c.x + 4, c.y + 2);
+  drawPixelTextShadow(ctx, g.name, c.x + 15, c.y + 3, '#9fb6d8', SHOP_BG);
   const pt = String(price);
   const pw = pixelTextWidth(pt, 2);
-  drawPixelTextShadow(ctx, pt, c.x + c.w - 4 - pw, c.y + 1, up ? '#8fe08a' : '#e0637a', SHOP_BG, 2);
-  drawTrend(c.x + c.w - 10 - pw, c.y + 4, up);
+  // no shadow on the 2x price: at that scale the shadow is 2 px deep and the
+  // graph's top rim would clip it, which reads as a clipped NUMBER
+  drawPixelText(ctx, pt, c.x + c.w - 5 - pw, c.y + 1, up ? '#8fe08a' : '#e0637a', 2);
+  drawTrend(c.x + c.w - 13 - pw, c.y + 4, up);
 
   drawMarketGraph(c.graph, c.id, col);
 

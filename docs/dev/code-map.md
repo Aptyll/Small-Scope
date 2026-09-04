@@ -16,6 +16,7 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | Looking for | Start at | Banner |
 | --- | --- | --- |
 | the songs, the sampled one-shots, the dials behind them | `SFX.music`, `TRACKS`, `SAMPLES`, `smp`, `trim`, `setAmbience` | its own IIFE — see [gameplay.md](gameplay.md#audio) |
+| BORROWING the music layer and giving it back where it was taken (the trading post's song) | `musicHold`, `musicRelease`, `held`, exposed as `SFX.music.hold`/`release`/`held` | `music` (its one caller: `openShop`/`closeShop`, shop.js) |
 
 ## js/core.js
 
@@ -288,8 +289,9 @@ order; the legacy `audio.js` row rides along because its dials get asked after c
 | what a thing is worth, both ways | `itemValue`, `cellValue` (a tool carries its loaded bits), `sellValue` (half, except the two goods) | `buying and selling` (the prices themselves: `price` on `TOOLS`/`BITS` tools.js, `CARD_PRICE` player.js) |
 | standing at a counter, and the merchant standing still to serve it | `SHOP_REACH`, `merchNear`, `inReach`, `shopServing` (read by `updateMerchant`, robots.js) | `buying and selling` |
 | the trades | `shopBuy`, `shopSell`, `shopSellCell`, `shopTrade`, `shopCmd` (the `runCmd` entry, ui.js), `shopFx`, `shopDeny`/`shopNoRoom` | `buying and selling` (a sale pays through `tradeGold`, player.js - gold without XP) |
-| the panel: whether it is up, opening and shutting it, and its geometry | `shopOpen`, `openShop`, `closeShop` (`state.shop` holds the merchant itself), `SHOP_W`/`SHOP_H`/`SHOP_Y`/`SHOP_WELL_*`/`SHOP_SEC_*`/`SHOP_CARD_*`, `shopLayout`, `shopHit`, `hitR`, `shopClick`, `shopDropSell` | `the shop panel` |
-| its pixels | `drawShopPanel`, `drawShopSection`, `drawShopWell`, `drawSellWell`, `drawMarketCard`, `drawMarketGraph`, `drawTradePlate`, `drawTradeArrow`, `drawTrend` | `the shop panel` › `drawing` (the `E SHOP` cap over the body: `drawShopHint`, ui.js) |
+| the panel: whether it is up, opening and shutting it (and the song it holds while it is), and its geometry | `shopOpen`, `openShop`, `closeShop` (`state.shop` holds the merchant itself), `SHOP_W`/`SHOP_H`/`SHOP_Y`/`SHOP_HEAD`/`SHOP_ICON`/`SHOP_WELL_*`/`SHOP_SEC_*`/`SHOP_CARD_*`/`SHOP_FOOT`, `shopLayout`, `shopHit`, `hitR`, `shopClick`, `shopDropSell` | `the shop panel` (the hold itself: `SFX.music.hold`/`release`, the `music` banner, audio.js) |
+| its pixels | `drawShopPanel`, `drawShopSign`, `drawShopHeading`, `drawShopSection`, `drawShopWell`, `drawSellWell`, `drawMarketCard`, `drawMarketGraph`, `drawTradePlate`, `drawTradeArrow`, `drawTrend` | `the shop panel` › `drawing` (the `E SHOP` cap over the body: `drawShopHint`, ui.js) |
+| the TRADING POST's own chrome: the timber frame and its iron brackets, the team-striped awning with its snow, scallops and icicles, the counter edge, and the two lanterns flanking the sign | `shopChromeCv` (baked once a side, keyed by team), `drawShopLantern`, `SHOP_WOOD_*`/`SHOP_CLOTH_*`/`SHOP_SNOW*`/`SHOP_LAMP*`/`SHOP_IRON*`/`SHOP_SIGN` | `the shop panel` › `drawing` |
 | what the pointer is on there, in the shared descriptor shape | `tipShop` | `the shop panel` › `tooltips` (`tipBase`/`tipTool`/`tipBit`/`tipStack`: `tooltips`, ui.js) |
 
 ## js/panels.js

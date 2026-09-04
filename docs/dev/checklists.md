@@ -102,7 +102,11 @@ there for two rounds while every served check passed.
   until first called.
 - `SFX.music.current` names the track the state machine thinks should be sounding, and
   `SFX.music.el(key)` hands out the live `<audio>` element: seek it to `duration - 0.6` to prove
-  the `jump → foxglove → silence` chain in seconds instead of nine minutes. `duration` is only
+  the `jump → foxglove → silence` chain in seconds instead of nine minutes. `SFX.music.held` is
+  what a **hold** interrupted and the second it was interrupted at — the way to prove the trading
+  post's borrow-and-return without listening: play a track, seek it, `DBG.openShop()`, read
+  `music.current` and `music.held`, `DBG.closeShop()`, and read the held element's
+  `currentTime` back. `duration` is only
   finite because [app/server.js](../../app/server.js) answers Range requests — a plain 200 makes an element
   treat a multi-MB mp3 as an unbounded stream.
 - For the ESC panel, `DBG.settingsRows` gives the open page's row anchors (already scrolled -

@@ -278,12 +278,20 @@
     eagle: { f: 'Flying On Eagle.mp3', loop: true, vol: 1 },
     jump: { f: 'Jumping Off Eagle.mp3', loop: false, vol: 1, next: 'foxglove' },
     foxglove: { f: 'Foxglove Drop.mp3', loop: false, vol: 0.85 },
+    village: { f: 'Forest Village Loop.mp3', loop: true, vol: 0.9 },
     victory: { f: 'Drop the Ice.mp3', loop: true, vol: 1 },
     defeat: { f: 'Sleepy Game Save.mp3', loop: true, vol: 1 },
   };
   const els = {};      // key -> HTMLAudioElement, made on first play
   let curKey = null;   // what should be sounding; anything else is fading out
   let pending = null;  // a play() the autoplay policy refused: retried on the first gesture
+  // What a HOLD interrupted, remembered with the second it was interrupted AT:
+  // the trading post's song takes the layer while its counter is open and hands
+  // it straight back, and what was playing picks up mid-phrase rather than from
+  // the top. Any ordinary play() or stop() clears it, so a track that takes the
+  // layer for its own reason (a victory, the lobby) can never be undone by a
+  // release arriving after it.
+  let held = null;
 
   function musicGain(el, t) {
     el.volume = Math.max(0, Math.min(1, el._g * t.vol * musicVol * volume * (muted ? 0 : 1)));
@@ -312,6 +320,7 @@
   function musicPlay(key, o) {
     o = o || {};
     if (!TRACKS[key]) return;
+    if (!o.keep) held = null; // an ordinary play owns the layer outright
     if (curKey === key && !o.restart) return;
     const outT = o.out === undefined ? 0.8 : o.out;
     for (const k in els) {
@@ -337,8 +346,36 @@
   function musicStop(fade) {
     curKey = null;
     pending = null;
+    held = null;
     const s = fade === undefined ? 0.8 : fade;
     for (const k in els) { const e = els[k]; e._to = 0; e._spd = s > 0 ? 1 / s : 99; e._off = true; }
+  }
+
+  // Borrow the layer. What was sounding is noted WITH its position and faded
+  // out; release() brings it back and seeks it to that second, so a long
+  // interruption costs the listener the bars it covered rather than the whole
+  // song. Holding twice over is still ONE hold - the first thing interrupted is
+  // the thing that comes back.
+  function musicHold(key, o) {
+    if (!TRACKS[key] || curKey === key) return;
+    if (!held) {
+      const e = curKey ? els[curKey] : null;
+      held = { key: curKey, at: e ? e.currentTime : 0 };
+    }
+    musicPlay(key, Object.assign({ keep: true }, o));
+  }
+  // Hand it back. Nothing held - or something else took the layer meanwhile -
+  // and this is a no-op; a hold taken over silence fades back out to silence.
+  function musicRelease(o) {
+    if (!held) return;
+    const h = held;
+    held = null;
+    if (!h.key) { musicStop(o && o.out !== undefined ? o.out : 0.8); return; }
+    musicPlay(h.key, Object.assign({ keep: true }, o));
+    const el = els[h.key];
+    // ...after the play, not before: a faded-out element is PAUSED, and
+    // musicPlay rewinds a paused one to the top
+    if (el) { try { el.currentTime = h.at; } catch (e) { } }
   }
 
   // ---------------------------------------------------- ambience + the ticker
@@ -429,6 +466,11 @@
     music: {
       play(key, opts) { ensure(); musicPlay(key, opts); },
       stop(fade) { musicStop(fade); },
+      // borrow the layer while something is up on screen (the trading post's
+      // counter) and give it back at the second it was taken
+      hold(key, opts) { ensure(); musicHold(key, opts); },
+      release(opts) { ensure(); musicRelease(opts); },
+      get held() { return held; },
       get current() { return curKey; },
       // the live element behind a track (the current one by default). For
       // driving from outside: seeking it is how the JUMP -> FOXGLOVE handover

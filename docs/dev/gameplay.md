@@ -1215,10 +1215,15 @@ cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than e
 ## The merchant's counter
 
 **Each eagle's merchant is a shop, and both shops serve everybody.** Walk up to either team's
-[merchant](#the-merchant), press **E**, and its counter opens: twelve offers rolled off the tool,
-bit and card pools, a **sell well** anything in the pack can be dragged onto, and a live **fish
-and berry market**. The whole feature is [js/shop.js](../../js/shop.js) — the `market`,
-`the counter's stock`, `buying and selling` and `the shop panel` banners.
+[merchant](#the-merchant), press **E**, and its counter opens — the **TRADING POST**: twelve
+offers rolled off the tool, bit and card pools, a **sell well** anything in the pack can be
+dragged onto, and a live **fish and berry market**. The whole feature is
+[js/shop.js](../../js/shop.js) — the `market`, `the counter's stock`, `buying and selling` and
+`the shop panel` banners.
+
+The post is the **shop**; the MARKET is one corner of it, under its own rule on the panel, and it
+is the only corner whose prices move. That is why the slab is not itself called a market —
+everything above that rule is priced once, on its own def.
 
 Your own roost's merchant is the near one; the rival's is a walk through their base and sells the
 same twelve things, because there is **one market and two shopfronts onto it**. That is also why a
@@ -1241,6 +1246,14 @@ Two things open with it: the **backpack** (`bagOpenNow`), because a sale is a dr
 grid; and nothing else — the character sheet closes, since the two slabs would sit on each other.
 While it is up, E does not swing at the world (`sampleHumanInput`), the way a wheel already
 swallows it.
+
+**The post has its own song.** `openShop` calls `SFX.music.hold('village', …)` — FOREST VILLAGE
+LOOP, which loops for exactly as long as the counter is open — and `closeShop` calls
+`SFX.music.release()`. A hold notes what was playing **and the second it had reached**, and the
+release puts that track back at that second, so a trip to the shop costs the match's own track the
+bars it covered rather than the whole song. Any ordinary `music.play`/`music.stop` in between
+clears the hold, so a track that takes the layer for its own reason — a victory, the lobby — can
+never be undone by a release arriving after it. See the `music` banner, js/audio.js.
 
 The merchant **stands still and faces you** while its counter is open (`shopServing`, read by
 `updateMerchant`): it drops the gate, the felling and the loiter for as long as the sale takes.
@@ -1330,17 +1343,30 @@ It is **wide and short and pinned near the top edge** rather than centred, and t
 piece of the layout that is not taste: the [tooltip](rendering.md#the-hover-tooltip) is bottom-left and grows
 upward off the bottom rim, so a tall centred slab would put its own bottom-left corner exactly
 where a tall tooltip lands — hovering the last row of offers would hide the last row of offers.
-Pinned at the top it ends at 190 px, and the tooltip that is up while the pointer is on its own
-bottom row — the sell well's, which is three lines — tops out forty pixels below that. Only the
-deepest tooltip in the game (a fully loaded tool hovered in the **pack**) reaches the strip at
-all, and that one is telling you to drag the thing to the counter; it collapses to three lines the
-moment you do. The pack, the hud strip and the feed all stay readable underneath while you trade.
+Its **height** is spent against that same rule, which is what caps a 336×202 slab that grew 46 px
+wider without growing much taller: pinned at the top it ends at 206 px, and the deepest tooltip an
+offer here can raise tops out around 192 on the 480×270 view a full screen gives — so all a
+tooltip can ever cover is the sell strip's own top edge, never the offers or the cards being read.
+The pack, the hud strip and the feed all stay readable underneath while you trade. (On the
+shortest view the canvas allows, 350×240, the slab covers the pack, as the narrower one before it
+did; every ordinary view clears it.)
 
-Top to bottom: a header carrying the merchant's own portrait in its side's mark and the purse; the
-turnover bar; the four sections as a 2×2 grid of three-well rows; the two market cards side by
-side; and the **SELL strip** along the bottom rim, the full width of the slab. Every offer well
-wears **its item's own tier plate** (`tierPlate`, gilded ones still shine) with the price on a
-band along the bottom.
+Top to bottom: the **awning** — a snow-capped, icicled valance striped in the counter's own team
+colours, the one thing on the panel that says whose eagle this is — with the shop's sign hung off
+its hem between two lanterns, the merchant's portrait framed at one end and the purse at the
+other; the turnover bar; the four sections as a 2×2 grid of three-well rows, each on a recessed
+board; the **MARKET** rule and its two cards side by side; and the **SELL strip** along the
+counter's edge, the full width of the slab. The frame, the section rules, the market cards and
+that edge are all cut from one timber palette under iron corner brackets, which is what makes the
+slab read as a shopfront rather than as one more blue HUD panel.
+
+Every offer well wears **its item's own tier plate** (`tierPlate`, gilded ones still shine) with
+the price on a band along the bottom. Two rules make the twelve read as one grid rather than as
+twelve loose pictures: every icon is drawn at exactly `SHOP_ICON` (24) px — the game's two icon
+grids are 8×8 and 12×12, so 3× and 2× land both of them on that same 24, and both are still whole
+numbers — and a price band's coin sits at a **fixed** offset with its number **right-aligned** to
+another, so a section's three prices line up as a column instead of three centred groups sliding
+about with the digit count.
 
 **A price you cannot pay is said three ways at once**, because one was too quiet to catch at a
 glance: the well's rim and its price band both go to the counter's out-of-reach red
@@ -2174,6 +2200,15 @@ crossfades (`in`/`out` seconds, `restart`), is a no-op when that key is already 
 hands out the live element, which is how a driver proves the handover chain without sitting
 through five minutes of a track.
 
+`music.hold(key, opts)` **borrows** the layer for as long as something is up on screen, and
+`music.release(opts)` gives it back. A hold notes what was playing **and the second it had
+reached** (`music.held`), fades it out, and the release brings it back and seeks it to that
+second — so an interruption costs the listener the bars it covered rather than the whole song.
+Holding twice over is still one hold: the first thing interrupted is the thing that comes back. An
+ordinary `play` or `stop` clears the note, so a track that takes the layer for its own reason (a
+victory, the lobby) can never be undone by a release arriving after it. The
+[trading post](#the-merchants-counter) is the one caller.
+
 | Track | Plays from | Loops |
 | --- | --- | --- |
 | `intro` — FROZEN NORTH RUN INTRO | boot, and `leaveSelect()` back to the menu | yes |
@@ -2181,6 +2216,7 @@ through five minutes of a track.
 | `eagle` — FLYING ON EAGLE | `beginDrop()` | yes |
 | `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
 | `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |
+| `village` — FOREST VILLAGE LOOP | `openShop()`, as a **hold**; `closeShop()` releases it | yes |
 | `victory` — DROP THE ICE | `endMatch('won')` | yes |
 | `defeat` — SLEEPY GAME SAVE | `endMatch('lost')` | yes |
 
