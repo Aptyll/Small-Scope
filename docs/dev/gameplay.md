@@ -1215,9 +1215,10 @@ cannot carry fires the [refusal tell](#inventory-and-the-backpack) rather than e
 ## The merchant's counter
 
 **Each eagle's merchant is a shop, and both shops serve everybody.** Walk up to either team's
-[merchant](#the-merchant), press **E**, and its counter opens — the **TRADING POST**: twelve
+[merchant](#the-merchant), press **E**, and its counter opens — the **SHOP**: twelve
 offers rolled off the tool, bit and card pools, a **sell well** anything in the pack can be
-dragged onto, and a live **fish and berry market**. The whole feature is
+dragged onto, a live **fish and berry market**, and a [restock road](#the-restock-road) counting
+down to the next turnover. The whole feature is
 [js/shop.js](../../js/shop.js) — the `market`, `the counter's stock`, `buying and selling` and
 `the shop panel` banners.
 
@@ -1363,10 +1364,12 @@ It is **wide and short and pinned near the top edge** rather than centred, and t
 piece of the layout that is not taste: the [tooltip](rendering.md#the-hover-tooltip) is bottom-left and grows
 upward off the bottom rim, so a tall centred slab would put its own bottom-left corner exactly
 where a tall tooltip lands — hovering the last row of offers would hide the last row of offers.
-Its **height** is spent against that same rule, which is what caps a 336×202 slab that grew 46 px
-wider without growing much taller: pinned at the top it ends at 206 px, and the deepest tooltip an
-offer here can raise tops out around 192 on the 480×270 view a full screen gives — so all a
-tooltip can ever cover is the sell strip's own top edge, never the offers or the cards being read.
+Its **height** is spent against that same rule. The deepest tooltip an offer here can raise tops
+out around 192 px on the 480×270 view a full screen gives, and the order along the bottom of the
+336×216 slab is chosen against that line: the **sell strip ends at 190**, clear of it, and only
+the restock road below runs under it — the road, whose countdown sits at its **right** end where
+no tooltip reaches. So all a tooltip can ever cover is the wagon, briefly, while you are reading a
+tool — never an offer, a card, the sell target or the clock.
 The pack, the hud strip and the feed all stay readable underneath while you trade. (On the
 shortest view the canvas allows, 350×240, the slab covers the pack, as the narrower one before it
 did; every ordinary view clears it.)
@@ -1374,19 +1377,45 @@ did; every ordinary view clears it.)
 Top to bottom: the **awning** — a snow-capped, icicled valance striped in the counter's own team
 colours, the one thing on the panel that says whose eagle this is — with the shop's sign hung off
 its hem between two lanterns, the merchant's portrait framed at one end and the purse at the
-other; the turnover bar; the four sections as a 2×2 grid of three-well rows, each on a recessed
-board; the **MARKET** rule and its two cards side by side; and the **SELL strip** along the
-counter's edge, the full width of the slab. The frame, the section rules, the market cards and
+other; the four sections as a 2×2 grid of three-well rows, each on a recessed
+board; the **MARKET** rule and its two cards side by side; the **SELL strip**, the full width of
+the slab, with air under it now rather than sitting on the rail; and the
+[restock road](#the-restock-road) along that rail. The frame, the section rules, the market cards and
 that edge are all cut from one timber palette under iron corner brackets, which is what makes the
 slab read as a shopfront rather than as one more blue HUD panel.
 
 Every offer well wears **its item's own tier plate** (`tierPlate`, gilded ones still shine) with
 the price on a band along the bottom. Two rules make the twelve read as one grid rather than as
-twelve loose pictures: every icon is drawn at exactly `SHOP_ICON` (24) px — the game's two icon
-grids are 8×8 and 12×12, so 3× and 2× land both of them on that same 24, and both are still whole
-numbers — and a price band's coin sits at a **fixed** offset with its number **right-aligned** to
+twelve loose pictures: every icon is drawn at the largest **whole-number** scale that fits
+`SHOP_ICON` (16) px (`shopIconCv`, baked once each) — the game's two icon grids are 8×8 and 12×12,
+so the counter runs 16s with the three tools at 12, rather than the tool with twice the *area* of
+the bit beside it that it looked like before the rule existed. The scale has to be whole: a
+fractional one stretches every third source pixel to double width, and a bow's 1 px linework comes
+out frayed. A common size for both grids needs 24, which is bigger than this counter wants its
+goods to be. And a price band's coin sits at a **fixed** offset with its number **right-aligned** to
 another, so a section's three prices line up as a column instead of three centred groups sliding
 about with the digit count.
+
+### The restock road
+
+Along the bottom rail, under the sell strip: **how long until the twelve offers above it turn
+over** (`drawShopLane`, the `the restock road` banner). It replaced a 2 px bar under the sign,
+which was honest about the *shape* of the thing — a countdown is a length — and useless about the
+only question actually asked of it: long enough to go and earn more gold, or worth waiting here
+for?
+
+So it answers twice, and neither answer is a sentence. **The number** is on a plate at the road's
+far end, `M:SS` beside a small clock face, going gold and flashing under 15 s. **The picture** is
+the merchant's own errand: a canopied wagon and the horse in its shafts leave the post's door at
+the turnover, are furthest out at the halfway mark, and roll back through that door exactly as the
+new stock lands. The wagon's **position is the clock** — there is no separate progress bar,
+because the wagon already is one — it faces the way it is going, and its trot frame is cut from
+**distance travelled** rather than from a timer of its own, so the legs and the wheels belong to
+the same journey.
+
+The countdown sits at the **right** end deliberately: the [tooltip](rendering.md#the-hover-tooltip)
+grows up out of the bottom-**left** corner, so that is the one readout here that has to survive
+being read at the same time as an offer.
 
 **A price you cannot pay is said three ways at once**, because one was too quiet to catch at a
 glance: the well's rim and its price band both go to the counter's out-of-reach red
@@ -1400,7 +1429,11 @@ The one control here that is not a click is the one with a **word** on it: you a
 strip already holding something, so it says SELL rather than trusting a glyph to carry a verb, and
 it is a full-width recessed well with corner brackets because a drop target you are aiming at with
 an item on the cursor should be hard to miss. Idle it is SELL → a coin; with something in hand it
-becomes that item → a coin and the gold it fetches, and the whole well lights and pulses. Nothing
+becomes that item → a coin and the gold it fetches, and the whole well lights and pulses. At rest
+a slow band of light crosses it (`sellSheen`) — the counter is open for business, and the one
+control you arrive at *holding* something has to look live while nothing is happening to it. It is
+a long period and a soft envelope on purpose: this is the panel's resting state, and a resting
+state must not blink. Nothing
 else on the panel is labelled with a verb: a market card's two trade plates say their direction by
 *arrangement* — coin into item is a buy, item into coin is a sale — and the price is stated once,
 big, because it is the same number both ways. The

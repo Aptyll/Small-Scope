@@ -346,13 +346,19 @@ somebody, and a price is not that — it is the state of the world your bag is a
 into, so it belongs where the clock and the alive count already are.
 
 **One shape, read left to right, with no sentence in it**: the merchant's **gold sack**
-(`SPRITES.goldSack`, 32×32 in six frames — the same mark on every plate, this is the shop talking,
-not the world — turning over on `NOTE_FR` (0.11 s) the whole time the plate is up, so the coin
-keeps catching the light), then what it is about (the good's own 8×8 item icon and the price it
-landed on, both at 2×, or `NEW STOCK` stacking its two words rather than shrinking), then one 8×8
-glyph at 2× carrying which way — an arrow up, an arrow down, or a crate. The plate is a fixed
-`NOTE_W`×`NOTE_H` (112×36) card: an opaque dark base under the kind's wash, a full 1 px frame in
-its accent, and the `drawPixelTextShadow` font, because the whole plate fades and an outline
+(`SPRITES.goldSack`, six frames — the same mark on every plate, this is the shop talking, not the
+world — turning over on `NOTE_FR` (0.11 s) the whole time the plate is up, so the coin keeps
+catching the light), then what it is about (the good's own 8×8 item icon and the price it landed
+on, at 2× where it fits and 1× where it does not — `NEW STOCK` is the one that does not), then one
+8×8 glyph carrying which way — an arrow up, an arrow down, or a crate.
+
+The plate is a fixed `NOTE_W`×`NOTE_H` (68×22) card, and `noteCard` is the whole
+of what makes it read as a stamped tag rather than as a rectangle: a shadow offset under it,
+**corners notched** off (`noteBox`, which draws the shape as three bands), a lit top edge and a
+shaded bottom one for the bevel, an opaque dark base under the kind's wash, a 1 px frame in its
+accent (`noteFrame`), a sunken well behind the sack, and the kind's ink **draining along the base**
+as the plate's own remaining life — the only place its 8 s is written down, and it is written as a
+length. Text is the `drawPixelTextShadow` font, because the whole plate fades and an outline
 stamped under a `globalAlpha` goes blotchy ([CLAUDE.md](../../CLAUDE.md#hard-rules)). `NOTE_KIND`
 holds the three palettes and is handed straight to `logEvent` as its colour override, so the plate
 and the feed line can never disagree about which way a price went.
@@ -360,7 +366,7 @@ and the feed line can never disagree about which way a price went.
 `noteRect(k)` places slot `k` off `MM_*` — right edge flush with the disc's own, `NOTE_GAP` (18 px)
 under its rim, so the column follows the minimap wherever the size dial and the view put it and
 never lands on the alive/clock row. **The newest plate is slot 0**, hard under the disc, and its
-arrival pushes the stack down: it flies in `NOTE_SLIDE` (46 px) off the right edge over `NOTE_IN`
+arrival pushes the stack down: it flies in `NOTE_SLIDE` (30 px) off the right edge over `NOTE_IN`
 (0.55 s) while the plates below ease down a whole `NOTE_PITCH` on that same curve. They are drawn
 **oldest first** so the newest lands on top of the stack it is shoving.
 

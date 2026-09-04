@@ -33,6 +33,33 @@
     return c;
   }
 
+  // A grid baked at HALF its cell size, every output pixel the alpha-weighted
+  // average of a 2x2 block. Blitting the full canvas into a half-size one
+  // instead would throw away three pixels in four, and on art whose whole
+  // animation is a 1px sparkle moving about (the gold sack) that IS the
+  // animation thrown away. The grids stay authored at full size - this only
+  // changes what gets baked out of them.
+  function bakeHalf(rows, pal) {
+    const src = bake(rows, pal);
+    const w = src.width >> 1, h = src.height >> 1;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const d = src.getContext('2d').getImageData(0, 0, src.width, src.height).data;
+    const g = c.getContext('2d'), out = g.createImageData(w, h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let r = 0, gg = 0, b = 0, a = 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const i = (((y << 1) + dy) * src.width + (x << 1) + dx) * 4, al = d[i + 3];
+        r += d[i] * al; gg += d[i + 1] * al; b += d[i + 2] * al; a += al;
+      }
+      const o = (y * w + x) * 4;
+      if (!a) continue;
+      out.data[o] = r / a; out.data[o + 1] = gg / a; out.data[o + 2] = b / a; out.data[o + 3] = a >> 2;
+    }
+    g.putImageData(out, 0, 0);
+    return c;
+  }
+
   function flipH(src) {
     const c = document.createElement('canvas');
     c.width = src.width; c.height = src.height;
@@ -3532,8 +3559,10 @@
     itemGold: bake(itemGold, ITPAL),
     itemFish: bake(itemFish, FIPAL),
     itemBag: bake(itemBag, ITPAL),
-    // the merchant's sack, six frames of coin catching the light
-    goldSack: [sackA, sackB, sackC, sackD, sackE, sackF].map((f) => bake(f, SACKPAL)),
+    // the merchant's sack, six frames of coin catching the light. Authored at
+    // 32 and baked at 16 (bakeHalf): the market plate it rides is HUD chrome
+    // and 16 is the size that reads there.
+    goldSack: [sackA, sackB, sackC, sackD, sackE, sackF].map((f) => bakeHalf(f, SACKPAL)),
     itemCardWhite: bake(itemCard, CARD_PALS.white),
     itemCardGreen: bake(itemCard, CARD_PALS.green),
     itemCardBlue: bake(itemCard, CARD_PALS.blue),

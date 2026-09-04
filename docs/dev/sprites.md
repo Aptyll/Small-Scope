@@ -118,10 +118,15 @@ frames `sackA`…`sackF` and snapped onto `SACKPAL` (fourteen colours: three out
 five coin, two shine), pixel for pixel, so the file and the grids are the same picture. Unlike the
 pine the **source order IS the animation order**: it was drawn as a loop, and the cloth barely
 moves while the coin in the neck of the sack sparkles, so the cycle reads as light catching gold
-rather than as a bag being jostled. Its only caller is the market plate, which is why the
-32×32 size drove `NOTE_H`
-([the plates](rendering.md#market-notices-the-plates-under-the-minimap)) rather than the other way
-round — a sack shrunk to fit a card would have lost the sparkle that is the whole animation.
+rather than as a bag being jostled.
+
+It is authored at 32 and **baked at 16**, through `bakeHalf` — the one thing in this file that does
+not bake a grid at its own cell size. Its only caller is the market plate
+([the plates](rendering.md#market-notices-the-plates-under-the-minimap)), which is HUD chrome where
+16 is the size that reads. `bakeHalf` averages each 2×2 block with the alpha as the weight rather
+than blitting the canvas down, because a plain half-size blit throws away three pixels in four and
+on art whose whole animation is a 1 px sparkle moving about that *is* the animation thrown away.
+Edit the grids at 32; what ships is the average of them.
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not
