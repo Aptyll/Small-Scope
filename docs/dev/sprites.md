@@ -96,7 +96,8 @@ White/Green/Blue/Purple/Gold — where the rarity itself is the only colour that
 `itemCardWhite`…`itemCardGold` are five palette swaps of one grid, the same relationship `GEAR_MATS`
 has to a single gear icon.
 
-**The pine is sixteen frames of one tree**, and the one sprite here that was not drawn by hand:
+**The pine is sixteen frames of one tree**, and one of two sprites here not drawn by hand (the
+gold sack below is the other):
 `treeSway` is `docs/media/new_media/*.png` cropped to **27×37** and snapped onto
 `TSPAL` (fourteen colours, `bake`d like everything else). It draws at
 `(px - 5, py - 21)` with its trunk on the tile's centre line, and **through `SPRITES.treeAtlas`,
@@ -110,6 +111,17 @@ into them into one smooth rise and fall. That ordering is what makes `treeFrame`
 side of a rest frame smooth, and smooth across the wrap. `TPAL` above it stays: it still dresses
 the `stump` a felled pine leaves. Which frame a tree is wearing is decided by the wind, not here -
 [rendering.md](rendering.md#the-wind-field).
+
+**The gold sack is the merchant's mark, and the second imported sprite.** `SPRITES.goldSack` is
+`docs/media/new_media/bag_of_gold_spritesheet.png` — a 192×32 strip — split at 32 px into the six
+frames `sackA`…`sackF` and snapped onto `SACKPAL` (fourteen colours: three outlines, four cloth,
+five coin, two shine), pixel for pixel, so the file and the grids are the same picture. Unlike the
+pine the **source order IS the animation order**: it was drawn as a loop, and the cloth barely
+moves while the coin in the neck of the sack sparkles, so the cycle reads as light catching gold
+rather than as a bag being jostled. Its only caller is the market plate, which is why the
+32×32 size drove `NOTE_H`
+([the plates](rendering.md#market-notices-the-plates-under-the-minimap)) rather than the other way
+round — a sack shrunk to fit a card would have lost the sparkle that is the whole animation.
 
 **The turret is half grid, half raster.** `turret` is a **32×32** mount — collar, column, plinth
 and snow skirt — whose top 16 rows are deliberately empty. The rotating housing and barrel are not

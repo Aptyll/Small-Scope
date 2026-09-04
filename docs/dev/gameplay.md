@@ -1350,9 +1350,9 @@ A headline goes to **two places at once**, and a restock's does too:
 Both readouts take their colour from one table (`NOTE_KIND`), handed straight to `logEvent` as its
 palette override, so the two can never disagree about which way a price went.
 
-**Each has its own cue** (js/audio.js): `SFX.market(up)` is a till on a spike and a low thud on a
-crash — two *different* clips rather than one pitched two ways, and unjittered, because this is
-read as a direction and never as a texture — and `SFX.restock()` is the turnover in two beats, a
+**Each has its own cue** (js/audio.js): `SFX.market(up)` is a coin dinging on a spike and a falling
+sigh on a crash — two *different* clips rather than one pitched two ways, and unjittered, because
+this is read as a direction and never as a texture — and `SFX.restock()` is the turnover in two beats, a
 wagon pulling in and, `RESTOCK_RING` (0.9 s) behind it, the bell over the new stock. Neither is
 gated on standing at a counter any more: a turnover is the one market event worth walking across
 the map for, and news you only hear once you are already there is not news.
@@ -2207,7 +2207,9 @@ low thump, so touching down off the eagle reads as weight rather than as an arro
 animal's kind — a wolf yelps where a rabbit squeals.
 
 **The market's four are notification cues, not world sounds**, and they are the one place a cue is
-deliberately *not* jittered: `market(up)` plays `spike` (a till) or `crash` (a low thud) whole,
+deliberately *not* jittered: `market(up)` plays `spike` (a coin ding) or `crash` (a sad falling
+sigh) whole — the ding is spent in under half a second where the sigh sustains and sags for the
+best part of one, so the two are told apart by their *shape* and not only by their pitch —
 and `restock()` plays two clips as one cue — `freight`, a wagon pulling in, and `restock`, the
 bell over the new stock, scheduled `RESTOCK_RING` (0.9 s) behind it through `smp`'s own `delay`.
 The wagon runs its full 3.3 s, so it is still rolling under the bell, which is the point: the

@@ -145,41 +145,32 @@ function updateMarket(dt) {
 // top-right, hard under the minimap beside the clock and the alive count.
 //
 // One shape, three notices, read left to right with no sentence in it: the
-// merchant's GOLD SACK (the same mark on every plate - this is the shop
-// talking), then what it is about (the good's own item icon and the price it
-// landed on, or NEW STOCK for a turnover), then one glyph carrying WHICH WAY
-// - an arrow up, an arrow down, or a crate. The plate's frame and ink carry
-// the same green/red/gold the feed line does, so the two readouts of one
-// event never disagree.
+// merchant's GOLD SACK (SPRITES.goldSack, the same mark on every plate - this
+// is the shop talking - turning over its six frames the whole time the plate
+// is up), then what it is about (the good's own item icon and the price it
+// landed on at 2x, or NEW STOCK for a turnover), then one glyph carrying
+// WHICH WAY - an arrow up, an arrow down, or a crate. The plate's frame and
+// ink carry the same green/red/gold the feed line does, so the two readouts
+// of one event never disagree.
 const NOTE_MAX = 3;      // plates on screen at once; the oldest falls off the bottom
-const NOTE_LIFE = 7;     // s from arrival to gone
-const NOTE_IN = 0.3;     // arrival: slides in off the right edge under a white pop
-const NOTE_OUT = 0.8;    // ...and fades over its last stretch
-const NOTE_W = 76, NOTE_H = 18, NOTE_PITCH = 21;
+const NOTE_LIFE = 8;     // s from arrival to gone
+// The arrival is a BEAT, not a fade-in: the plate flies in off the right edge
+// over NOTE_IN while flashing white (NOTE_FLASH - three pulses under a decay,
+// so the corner catches somebody whose eyes are on the middle of the screen),
+// and at the end it rides back out the way it came over NOTE_OUT rather than
+// dissolving in place. Long on purpose: this is news you are meant to look up
+// for, and a third-of-a-second slide is over before a glance can land on it.
+const NOTE_IN = 0.55;    // arrival: the slide in
+const NOTE_FLASH = 0.45; // ...and the white flash pulsing over it
+const NOTE_OUT = 1.2;    // departure: fades while sliding back out right
+const NOTE_SLIDE = 46;   // px it travels, in and out
+const NOTE_FR = 0.11;    // s per frame of the sack's six
+const NOTE_W = 112, NOTE_H = 36, NOTE_PITCH = 40;
 const NOTE_GAP = 18;     // below the disc's alive/clock row, which ends 14px under it
 const notices = [];      // {kind, txt, good, t}; ageNotices runs the clock
-
-// the merchant's mark: a cinched sack of coin, tied at the neck, with one
-// piece of gold showing on the belly. 12x12 - the plate's whole height less
-// its rim, so the icon IS the left edge of the card
-const NOTE_SACK = [
-  '....o..o....',
-  '...ollllo...',
-  '...otttto...',
-  '..olccccdo..',
-  '.olccccccdo.',
-  'olcccccccddo',
-  'olcccggcccdo',
-  'olccghhgccdo',
-  'olccgkkgccdo',
-  'olcccggcccdo',
-  '.occccccddo.',
-  '..oooooooo..',
-];
-const NOTE_SACK_PAL = { '.': null, o: '#2b1d12', t: '#6f4a26', l: '#e0c088', c: '#c49a56',
-  d: '#8a6a34', g: '#f2cc6a', h: '#ffedb0', k: '#b8912f' };
 // the tails: which way the price went, or a crate for a counter that just
-// turned over. 8x8, the item icons' own grid, so the row reads as one rank.
+// turned over. 8x8, the item icons' own grid, stamped at 2x like everything
+// else on the plate, so the row reads as one rank.
 const NOTE_TAILS = {
   up: ['........', '...aa...', '..ahha..', '.ahhhha.', 'aahhhhaa', '..ahha..', '..ahha..', '..ahha..'],
   down: ['..ahha..', '..ahha..', '..ahha..', 'aahhhhaa', '.ahhhha.', '..ahha..', '...aa...', '........'],
@@ -205,7 +196,8 @@ function marketNotice(kind, txt, good) {
 }
 
 // Chrome, like the event feed: it ages on WALL time from updateFx (js/sim.js),
-// so a plate fades out while the sim is paused rather than hanging there.
+// so a plate fades out - and the sack keeps turning over its six frames -
+// while the sim is paused rather than hanging there.
 function ageNotices(dt) {
   for (let i = notices.length - 1; i >= 0; i--) {
     notices[i].t += dt;
@@ -234,10 +226,16 @@ function renderNotices() {
   for (let k = n - 1; k >= 0; k--) {
     const e = notices[notices.length - 1 - k], K = NOTE_KIND[e.kind] || NOTE_KIND.stock;
     const slide = 1 - easeOut(e.t / NOTE_IN);
-    const a = Math.min(1, e.t / (NOTE_IN * 0.5)) * Math.min(1, (NOTE_LIFE - e.t) / NOTE_OUT);
+    // the exit is the entrance run backwards - it leaves by the edge it came
+    // in from, so the corner reads as one lane rather than as things vanishing
+    const gone = easeOut((e.t - (NOTE_LIFE - NOTE_OUT)) / NOTE_OUT);
+    // No fade IN: the plate is opaque from its first frame and the flash's own
+    // first peak is what covers its arrival, so the card reads as a bulb going
+    // off rather than as something dissolving into place.
+    const a = 1 - gone;
     if (a <= 0) continue;
     const r = noteRect(k);
-    const x = r.x + Math.round(slide * 26); // in off the right edge
+    const x = r.x + Math.round((slide + gone) * NOTE_SLIDE);
     const y = Math.round(r.y - (k ? (1 - push) * NOTE_PITCH : 0));
     ctx.globalAlpha = a;
     ctx.fillStyle = 'rgba(6,9,22,0.8)'; // base: the world must not read through the plate
@@ -249,19 +247,39 @@ function renderNotices() {
     ctx.fillStyle = K.edge; // a full 1px frame: this is a card, not a feed line
     ctx.fillRect(x, y, NOTE_W, 1); ctx.fillRect(x, y + NOTE_H - 1, NOTE_W, 1);
     ctx.fillRect(x, y, 1, NOTE_H); ctx.fillRect(x + NOTE_W - 1, y, 1, NOTE_H);
-    if (slide > 0) { // the arrival pop, as the feed's lines take one
-      ctx.globalAlpha = a * 0.55 * slide * slide;
+    // the merchant's sack, turning over its six frames the whole time it is up
+    ctx.drawImage(SPRITES.goldSack[Math.floor(e.t / NOTE_FR) % SPRITES.goldSack.length], x + 2, y + 2);
+    // What it is about, centred in the well between the sack and the tail: a
+    // price rides beside the good's own icon at 2x, and a headline with no
+    // good to name (NEW STOCK) stacks its words rather than shrinking.
+    const cx0 = x + 37, cw = NOTE_W - 60;
+    const im = e.good && ITEMS[e.good] && SPRITES[ITEMS[e.good].icon];
+    const sh = 'rgba(6,9,22,0.9)'; // the plate is opaque and it fades: shadow font, not outline
+    if (im) {
+      const bx = cx0 + Math.max(0, (cw - 20 - pixelTextWidth(e.txt, 2)) >> 1);
+      ctx.drawImage(im, bx, y + 10, im.width * 2, im.height * 2);
+      drawPixelTextShadow(ctx, e.txt, bx + 20, y + 13, K.fg, sh, 2);
+    } else {
+      const ls = e.txt.split(' ');
+      for (let i = 0; i < ls.length; i++) {
+        const tx = cx0 + Math.max(0, (cw - pixelTextWidth(ls[i], 2)) >> 1);
+        drawPixelTextShadow(ctx, ls[i], tx, y + (ls.length > 1 ? 7 + i * 12 : 13), K.fg, sh, 2);
+      }
+    }
+    stampGrid(NOTE_TAILS[K.tail], K.tp, x + NOTE_W - 20, y + 10, 2);
+    // The flash, last and over everything: three pulses under a decay, so the
+    // first is a near-white card and the two after it are the plate blinking
+    // as it slides home. The frame goes white whole while the field only
+    // washes - past the opening peak the card has to stay readable.
+    if (e.t < NOTE_FLASH) {
+      const f = (1 - e.t / NOTE_FLASH) * (0.5 + 0.5 * Math.cos(e.t / NOTE_FLASH * Math.PI * 6));
+      ctx.globalAlpha = a * 0.85 * f;
       ctx.fillStyle = '#f4f7ff';
       ctx.fillRect(x + 1, y + 1, NOTE_W - 2, NOTE_H - 2);
-      ctx.globalAlpha = a;
+      ctx.globalAlpha = a * f;
+      ctx.fillRect(x, y, NOTE_W, 1); ctx.fillRect(x, y + NOTE_H - 1, NOTE_W, 1);
+      ctx.fillRect(x, y, 1, NOTE_H); ctx.fillRect(x + NOTE_W - 1, y, 1, NOTE_H);
     }
-    stampGrid(NOTE_SACK, NOTE_SACK_PAL, x + 3, y + 3, 1);
-    let tx = x + 18;
-    const im = e.good && ITEMS[e.good] && SPRITES[ITEMS[e.good].icon];
-    if (im) { ctx.drawImage(im, tx, y + 5); tx += im.width + 2; }
-    // the plate is opaque and it fades, so the shadow font, not the outline
-    drawPixelTextShadow(ctx, e.txt, tx, y + 7, K.fg, 'rgba(6,9,22,0.9)');
-    stampGrid(NOTE_TAILS[K.tail], K.tp, x + NOTE_W - 12, y + 5, 1);
     ctx.globalAlpha = 1;
   }
 }

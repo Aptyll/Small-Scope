@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 2.97'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 2.98'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['2.98', 'THE MARKET PLATES ARE HALF AGAIN AS BIG AND FLASH WHITE AS THEY FLY IN, CARRYING AN ANIMATED SACK OF GOLD, AND A SPIKE NOW DINGS WHERE A CRASH SIGHS.'],
   ['2.97', 'THE MARKET NOW SHOUTS: A PRICE SPIKE, A CRASH OR A RESTOCK RAISES A GOLD-SACK PLATE UNDER THE MINIMAP - THE GOOD, THE PRICE AND AN ARROW - OVER A CUE OF ITS OWN, WITH THE WAGON AND ITS BELL FOR NEW STOCK.'],
   ['2.96', 'THE MERCHANT KEEPS A TRADING POST NOW - A WIDER SLAB UNDER A SNOWY, LANTERN-LIT AWNING, EVERY OFFER ICON THE SAME SIZE OVER A PRICE COLUMN THAT LINES UP, A BIGGER MARKET UNDER ITS OWN RULE, AND ITS OWN SONG THAT HANDS THE MATCH ITS TRACK BACK WHERE IT LEFT OFF.'],
   ['2.95', 'THE RESPAWN WAIT IS YOUR LEVEL - 5 S AT LEVEL 2, 25 S AT 12 - AND THE WAIT SCREEN IS AN ALLY THROUGH THE CAMERA UNDER ONE COUNTDOWN LINE, WITH A BIG CLOSEABLE REPLAY OF YOUR DEATH OVER IT AND NO PLANKS.'],

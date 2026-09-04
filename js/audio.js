@@ -125,11 +125,11 @@
     wind: ['gentle_wind_blowing_#1-1787704908517.mp3', 'gentle_wind_blowing_#3-1787704902018.mp3',
       'gentle_wind_blowing__#4-1787704410848.mp3'],
     owl: ['owl_sound_at_night_#2-1787704444687.mp3'],
-    // the market's four, notification cues rather than world sounds: a till
-    // for a price spike, a low thud for a crash, and the wagon and the bell
-    // the counter's turnover is announced by (SFX.restock, below)
-    spike: ['money win notification.mp3'],
-    crash: ['deep base hit.mp3'],
+    // the market's four, notification cues rather than world sounds: a coin
+    // ding for a price spike, a falling sigh for a crash, and the wagon and the
+    // bell the counter's turnover is announced by (SFX.restock, below)
+    spike: ['money ding.mp3'],
+    crash: ['sad sound.mp3'],
     freight: ['freigh moving.mp3'],
     restock: ['market refresh notification.mp3'],
   };
@@ -620,8 +620,8 @@
     // one number climbing on the victory screen: a dry, quiet blip
     tally() { tone(1320, 0.03, 'square', 0.035); },
     // The market moving hard (marketNews, js/shop.js), under the plate that
-    // rises with it (the `market notices` banner, js/shop.js): a till ringing
-    // on a spike, a low thud on a crash. Two DIFFERENT clips rather than one
+    // rises with it (the `market notices` banner, js/shop.js): a coin dinging
+    // on a spike, a sad fall on a crash. Two DIFFERENT clips rather than one
     // pitched two ways, and unjittered, because this is read as a DIRECTION
     // and not as a texture - a spike must never be mistakable for a crash.
     // The synth pair underneath is the fallback, and says the same thing.
