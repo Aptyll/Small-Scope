@@ -4,8 +4,8 @@ The player (momentum, tools, dodge), the entities that share the world, the gold
 you can build, and the supporting subsystems. Read this before changing how an input resolves,
 what something pays out, or what a structure does.
 
-Everything below describes **a player**, not *the* player: each mechanic runs per slot off
-`p.input`, and `player` is only the local slot. [multiplayer.md](multiplayer.md) covers the slot
+Everything below describes **a player**, not *the* player: each mechanic runs per player off
+`p.input`, and `player` is only the local player. [multiplayer.md](multiplayer.md) covers the player
 model, the input struct, teams, bots and how two players' orders are resolved.
 
 > Several numbers below (ice cap, steer, slide threshold and fatigue, draw time and speed, arrow
@@ -18,7 +18,7 @@ A player moves on a real velocity (`p.vx/vy`): `p.input.mx/my` accelerates, and 
 underfoot sets friction and speed caps. All the tuning constants live in the `players` banner of
 [js/player.js](../../js/player.js) (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`, above
 `CLASSES`, whose kits are written against them) and the per-surface rates inline in
-`updatePlayer()`'s movement block, which every slot runs. **Momentum is deliberately players-only**
+`updatePlayer()`'s movement block, which every player runs. **Momentum is deliberately players-only**
 — animals, robots, and knockback still use the old direct-move idiom.
 
 - **Snow at walking speed** uses a near-instant vector approach (settles in ~3 frames) tuned to
@@ -58,7 +58,7 @@ underfoot sets friction and speed caps. All the tuning constants live in the `pl
   [tackle](#the-roll-is-a-hit).
 - Walk animation and footprints key off actual speed now (`sp > 8`), not input; sliding and
   ice-gliding use the standing pose. `die(p)` and `Player.reset()` zero `vx/vy` and clear
-  `sliding`. Footprints and slide trails from every slot share the one `footprints` decal array.
+  `sliding`. Footprints and slide trails from every player share the one `footprints` decal array.
 
 ## Unit collisions
 
@@ -84,7 +84,7 @@ which is what makes running into one a tackle rather than a pass.
 
 ## Pathfinding
 
-Everything that walks to a goal on its own — robots, bot slots, hunting wolves and patrolling
+Everything that walks to a goal on its own — robots, bots, hunting wolves and patrolling
 ones, prey both fleeing and grazing, any future enemy — routes through the `pathfinding` banner
 rather than steering straight at it. Nothing that walks holds a bare heading on a timer any more.
 `findPath(sx, sy, gx, gy, reach, budget)` is grid A* over the tile map: a tile is `walkable()`
@@ -179,13 +179,13 @@ A **projectile bit** is one shot: `path` (how it flies), `solid` (whether a wall
 flight; optional `reach` widens every hit test past the tip (a bit with a *body* — the fist, the
 axe); optional `body` names the silhouette the shots pass draws it as (`BIT_BODY`, js/render.js);
 optional `impact` names what it does where it *lands* (`BIT_IMPACT`, js/tools.js); and
-`bot: false` marks a kind no AI slot will load. A spent shot is simply gone — nothing lands to be
+`bot: false` marks a kind no bot will load. A spent shot is simply gone — nothing lands to be
 picked back up.
 
 #### Knockback: one number thrown at three weights
 
 `kb` is a **multiplier**, not a speed, and 1 is the ordinary shove. It has to be, because the
-three kinds of unit are already pushed at three different weights — a slot at `HIT_KB` (110 px/s,
+three kinds of unit are already pushed at three different weights — a player at `HIT_KB` (110 px/s,
 js/player.js), a worker at `ROBOT_KB` (40, js/robots.js), an animal on a curve off the draw
 (25–70) — and one number written on a bit has to mean the same thing thrown at any of them. It
 rides to `hurtUnit` as `o.kbMul`, which scales whatever shove that kind takes; `o.kb` beside it
@@ -275,7 +275,7 @@ is the teleport's whole rule: a request that hits nothing takes you nowhere.
 spends the tensile budget up the column and everything it can afford leaves together, so a tool
 whose budget covers all of it fires all of it at once.
 
-`fireTool(p)` is the one entry point — the falling edge of `input.fire`, for every slot alike:
+`fireTool(p)` is the one entry point — the falling edge of `input.fire`, for every player alike:
 
 1. Read the cover first (`ambushReady`), before anything below can break it.
 2. `spearFish(p)` — bow-fishing survived the new weapon: **any** tool, standing on ice with a fish
@@ -345,7 +345,7 @@ bots (never on the shooter, at any weight), and `a.cinder` lights a ring around 
 ended. A burning shot trails fire instead of team colour and bursts embers where it lands.
 
 **Three hit tests, one blow.** The branches differ only in what they test against — a raised tower
-shield and a 7 px body for a slot, `robotHit` for a chassis, `animalHit` for a body that may be up
+shield and a 7 px body for a player, `robotHit` for a chassis, `animalHit` for a body that may be up
 on its own altitude — and all three then call the same local `blow()`, which hands the bit's damage,
 type, fire and shove to `hurtUnit`. Nothing about *what a shot does* is written per kind, which is
 what keeps the left button honest across the whole roster.
@@ -474,7 +474,7 @@ orbit and leaves those for someone who can.
 
 `CLASS_LOADOUT` gives each class a tool and its bits, and `giveLoadout(p)` is called from
 `Player.reset()` and from `setClass()` — so the weapon is part of picking a class, every AI
-slot gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
+player gets its own, and a respawn is re-armed. The HUNTER flies in with a SHORTBOW loaded ARROW +
 BARBED SHOT (7 of its 9 strength, both firing); the WARRIOR with a SLING loaded **HEFT then
 ARROW** — the fitting under the shot, filling the sling's 7 exactly. The order in `bits` is the
 firing order, and a starting kit that fitted a modifier *above* its only shot would teach the
@@ -487,7 +487,7 @@ class flies out with.
 ## Class abilities (keys 1-4)
 
 Everything in this section lives in **[js/abilities.js](../../js/abilities.js)**, under the
-`class abilities` banner. Keys 1-4 cast the four actives of the slot's
+`class abilities` banner. Keys 1-4 cast the four actives of the player's
 [class](multiplayer.md#classes) — `CLASS_AB[p.cls]`, one row per key, where **what an ability IS
 lives in its table entry** (`cd`, `cast`, `use(p)`), never in an `if` elsewhere. The press goes
 through `input.ability` (edge-triggered, like the dodge) into `tryAbility(p, i)`, so a bot casts
@@ -525,7 +525,7 @@ other's click; hover lights the plate and the tooltip carries the numbers (`LOCK
 level first — which spends their first four unlocking all four keys before any gets a cut. The cd
 column in the tables below is the level-1 base.
 
-**Every ability lands on every kind of body.** A slot, a rabbit, a deer, a bird, a wolf and a worker
+**Every ability lands on every kind of body.** A player, a rabbit, a deer, a bird, a wolf and a worker
 bot out of the [bot bay](#robots) take the same damage and the same states from all eight — the
 tables below say "rival" because that is who you are usually casting at, not because anything else
 is exempt. That is not written into each ability: they sweep `unitsNear`/`unitsHit` and land through
@@ -563,7 +563,7 @@ WARRIOR — close pressure, blocking, momentum:
 | 3 | **AVALANCHE STOMP** | 14 s | a leap-stomp at the feet: 12 damage + radial knockback + a beat of stun in `STOMP_R`, and the **crater** (`craters`) is deep snow that slows rivals crossing it for 4 s |
 | 4 | **JUGGERNAUT** | 20 s | 5 s: immune to stun (`stunUnit` head) and knockback (`damagePlayer`), speed ramps +50 % over the duration, and body contact at speed bowls rivals over — damage scales with the speed carried in, once per rival per activation (`p.jugHit`) |
 
-A slot's movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
+A player's movement caps fold through one function — `abilityMoveMul(p)`: root pins, cast/shield/net/
 crater drag (the pierce windup's own harder drag included), juggernaut ramps — applied to the walk
 cap **and** the ice cap in `updatePlayer`; the grapple's reel is its own movement branch there,
 beside the rush's. An
@@ -698,7 +698,7 @@ cleared on release and at every point that cancels a draw (`tryWork`, falling in
 overlay opening in `sampleHumanInput`, changing slot, `die`), and the draw begins on the first
 step where it is set *and* `nockT <= 0` *and* `toolReady(p)` (a tool whose budget reaches at
 least one projectile). Requiring a fresh press instead
-would deadlock every controller that simply holds the button down — which is every AI slot:
+would deadlock every controller that simply holds the button down — which is every bot:
 `updateAI` sets `inp.fire = chargeT < bowCharge * k`, so after a shot it goes straight back to
 true and no second edge ever arrives. `p.chargeT` is the raw seconds held and is **never
 clamped** — every reader takes `drawPow(p)` (0..1) off it, and the meter's white blink at the
@@ -724,7 +724,7 @@ when the selected tool cannot answer — an empty slot, or a tensile budget that
   ability well cools by, over exactly `toolCycle`. When the wipe is gone, the bow is ready.
   Always.
 - **The overhead bar** (`drawPlayer`) — the draw meter's slot doubles as the cycle readout for
-  *every* slot: gold filling = drawing, slate filling = reloading, pale gold = just came back.
+  *every* player: gold filling = drawing, slate filling = reloading, pale gold = just came back.
   Same geometry either way, so it never jumps.
 - **The reticle** (`cursorInfo` → `drawCursor`). Every reticle in play carries `nock` (elapsed
   fraction, 1 = ready) and `dry`, whatever the pointer is over. While the cycle runs, four gold
@@ -851,7 +851,7 @@ pale ghost of the lost chunk (`player.stamGhost`/`stamGhostT`): it holds ~0.3 s,
 into the live fill souls-style. Death cancels the roll, respawn refills
 charges; pause, the settings panel and the wheel block the local player's roll (the
 [map](#the-m-map-does-not-pause) does not). The bar is drawn for
-the local slot only — a rival's tells are their draw meter and their position. A roll out of
+the local player only — a rival's tells are their draw meter and their position. A roll out of
 [prone](#prone-under-the-snow) is legal and is the fast way out of the snow: `tryDodge` stands the
 player up first, so the escape costs a charge.
 
@@ -860,7 +860,7 @@ player up first, so the escape costs a charge.
 A dash is a body thrown at whatever is in front of it. Every step of the roll, `rollSweep(p)`
 takes everything inside `ROLL_HIT_R` (7px) of the roller's own radius and splits it two ways:
 
-- **Small — rabbits, wolves, robots, other slots.** One swipe each, **once per roll**
+- **Small — rabbits, wolves, robots, other players.** One swipe each, **once per roll**
   (`p.rollHit`, cleared by `tryDodge` and again when the roll ends), and the roll goes straight
   **through** them: `separateUnits` skips any pair where one side is a live roll and the other is
   small, so there is nothing to bump against. Friendly bots and teammates are passed through
@@ -887,14 +887,14 @@ and their once-per-roll bookkeeping.
 ## Status effects: one set for every unit
 
 Everything in this section lives under the **`status effects`** banner at the foot of
-[js/actions.js](../../js/actions.js). Three kinds of thing walk this world — a **player slot**, an
+[js/actions.js](../../js/actions.js). Three kinds of thing walk this world — a **player**, an
 **animal**, a **worker bot** — and anything that can hurt one can hurt all three the same way. That
 is not a coincidence to be re-established per feature; it is what these funnels are for:
 
 | Reach for | When |
 | --- | --- |
 | `hurtUnit(e, dmg, nx, ny, src, o)` | **any** blow. `o` = `{ type, kb, kbMul, cause, ambush, crit, burn, burnDps }` — `kb` the absolute px/s of shove an ability picks, `kbMul` the multiplier on whatever shove that kind takes anyway ([knockback](#knockback-one-number-thrown-at-three-weights)). Routes to `damagePlayer` / `hurtAnimal` / `hurtRobot`, which stay for what is genuinely per-kind (a den waking, a worker turning on whoever hit it) |
-| `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — slots, wildlife **and** bots in one list |
+| `unitsNear(src, x, y, r)` | every living thing in a circle that `src` may touch — players, wildlife **and** bots in one list |
 | `unitsHit(src, x, y, r)` | the same, minus anyone whose i-frames are up: the list a **blow** sweeps, so a rival mid-roll is untouchable. A lasting ground *condition* (a crater) wants `unitsNear` — a condition is not a hit, and a roll should not shrug one off |
 | `stunUnit` `rootUnit` `slowUnit` `netUnit` `markUnit` `igniteUnit` | the one place each state is written. Each takes the worse/longer of what is already on the body |
 | `unitMoveMul(e)` | what is left of a non-player's speed — `abilityMoveMul`'s twin. Spent inside `navStep`, so one edit slows every walker; the two movers that steer themselves rather than route (a loitering bot, a bird in flight) fold it in by hand |
@@ -910,7 +910,7 @@ caster, so a net outlives the hunter who threw it and still knows whose it was; 
 ### I-frames: only something deliberate grants them
 
 `p.invuln` (players only — an animal or a worker bot has no such field and never had) counts down
-in `updatePlayer` and is read by every picker at once: the arrow loop skips a slot that has it,
+in `updatePlayer` and is read by every picker at once: the arrow loop skips a player that has it,
 `unitsHit` drops one, `rollSweep` passes over one, and `damagePlayer` returns early on one. **A hit
 sets it nowhere.** As of **PATCH 3.01** the only things that grant it are deliberate:
 
@@ -938,11 +938,11 @@ The six states, and what each does to a body:
 
 | state | field | what it does | the tell on the body |
 | --- | --- | --- | --- |
-| **stun** | `stunT`/`stunMax` | a slot has every intent dropped out of `p.input` at the top of `updatePlayer` (movement, fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a human and an AI fill are pinned by the identical window — the draw, the swing in flight and any roll are cancelled outright; an animal or a bot skips its brain for the window in `updateAnimal`/`updateRobot`. Never touches velocity: whatever hit you still slides you | three sparks orbiting (`drawStunStars`) |
+| **stun** | `stunT`/`stunMax` | a player has every intent dropped out of `p.input` at the top of `updatePlayer` (movement, fire, work, slide, the edge-triggered lot) rather than each action refusing separately, so a human and an AI fill are pinned by the identical window — the draw, the swing in flight and any roll are cancelled outright; an animal or a bot skips its brain for the window in `updateAnimal`/`updateRobot`. Never touches velocity: whatever hit you still slides you | three sparks orbiting (`drawStunStars`) |
 | **root** | `rootT` | move multiplier 0 — no walk, no roll, no slide; tools still work. Currently no ability or bit sets it — the state and its tell stay with the universal set ([Known drift](checklists.md#known-drift)) | sprung iron jaws at the feet |
 | **slow** | `slowT`/`slowMul` | the multiplier on every speed cap | — (the net's drape says it, when a net is why) |
 | **net** | `netT` | the slow, plus the reason for it | a mesh drape over the sprite |
-| **mark** | `markT` | on a slot, `seenAt()` returns full range and both maps keep drawing them (its one legal bypass); an animal or a bot has no cover to strip, so it is the reveal alone. Like root, currently sourceless — kept with the set | gold chevrons falling toward the head |
+| **mark** | `markT` | on a player, `seenAt()` returns full range and both maps keep drawing them (its one legal bypass); an animal or a bot has no cover to strip, so it is the reveal alone. Like root, currently sourceless — kept with the set | gold chevrons falling toward the head |
 | **fire** | `burnT`/`burnDps`/`burnBy` | see below | flame tongues off the crown, and lit snow under the feet |
 
 Every one of them is **drawn on the body, for both sides**, at whatever size that body is —
@@ -954,7 +954,7 @@ differs by kind: over an animal or a robot the sparks sit above the health bar, 
 they ride a badge that **mirrors the level badge on the other side of the overhead frame** — same
 backing and track, its left frame column shared with the health bar backing's right edge — whose
 5×5 track drains from the bottom as the window runs out (`stunMax` is the height it drains from).
-It is drawn for every slot, like the stamina bar: a rival seeing stars is a tell worth having.
+It is drawn for every player, like the stamina bar: a rival seeing stars is a tell worth having.
 
 ### Damage types, and fire
 
@@ -1070,7 +1070,7 @@ None of them is a word:
   bar, level badge, and the draw meter that says a shot is coming. A rival keeps none of it. The
   whole stack also drops 6 rows with the pose, since a prone body starts that much lower in the
   same 16×16 cell.
-- **The bury ring** (`drawBuryRing`, local slot only) — twelve marks on a ring in the snow that
+- **The bury ring** (`drawBuryRing`, local player only) — twelve marks on a ring in the snow that
   light one at a time as the cover builds, then flash white and go. Each gets a dark pixel under
   it, because white on snow is white on white. A rival needs no meter: they can watch you vanish.
 - **The reticle arms.** `cursorInfo` puts `amb` on every reticle it builds; `drawCursor` grows a
@@ -1084,7 +1084,7 @@ None of them is a word:
 ### Bots
 
 A hunter bot casts it through the same ability key a human presses (`inp.ability = 3`) — rung 2
-of the [ladder](multiplayer.md#ai-slots), decided before the rest because two later rungs read
+of the [ladder](multiplayer.md#bots), decided before the rest because two later rungs read
 the answer; a warrior bot has no burrow to decide.
 
 ## Wildlife
@@ -1095,14 +1095,14 @@ the answer; a warrior bot has no burrow to decide.
 `PREY_POP` strength: 16 rabbits (8 HP, biased to spawn near berry bushes) and 10 deer (24 HP).
 Neither reproduces, but **the meadow is restocked**: `updatePreyStock` (from `updatePlay`, never
 under `PRACTICE`) puts one animal of the kind furthest under strength back every `PREY_REPOP`
-(15 s) through `spawnPrey`, on a free tile no live slot is within `PREY_CLEAR` (280 px — past
+(15 s) through `spawnPrey`, on a free tile no live player is within `PREY_CLEAR` (280 px — past
 the edge of any screen at zoom 1) of, so nothing is ever seen to appear. **Wolves** (30 HP) and
 **birds** (3 HP) belong to a [landmark](world.md#landmarks) instead — `a.home` points at it,
 and the site restocks them.
 
 **Every animal wears a level** (`a.level`), the hero's plate on the left of its frame
 ([rendering.md](rendering.md#overhead-health-bars)), dealt once by `makeAnimal` from
-`animalLevel()` — the **average hero level of the active slots**, rounded, capped at
+`animalLevel()` — the **average hero level of the active players**, rounded, capped at
 `LEVEL_MAX` — and never raised after: an animal does not level, the meadow does, as the ones
 the eagle dropped you into (all level 1) are shot and restocked at whatever the table has
 reached. What grows with it is hp, `ANIMAL_LV_HP` a level over `ANIMAL_HP` (rabbit +1, deer
@@ -1119,7 +1119,7 @@ prey and threat red on a wolf — for as long as it does: `a.senseT` counts the 
 first did and is 0 whenever it does not. For prey, "in sight" is a player inside the
 `FLEE_SIGHT` ring (through `seenAt`, so cover keeps it down) **or a flight already under way**,
 so a deer running wears the reason it is running and a deer that grazes on has not seen you; for
-a wolf it is a slot in sight on its ground or a hunt in progress, and **not** a bar draining
+a wolf it is a player in sight on its ground or a hunt in progress, and **not** a bar draining
 with nobody in view — that wolf has lost you, and the mark going out is how it says so.
 
 `updateAnimal()` is the shared shell: it ages the flash and knockback, runs
@@ -1131,7 +1131,7 @@ hunt reticle, and joins the y-sorted draws.
 
 **An animal is a unit like any other.** `makeAnimal` hands every kind the full status set through
 `clearUnitStatus`, so a rabbit, a deer, a wolf and a bird take the same damage and the same six
-states from every ability and every bit that a player slot does — rooted, netted, slowed, marked,
+states from every ability and every bit that a player does — rooted, netted, slowed, marked,
 stunned, set alight — and wear the same tells at their own size
 ([status effects](#status-effects-one-set-for-every-unit)). Nothing about wildlife is exempted
 anywhere; what makes them everybody's target rather than nobody's is simply that they carry no
@@ -1181,7 +1181,7 @@ included, which is what keeps the `.` overlay honest ([rendering.md](rendering.m
 A kill pays its `YIELD` gold, grown a tenth a level for the animal's level (`ANIMAL_LV_GOLD`,
 above), straight to whoever landed the final blow (`a.lastHit`, through
 `awardGold` — see [Economy](#economy-one-currency)); rabbits also drop 1 berry as a physical
-pickup, and a burn credits the slot that lit it, so an animal that walks away and dies of its
+pickup, and a burn credits the player that lit it, so an animal that walks away and dies of its
 fire still pays. Shots, rolls and the class abilities are what hurt them (there is no
 melee — the E swing is for scenery, never for a body); animals are solid
 to players, robots and each other except birds, which fly (see
@@ -1222,7 +1222,7 @@ A **wolf den** ([world.md](world.md#landmarks)) keeps 4 wolves. `updateWolf()`:
   inside `WOLF_BITE_R` (13 px) every `WOLF_BITE_CD` (1 s) per wolf, through
   `damagePlayer(t, dmg, dx, dy, null, 'wolf')`. **Nothing caps the pack.** Until **PATCH 3.01**
   the 0.7 s of i-frames a hit granted did — standing in a den measured ~9 hp/s, about 10 s for a
-  level-1 slot — but a hit grants none now
+  level-1 player — but a hit grants none now
   ([i-frames](#i-frames-only-something-deliberate-grants-them)), so all four bites land and a den
   costs up to ~36 hp/s: under three seconds for a 92 hp hunter. `WOLF_BITE_CD` is the only dial
   left on it. Death reads `WENT TO THE WOLVES` in the feed
@@ -1255,7 +1255,7 @@ A **rookery** keeps 9 birds perched in its dead trees. `updateBird()`:
 Every player owns a wallet **and** a bag. `p.inv` is `{ gold }` — currency only, no ceiling —
 while everything you *carry* lives in `p.bag`, the slot array described in
 [Inventory and the backpack](#inventory-and-the-backpack). (`inv` is an alias for the local
-slot's wallet.) **Gold is the only resource** — there is no wood or stone —
+player's wallet.) **Gold is the only resource** — there is no wood or stone —
 and berries/fish are consumables ([Food](#food-the-meal-is-a-channel)), never spent on anything. The whole economy is the
 `YIELD` table in the constants banner of [js/core.js](../../js/core.js) - the one tuning table
 with no single owner - which gives every source a different **yield profile**
@@ -1263,7 +1263,7 @@ rather than a different resource (the League model: one number, many ways to ear
 
 | Source | Pays | Profile |
 | --- | --- | --- |
-| the clock | `TRICKLE_GOLD` (1) every `TRICKLE_T` (4 s) — the `passive income` banner, js/sim.js | 15 a minute to every slot on the ground, silently (no floater, no blip); the floor under everyone's purse and the pace a level comes at for a player who never farms |
+| the clock | `TRICKLE_GOLD` (1) every `TRICKLE_T` (4 s) — the `passive income` banner, js/sim.js | 15 a minute to every player on the ground, silently (no floater, no blip); the floor under everyone's purse and the pace a level comes at for a player who never farms |
 | tree (`TREE_HP` 3, js/world.js) | `treeFall` 1 on the fell (`treeHit` is 0 — a swing is work, the fell is the pay) | slow, safe, everywhere — a pine a second chained, so a gold a second is the ceiling of full-time farming; leaves a stump, and 1 in 25 leaves a tier-0 [find](#where-tools-and-bits-come-from) |
 | dead tree (3 hp) | `deadTreeFall` 1 | a tree, but only at a rookery |
 | rare tree (8%) | + `treeRare` 3 → 4 | jackpot roll, see `treeRare()` |
@@ -1451,7 +1451,7 @@ A headline goes to **two places at once**, and a restock's does too:
   — the match's own record, where everything else that happened to somebody already is;
 - a **plate top-right under the minimap** — the `market notices` banner in js/shop.js, drawn by
   `renderNotices` ([the plates](rendering.md#market-notices-the-plates-under-the-minimap)) —
-  because a price is not something that happened to a slot: it is the state of the world you are
+  because a price is not something that happened to a player: it is the state of the world you are
   about to sell your bag into, and it has to arrive where the clock and the alive count are
   rather than in a log at the far corner.
 
@@ -1554,7 +1554,7 @@ row.
 
 ## Inventory and the backpack
 
-Everything a slot carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
+Everything a player carries is in **`p.bag`**: a fixed array of `p.bagCap` cells, each one `null`
 or a `{ type, n }` stack of at most `ITEMS[type].stack`. Everyone starts with **one bag of 10**
 (`BAG_CAP`, two rows of `BAG_COLS` — a simple inventory); a second bag is a bigger `bagCap` and a longer array,
 nothing else. The table:
@@ -1605,7 +1605,7 @@ The HUD is in the `UI` › `backpack` banner — see
 
 ## Food: the meal is a channel
 
-Berries and fish are the only heal a slot carries, and they answer the same question — *can I take
+Berries and fish are the only heal a player carries, and they answer the same question — *can I take
 this fight* — so the whole thing is **one clock and one channel**, in the `food` banner of
 [js/core.js](../../js/core.js):
 
@@ -1663,7 +1663,7 @@ there chewing under fire is not patience, it is a free kill.
 
 ## Gear
 
-Every slot wears four pieces — **helmet, chest, legs, boots** (`GEAR_SLOTS`) — each one of three
+Every player wears four pieces — **helmet, chest, legs, boots** (`GEAR_SLOTS`) — each one of three
 variants with a distinct lane, all in the `GEAR` table in the `players` banner:
 
 | Slot | Variants (per piece level) |
@@ -1679,7 +1679,7 @@ The variant pick is free and is **level 1**; in-match gold buys each piece to le
 from class select's collapsed gear widget, all 12 variants at once as 32×32 icon wells beside a
 live preview and a real-number stat ledger with hover deltas (League runes-style; see
 [Main menu](rendering.md#main-menu-title)); `pickGear()` writes straight to `player.gear`. AI
-slots hash all four variants from the seed in `initPlayers()`. **Every variant has its own
+players hash all four variants from the seed in `initPlayers()`. **Every variant has its own
 icons**: the 12×12 material-swapped `SPRITES.gearIcons[slot][variant][material]` the HUD and
 the select screen's plaque wear, and the detailed 32×32 `GEAR32` set the pop-up's wells wear —
 a pick is a distinct picture, not a label.
@@ -1690,7 +1690,7 @@ called from `drawPlayer` under the held tool; skipped while rolling, in a hole, 
 free level-1 pick draws nothing, so the baseline look stays the class's; a fed player reads
 iron → steel → gold at a glance, the same materials the HUD plates wear.
 
-**Mechanism**: a variant's `mod(k, L)` writes its bonus into the slot's *effective kit* —
+**Mechanism**: a variant's `mod(k, L)` writes its bonus into the player's *effective kit* —
 `refreshKit(p)` copies the class kit, adds the gear-only defaults (`huntMul`, `dr`, `foodMul`,
 `nightHeal`, `walkMul`, `harvestMul`, `dodgeCd`, `stealth`) and applies the four mods; `kitOf(p)`
 returns that cache, so every existing kit read site (movement, `emitBit`, dodge timing, the AI,
@@ -1850,7 +1850,7 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
   inside `TUR_LOCK` (0.14 rad) charges for `aim` seconds (0.55 / 0.45 / 0.35) before firing a
   **bolt** every `rate` seconds. Losing the bearing bleeds the charge back down rather than
   cancelling it. Targeting runs through `turretMark`/`turretHolds`, which reject anything on the
-  turret's own team, anything dead, and any slot still `inAir` on the eagle; `turretSees` walks
+  turret's own team, anything dead, and any player still `inAir` on the eagle; `turretSees` walks
   tiles from the pivot and holds fire when a solid tile blocks the shot, skipping the turret's own
   footprint (the pivot sits above the tile, so the first samples fall back inside the mount). With
   no mark it sweeps ±1.15 rad at a third of its traverse, so a live turret never reads as a prop.
@@ -1899,7 +1899,7 @@ Mechanics (the wheel in [ui.js](../../js/ui.js), the buildings in [structures.js
 `robots` holds the bay-owned worker bots (one 12×10 faceless tread-bot grid in team colour, two
 tread frames — see [sprites.md](sprites.md)) — and the two eagles' [merchants](#the-merchant),
 which ride the same list with `merchant: true`. `updateRobot()` mirrors the animal state machine plus
-jobs — `updateUnitStatus` first, so a chassis wears every state a player slot can be put under
+jobs — `updateUnitStatus` first, so a chassis wears every state a player can be put under
 (`makeRobot` clears the full set into it): rooted, netted, slowed, marked, stunned, on fire, and
 scrapped by a burn like anything else ([status effects](#status-effects-one-set-for-every-unit)).
 The root and the slow are spent inside `navStep` for a routed drive and folded into `wander()` by
@@ -1928,7 +1928,7 @@ the balance pass. `robotStrike(b, e, pt)` is the single blow: a building goes th
 all credited to `players[b.owner]`, so a worker kill pays the bounty and levels its owner like any
 other. `cause` doubles as the feed's **verb** (`KILL_VERB`), so a
 worker kill reads `YOU CUT DOWN <NAME>` instead of `SHOT`. Targets come from
-`robotFoeUnit(b, range)` (nearest enemy slot or worker; slots are noticed through `seenAt`, so a
+`robotFoeUnit(b, range)` (nearest enemy player or worker; players are noticed through `seenAt`, so a
 buried body is as invisible to a worker as to a wolf) and `enemyStructNear(team, x, y, r)`.
 `foePoint(e, fx, fy)` is where the axe lands: a body a little above its feet, or **the nearest
 point on a building's footprint** — the bay is 3×2 and a worker measuring to its centre could
@@ -1943,7 +1943,7 @@ players, so a bay's own side drives through its workers safely), and so does eve
 and the roll, all of them through `hurtUnit`. `robotDies(b, src)`
 **hands whatever the worker was hauling to whoever downed it** (`awardGold` on `b.carry`) — which
 is what keeps shooting a loaded worker on its way home worth the arrows — and logs
-`<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed slot, so it never touches
+`<NAME> SCRAPPED A WORKER` to the feed. A downed worker is not a downed player, so it never touches
 the kill count. `updateRobot`'s own `hp <= 0` check routes through the same function (with no
 `src`, so the wreck goes unclaimed). Turret bolts ride the arrow pipeline, so a turret's mark
 finally dies; a rival's **worker on an attack flag** melees one; a rival's abilities and roll catch
@@ -1959,7 +1959,7 @@ hauler it always was — see [Worker flags](#worker-flags) for why the anger is 
 
 Each eagle is **driven** by its team's merchant — the old trader in the wide fur hat with the
 team-cloth crown and the white beard, seated on the bird's neck in flight (`MERCH_SEAT`, `drawEagle`; the look is
-[sprites.md](sprites.md)'s own 16 × 18 grids, built so it never reads as a slot on either side,
+[sprites.md](sprites.md)'s own 16 × 18 grids, built so it never reads as a player on either side,
 with a `MERCH` nameplate and a bar in its side's paint over it, `drawMerchant`; the bird wears `PERCH`) — who climbs
 down the moment it roosts (`spawnMerchant`, called
 from `eagleCrash`, the `merchant` banner in js/robots.js) and works the roost for its side, in
@@ -1972,7 +1972,7 @@ and retried last when no route reaches it); then the **rim**: every pine within 
 (5.6 tiles — one ring past `BOOM_STUMP_R`) of the roost felled to a **stump** at
 `MERCH_SWING_T` a swing, **paying no gold** (like the crater and the lane — the same free start
 for both sides), picking the nearest pine to itself that still has an open side to stand on and
-keeping a timed `b.avoids` list of trunks no route reached (one slot flipped forever between two
+keeping a timed `b.avoids` list of trunks no route reached (one player flipped forever between two
 walled-in trees); then it keeps to the lane mouth, a step or two either way — **and keeps shop there**: that post is
 [the counter](#the-merchants-counter), open to either team, and it stands still and faces its
 customer for as long as one is being served.
@@ -1980,7 +1980,7 @@ customer for as long as one is being served.
 It is a unit in `robots` with `merchant: true` and `kind: 'merchant'`: the same
 `separateUnits` (player radius and mass — `unitRadius`/`UNIT_MASS.merchant`) and y-sorted draw a
 worker rides, dispatched to `updateMerchant`/`drawMerchant` off the flag after `updateRobot`'s
-shared status/stun handling. The gate's owner is the team's first slot (kill credit for the
+shared status/stun handling. The gate's owner is the team's first player (kill credit for the
 turrets' bolts). `owner` is -1, so it reads no flag and no flag ever recalls it.
 
 **It cannot be hurt, and it has no `hp` field at all rather than a large one.** `unitAlive`
@@ -2048,7 +2048,7 @@ mark dies falls back to holding the flag's ground.
   teaching lines were removed with the rest of the text hints): the ESC panel's CONTROLS block is
   where the middle-mouse binding is looked up.
 - The order is per-player state, not a world resource, so it does **not** go through `contest()`.
-  AI slots never plant one, which is why a bot's bay still gathers exactly as it always did.
+  bots never plant one, which is why a bot's bay still gathers exactly as it always did.
 
 **What it looks like** (the `what a flag looks like` group in [draw-world.js](../../js/draw-world.js)
 draws all three; `FLAG_JOBS`, in robots.js, holds the 7×7 icon grids as landmark-style rect lists):
@@ -2085,7 +2085,7 @@ Death is a walk back, never the end: while your team's eagle still roosts (`team
 eagle-drop banner in js/boot.js) going down costs a timer and everything you carried, and you are
 set down again at the bird ([Respawn at the bird](multiplayer.md#respawn-at-the-bird)); once the
 eagle has been driven off every death on that side is permanent, and that is the only way anyone
-is ever out of a match. `die(p, src, cause)` marks that slot dead and drops its bow draw and
+is ever out of a match. `die(p, src, cause)` marks that player dead and drops its bow draw and
 momentum either way. **Death empties the wallet** (`spillInventory(p, killer)`, right beside
 `die`): a credited killer pockets the victim's gold outright through `awardGold` — so a kill levels
 the killer, which is the bounty that makes taking the fight worth it — while an uncredited death
@@ -2096,13 +2096,13 @@ killer whose own bag is full simply leaves them lying; this is also, for free, h
 roguelike card drops on death** (see [Roguelike cards](#roguelike-cards)) — a picked card is
 already baked into the kit, not an item, so only what's still sitting unopened in the bag spills.
 **And the four weapon slots empty with it**, each tool going down *loaded*: a build lies where its
-owner fell, for whoever walks over it, and `reset()` hands the dead slot its class's starting
+owner fell, for whoever walks over it, and `reset()` hands the dead player its class's starting
 loadout back — so a respawn is armed but is not the player it was. (An item riding the cursor
 mid-drag goes back in the bag first, so it spills with the rest instead of vanishing with the hand
 holding it.) All three loops are generic per type, so a future resource spills without touching
 death code, and an instanced tool travels as the same object it always was
 (`spawnDrop`'s `it`). The standings are unaffected because `scoreOf` ranks lifetime
-`xp`, not the purse, so a looted slot keeps the place it earned. `die` also credits the kill (and
+`xp`, not the purse, so a looted player keeps the place it earned. `die` also credits the kill (and
 heals the killer if their kit carries `killHeal`, off a card) and writes the feed line — see
 [Kills and the event feed](multiplayer.md#kills-and-the-event-feed) — then asks
 `teamEagleDown(p.team)`: with the eagle still roosting, `p.respawnT` starts counting down
@@ -2112,7 +2112,7 @@ for the whole path); with it driven off, `p.eliminated = true`, the permanent pa
 win — a team-level question a kill can never answer, since a side is in the match while its bird
 roosts ([PvP](multiplayer.md#pvp)).
 
-Either way the local slot's overlay goes up through `endMatch('lost' | 'won' | 'respawning')` (the
+Either way the local player's overlay goes up through `endMatch('lost' | 'won' | 'respawning')` (the
 `death & spectate` banner): `state.mode = 'dead'`, every local overlay closed, and the screen goes
 to a dim with two planks — **SPECTATE** and **LOBBY** — for `'lost'` (permanent), to
 [the victory screen](rendering.md#the-end-screens), whose planks are **KEEP PLAYING** and
@@ -2126,24 +2126,24 @@ after, the player choosing when. **LOBBY** on a `'lost'` dim does not leave: it 
 plank is the door out — a lost match ends when you stop watching it, not the instant you go down.
 `'respawning'` needs no state of its own beyond `state.rpClosed` (reset by every `endMatch`):
 once `p.respawnT` hits 0, `respawnPlayer(p)` snaps `state.mode` back to `'play'` the same
-one-line way `'KEEP PLAYING'` already does, lands the local slot at its bird, and replays the HUD
+one-line way `'KEEP PLAYING'` already does, lands the local player at its bird, and replays the HUD
 slide-in a fresh eagle landing gets. A win *or* an elimination also freezes what its screen will
 print (`endSnapshot()` on `state.end`: gold, kills, level, clock, team, class, the kit, and the
 placing and killer only the loss prints) because the match keeps running underneath and a total
 that climbs behind a tally which already counted it reads as a bug — and because a loss's summary
 is opened off a plank minutes later, by which time none of those numbers are still true. Spectating
-sets `state.spec` to a living slot's id and `viewPlayer()` — the one place the camera and minimap
+sets `state.spec` to a living player's id and `viewPlayer()` — the one place the camera and minimap
 ask who to frame — returns it. The control is
-a top-centre `[<] NAME [>]` strip (`specLayout`/`specHit`, sized to the widest slot name so the
-arrows never shift): clicking an arrow or pressing the arrow keys cycles (`specNext`, slot order,
+a top-centre `[<] NAME [>]` strip (`specLayout`/`specHit`, sized to the widest player name so the
+arrows never shift): clicking an arrow or pressing the arrow keys cycles (`specNext`, player order,
 skipping the dead — and skipping rivals while a respawn wait runs, since the wait is not a scouting
 window), ESC returns to the planks (on a wait, which has none, it closes the replay instead), and a
-watched slot that dies hands the view to the next. There is deliberately no hint text — the arrows are the whole explanation (CLAUDE.md's
+watched player that dies hands the view to the next. There is deliberately no hint text — the arrows are the whole explanation (CLAUDE.md's
 "show, don't label" rule); with nobody left the plate shows a dash instead of a name. LOBBY (`toLobby`) fades to dark and reloads
 the page on the same seed, which boots into the title screen. **TAB still opens the standings
 while you are out**, which is the point of holding them above the dim.
 `state.mode` is `title | drop | play | dead`, and `updatePlay()` runs in `play`, `dead` **and**
-`drop` (the clock starts with the eagle; airborne slots are skipped) — the match carries on
+`drop` (the clock starts with the eagle; airborne players are skipped) — the match carries on
 without you, and `updateRespawns` ticks a respawn timer down under the `'respawning'` overlay the
 same way. Only **pause (P) and the settings panel (ESC)** stop the sim;
 `update()` (time, darkness, camera, fx) always keeps running. In `title` only the ambient half
@@ -2255,8 +2255,8 @@ the **info stack** — `drawTags()`, a vertical list on the left edge at the top
 view, drawn above every overlay. Four lines — **FPS** (`loop()`
 accumulates raw unclamped frame deltas into `perf` and refreshes `perf.fps` every half second),
 **SFX**, the sampled sound bank's decoded/asked-for tally (below),
-**POS**, the tile coordinates of the slot the camera frames (`viewPlayer()`, so spectators read
-the watched slot), and **SEED**, the run seed (see
+**POS**, the tile coordinates of the player the camera frames (`viewPlayer()`, so spectators read
+the watched player), and **SEED**, the run seed (see
 [world.md](world.md#determinism-and-noise)) — each drawn as a dim label plus a value on one
 shared x, so the numbers line up in a column; that dim-label / bright-value pairing is the same
 one the berry and fish counters use. **Red on the fps value (below 45) is the only colour in the
@@ -2277,7 +2277,7 @@ has no ESC-menu row, only the `. HITBOX` line in the CONTROLS block; the rest is
 
 Beneath the minimap
 `renderMinimap()` prints one centred row: a 5×7 pixel figure (`ALIVE_ICON`, no label) with
-`aliveCount()` — slots active and not dead, riders included — then the elapsed clock.
+`aliveCount()` — players active and not dead, riders included — then the elapsed clock.
 
 ## Audio
 
@@ -2354,7 +2354,7 @@ split off from `pickup()`, which stays the synth UI blip so menus keep an instan
 click; `hammer()` (raising, upgrading or finishing a structure) splits off from `place()` the same
 way, with `building()` as its quieter, shorter sibling on a site's dust tick — it repeats for as
 long as the build takes, so it is widely jittered and must never settle into a rhythm. `step()` is
-one boot per footprint the local slot leaves; `land()` is the same boot dropped an octave under a
+one boot per footprint the local player leaves; `land()` is the same boot dropped an octave under a
 low thump, so touching down off the eagle reads as weight rather than as an arrow connecting.
 `yelp()` is a creature crying out under a hit it survived, and `monsterDie(kind)` takes the
 animal's kind — a wolf yelps where a rabbit squeals.
@@ -2398,7 +2398,7 @@ victory, the lobby) can never be undone by a release arriving after it. The
 | `intro` — FROZEN NORTH RUN INTRO | boot, and `leaveSelect()` back to the menu | yes |
 | `select` — FROZEN NORTH RUN CLASS SELECTION | `beginSelect()`; the gear pop-up keeps it | yes |
 | `eagle` — FLYING ON EAGLE | `beginDrop()` | yes |
-| `jump` — JUMPING OFF EAGLE | `dropJump()` for the local slot | no → `foxglove` |
+| `jump` — JUMPING OFF EAGLE | `dropJump()` for the local player | no → `foxglove` |
 | `foxglove` — FOXGLOVE DROP | the end of `jump`, via `TRACKS.next` | no → silence |
 | `village` — FOREST VILLAGE LOOP | `openShop()`, as a **hold**; `closeShop()` releases it | yes |
 | `wiki` — WHISPERING WOODS | `beginWiki()`, as an ordinary **play**; `leaveWiki()` puts `intro` back | yes |

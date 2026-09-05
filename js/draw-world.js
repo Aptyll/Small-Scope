@@ -1053,7 +1053,7 @@ function bigBuildReveal(o) {
 //   roll-out - the next bot slides down the doorway over the last 0.8 s of its
 //              timer, so the real one appears at the mouth mid-motion
 //   shutter  - rolls down over the doorway as o.door -> 0 (guard mode)
-//   pips     - one per bot slot: lit = alive, blinking = being built, dark = empty
+//   pips     - one per bot: lit = alive, blinking = being built, dark = empty
 //   bar      - the roll-out timer, under the pips
 //   vents    - a slat flickers across each grille
 //   beacon   - roof corner, amber blink while a bot is due, grey otherwise
@@ -1389,7 +1389,7 @@ function drawMerchant(b, ex, ey, now) {
   const frames = set[b.dir] || set.down;
   const spr = frames[b.moving ? 1 + (Math.floor(b.animT / 2) % 2) : 0];
   // 16 x 18: the feet land on the player's own foot row (b.y + 4), so the
-  // extra two rows are height, and a walking robe bobs a pixel like a slot
+  // extra two rows are height, and a walking robe bobs a pixel like a player
   const px = Math.round(b.x - 8 - ex), py = Math.round(b.y + 4 - ey) - spr.height;
   const lift = (b.hopT > 0 ? Math.round(Math.sin(Math.min(1, b.hopT / MERCH_HOP_T) * Math.PI) * 10) : 0) +
     (b.moving ? Math.floor(b.animT / 2) % 2 : 0);
@@ -1693,7 +1693,7 @@ function drawPlayer(p, ex, ey, now) {
   // wall), and spanning the health bar and the stamina bar stacked (hy-8 ..
   // hy-2) - the plate every animal wears too (drawLevelBadge)
   drawLevelBadge(fx - 8, hy - 8, p.level);
-  // Every slot carries a name tag in its team colour so a fight stays
+  // Every player carries a name tag in its team colour so a fight stays
   // legible - your own included: the profile name is what the rest of the
   // table sees over your head, and hiding it from you alone would make it
   // the one label in the game you cannot check.
@@ -1703,7 +1703,7 @@ function drawPlayer(p, ex, ey, now) {
   // dodge stamina: one clean unsegmented WHITE bar under the health bar -
   // white on every side, since stamina has no side, and white is neither the
   // team's paint above it nor the gold of the draw - charges stay discrete
-  // in the sim, the bar just shows the pooled total. Drawn for every slot
+  // in the sim, the bar just shows the pooled total. Drawn for every player
   // (a rival out of rolls is a tell, and the level badge spans both bars, so
   // a lone hp bar would look broken).
   // The track is painted one row taller than the fill so the gap between the two
@@ -1889,7 +1889,7 @@ function drawSnowCover(p, spr, px, py, alpha) {
   ctx.globalAlpha = 1;
 }
 
-// The bury meter, local slot only: twelve marks on a ring in the snow that
+// The bury meter, local player only: twelve marks on a ring in the snow that
 // light one at a time as the cover builds, then flash white and go. A rival's
 // bury needs no meter - they can literally watch you disappear - and this one
 // exists only because you cannot see your own back.
@@ -1911,8 +1911,8 @@ function drawBuryRing(p, cxp, cyp) {
   ctx.globalAlpha = 1;
 }
 
-// an unfilled slot: a flat team-tinted silhouette standing at its camp, so
-// the world shows who is missing rather than pretending the slot isn't there
+// an unfilled player: a flat team-tinted silhouette standing at its camp, so
+// the world shows who is missing rather than pretending the player isn't there
 function drawGhost(p, ex, ey) {
   const spr = classSet(p)[p.dir][0];
   const px = Math.round(p.x - 8 - ex), py = Math.round(p.y - 12 - ey);

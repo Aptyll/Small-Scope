@@ -1,5 +1,5 @@
 'use strict';
-// The frame sim: update()/updatePlay() step every slot, arrow, drop and
+// The frame sim: update()/updatePlay() step every player, arrow, drop and
 // timer; updatePlayer is the one body every controller drives; updateFx ages
 // the cosmetics. Owns the camera (camX/camY) and the world-space snow.
 // ------------------------------------------------------------ update
@@ -110,7 +110,7 @@ function update(dt) {
     }
   }
 
-  // the match runs on while the local player is down - other slots are still
+  // the match runs on while the local player is down - other players are still
   // playing. Only pause and the settings panel stop the sim: the map is read
   // with the world still moving, the same deal the build wheel takes.
   if ((state.mode === 'play' || state.mode === 'dead' || state.mode === 'drop') &&
@@ -161,7 +161,7 @@ function update(dt) {
     camY += (bt.y - WV_H / 2 - camY) * Math.min(1, dt * 3.5);
   } else {
     const vp = viewPlayer();
-    const look = vp === player ? 0.12 : 0; // the aim lean is the local slot's; a watched one is framed dead centre
+    const look = vp === player ? 0.12 : 0; // the aim lean is the local player's; a watched one is framed dead centre
     // the lean is a FRACTION of the view, so it divides by the zoom: the same
     // pointer offset leans the same share of the screen however close you are
     const lookSX = (mouse.x - VIEW_W / 2) * look, lookSY = (mouse.y - VIEW_H / 2) * look;
@@ -215,7 +215,7 @@ function update(dt) {
   updateFx(dt);
 }
 
-// A shot's reach into a body: the disc round a slot's centre an arrow lands
+// A shot's reach into a body: the disc round a player's centre an arrow lands
 // in, wider than the 4.5 px body a walker collides with. A walking target
 // crosses its own width twice in the quarter second a full-draw arrow takes
 // to fly 80 px, so at the body's own radius almost nothing lands on a moving
@@ -223,7 +223,7 @@ function update(dt) {
 // same disc on every side keeps it a fact of arrows, not a hidden handicap.
 const ARROW_HIT_R = 10;
 // ------------------------------------------------------------ passive income
-// The clock pays: every slot on the ground draws TRICKLE_GOLD into its
+// The clock pays: every player on the ground draws TRICKLE_GOLD into its
 // wallet every TRICKLE_T s, through gainGold so it levels too - the League
 // trickle. A floor under everyone's purse, so a player who never swings an
 // axe still buys gear and still reaches the mid levels, and a farmer pulls
@@ -235,8 +235,8 @@ const TRICKLE_T = 4;      // s per coin: 15 gold a minute, ~225 over a fifteen-m
 function updatePlay(dt) {
   state.tick++; // with SEED and the player id, this decides contested orders
 
-  // every slot steps through the same code, each off its own input struct
-  // (slots still on or under the eagle are moved by updateDrop instead)
+  // every player steps through the same code, each off its own input struct
+  // (players still on or under the eagle are moved by updateDrop instead)
   for (const p of players) {
     if (!p.active || inAir(p)) continue;
     if (p.control === 'ai') updateAI(p, dt);
@@ -347,11 +347,11 @@ function updatePlay(dt) {
     }
     // What the shot does to a BODY, said once for all three kinds: the damage
     // type, the fire it lights and the shove it lands are the bit's, and
-    // hurtUnit (js/actions.js) hands them to a slot, a deer or a worker bot
+    // hurtUnit (js/actions.js) hands them to a player, a deer or a worker bot
     // alike. Only the hit test below differs per kind - a raised shield, a
     // chassis, a small animal high on its own altitude.
     // `base` is the px/s shove this KIND of body takes from a shot; the bit's
-    // own KNOCKBACK (a.kb) scales it - and scales a slot's HIT_KB too, which
+    // own KNOCKBACK (a.kb) scales it - and scales a player's HIT_KB too, which
     // is the whole reason it travels as a multiplier (js/tools.js).
     const blow = (t, base) => {
       hurtUnit(t, a.dmg, nx, ny, players[a.owner], {
@@ -583,7 +583,7 @@ function updatePlayer(p, dt) {
   // the class abilities' own clock: cooldowns, the cast landing, and every
   // timed state one leaves on this body (js/abilities.js)
   updateAbilities(p, dt);
-  if (p.dead) return; // a burn can finish the slot in there; a body takes no more steps
+  if (p.dead) return; // a burn can finish the player in there; a body takes no more steps
   // ...and the meal's clock beside it: the channel landing its heal, and the
   // one cooldown a berry and a fish share (js/core.js)
   updateEat(p, dt);
@@ -920,7 +920,7 @@ function updatePlayer(p, dt) {
 
   // the cycle: the cooldown a shot starts (toolCycle, js/tools.js) counts
   // down, and its end is the ONE gate between presses. It runs for every
-  // slot - dead or alive is already filtered above - so a bot recovers on
+  // player - dead or alive is already filtered above - so a bot recovers on
   // exactly the human's clock.
   if (p.nockT > 0) {
     p.nockT = Math.max(0, p.nockT - dt);
@@ -932,7 +932,7 @@ function updatePlayer(p, dt) {
   // The tool: pressing arms the shot, releasing fires it. The press does not
   // have to land on a ready tool - it stays armed, so holding through the
   // cycle draws the moment the wipe clears. Without that, a controller that
-  // holds fire down - every AI slot does - would fire once and then wait
+  // holds fire down - every bot does - would fire once and then wait
   // forever for an edge it already spent. `toolReady` is the only other
   // refusal: a slot with no tool in it, or a tool with no bit light enough to
   // throw, is dry.

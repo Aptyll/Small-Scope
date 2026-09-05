@@ -25,7 +25,7 @@ const FISH_SPAWN_T = 11;   // seconds between new fish while the shoal is health
 
 // One currency, many sources. Every source pays gold with a different yield profile
 // (burst on completion, or per kill); this table is the whole economy, with one
-// source outside it: the clock, which pays every slot on the ground a coin every
+// source outside it: the clock, which pays every player on the ground a coin every
 // TRICKLE_T s (the passive income banner, js/sim.js). The per-swing rows are 0 -
 // a swing is work, the fell is the pay - because a per-swing coin on a one-second
 // pine was the firehose that had every bot at the level cap by two minutes.
@@ -51,7 +51,7 @@ function mulberry32(a) {
 }
 // Practice mode: ?practice=1 (the PRACTICE const above WORLD) boots the
 // training arena (the `practice arena` banner, js/world.js) instead of a
-// match - no title menu, no eagles, no other slots, and the clock pinned to
+// match - no title menu, no eagles, no other players, and the clock pinned to
 // early morning (sim.js never advances state.time under PRACTICE). It pins
 // SEED to a constant BELOW ?seed on purpose, so the arena is the same ground
 // on every machine every time: a practice room the seed can never reshuffle.
@@ -74,7 +74,7 @@ function randi(a, b) { return Math.floor(rand(a, b + 1)); }
 
 // ------------------------------------------------------------ state
 const state = {
-  mode: 'title', // title | drop | play | dead  (drop = riding / falling from the eagle; dead = the local slot is out of the match, or it is over)
+  mode: 'title', // title | drop | play | dead  (drop = riding / falling from the eagle; dead = the local player is out of the match, or it is over)
   time: DAY_LEN * 0.25, // start mid-morning
   elapsed: 0,
   day: 1,
@@ -89,14 +89,14 @@ const state = {
   shake: 0,
   deadTimer: 0,
   // out of the match: the overlay's state. over: 'lost' | 'won' | null; view:
-  // 'menu' (the planks) | 'spec' (following a living slot); spec: that slot's
+  // 'menu' (the planks) | 'spec' (following a living player); spec: that player's
   // id; sel + hover: the planks' keyboard pick and per-plank hover eases
   over: null, deadView: 'menu', spec: -1, deadSel: 0, deadHover: [0, 0],
   // the replay window over a respawn wait has been closed (endMatch reopens it)
   rpClosed: false,
   // a win or an elimination freezes the numbers its end screen prints
   // (endSnapshot(), the victory banner); defeatT is the loss summary's own
-  // clock, started when that view opens rather than when the slot went down
+  // clock, started when that view opens rather than when the player went down
   end: null, defeatT: 0,
   msg: null, msgT: 0,
   fishT: FISH_SPAWN_T, // countdown to the next fish swimming in (see updateFish)
@@ -161,7 +161,7 @@ const state = {
   introLen: 1,         // that transition's full length (the camera ease divides by it)
   introFrom: null,     // camera position the transition started from
   drop: null,          // the eagle while it is in the air: see makeEagleRoute() / beginDrop()
-  // the DROP BRIEF: a local slot that never jumped rides the landing, and the
+  // the DROP BRIEF: a local player that never jumped rides the landing, and the
   // crash pans the camera to both roosts and states the objective before
   // handing the controls (and the E hop off the bird) back -
   // { ph: 'wait'|'theirs-go'|'theirs'|'ours-go'|'ours', t, total }, run by
@@ -354,7 +354,7 @@ function eatBerry(p) { startEat(p, 'berry'); }
 function eatFish(p) { startEat(p, 'fish'); }
 
 // The meal ticking, and the shared clock beside it. Called from updatePlayer
-// next to the ability clock, for every slot alike.
+// next to the ability clock, for every player alike.
 function updateEat(p, dt) {
   if (p.foodCd > 0) p.foodCd = Math.max(0, p.foodCd - dt);
   if (p.eatT <= 0) return;

@@ -24,16 +24,16 @@ declare victory. The three affordances:
   fixed-`dt` update ticks and one render, `freeze = true` stops the rAF loop so stepping is
   deterministic (it halts `render()` too, so the canvas holds the last frame — set the value you
   want *before* freezing), `hideUI = true` drops the HUD/info stack/cursor for captures, `buildStruct` stages
-  a construction site with no cost or validation, `warp(tx, ty, p?)` drops a slot on a tile, and
-  `setControl(slot, mode)` hands a slot to an AI, a human or nobody. `setHide(h, p?)` stages a
+  a construction site with no cost or validation, `warp(tx, ty, p?)` drops a player on a tile, and
+  `setControl(id, mode)` hands a player to an AI, a human or nobody. `setHide(h, p?)` stages a
   buried body without lying in the snow for `PRONE_BURY`, and `concealOf` / `seenAt(range, p?)` /
   `ambushReady` read back what the world makes of it. **Stage the scene** (place
   structures, warp to a landmark, jump `state.day`/`state.time`) instead of playing to reach it.
-  Two things a staged scene walks into: `warp` moves a slot but **not the camera**, which lerps
+  Two things a staged scene walks into: `warp` moves a player but **not the camera**, which lerps
   after it over about a second of stepped frames — step ~120 frames of `1/60` after warping before
-  cropping anything, or the crop lands on empty world; and a live AI slot parked beside the staged
+  cropping anything, or the crop lands on empty world; and a live bot parked beside the staged
   player will quietly shoot it dead mid-capture, so park its bow with `setNock(1e9, p)` first.
-  And `warp` checks nothing: a slot dropped into a pine's tile has every shot it fires die in the
+  And `warp` checks nothing: a player dropped into a pine's tile has every shot it fires die in the
   tile it spawned in (the arrow loop strikes the solid it starts inside), which reads as "the bow
   is broken" - test `objects[ty * WORLD + tx]` for the stand tile and the line of fire first.
 - **The counter needs a merchant, and a merchant needs a roost**: `startGame()`, step until
@@ -275,7 +275,7 @@ name it in the entry's `icon` field, map the object types it works in `workTarge
 only selection logic — there are no keys or bar slots), and give its `key` behavior in
 `hitObject()`'s gating.
 
-**Adding an ability or input** — it belongs to *every* slot, not to the local player. Add the
+**Adding an ability or input** — it belongs to *every* player, not to the local player. Add the
 field to `makeInput()`, fill it for the human in `sampleHumanInput()` (edge-triggered flags are
 set by the event handlers and cleared by the sim), consume it in `updatePlayer(p, dt)`, and give
 bots a way to use it in `updateAI()`. If only one player can have the result, queue it through
@@ -285,7 +285,7 @@ bound as a *held* state that the player uses alongside WASD will close their tab
 tap that toggles, and drop `e.repeat` — a held modifier auto-repeats.
 
 **Adding something that hunts a player** — a new enemy, a new building, anything that decides it
-can see a slot — asks `seenAt(p, range)`, never a bare distance against a bare range. That one
+can see a player — asks `seenAt(p, range)`, never a bare distance against a bare range. That one
 function is where GHOSTSTEP and lying buried in the snow both live, and a hunter that skips it
 stares straight through the cover with nothing in the code to say why. If it also *marks* the
 player somewhere the player can read (a map dot, an icon), gate that on
@@ -294,10 +294,10 @@ player somewhere the player can read (a map dot, an icon), gate that on
 
 **Adding a way to hurt anything** — call `hurtUnit(e, dmg, nx, ny, src, o)`, never `damagePlayer` /
 `hurtAnimal` / `hurtRobot` directly, and put a state on a body with its setter (`stunUnit`,
-`rootUnit`, `slowUnit`, `netUnit`, `markUnit`, `igniteUnit`). One call, and a slot, a deer and a
+`rootUnit`, `slowUnit`, `netUnit`, `markUnit`, `igniteUnit`). One call, and a player, a deer and a
 worker bot all take it; the three per-kind functions under `hurtUnit` exist for what is genuinely
 per-kind and are not the entry point. For an **area** effect sweep `unitsHit(src, x, y, r)` (a blow:
-a slot mid-roll or fresh off a respawn is dropped) or `unitsNear` (a lasting ground condition,
+a player mid-roll or fresh off a respawn is dropped) or `unitsNear` (a lasting ground condition,
 which a roll should not shrug off) rather than writing a loop per kind — that loop is exactly how wildlife and bots
 fall out of a feature. Still pass the attacker as `src` (or, when the world did it, a `DEATH_CAUSE`
 key as `o.cause`): miss it and the kill is uncredited on the TAB scoreboard and the event feed
@@ -383,7 +383,7 @@ mix against the other cues, not against the file's own loudness — then check i
 (0.3–0.7 for a world cue) rather than by ear, because these clips arrive 20 dB apart. Set `dur` if
 the clip holds more than one hit; several of the existing files are a whole loop padded to a fixed
 length. World cues gate on `nearPlayer(x, y)` so a remote base cannot spam the mix; cues only the
-local slot should hear gate on `p === player`. A cue on a repeating tick (`building()` on a
+local player should hear gate on `p === player`. A cue on a repeating tick (`building()` on a
 site's dust timer) needs a wide `jitter` and a `gap`, or it settles into a rhythm. A
 **notification** cue is the opposite: no jitter at all, and two directions get two *different*
 clips rather than one pitched two ways (`SFX.market`), since it is heard as a meaning and not as
@@ -403,7 +403,7 @@ bird, beside `die()`, js/player.js), the `CARDS` table (every card's effect, by 
 draw-3 rule, the `YIELD` table (every gold payout, the one table still in core.js), the trickle
 (`TRICKLE_GOLD`/`TRICKLE_T`, js/sim.js) and `TREE_HP` (js/world.js) beside it, the hero-level table
 (`LEVEL_XP`/`LVL_HP`/`LVL_DMG`, js/player.js — sized against the harness, see
-[multiplayer.md](multiplayer.md#ai-slots)), the eagle's siege (`EAGLE_HP`/`EAGLE_WORK_DMG`/
+[multiplayer.md](multiplayer.md#bots)), the eagle's siege (`EAGLE_HP`/`EAGLE_WORK_DMG`/
 `EAGLE_ARROW_DMG`/`GUST_R`/`PREEN_RATE`, js/boot.js) and the bots' objective clocks (`AI_LEVELS`'
 `push`/`guard`, `AI_ALLY_PUSH`, `AI_ESCALATE`, `AI_JOIN_HP`, `AI_ALARM_HP`, `AI_ROOST_R`,
 js/ai.js), the chest
@@ -411,7 +411,7 @@ count/spacing/payout (`CHEST_*` above `placeChests()` in js/world.js),
 `WORK_REACH` and the roll/prone blocks in js/actions.js, `BOW_CHARGE` and the
 momentum constants (`ICE_MAX`, `SLIDE_MIN`/`SLIDE_EXIT`, `TRAIL_MIN`) in js/player.js above
 `CHAMPS`, the per-surface steer/decay rates inline in `updatePlayer()`'s movement block,
-the slot count (`MAX_PLAYER_SLOTS`, js/player.js) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
+the player count (`MAX_PLAYERS`, js/player.js) and the bot ranges (`AI_SIGHT`, `AI_HUNT`, `AI_FORAGE`),
 the `TOOLS` and `BITS` tables and the loot rates (`ROCK_DROP`/`TREE_DROP`/`CHEST_TOOL`/`LOOT_TOOL`)
 in js/tools.js, the flight-path constants beside `steerBit`, the damage roll in `emitBit()`,
 `TREE_RARE_CHANCE` in `treeRare()`, the darkness ramp in
@@ -455,7 +455,7 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   instead of walking into the corner) removed the one such stall it reproduced — ten bodies
   jammed at a lane's bend, seed 99 — and none of 2.64's runs stalled, but seed 2 itself was not
   re-run; if a push stands still again, the harness's per-minute rows (own/rival roost distance
-  per slot) and `settings.hitbox = 1` on the stalled bots' routes are the way in.
+  per player) and `settings.hitbox = 1` on the stalled bots' routes are the way in.
 - **A player's whole wallet still goes to the killer** (2.63): with the fells cut, kill transfers
   are the biggest single swing left in the harness buckets (400–590 gold to one bot in a
   20-minute run, from bots that hoard once their gear is bought) — a level and a half late. It is
@@ -514,7 +514,7 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
   pushing to it. Wolves are hostile but only to players.
   Worker bots take arrows from any rival, the turret bolts that were already aiming at them, a
   rival worker's axe on an attack [flag](gameplay.md#worker-flags), and now every class ability and
-  the roll like any other body — but the AI's target picker still ignores them: a bot slot only
+  the roll like any other body — but the AI's target picker still ignores them: a bot only
   downs a worker by accident, with a shot meant for a player. Buildings are not immune either: a
   **player** on another team breaks one with E, and a worker on a siege flag does the same through
   the same `hurtStruct` (see [Base building](gameplay.md#base-building)), but no wildlife does, and
@@ -528,7 +528,7 @@ here), and **never rewrite js/sprites.js** — it has a UTF-8 BOM and byte-fragi
 - **The AI does not play around the new states.** `updateAI` reads no `burnT`, `netT` or `rootT`,
   so a bot on fire does not break off and a netted one does not change its mind. Everything lands
   on them correctly; nothing reacts to it yet.
-- **AI slots never plant a worker flag.** `p.flag` exists on every slot and the whole dispatch is
-  slot-generic, but only `sampleHumanInput`'s middle-click writes one, so a bot's bay gathers the
+- **bots never plant a worker flag.** `p.flag` exists on every player and the whole dispatch is
+  player-generic, but only `sampleHumanInput`'s middle-click writes one, so a bot's bay gathers the
   way it always did. Teaching `updateAI` to plant one is the obvious next move and needs no new
   plumbing.

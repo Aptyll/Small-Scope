@@ -34,7 +34,7 @@ window.addEventListener('keydown', (e) => {
   if (state.mode === 'dead') { deadKey(e.key.toLowerCase()); return; }
   if (state.mode !== 'play') return;
   // edge-triggered intents go into the local player's input struct; the sim
-  // reads and clears them, exactly as it does for an AI slot
+  // reads and clears them, exactly as it does for an bot
   if (e.key === ' ') player.input.dodge = true;
   if (e.key.toLowerCase() === 'q') player.input.eatBerry = true;
   if (e.key.toLowerCase() === 'f') player.input.eatFish = true;

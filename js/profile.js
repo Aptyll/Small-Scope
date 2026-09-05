@@ -56,7 +56,7 @@
       practice: false, // has the PRACTICE TOOL plank been knocked open (3 knocks; stays open)
       bestLap: 0,      // the ice parkour's all-time best lap in seconds (0 = never lapped)
       bestRange: 0,    // the archery range's all-time best round score (0 = never played) - these two are all practice writes
-      // wins = matches the local slot was standing for at the win
+      // wins = matches the local player was standing for at the win
       // (endMatch('won')); days = days begun (takeoff + each dawn still in).
       // A save written as games/bestDay is a different pair and is not copied.
       stats: { wins: 0, gold: 0, days: 0 },

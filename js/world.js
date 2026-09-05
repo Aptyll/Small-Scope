@@ -202,8 +202,8 @@ const cx = WORLD / 2, cy = WORLD / 2;
 // six evenly spaced points on a ring 55 tiles in from the world edge (at the
 // treeline). These were the spawn camps before the eagle drop; they still
 // anchor the river spokes and the keep-clear rules so existing seeds keep
-// their terrain. Nobody starts here any more - every slot lands from the eagle.
-// RING_N is frozen at six ON PURPOSE: it stopped tracking the slot count when
+// their terrain. Nobody starts here any more - every player lands from the eagle.
+// RING_N is frozen at six ON PURPOSE: it stopped tracking the player count when
 // the roster grew to ten, because player count must never reshape the terrain.
 const SPAWN_D = WORLD / 2 - 55;
 const RING_N = 6;
@@ -598,7 +598,7 @@ function landmarkAt(x, y) {
 //
 // Boots only under PRACTICE (js/core.js pins the seed to PRACTICE_SEED, so
 // ?seed can never reshape it) and replaces genWorld outright: no landmarks,
-// no eagles, no other slots (js/boot.js), and the clock is pinned to early
+// no eagles, no other players (js/boot.js), and the clock is pinned to early
 // morning forever (sim.js). One player, nothing at stake - die() revives on
 // the spot and the profile is never written (js/player.js), with ONE
 // exception: a record parkour lap goes through PROFILE.setBestLap, so the

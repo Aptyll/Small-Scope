@@ -109,7 +109,7 @@ function separateUnits() {
 
 // ------------------------------------------------------------ pathfinding
 // Grid A* over the tile map for everything that walks on its own: robots,
-// animals, bot slots and any future enemy. A tile is walkable when it is
+// animals, bots and any future enemy. A tile is walkable when it is
 // in-world, not solid and not open water (players can enter a hole, but
 // nothing steers into one on purpose). Eight-connected with no corner
 // cutting - a diagonal step needs both orthogonal neighbours open, so a unit
@@ -310,7 +310,7 @@ function navStep(e, gx, gy, r, spd, dt, reach) {
   // The one place a self-mover's speed is spent, so it is the one place the
   // net, the crater and the snare's jaws have to be folded in: unitMoveMul
   // (js/actions.js) is abilityMoveMul's twin for everything that is not a
-  // slot, and a rooted animal or bot comes out of it at zero.
+  // player, and a rooted animal or bot comes out of it at zero.
   spd *= unitMoveMul(e);
   const mv = moveEntity(e, (n.dx * spd + e.kbx) * dt, (n.dy * spd + e.kby) * dt, r);
   if ((mv.blockedX || mv.blockedY) && e.nav.replanT < NAV_REPLAN - 0.2) e.nav.replanT = 0;

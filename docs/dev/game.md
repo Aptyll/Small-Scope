@@ -10,8 +10,8 @@ nine other people are on it.
 
 ## A match
 
-Ten slots in `players` — **slot 0 is you, the rest are AI** — across **two teams of five, RED vs
-BLUE** (slots alternate). Everyone picks one of **two classes** (the ranged HUNTER, the melee
+Ten players in `players` — **player 0 is you, the rest are AI** — across **two teams of five, RED vs
+BLUE** (players alternate). Everyone picks one of **two classes** (the ranged HUNTER, the melee
 WARRIOR) and is **dropped in by their team's armoured eagle** — the two birds fly the map's one
 diagonal in opposite directions and pass mid-route; nobody starts at a spawn camp. At the end of
 its line each eagle dives into its **corner's** treeline — RED always bottom-left, BLUE always
@@ -117,7 +117,7 @@ costs the wallet, the bag and the walk. The bird is the **only objective** and t
 match ends, which is why both teams always have somewhere worth walking to — and why every bot
 on the map knows where both birds are and what is happening at them, and answers a hit on its
 own from anywhere. [Eagle drop](rendering.md#eagle-drop-mode-drop),
-[Death and respawn](gameplay.md#death-and-respawn), [AI slots](multiplayer.md#ai-slots).
+[Death and respawn](gameplay.md#death-and-respawn), [Bots](multiplayer.md#bots).
 
 **Roguelike cards come out of the treeline's chests.** A sprung chest drops a **rarity-rolled
 card**, drafted three-at-a-time from a bag cell without pausing the sim, and a picked card is
@@ -142,7 +142,7 @@ wildlife in the game) and a **ROOKERY**. [Landmarks](world.md#landmarks).
 - **Not a deathmatch.** Kills never win a match and never end one — only the bird does. Death
   still costs everything you carried and the walk back from your roost; that is the stake
   everything else borrows from, and the objective is the only place it is ever permanent.
-- **Not a solo survival game.** Every mechanic runs per slot off `p.input`, and `player` is only
+- **Not a solo survival game.** Every mechanic runs per player off `p.input`, and `player` is only
   the local one — see [multiplayer.md](multiplayer.md).
 - **Not a game that explains itself in text.** The UI rule in [CLAUDE.md](../../CLAUDE.md) is a
   design constraint, not a style preference.

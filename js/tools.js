@@ -51,7 +51,7 @@ const TIER_SHINE = 2; // the tier whose plate animates
 //
 // KNOCKBACK (`kb`) is a MULTIPLIER, not a speed: 1 is the ordinary shove a
 // blow lands and the bit scales it. It has to be a multiplier, because the
-// three kinds of unit are already shoved at three different weights (a slot
+// three kinds of unit are already shoved at three different weights (a player
 // at HIT_KB, a worker at ROBOT_KB, an animal on a curve off the draw) and one
 // number written on a bit has to mean the same thing thrown at any of them -
 // so it rides to hurtUnit as `kbMul` and scales whatever shove that kind
@@ -62,7 +62,7 @@ const TIER_SHINE = 2; // the tier whose plate animates
 // silhouette the shots pass draws it with (BIT_BODY, js/render.js; absent =
 // the arrow), `impact` what it DOES where it lands on something rather than
 // simply running out (BIT_IMPACT below), and `bot: false` marks a bit no AI
-// slot can read, the way the paths it cannot aim are already left alone.
+// player can read, the way the paths it cannot aim are already left alone.
 //
 // `price` is what the merchant sells one for (the `shop` banner, js/shop.js),
 // and half of it is what the merchant pays for one back. It is the only
@@ -852,10 +852,10 @@ function dropLoot(x, y, tier, chance) {
 }
 
 // ---- starting loadouts ---------------------------------------------------
-// Every slot flies in with its class's tool in the one weapon slot, its
+// Every player flies in with its class's tool in the one weapon slot, its
 // class's own bits in it, which is what makes the pick a choice rather than
 // a preview: the two classes do not shoot the same thing. Called from
-// initPlayers() and again whenever the local slot changes class at select.
+// initPlayers() and again whenever the local player changes class at select.
 // The order inside `bits` is the FIRING order, cell 0 first, and a modifier
 // only reaches the shots after it - so the WARRIOR's HEFT sits UNDER its
 // arrow. A starting kit that fitted a modifier above its only shot would

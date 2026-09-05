@@ -1,18 +1,18 @@
 'use strict';
-// Every combatant in the match: the numbers a slot is made of, the Player
-// class and its slots, the two playable classes and their kits, gear, cards,
+// Every combatant in the match: the numbers a player is made of, the Player
+// class and the ten of them, the two playable classes and their kits, gear, cards,
 // the input struct, contested orders, the entity arrays - and the damage &
-// death lifecycle those slots live and die by.
+// death lifecycle those players live and die by.
 // ------------------------------------------------------------ players
-// Every slot in the match is a Player. They all carry identical state and are
+// Every player in the match is a Player. They all carry identical state and are
 // all driven from the same `input` struct, so a feature written for "the
-// player" is a feature every slot has: the local human (slot 0), the AI fills,
+// player" is a feature every player has: the local human (player 0), the AI fills,
 // and eventually a network peer are only different in who fills that struct.
-// Sim code takes a `p` argument; `player` (the local slot) is for the camera,
+// Sim code takes a `p` argument; `player` (the local player) is for the camera,
 // HUD, cursor and audio only.
 const TEAMS = SPRITES.teams; // the 2 colour presets (RED, BLUE), baked into the sprites
 // Which PRESET a team wears on this screen. With settings.teamBlue (the
-// default) the local slot's side is always the BLUE one and the rival side
+// default) the local player's side is always the BLUE one and the rival side
 // always RED, whatever team index the roster dealt - so allies read blue and
 // enemies red from the first match to the last, and a future second human
 // sees the mirror. The match itself never asks this: team indices, enemyOf,
@@ -22,12 +22,12 @@ const TEAMS = SPRITES.teams; // the 2 colour presets (RED, BLUE), baked into the
 // computed from it live (Player.name), so RED-3 turns BLUE-3 with the toggle.
 function skin(team) { return settings.teamBlue && player && player.team === 0 ? 1 - team : team; }
 
-// Player slots. Every combatant in the match - the local human, the AI fills,
+// Players. Every combatant in the match - the local human, the AI fills,
 // and (later) network peers - is a Player in `players`, so anything written
-// for "the player" is automatically something every slot can do. Only the
-// camera, HUD and cursor address one specific slot (`player`, the local one).
-const MAX_PLAYER_SLOTS = 10; // five a side
-const TEAM_COUNT = 2;      // RED vs BLUE; slots alternate (slot % TEAM_COUNT)
+// for "the player" is automatically something every player can do. Only the
+// camera, HUD and cursor address one specific player (`player`, the local one).
+const MAX_PLAYERS = 10; // five a side
+const TEAM_COUNT = 2;      // RED vs BLUE; players alternate (id % TEAM_COUNT)
 const PVP = true;          // arrows hit players on another team (friendly fire is off)
 const PLAYER_SPEED = 72;
 const PLAYER_R = 4.5;
@@ -72,12 +72,12 @@ const BOW_CHARGE = 0.9;   // seconds to a full draw
 const BOW_NOCK = 0.45;    // WREN's seconds between loosing and the next draw
 
 // ---- classes ------------------------------------------------------------
-// Every slot plays one of these. A class is a look (SPRITES.champ[c] - the
+// Every player plays one of these. A class is a look (SPRITES.champ[c] - the
 // sprite key keeps its legacy name; js/sprites.js is never rewritten) plus a
 // kit - the numbers updatePlayer / emitBit / tryDodge read through kitOf(p)
 // instead of the bare constants - plus its four ACTIVE ABILITIES on keys 1-4
 // (CLASS_AB, js/abilities.js). Picked on the class select screen (local) or
-// hashed from the seed (AI slots) in initPlayers().
+// hashed from the seed (bots) in initPlayers().
 const CLASSES = [
   {
     name: 'HUNTER', role: 'BOW, TRAPS, DISTANCE',
@@ -94,11 +94,11 @@ const CLASSES = [
       bowCharge: 0.75, nock: 0.5, dmgBase: 3, dmgPow: 6, spdDmg: 5, dodgeSpeed: 230, maxHp: 120 },
   },
 ];
-// the kit every sim site reads: the class's numbers with the slot's gear
+// the kit every sim site reads: the class's numbers with the player's gear
 // folded in. refreshKit() rebuilds the cache whenever class or gear
 // changes; kitOf() itself is called many times a frame and must stay a read.
 function kitOf(p) { return p.kit || CLASSES[p.cls].kit; }
-// swap a slot's class: kit hp applies on the spot (full heal, it's a
+// swap a player's class: kit hp applies on the spot (full heal, it's a
 // pre-match choice), and the new class brings its own tool and bits - the
 // loadout is part of who you picked, not a thing carried across (js/tools.js)
 function setClass(p, c) { p.cls = c; refreshKit(p); p.hp = p.maxHp; giveLoadout(p); }
@@ -141,8 +141,8 @@ function levelUp(p) {
   if (p === player) SFX.levelUp();
 }
 function classSet(p) { return SPRITES.champ[p.cls][skin(p.team)]; }
-// Five slots share each team colour, so text that names one player (the
-// scoreboard, the event log) also needs a per-slot shade of that team's
+// Five players share each team colour, so text that names one player (the
+// scoreboard, the event log) also needs a per-player shade of that team's
 // palette - the team colour stays the background, this is the ink.
 function playerTint(p) {
   const t = TEAMS[skin(p.team)];
@@ -396,16 +396,16 @@ function makeInput() {
 }
 
 class Player {
-  constructor(slot, control) {
-    this.id = slot;
-    this.team = slot % TEAM_COUNT;
-    this.control = control;             // 'human' | 'ai' | 'none' (empty slot -> ghost)
-    // the local slot wears the profile's display name; every other slot is
+  constructor(id, control) {
+    this.id = id;
+    this.team = id % TEAM_COUNT;
+    this.control = control;             // 'human' | 'ai' | 'none' (nobody -> ghost)
+    // the local player wears the profile's display name; every other player is
     // named off its team - live, through the `name` getter below, so the name
     // follows the paint (skin) when the team-colour setting flips. Editing the
     // name at the menu calls applyProfileName().
     this._name = control === 'human' ? PROFILE.name() : null;
-    this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this slot (the bot brain's "home")
+    this.spawn = { tx: WORLD >> 1, ty: WORLD >> 1 }; // landing tile once the eagle drops this player (the bot brain's "home")
     this.inv = { gold: 0 };             // the wallet is currency only - carried goods are in the bag
     this.bagCap = BAG_CAP;              // slots; one starting backpack
     this.bag = new Array(this.bagCap).fill(null); // each cell null or { type, n }
@@ -414,7 +414,7 @@ class Player {
     this.gearLv = [1, 1, 1, 1];         // piece levels, 1..GEAR_LV_MAX - fresh every match
     this.skillPts = 1;                  // unspent; level 1 starts with one, each levelUp adds one - spent on ability levels (buyAbilityLv, js/abilities.js)
     this.cards = [];                    // picked roguelike cards, {rarity,id} - like gear, survives a respawn
-    // the one order marker this slot commands its workers with (middle click,
+    // the one order marker this player commands its workers with (middle click,
     // see the `worker flags` banner in js/robots.js): null, or { tx, ty, job, unit }. NOT
     // cleared by reset() - an order outlives the hand that gave it.
     this.flag = null;
@@ -428,8 +428,8 @@ class Player {
     this.dropT = 0;                     // seconds of free fall left after jumping (0 = on the ground)
     this.dropAlt = 0;                   // px the fall started from: the flight's DROP_ALT, or a hop's HOP_ALT off the roost
     this.dropSc = 1;                    // the body's drawn scale as it left the seat (riderScale), shrinking to 1 as it falls
-    this.dropU = 1;                     // route fraction at which an AI slot jumps
-    // bot brain (unused by a human slot): current job, give-up timers and the
+    this.dropU = 1;                     // route fraction at which an bot jumps
+    // bot brain (unused by a human player): current job, give-up timers and the
     // short blacklists that keep a bot from re-picking work it cannot reach
     this.ai = {
       tgt: null, avoid: null, avoidT: 0, thinkT: 0,
@@ -446,12 +446,12 @@ class Player {
     this.reset(true);
   }
   get active() { return this.control !== 'none'; }
-  // a named slot (the human, via applyProfileName) keeps its name; every other
-  // slot is called after the colour it is WEARING right now
+  // a named player (the human, via applyProfileName) keeps its name; every other
+  // player is called after the colour it is WEARING right now
   get name() { return this._name !== null ? this._name : TEAMS[skin(this.team)].name + '-' + (this.id + 1); }
   set name(v) { this._name = v; }
   // spawn placement + every transient cleared; boot calls it with first=true,
-  // respawnPlayer() (the team's bird setting a slot back down) with first=false
+  // respawnPlayer() (the team's bird setting a player back down) with first=false
   reset(first) {
     this.x = (this.spawn.tx + 0.5) * TILE;
     this.y = (this.spawn.ty + 0.5) * TILE;
@@ -486,7 +486,7 @@ class Player {
     this.castAb = -1; this.castT = 0;
     // Every state ANY unit can be under - stun, root, slow and its net
     // drape, the mark, and fire - is written and cleared in one place for
-    // all three kinds of unit (`status effects`, js/actions.js), so a slot,
+    // all three kinds of unit (`status effects`, js/actions.js), so a player,
     // a deer and a worker bot wear the identical set.
     clearUnitStatus(this);
     this.shieldT = 0; this.shieldA = 0;            // the tower shield, and where it faces
@@ -511,15 +511,15 @@ class Player {
   }
 }
 
-const players = [];  // every slot; filled by initPlayers() at boot
-let player = null;   // the local slot - camera, HUD, cursor and audio follow this one
+const players = [];  // every player; filled by initPlayers() at boot
+let player = null;   // the local player - camera, HUD, cursor and audio follow this one
 let inv = null;      // === player.inv, the counters the HUD draws
 
-// one human (this session) and an AI in every other slot
+// one human (this session) and an AI in every other player
 function initPlayers() {
   players.length = 0;
-  for (let i = 0; i < MAX_PLAYER_SLOTS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
-  // AI slots draw their class AND their four gear variants from the seed,
+  for (let i = 0; i < MAX_PLAYERS; i++) players.push(new Player(i, i === 0 ? 'human' : 'ai'));
+  // bots draw their class AND their four gear variants from the seed,
   // so a replayed world fields the same roster in the same loadouts
   for (const p of players) if (p.control === 'ai') {
     for (let i = 0; i < GEAR_SLOTS.length; i++) p.gear[i] = Math.floor(hash2(p.id * 29 + i * 13 + 5, 191) * 3) % 3;
@@ -531,14 +531,14 @@ function initPlayers() {
   inv = player.inv;
 }
 
-// who p is allowed to shoot: another live slot on another team (this is the
+// who p is allowed to shoot: another live player on another team (this is the
 // one place the FFA/friendly-fire rule lives)
 function enemyOf(p, q) { return q !== p && q.active && !q.dead && !inAir(q) && (!PVP || q.team !== p.team); }
 // riding the eagle or falling from it: not in the world yet, nothing can touch it
 function inAir(p) { return p.aboard || p.dropT > 0; }
 
 // ---- being seen ---------------------------------------------------------
-// How buried a slot reads to anything hunting for it. `p.hide` is the cover
+// How buried a player reads to anything hunting for it. `p.hide` is the cover
 // itself; a mound that is crawling is worth much less than one holding still,
 // which is the whole reason to stop moving before you shoot.
 function concealOf(p) { return p.hide > 0 ? p.hide * (p.moving ? PRONE_MOVE : 1) : 0; }
@@ -601,7 +601,7 @@ const landmarks = []; // named points of interest, placed by worldgen (see the l
 // ------------------------------------------------------------ damage & death
 // Nothing to do with the wheel above: a hit, what a hit spills, the split
 // between a respawn timer and permanent elimination, and the overlay the
-// local slot's ending puts up.
+// local player's ending puts up.
 
 // Causes that are a BURN rather than a blow (see updateBurn, js/actions.js).
 // A bite of one is not a hit: it goes through the i-frames a body DOES have
@@ -611,7 +611,7 @@ const DOT_CAUSE = { fire: true };
 
 // The shove a blow lands on a body, in px/s. It is the BASELINE, not the
 // whole story: `kb` is a multiplier on it, so a projectile bit's KNOCKBACK
-// (js/tools.js) scales a slot's shove exactly as it scales an animal's or a
+// (js/tools.js) scales a player's shove exactly as it scales an animal's or a
 // worker's, and the ordinary blow is 1.
 const HIT_KB = 110;
 
@@ -662,7 +662,7 @@ const KILL_VERB = { worker: 'CUT DOWN', fire: 'BURNED' };
 // carried still spills as pickups, one per bag stack, because a stack is
 // already the unit the bag counts in - a killer with a full bag of their own
 // simply leaves them lying. Lifetime xp is untouched, and the standings rank
-// on xp (scoreOf), so a looted slot keeps the place it earned.
+// on xp (scoreOf), so a looted player keeps the place it earned.
 function spillInventory(p, killer) {
   for (const k in p.inv) {
     const n = p.inv[k];
@@ -678,7 +678,7 @@ function spillInventory(p, killer) {
   }
   // the bag, and then the weapon slot: a build goes down with the body and
   // lies where it fell, loaded, for whoever walks over it. reset() hands
-  // the slot its class's starting loadout back, so a respawn is armed but
+  // the player its class's starting loadout back, so a respawn is armed but
   // not the same player it was.
   for (let i = 0; i < p.bag.length; i++) {
     const s = p.bag[i];
@@ -692,7 +692,7 @@ function spillInventory(p, killer) {
   }
 }
 
-// The wait for the bird to set a downed slot back down: gold-free, and a
+// The wait for the bird to set a downed player back down: gold-free, and a
 // read of the hero's level alone - 3 s at level 1, 5 s at level 2, 25 s at
 // LEVEL_MAX - so an early death costs almost nothing and a late one costs
 // real match, which is what makes a wiped side late (everyone high) a real
@@ -703,13 +703,13 @@ const RESPAWN_BASE = 1;   // s
 const RESPAWN_LV = 2;     // s more per hero level
 function respawnTime(p) { return RESPAWN_BASE + RESPAWN_LV * p.level; }
 
-// A slot goes down two ways. While its team's bird still roosts (or is
+// A player goes down two ways. While its team's bird still roosts (or is
 // still flying in) it is temporary: p.dead is set (out of the world right
 // now) but p.eliminated stays false and respawnT counts down to a return AT
 // THE BIRD (see updateRespawns/respawnPlayer). Once the bird has been driven
 // off it is permanent: p.eliminated = true, no way back - the eagle is the
-// only thing that takes a slot out of a match for good. Only the local
-// slot's ELIMINATION takes the screen with it (the death overlay); a
+// only thing that takes a player out of a match for good. Only the local
+// player's ELIMINATION takes the screen with it (the death overlay); a
 // respawn-pending local death gets the lighter 'respawning' overlay instead
 // (see endMatch/DEAD_ITEMS/renderDead).
 function die(p, src, cause) {
@@ -754,18 +754,18 @@ function die(p, src, cause) {
   logEvent(killer ? killer.name + ' ' + (KILL_VERB[cause] || 'SHOT') + ' ' + p.name
     : p.name + ' ' + (DEATH_CAUSE[cause] || 'WENT DOWN'), killer || p);
   // the bird is the way back - a side whose objective has fallen is out,
-  // however its slots go down after that
+  // however its players go down after that
   if (!teamEagleDown(p.team)) p.respawnT = respawnTime(p);
   else p.eliminated = true;
   if (p === player) endMatch(p.eliminated ? 'lost' : 'respawning');
   else {
     addFloater(p.x, p.y - 20, p.name + (p.eliminated ? ' OUT' : ' DOWN'), TEAMS[skin(p.team)].mark);
-    if (state.spec === p.id) specNext(1); // the slot being watched went down: follow another
+    if (state.spec === p.id) specNext(1); // the player being watched went down: follow another
   }
   checkLastStanding();
 }
 
-// ticks every dead-but-not-eliminated slot's respawn timer; called from
+// ticks every dead-but-not-eliminated player's respawn timer; called from
 // updatePlay alongside updateStructures, so it keeps running under the
 // 'respawning' overlay exactly like the rest of the sim does under 'dead'
 function updateRespawns(dt) {
@@ -777,7 +777,7 @@ function updateRespawns(dt) {
     p.respawnT -= dt;
     if (p.respawnT > 0) continue;
     // a bird still in the air has nowhere to set anyone down: hold at zero
-    // until it roosts (a slot shot in the seconds between its own landing
+    // until it roosts (a player shot in the seconds between its own landing
     // and the bird's)
     const e = state.drop && state.drop.eagles[p.team];
     if (!e || e.state !== 'down') { p.respawnT = 0; continue; }
@@ -785,7 +785,7 @@ function updateRespawns(dt) {
   }
 }
 
-// brings a downed slot back at its team's bird: p.reset(false) is the exact
+// brings a downed player back at its team's bird: p.reset(false) is the exact
 // full-clear a fresh eagle landing gets (same 3 s i-frames), anchored
 // RESPAWN_OUT px down the lane from the roost - the nearest tile a body can
 // stand on there - so the way back into the match is the road everyone
@@ -805,7 +805,7 @@ function respawnPlayer(p) {
   if (p === player) {
     state.over = null;
     state.mode = 'play';
-    state.spec = -1; // the camera returns to the local slot, not whoever it was watching
+    state.spec = -1; // the camera returns to the local player, not whoever it was watching
     camX = Math.max(0, Math.min(WORLD * TILE - WV_W, p.x - WV_W / 2));
     camY = Math.max(0, Math.min(WORLD * TILE - WV_H, p.y - WV_H / 2));
     state.introFrom = { x: camX, y: camY };
@@ -813,11 +813,11 @@ function respawnPlayer(p) {
   }
 }
 
-// slots still in the match (riding the eagle counts: it is about to land)
+// players still in the match (riding the eagle counts: it is about to land)
 function aliveCount() { let n = 0; for (const p of players) if (p.active && !p.dead) n++; return n; }
 
 // a team is still "in the match" while its bird has not been driven off and
-// anyone is in one of its slots - note !eliminated, not !dead: a wiped team
+// anyone on it is still in - note !eliminated, not !dead: a wiped team
 // is waiting on its bird, not out, so the objective is the only way to win
 function teamInMatch(team) {
   if (teamEagleDown(team)) return false; // the objective: a fallen eagle takes its whole side out
@@ -826,7 +826,7 @@ function teamInMatch(team) {
 
 // rival TEAMS still in the match, by the same rule enemyOf()/PVP state -
 // p's own team is never counted, and each rival team counts once however
-// many slots it has.
+// many players it has.
 function rivalTeamsInMatch(p) {
   const seen = new Set();
   let n = 0;
@@ -838,7 +838,7 @@ function rivalTeamsInMatch(p) {
   return n;
 }
 
-// the local slot not eliminated and every RIVAL team gone: the match is won
+// the local player not eliminated and every RIVAL team gone: the match is won
 // (only once, and only when there was another side to beat). Teams win
 // together - a side is in the match while its bird roosts, whoever is
 // standing - so this is the last BIRD standing, never the last player.
@@ -875,14 +875,14 @@ function practiceRevive(p) {
 // the whole side both stages stand, and the one fact only the loss prints
 // (its placing).
 function endSnapshot() {
-  // where the local slot finished: every slot still in the match outlasted
+  // where the local player finished: every player still in the match outlasted
   // it, so place is one past that count. A win is 1st by definition (the
   // screen that prints place never sees a win, but the object shouldn't lie).
   const left = players.filter((q) => q !== player && q.active && !q.eliminated).length;
   return {
     gold: player.xp, kills: player.kills, level: player.level, time: state.elapsed,
     team: player.team, cls: player.cls,
-    // the whole side, the local slot first: every body either ending stands
+    // the whole side, the local player first: every body either ending stands
     // on its stage, with the name, class and kit it finished in (a mate who
     // is down at the whistle still shares the result)
     roster: players.filter((q) => q.active && q.team === player.team)
@@ -892,7 +892,7 @@ function endSnapshot() {
   };
 }
 
-// the local slot leaves the match, one way or the other: the overlay takes
+// the local player leaves the match, one way or the other: the overlay takes
 // the screen (mode 'dead'), the sim runs on underneath it
 function endMatch(how) {
   // count a win only the first time this match resolves as won - a second
@@ -922,7 +922,7 @@ function endMatch(how) {
   if (how === 'won') { SFX.victory(); state.shake = Math.max(state.shake, 4); }
   // the end screen has a song of its own; a respawn timer is not the end of anything
   if (how === 'won' || how === 'lost') SFX.music.play(how === 'won' ? 'victory' : 'defeat', { in: 1.2 });
-  player.input = makeInput(); // whatever was held dies with the slot
+  player.input = makeInput(); // whatever was held dies with the player
   // a respawn wait has no planks: it opens straight onto an ally, with the
   // replay window over the view until it is closed (the `death & spectate`
   // banner, js/screens.js); specNext keeps to the side while the wait runs

@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Softfall: a browser canvas 2D top-down pixel-art cozy survival team battle on a winter map — ten
-slots, two teams, drive off the rival eagle to win. **Read [docs/dev/game.md](docs/dev/game.md) before proposing
+players, two teams, drive off the rival eagle to win. **Read [docs/dev/game.md](docs/dev/game.md) before proposing
 a feature or judging whether one fits**: that is the design in one page, and this file is only the
 rules.
 
@@ -32,7 +32,7 @@ Read the relevant one **before** working in that area — they carry the detail 
 | camera, zoom, a draw pass, HUD, baked panels, cursor, lighting, the main menu | [docs/dev/rendering.md](docs/dev/rendering.md) |
 | worldgen, tiles, ground, determinism/RNG, day/night, ice holes and fish, landmarks | [docs/dev/world.md](docs/dev/world.md) |
 | movement, tools and bits, the draw and the cycle, the class abilities, dodge, wildlife, economy, the merchant's shop and the fish/berry market, building, robots, settings, audio | [docs/dev/gameplay.md](docs/dev/gameplay.md) |
-| player slots, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
+| players, classes and kits, the input struct, teams, AI bots, contested orders, PvP | [docs/dev/multiplayer.md](docs/dev/multiplayer.md) |
 | sprite grids and palettes | [docs/dev/sprites.md](docs/dev/sprites.md) |
 | a **new look** for anything drawn — concept sheets Noah picks from before a grid ships | the `concept-art` skill ([.claude/skills/concept-art/SKILL.md](.claude/skills/concept-art/SKILL.md)); past sheets in `docs/media/concepts/` |
 | adding an object/tool/structure/ground type/landmark, tuning balance, intentional dead code | [docs/dev/checklists.md](docs/dev/checklists.md) |
@@ -57,7 +57,7 @@ unlocked for everybody, so `LOOT_POOL` is the same on a first flight as on a fiv
 ([the wiki](docs/dev/gameplay.md#the-wiki)).
 
 All game state lives in module-scope singletons (`state`, `settings`, `players`) and the entity
-arrays beside them; `player`/`inv` are the **local slot only**, and carried goods are `player.bag`.
+arrays beside them; `player`/`inv` are the **local player only**, and carried goods are `player.bag`.
 The full list: [code-map](docs/dev/code-map.md#jsplayerjs).
 
 A feature's **tuning constants live in the file that owns the feature**, above the code that reads
@@ -152,7 +152,7 @@ lives in `docs/dev/*.md` beside the code it protects.
 - **A tool is an instance, not a type name.** Its bag cell carries the bits loaded into it, so a
   tool is **moved** between bag, slot, drop and back (`bagPut`, `slotPut`, `spawnDrop`'s `it`) and
   never rebuilt from `s.type` — rebuilding it silently empties somebody's build. What the button
-  fires goes through `fireTool` → `emitBit` for every slot alike: [tools and
+  fires goes through `fireTool` → `emitBit` for every player alike: [tools and
   bits](docs/dev/gameplay.md#tools-and-bits).
 - **Anything deciding it can see a player asks `seenAt(p, range)`**, never a bare range — that one
   function is where GHOSTSTEP and burial live (both maps gate on `concealOf(p)`).
@@ -160,7 +160,7 @@ lives in `docs/dev/*.md` beside the code it protects.
   `SPRITES.champ[c][skin(t)]`, every per-team sprite set — never by the bare index: your side is
   always BLUE on your screen (`settings.teamBlue`), and a bare `TEAMS[p.team]` is the one thing
   on it painted the wrong colour. Rules (`p.team`, `enemyOf`) never call it.
-- **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local slot only),
+- **Anything a player does takes a `p` and reads `p.input`**, never `keys`/`mouse` (local player only),
   and anything only one of them can get (a work swing, a build, a drop, a fish) goes through
   `contest()`, which picks the winner from (SEED, player id, `state.tick`).
 - **Never add or remove an `rng()` call inside `genWorld()`** — it reshuffles every existing seed

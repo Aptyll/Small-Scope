@@ -272,7 +272,7 @@ function render() {
     }
   }
   for (const p of players) {
-    if (p.dead || inAir(p)) continue; // airborne slots draw in drawDropAir
+    if (p.dead || inAir(p)) continue; // airborne players draw in drawDropAir
     draws.push({ y: p.y + 8, p, ghost: !p.active }); // empty slots stand as silhouettes
   }
   for (const a of animals) draws.push({ y: a.y + 4, a });
@@ -691,7 +691,7 @@ function render() {
 }
 
 // the info stack (settings.info - the INFO row in the ESC menu, or F3, the
-// minecraft reflex): fps, the framed slot's tile coordinates, and the run
+// minecraft reflex): fps, the framed player's tile coordinates, and the run
 // seed as one vertical list on the left edge at the top quarter of the view,
 // clear of the berry/fish counters above it, above every overlay. In title
 // only the fps line shows - nobody stands anywhere yet, and the menu prints
@@ -818,7 +818,7 @@ const BIT_BODY = {
 // WARP_STEP px of the line it crossed (js/tools.js owns the flash itself),
 // all of them fading together. It is the tell that makes a teleport read as a
 // PATH rather than as a body blinking out of one place and into another - the
-// same tinted-scratch trick the empty-slot ghost is drawn with, and the
+// same tinted-scratch trick the missing player's ghost is drawn with, and the
 // stamps nearest the origin are the faintest, so the trail reads as a
 // direction rather than a smear. The ARRIVAL is never stamped: the body is
 // already standing there, and a silhouette over it only whites it out.
@@ -865,7 +865,7 @@ function drawTags() {
   const bs = SFX.banked();
   line('SFX', bs.got + '/' + bs.want, bs.got < bs.want ? '#ff9a8a' : '#f4f7ff');
   if (state.mode !== 'title') {
-    const vp = viewPlayer(); // spectators read the slot the camera frames
+    const vp = viewPlayer(); // spectators read the player the camera frames
     line('POS', Math.floor(vp.x / TILE) + ', ' + Math.floor(vp.y / TILE));
     line('SEED', String(SEED));
   }
@@ -1077,7 +1077,7 @@ function drawNavPaths(ox, oy, ex, ey) {
     hbLine(Math.round(a.x - ex), Math.round(a.y - a.alt - ey), gx, gy, col, 2);
     hbBox(a.perch.tx * TILE - ox, a.perch.ty * TILE - oy, TILE, TILE, col);
   };
-  // one colour per kind of walker, as they read on the minimap: the slots
+  // one colour per kind of walker, as they read on the minimap: the players
   // gold, a wolf red, the rest of the wildlife green, a worker bot blue
   for (const p of players) if (p.active && !p.dead && !inAir(p)) one(p, '#ffe27a');
   for (const a of animals) {

@@ -74,7 +74,7 @@ function makeAnimal(kind, x, y) {
     dead: false,
   };
   // stun, root, slow, the net drape, the falcon's mark, fire: an animal wears
-  // the identical set a player slot does, written by the same setters
+  // the identical set a player does, written by the same setters
   // (`status effects`, js/actions.js) - a rabbit is not a different rulebook
   clearUnitStatus(a);
   return a;
@@ -91,7 +91,7 @@ function animalHit(a, x, y, pad) {
 
 // One animal taking a hit, from an arrow or from a body rolled into it. Both
 // come through here so a swipe reacts exactly like a shot does - the den
-// wakes, prey bolts, the flock scatters - and `lastHit` (the slot whose
+// wakes, prey bolts, the flock scatters - and `lastHit` (the player whose
 // HUNTSMAN bonus the kill pays, see animalDies) is stamped in one place.
 function hurtAnimal(a, dmg, nx, ny, kb, owner, ambush) {
   a.hp -= dmg;
@@ -112,13 +112,13 @@ function hurtAnimal(a, dmg, nx, ny, kb, owner, ambush) {
 // kind - rabbits biased toward berry bushes, which is what makes a patch read
 // as a warren - put down at boot by spawnAnimals and then topped up one at a
 // time by updatePreyStock, every PREY_REPOP seconds a kind is short, at a spot
-// no live slot is within PREY_CLEAR of (past the edge of any screen at zoom
+// no live player is within PREY_CLEAR of (past the edge of any screen at zoom
 // 1, so nothing is ever seen to appear) and at the level the table has
 // reached by then (animalLevel). Neither kind breeds: the meadow is restocked,
 // not grown, and a hunt never empties it for good.
 const PREY_POP = { rabbit: 16, deer: 10 };
 const PREY_REPOP = 15;  // s between top-ups (one animal each)
-const PREY_CLEAR = 280; // px from every live slot a newcomer must land
+const PREY_CLEAR = 280; // px from every live player a newcomer must land
 let preyRepopT = PREY_REPOP;
 
 // one animal of a kind on a free tile: beside one of `bushes` seven times in
@@ -654,8 +654,8 @@ function updateWolf(a, dt) {
 
   const sight = WOLF_SIGHT * (1 + state.darkness * 0.75); // night gives the pack its teeth
   const onGround = (p) => Math.hypot(p.x - hx, p.y - hy) < WOLF_GROUND;
-  // the nearest slot in sight on the pack's ground. GHOSTSTEP - and lying
-  // buried in the snow - shorten the sight for that one slot
+  // the nearest player in sight on the pack's ground. GHOSTSTEP - and lying
+  // buried in the snow - shorten the sight for that one player
   let near = null, nd = sight;
   for (const p of players) {
     if (!p.active || p.dead || inAir(p) || !onGround(p)) continue;
@@ -681,7 +681,7 @@ function updateWolf(a, dt) {
     if (a.threat >= 1) { wakePack(a, near); t = near; }
   } else a.threat = Math.max(0, a.threat - dt / WOLF_THREAT_DECAY);
   a.target = t;
-  // the mark over its head (drawAnimal): a wolf with a slot in sight on its
+  // the mark over its head (drawAnimal): a wolf with a player in sight on its
   // ground, or one on a hunt - never one whose bar is draining with nobody in
   // view, which is a wolf that has LOST you
   a.senseT = near || t ? a.senseT + dt : 0;

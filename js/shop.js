@@ -139,7 +139,7 @@ function updateMarket(dt) {
 // Every headline here leaves its line in the event feed as well (logEvent,
 // js/panels.js) - the feed is the match's own record and the market belongs
 // in it - but the feed is bottom-left, small, and full of what happened to
-// SLOTS. A price is not something that happened to a slot: it is the state of
+// PLAYERS. A price is not something that happened to a player: it is the state of
 // the world you are about to sell your bag into, and it has to arrive where
 // the other things you glance at mid-fight are. So it also raises a PLATE,
 // top-right, hard under the minimap beside the clock and the alive count.
@@ -409,7 +409,7 @@ function shopOffer(sec, i) {
 // price does the taking all by itself.
 const SHOP_REACH = 34; // px from a merchant's body the counter is open
 
-// the merchant whose counter this slot is standing at, or null. Either team's:
+// the merchant whose counter this player is standing at, or null. Either team's:
 // both counters serve everybody.
 function merchNear(p) {
   let best = null, bd = SHOP_REACH + PLAYER_R;
@@ -424,7 +424,7 @@ function merchNear(p) {
 function inReach(p, b) {
   return !!b && !b.dead && Math.hypot(b.x - p.x, b.y - p.y) <= SHOP_REACH + PLAYER_R;
 }
-// The other way round: the slot whose counter is OPEN on this merchant, or
+// The other way round: the player whose counter is OPEN on this merchant, or
 // null. updateMerchant (js/robots.js) asks it every frame and drops
 // everything - the gate, the felling, the loiter - while somebody is being
 // served: a shopkeeper does not walk off mid-sale, and a counter that strolled
@@ -434,8 +434,8 @@ function inReach(p, b) {
 // It is the OPEN PANEL and not mere proximity on purpose. Everybody lands at
 // the roost together, so a merchant that stopped for anyone standing near it
 // would never get its gate up at all.
-// The local slot is the only one that can open a counter today; when other
-// slots can, this is the one place that has to learn about them.
+// The local player is the only one that can open a counter today; when other
+// players can, this is the one place that has to learn about them.
 function shopServing(b) {
   return state.shop === b && player.active && !player.dead ? player : null;
 }
@@ -470,7 +470,7 @@ function shopNoRoom(p) { if (p === player) bagDenied(); }
 // A LINE off the counter. Reached through runCmd (input.cmd {kind:'shop'}), so
 // the HUD click, a bot and anything later all buy the same way - and it
 // re-validates the reach itself, exactly as buyGear re-validates its cost, so
-// a stale order from a slot that has since walked away is harmless. Nothing is
+// a stale order from a player that has since walked away is harmless. Nothing is
 // contested: the stock is a window, not a queue, and two players at the same
 // counter cannot take the same thing from each other.
 function shopBuy(p, sec, i) {

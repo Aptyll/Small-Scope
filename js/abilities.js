@@ -2,7 +2,7 @@
 // The class abilities: keys 1-4, four unique actives per class, each with a
 // cooldown, a cast the body visibly performs, and world entities of its own
 // (a piercing shot, nets, a grapple line, a shield, a rush, a crater, a fury).
-// Everything here runs per slot off p.input.ability, so a bot casts through
+// Everything here runs per player off p.input.ability, so a bot casts through
 // exactly the key a human presses. Loaded after tools.js (it shares the
 // world's fx helpers at runtime and nothing at load time - and it must draw
 // no load-time rng(), or every seed reshuffles).
@@ -128,7 +128,7 @@ const nets = [];     // {x, y, nx, ny, d, owner, team, spin}
 // key), the one entry point a buyer reaches through runCmd (HUD plate click
 // and bots alike), and the effective cooldown the sim reads instead of the
 // table's base. abUnlocked is the ONE gate - tryAbility and every bot that
-// reaches for a key ask it, so a locked ability is dark for a slot whoever
+// reaches for a key ask it, so a locked ability is dark for a player whoever
 // is driving it.
 function abUnlocked(p, i) { return p.abLv[i] > 0; }
 function abReady(p, i) { return p.abLv[i] > 0 && p.abCd[i] <= 0; } // bought AND off cooldown: what a bot reaches for
@@ -181,8 +181,8 @@ function tryAbility(p, i) {
   if (nearPlayer(p.x, p.y)) SFX.swing();
 }
 
-// per-slot tick: cooldowns, the cast landing, and every timed state an
-// ability leaves on a body. Called from updatePlayer once the slot is alive.
+// per-player tick: cooldowns, the cast landing, and every timed state an
+// ability leaves on a body. Called from updatePlayer once the player is alive.
 function updateAbilities(p, dt) {
   for (let i = 0; i < AB_KEYS; i++) if (p.abCd[i] > 0) p.abCd[i] = Math.max(0, p.abCd[i] - dt);
   if (p.hopT > 0) p.hopT = Math.max(0, p.hopT - dt);
@@ -190,7 +190,7 @@ function updateAbilities(p, dt) {
   // (updateUnitStatus, js/actions.js) - an animal and a worker bot age the
   // identical states off the identical timers
   updateUnitStatus(p, dt);
-  if (p.dead) return; // a burn can finish a slot mid-tick
+  if (p.dead) return; // a burn can finish a player mid-tick
   if (p.rootT > 0) p.sliding = false;
   // juggernaut: the body is the weapon while it moves. One bowl-over per
   // rival per activation, scaled by the speed actually carried into them.
@@ -211,7 +211,7 @@ function updateAbilities(p, dt) {
     }
     if (sp > JUG_MIN_SP) {
       const nx = p.vx / sp, ny = p.vy / sp;
-      // anything alive in the way, not only the rival slots: a body running
+      // anything alive in the way, not only the rival players: a body running
       // this hard bowls a deer or a worker over exactly as it does a player
       for (const q of unitsHit(p, p.x, p.y, PLAYER_R * 2 + 2)) {
         if (p.jugHit.includes(q)) continue;
@@ -480,7 +480,7 @@ function rushEnd(p, wall) {
 
 function abStomp(p) {
   const px = p.x, py = p.y;
-  // one list, every living thing in the ring: slots, wildlife and worker bots
+  // one list, every living thing in the ring: players, wildlife and worker bots
   // take the same damage, the same shove and the same beat of stun
   for (const q of unitsHit(p, px, py, STOMP_R)) {
     const d = Math.hypot(q.x - px, q.y - py) || 1;
@@ -535,7 +535,7 @@ function abHitDummies(x, y, r, dmg) {
 
 // Each of them is asked about through `sideOf` (js/actions.js), which hands
 // unitsNear/unitsHit the side a thing in the world is on rather than a living
-// caster. Everything those two return is fair game: slots, wildlife AND worker
+// caster. Everything those two return is fair game: players, wildlife AND worker
 // bots, none of them a special case.
 // This is the other half: who to credit a kill to - the caster, if they are
 // still standing. A trap that outlives its hunter kills for nobody.
@@ -713,7 +713,7 @@ function abilityPose(p) {
 // game, but the tells stay with the universal status set - see Known drift,
 // docs/dev/checklists.md). Takes the sprite's
 // own box, so a rabbit, a worker bot
-// and a player slot wear the same four tells at their own size - a state you
+// and a player wear the same four tells at their own size - a state you
 // cannot see is a rule you cannot play around, and that is as true of a deer
 // as of a rival. Called by drawAbilityOnPlayer below and by drawAnimal /
 // drawBird / drawRobot (js/draw-world.js).
@@ -773,7 +773,7 @@ function drawUnitStates(e, px, py, w, h, now) {
   }
 }
 
-// The player's own layer: the two states only a slot can be in - a raised
+// The player's own layer: the two states only a player can be in - a raised
 // shield and the juggernaut's fury - over the four every unit shares.
 function drawAbilityOnPlayer(p, px, py, now) {
   if (p.shieldT > 0) {
