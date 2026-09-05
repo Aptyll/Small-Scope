@@ -587,7 +587,7 @@ function renderMinimap(now) {
   mmViewCtx.globalCompositeOperation = 'destination-in';
   mmViewCtx.drawImage(mmMask(MM_R), 0, 0);
   ctx.drawImage(mmView, MM_CX - MM_R, MM_CY - MM_R);
-  // the other slots, in team colour, wherever they fall inside the view. A
+  // the other players, in team colour, wherever they fall inside the view. A
   // rival buried past PRONE_MAP drops off it entirely - a dot that survived
   // the cover would make the whole thing pointless. Your own side never does.
   for (const p of players) {
@@ -627,7 +627,7 @@ function renderMinimap(now) {
     if (Math.hypot(dx, dy) > MM_R - 2) continue;
     drawLandmarkIcon(ctx, L, MM_CX + dx, MM_CY + dy, L.spec.mark, '#0f1632');
   }
-  // the centre dot: white for you, the team colour for a slot you are watching
+  // the centre dot: white for you, the team colour for a player you are watching
   ctx.fillStyle = '#0f1632';
   ctx.fillRect(MM_CX - 2, MM_CY - 2, 4, 4);
   ctx.fillStyle = vp === player ? '#ffffff' : TEAMS[skin(vp.team)].mark;
@@ -648,7 +648,7 @@ function renderMinimap(now) {
   ctx.fillRect(Math.round(MM_CX + Math.cos(ta) * (r0 + 1)) - 1, Math.round(MM_CY + Math.sin(ta) * (r0 + 1)) - 1, 3, 3);
   ctx.globalAlpha = 1;
 
-  // beneath the minimap, one centred row: slots still in the match (a pixel
+  // beneath the minimap, one centred row: players still in the match (a pixel
   // figure + the count, no label) then the elapsed play-time. Clear of the
   // fps readout, which owns the extreme top-right corner.
   const clock = clockTxt(state.elapsed);
@@ -2525,7 +2525,7 @@ function tipGear(i) {
   d.notes.push([cost ? 'CLICK TO BUY THE NEXT LEVEL' : 'FULLY UPGRADED', TIP_DIM]);
   return d;
 }
-// a class ability well - the strip's in play (cls omitted: the local slot's
+// a class ability well - the strip's in play (cls omitted: the local player's
 // class, live cooldown, the cast hint), or class select's stage (cls given:
 // the previewed class, before it is ever locked, with nothing castable yet)
 function tipClassAb(i, cls) {
@@ -2558,7 +2558,7 @@ function tipKind(id) {
   const cell = toolIdOf(id) ? makeTool(toolIdOf(id)) : null;
   const d = cell ? tipTool(cell) : tipBit(bitIdOf(id));
   // A wiki row describes the KIND, not a tool somebody is holding, so the
-  // "what is loaded in it" half goes: no bit list, and the slot count is the
+  // "what is loaded in it" half goes: no bit list, and the player count is the
   // capacity rather than 0-out-of-capacity.
   d.notes.length = 0;
   if (cell) {

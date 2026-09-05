@@ -5,7 +5,7 @@
 // ------------------------------------------------------------ scoreboard & log
 // Two readouts of the match rather than of the world. TAB, held, opens the
 // standings from any mode but the title - being dead is exactly when you want
-// them - and everything significant that happens to a slot leaves a line in
+// them - and everything significant that happens to a player leaves a line in
 // the feed at the bottom left. Both draw after the death overlay so neither is
 // dimmed by it. Colours everywhere: the team is the plate, playerTint(p) is
 // the ink, so teammates read as one side and still as two people.
@@ -19,8 +19,8 @@ const events = [];        // {txt, bg, fg, t}; updateFx ages and expires them
 
 // p tints the line and is who it is about; null = a line nobody owns. The
 // plate takes the team's dark coat, not its bright mark: the ink is a pale
-// per-slot tint, and a bright plate over snow leaves it nothing to sit on.
-// `o` overrides that palette for a line no SLOT owns but the world still
+// per-player tint, and a bright plate over snow leaves it nothing to sit on.
+// `o` overrides that palette for a line no player owns but the world still
 // wants coloured - the market's own headlines, green on a spike and red on a
 // crash (marketNews, js/shop.js).
 function logEvent(txt, p, o) {
@@ -80,7 +80,7 @@ function scoreboardOpen() { return !!keys['tab'] && state.mode !== 'title' && !w
 // is progress, and it is the same number the hero levels run on
 function scoreOf(p) { return p.xp; }
 
-// slots grouped by team, teams ordered by their total, players by their own
+// players grouped by team, teams ordered by their total, players by their own
 function scoreGroups() {
   const byTeam = new Map();
   for (const p of players) {
@@ -135,7 +135,7 @@ function renderScoreboard() {
       if (p === player) drawPixelTextShadow(ctx, '>', x + 9, ry + 1, '#ffd95c', shadow);
       drawPixelTextShadow(ctx, p.name, x + 14, ry + 1, playerTint(p), shadow);
       if (p.dead) {
-        // eliminated reads OUT; a respawn-pending slot shows the countdown
+        // eliminated reads OUT; a respawn-pending player shows the countdown
         // instead, since "OUT" on someone back in 3s is actively wrong
         const tag = p.eliminated ? 'OUT' : Math.ceil(p.respawnT) + 's';
         drawPixelTextShadow(ctx, tag, x + 18 + pixelTextWidth(p.name), ry + 1, '#8f9cc4', shadow);
@@ -351,7 +351,7 @@ function renderWorldMap(now) {
     ctx.fillRect(lx - 2, ly, 5, 1); ctx.fillRect(lx, ly - 2, 1, 5);
   }
 
-  // the other slots, inked in their team colour
+  // the other players, inked in their team colour
   for (const p of players) {
     if (p === player || !p.active || p.dead || inAir(p)) continue;
     if (p.team !== player.team && p.markT <= 0 && concealOf(p) >= PRONE_MAP) continue; // buried: off the map, same as the minimap - unless falcon-marked
@@ -878,7 +878,7 @@ function renderSettings(now, opts) {
 }
 
 // ------------------------------------------------------------ player profile
-// Who you are between matches: the display name every other slot reads over
+// Who you are between matches: the display name every other player reads over
 // your head, and the three lifetime numbers under it. The STORE is
 // js/profile.js and nothing here touches localStorage - this banner is only
 // the panel, the field and the title-screen tag that opens them.
@@ -931,7 +931,7 @@ function buildNamePanel() {
   g.fillStyle = '#2c3a68'; g.fillRect(14, 74, SET_W - 28, 1);
 }
 
-// the local slot wears the profile name; it is set in the Player constructor
+// the local player wears the profile name; it is set in the Player constructor
 // and this is the only other place it changes
 function applyProfileName() { player.name = PROFILE.name(); }
 

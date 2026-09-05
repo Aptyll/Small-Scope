@@ -21,7 +21,7 @@ tags breaks the build silently: a missing global is `undefined` at call time, no
 | [js/audio.js](../../js/audio.js) | ~570 | `SFX` | synth, samples and music under one master dial |
 | [js/core.js](../../js/core.js) | ~250 | shared scope, no `window.*` export | the base layer: the numbers with no one owner (grid, view, day cycle, `YIELD`), the seeded rng, `state`/`settings`, the fx/economy helpers |
 | [js/canvas.js](../../js/canvas.js) | ~250 | shared scope, no `window.*` export | screen + world + light buffers, `fitCanvas`, pixel-exact zoom, the panel layout anchors |
-| [js/player.js](../../js/player.js) | ~880 | shared scope, no `window.*` export | the `Player` class and slots, classes/kits/gear/cards, the entity arrays, damage & death |
+| [js/player.js](../../js/player.js) | ~880 | shared scope, no `window.*` export | the `Player` class and the ten of them, classes/kits/gear/cards, the entity arrays, damage & death |
 | [js/input.js](../../js/input.js) | ~230 | shared scope, no `window.*` export | `keys`/`mouse` and the listeners; `sampleHumanInput` folds them into the input struct |
 | [js/world.js](../../js/world.js) | ~730 | shared scope, no `window.*` export | the tile grid, the `OBJECTS` table every kind of scenery is an entry in, worldgen, the landmarks with their own `lmRng` stream, and the practice training grounds |
 | [js/nav.js](../../js/nav.js) | ~310 | shared scope, no `window.*` export | `moveEntity`, `separateUnits`, and A* routing (`findPath`/`navTo`/`navStep`) |
@@ -89,7 +89,7 @@ file is a save file.
   winter words, every one clean under the validator — so there is no first-launch prompt, and the
   name panel only opens when the player asks for it.
 - **The stat calls coalesce.** `addGold` fires on every payout, `addWin` once per
-  `endMatch('won')`, `addDay` at eagle takeoff and at each dawn the local slot is still in, so
+  `endMatch('won')`, `addDay` at eagle takeoff and at each dawn the local player is still in, so
   writes are batched behind an 800 ms timer and flushed on `pagehide` / `visibilitychange`;
   `setName` and `putSettings` write through immediately. A save written with the old `games` /
   `bestDay` pair keeps its gold and starts wins and days at zero — those were different
@@ -191,9 +191,9 @@ All game state lives in top-level singletons shared across the game files — `s
 
 - **`state`** — the match: tick, day/time, darkness, mode, overlays (`state.draft`, `state.msg`).
 - **`settings`** — the player's dials, persisted **under the profile** (`PROFILE.putSettings`).
-- **`players`** — the ten slots. `player` and `inv` are aliases for **the local slot only**
-  (slot 0) and its gold-only wallet; carried goods are `player.bag`. See
-  [multiplayer.md](multiplayer.md#the-slot-model).
+- **`players`** — the ten players. `player` and `inv` are aliases for **the local player only**
+  (player 0) and its gold-only wallet; carried goods are `player.bag`. See
+  [multiplayer.md](multiplayer.md#the-ten-players).
 
 Plus the flat arrays every pass iterates: `animals`, `arrows`, `drops`, `particles`, `floaters`,
 `footprints`, `structures`, `robots`, `fish`, `landmarks`.

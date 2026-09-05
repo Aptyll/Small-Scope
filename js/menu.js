@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 3.06'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.07'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.07', 'THE DOCS AND CODE COMMENTS SAY PLAYERS AND BOTS NOW, NOT SLOTS - THE WORD ONLY EVER MEANT A PERSON IN THE MATCH.'],
   ['3.06', 'THE CAMERA ZOOMS ABOUT THE CENTRE OF THE SCREEN INSTEAD OF SLIDING OFF TOWARD A CORNER AND DRIFTING BACK.'],
   ['3.05', 'THE MEAL CLOCK TURNS THE SAME HAND EVERY OTHER WELL DOES, SO EVERY WAIT IN THE GAME IS NOW ONE SHAPE - AND THE WEAPON WELL DROPS THE WHITE OUTLINE AND THE LIFT IT WORE FOR A SELECTION THAT COULD NEVER CHANGE.'],
   ['3.04', 'THE WEAPON WELL TURNS THE SAME CLOCK HAND THE ABILITIES DO - ONE SHAPE FOR EVERY COOLDOWN A PRESS WAITS ON, WITH ONLY THE SPEED OF THE HAND TELLING A BOW FROM A FURY.'],
@@ -1021,7 +1022,7 @@ function drawPatchBar(ox, oy) {
 // SINGLEPLAYER goes here (menu.screen = 'select'): ONE screen on its own
 // painted night - never the live world - laid out the way a League lobby is.
 // Down the LEFT run your side's five cards, down the RIGHT the rivals' (a
-// well each wearing the slot's class sprite in its team paint, the name
+// well each wearing the player's class sprite in its team paint, the name
 // beside it; yours gold-rimmed and showing the class on stage before it is
 // locked), with the rivals' DIFFICULTY meter at the head of their column -
 // three notches filled up to settings.aiLevel (AI_LEVELS, js/ai.js) and
@@ -1064,7 +1065,7 @@ function selectLayout() {
   const abils = [];
   for (let k = 0; k < 4; k++) abils.push({ x: cx - 72 + k * 37, y: toy + 212, w: 34, h: 34 });
   // the two rosters: your side's cards down the left, the rivals' down the
-  // right, in slot order; each carries its slot as `p`
+  // right, in player order; each carries its player as `p`
   const cards = [[], []];
   const mineTeam = player ? player.team : 0;
   for (const p of players) {
@@ -1698,7 +1699,7 @@ function leaveGear() {
   state.menu.screen = 'select';
   SFX.pickup();
 }
-// pre-match variant pick for the local slot, full heal like setClass since
+// pre-match variant pick for the local player, full heal like setClass since
 // nothing has been risked yet. The pick plays on the preview body: gearFxT
 // runs the white flash and the sparkles, gearFxSlot lights the piece's band.
 function pickGear(i, v) {
@@ -1798,7 +1799,7 @@ function cancelCount() {
 function selectRevealed() {
   const m = state.menu;
   if (m.countT > 0) return COUNT_T + 1 - Math.ceil(m.countT);
-  return m.countN === 0 ? MAX_PLAYER_SLOTS : 0;
+  return m.countN === 0 ? MAX_PLAYERS : 0;
 }
 // the count's end: the short hold, then the eagle (updateTitle: lockT -> beginDrop)
 function lockIn() {
@@ -2002,7 +2003,7 @@ function drawSelectStage(now, a, sw) {
   }
 }
 
-// One roster card: the slot's class sprite in its team paint on a small
+// One roster card: the player's class sprite in its team paint on a small
 // well, its name beside it (names are text's job). Yours wears the gold rim
 // and shows the class on stage before it is locked; a rival's is face-down -
 // a flat shade of a body, no class to read - until the count turns it, and

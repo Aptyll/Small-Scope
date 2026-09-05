@@ -29,7 +29,7 @@ function makeRobot(sp) {
     moveT: 0, idleT: rand(0.3, 1), mvx: 0, mvy: 0, moving: false,
     animT: rng() * 2, flash: 0, kbx: 0, kby: 0, dead: false,
   };
-  // a worker takes every state a player slot can be put under - snared,
+  // a worker takes every state a player can be put under - snared,
   // netted, marked, alight - written by the same setters (`status effects`,
   // js/actions.js). A bot rolling out of the bay is not a different rulebook.
   clearUnitStatus(b);
@@ -80,7 +80,7 @@ function robotDies(b, src) {
     if (src && src.inv) awardGold(src, b.carry, b.x, b.y);
     b.carry = 0;
   }
-  // a downed worker is not a downed slot: it makes the feed, never the kill
+  // a downed worker is not a downed player: it makes the feed, never the kill
   // count. There is no merchant line any more: a merchant cannot be downed
   // (unitAlive, js/actions.js), so nothing reaches here carrying one.
   if (src && src.team !== b.team) logEvent(src.name + ' SCRAPPED A WORKER', src);
@@ -444,7 +444,7 @@ function updateMerchant(b, dt) {
   // The nearest pine to the MERCHANT inside the ring that still has an open
   // side to stand on - the ones its own gate walled in are the forest's now.
   // A pine the route failed on goes on the avoid list for a while, a LIST
-  // because one slot flips forever between two blocked trunks.
+  // because one player flips forever between two blocked trunks.
   if (b.tgt && objects[idx(b.tgt.tx, b.tgt.ty)] !== b.tgt) b.tgt = null;
   for (let i = b.avoids.length - 1; i >= 0; i--) if ((b.avoids[i].t -= dt) <= 0) b.avoids.splice(i, 1);
   if (!b.tgt) {
@@ -701,7 +701,7 @@ function foePoint(e, fx, fy) {
     y: Math.max(y0, Math.min(y0 + structH(e.type) * TILE, fy)),
   };
 }
-// nearest enemy UNIT (slot or worker) inside range. Slots are noticed through
+// nearest enemy UNIT (player or worker) inside range. Players are noticed through
 // seenAt, so a body under the snow is as invisible to a worker as to a wolf.
 function robotFoeUnit(b, range) {
   let best = null, bd = range;
@@ -731,7 +731,7 @@ function robotStrike(b, e, pt) {
 }
 
 // ---- who can be ordered, and what the held press is aiming at -----------
-// Does this slot have anyone to command? A live worker, or a bay that is
+// Does this player have anyone to command? A live worker, or a bay that is
 // about to roll one out - the affordance has to be there the moment the bay
 // is up, not only once the first bot is in the yard. No crew, no preview.
 function hasWorkers(p) {

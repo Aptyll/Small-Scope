@@ -12,7 +12,7 @@
 // DROP_ZOOM, the flight path is dotted across the snow itself (M raises the
 // world map for the wider read), and a rider jumps with Space/Enter/E/click -
 // but only inside the JUMP WINDOW: the line's last DROP_LOCK_T seconds, gold
-// on the flight bar and on the dotted line both (AI slots jump at their own
+// on the flight bar and on the dotted line both (bots jump at their own
 // hashed fraction of the window). A jumper free-falls for FALL_T onto the
 // nearest open tile, which becomes its spawn tile (the bot brain's home); the
 // human's landing snaps the view back to the player's own zoom and runs the
@@ -38,7 +38,7 @@ const DROP_EDGE_MARGIN = 3; // tiles of open ground a forced drop keeps clear of
 const EAGLE_END = 2;        // tiles inside the corner's treeline each end of the line sits (diagEnd)
 const HOP_FALL_T = 0.7;     // s the hop off a GROUNDED bird takes (a step down, not a free fall)...
 const HOP_ALT = 16;         // ...from this many px up
-// the DROP BRIEF: a local slot that rides the landing (the first flight
+// the DROP BRIEF: a local player that rides the landing (the first flight
 // always - its manual jump is refused, the ride is fully scripted - or a
 // veteran who never jumped) sits through a camera tour before the hop: a
 // beat on the crash you are sitting in, then across the map to the RIVAL
@@ -121,7 +121,7 @@ const BOOM_STUMP_R = 4.6;   // ...and the ring beyond snapped to stumps - the ga
 const BOOM_LIFE = 0.9;      // seconds the impact shockwave rings run
 // where the five riders sit, in the bird's own frame (x along the heading,
 // y across the wings, unscaled sprite px): one on its back, two on the inner
-// wings, two out on the primaries. Seat 0 is the roster's first slot per team
+// wings, two out on the primaries. Seat 0 is the roster's first player per team
 // - the human, on their own bird.
 const EAGLE_SEATS = [[-2, 0], [2, -11], [2, 11], [-7, -19], [-7, 19]];
 
@@ -245,7 +245,7 @@ function beginDrop() {
   // a profile's first flight ever counts itself down and jumps for you -
   // reading the ride is a lot to ask of someone who has never seen it
   state.drop = { eagles: makeEagles(), firstFlight: !PROFILE.hasDropped() };
-  const seats = [0, 0]; // next free wing seat per team; slot 0 takes seat 0 on the red bird
+  const seats = [0, 0]; // next free wing seat per team; player 0 takes seat 0 on the red bird
   for (const p of players) {
     if (!p.active) continue;
     const e = state.drop.eagles[p.team];
@@ -305,7 +305,7 @@ function dropJump(p, force) {
   }
 }
 
-// touchdown: the nearest open tile to the fall point becomes the slot's
+// touchdown: the nearest open tile to the fall point becomes the player's
 // position and its spawn tile. Only the local landing changes the mode.
 function landPlayer(p) {
   const ftx = Math.floor(p.x / TILE), fty = Math.floor(p.y / TILE);
@@ -338,7 +338,7 @@ function landPlayer(p) {
   }
 }
 
-// mode 'drop' -> 'play' for the local slot, wherever it is: on its boots
+// mode 'drop' -> 'play' for the local player, wherever it is: on its boots
 // after a jump, or still on the bird's back at the crash (landAboard)
 function handOver(p) {
   state.mode = 'play';
@@ -351,7 +351,7 @@ function handOver(p) {
   state.menu.screenT = 0;
 }
 
-// the crash with the local slot still aboard: the ride's song is interrupted
+// the crash with the local player still aboard: the ride's song is interrupted
 // by the impact the way a jump interrupts it, play begins with you seated on
 // the roost, and the brief opens - the E hop comes after it (updateDrop)
 function landAboard(p) {
@@ -943,7 +943,7 @@ function drawEagle(e, ex, ey, now) {
     ctx.drawImage(spr, -w / 2, -h / 2, w, h);
     ctx.restore();
     // every rider seated on its wing, facing the way the bird flies, at the
-    // bird's own perspective size (riderScale); the local slot draws last so
+    // bird's own perspective size (riderScale); the local player draws last so
     // it is never under a teammate. A wingbeat lifts the whole crew a pixel.
     const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
     const RS = riderScale(e), rd = riderDir(e);
@@ -1024,7 +1024,7 @@ function drawEagle(e, ex, ey, now) {
       ctx.restore();
       // whoever rode the landing, still seated - world-sized now, the bird at
       // rest is just a big bird - breathing with it, facing where it points
-      // (the local slot: their first ground is this bird's back), with the
+      // (the local player: their first ground is this bird's back), with the
       // gold landing ring pulsing under the bird once the brief has handed
       // back - the flight's own "a jump lands here" mark, now for the hop
       const hc = Math.cos(e.heading), hs = Math.sin(e.heading);
@@ -1055,7 +1055,7 @@ function drawEagle(e, ex, ey, now) {
       ctx.fillStyle = '#3a3448'; ctx.fillRect(bx, by, bw, 3);
       ctx.fillStyle = TEAMS[skin(e.team)].mark;
       ctx.fillRect(bx, by, Math.round(bw * Math.max(0, e.hp) / e.maxHp), 3);
-      drawPixelTextOutline(ctx, 'PERCH', centreTextX(sx, 'PERCH'), by - 8, TEAMS[skin(e.team)].mark, '#0f1632'); // two clear rows over the frame, as a slot's tag sits
+      drawPixelTextOutline(ctx, 'PERCH', centreTextX(sx, 'PERCH'), by - 8, TEAMS[skin(e.team)].mark, '#0f1632'); // two clear rows over the frame, as a player's tag sits
     }
   }
   // the impact shockwave: two rings racing out over the crater, then gone -
@@ -1260,9 +1260,9 @@ buildPatchPanel();
 camX = player.x - WV_W / 2;
 camY = player.y - WV_H / 2;
 // practice boots straight onto the snow: no title, no eagle. The other nine
-// slots empty out (control 'none' - `active` is derived from it) and stand
+// players empty out (control 'none' - `active` is derived from it) and stand
 // parked in the corner forest, far outside the arena, so their ghost
-// silhouettes never wander into a capture; the local slot takes the arena's
+// silhouettes never wander into a capture; the local player takes the arena's
 // spawn tile and the HUD slides in the way a landing's does.
 if (PRACTICE) {
   for (const p of players) {
@@ -1314,7 +1314,7 @@ window.DBG = {
   // open the wheel on, and watch the sweep (pkAnim rebinds, so a getter;
   // pkAnimStep lets a driver fast-forward the front)
   pkRoll, pkDieNear, pkWheelPick, PK_DIFFS, pkAnimState: () => pkAnim, pkAnimStep,
-  // drop a slot (default the local one) on a tile - how to stage a landmark
+  // drop a player (default the local one) on a tile - how to stage a landmark
   warp: (tx, ty, p) => { const q = p || player; q.x = (tx + 0.5) * TILE; q.y = (ty + 0.5) * TILE; q.vx = q.vy = 0; return q; },
   settings, perf, treeRare, cursorInfo,
   // the local profile: the store itself, the PLAYER panel and the two hit
@@ -1346,7 +1346,7 @@ window.DBG = {
   // reaches, through which envelope, and where it runs out (`cut`)
   toolPlan, toolLoad, toolOver,
   toolRof, toolCycle, peekBit, toolReady, dropLoot, giveLoadout, CLASS_LOADOUT,
-  // the draw curve: 0..1 off a slot's chargeT, and the flight and damage it buys a bit
+  // the draw curve: 0..1 off a player's chargeT, and the flight and damage it buys a bit
   drawPow, shotFlight, drawDmgMul, DRAW_RANGE_MIN, DRAW_SPEED_MIN, DRAW_DMG_MIN,
   toolCellRect, bitColRect, bitColHit, bitEditSlot, tierPlate,
   // the closing line's three bits: what a shot does where it LANDS, the
@@ -1409,9 +1409,9 @@ window.DBG = {
     q.tools[slot] = cell;
     return cell;
   },
-  setNock: (t, p) => { (p || player).nockT = t; }, // a huge t parks a slot's bow for a capture
-  // multiplayer slots: every slot, the local one, and the teams table
-  players, MAX_PLAYER_SLOTS, TEAMS, Player, ringPts, contestRank,
+  setNock: (t, p) => { (p || player).nockT = t; }, // a huge t parks a player's bow for a capture
+  // the players: all ten, the local one, and the teams table
+  players, MAX_PLAYERS, TEAMS, Player, ringPts, contestRank,
   // the eagle drop: the live flight records, force a jump, or fly the route from scratch
   get drop() { return state.drop; }, beginDrop, dropJump: (p) => dropJump(p || player, true), landPlayer, makeEagleRoute, makeEagles, inAir,
   hopOff: (p) => hopOff(p || player), // E off the roost for a rider who rode the landing (refused while the brief runs)
@@ -1435,8 +1435,8 @@ window.DBG = {
   bagCount: (type, p) => bagCount(p || player, type),
   bagRoom: (type, p) => bagRoom(p || player, type),
   bagUsed: (p) => bagUsed(p || player),
-  // hand a slot to an AI, a human, or nobody (a ghost at its camp)
-  setControl: (slot, mode) => { const p = players[slot]; if (p) p.control = mode; return p; },
+  // hand a player to an AI, a human, or nobody (a ghost at its camp)
+  setControl: (id, mode) => { const p = players[id]; if (p) p.control = mode; return p; },
   placeObj, idx, objAt, hoverFish, damagePlayer, die, endMatch, specNext, aliveCount, updateAI, contest,
   // the two end screens: their timelines, the frozen numbers they print, and
   // a way to open the loss summary without pressing its plank. Set
@@ -1446,9 +1446,9 @@ window.DBG = {
   rpRect, rpCloseRect, rpCloseHit,
   // routes: the search itself, and showPaths = true draws every unit's live route
   findPath, walkable, navTo, showPaths: false,
-  // hero levels: pay a slot gold (and XP) the way a pickup would
+  // hero levels: pay a player gold (and XP) the way a pickup would
   gainGold: (n, p) => gainGold(p || player, n), LEVEL_XP, LEVEL_MAX,
-  // gear: the table, a slot's effective kit, and buy/pick without the HUD
+  // gear: the table, a player's effective kit, and buy/pick without the HUD
   GEAR, GEAR_SLOTS, GEAR_COSTS, kitOf, refreshKit, gearHit, charLayout, charHit, BAG_CELL,
   gearCost: (i, p) => gearCost(p || player, i),
   buyGear: (i, p) => buyGear(p || player, i),
@@ -1464,14 +1464,14 @@ window.DBG = {
     get slot() { return [rpSW, rpSH]; }, get bytes() { return rpAt ? rpAt.width * rpAt.height * 4 : 0; },
     W: RP_W, H: RP_H, fps: RP_FPS, rate: RP_RATE, ov: rpOv,
   },
-  // action entry points default to the local slot, or take any player
+  // action entry points default to the local player, or take any player
   clickAction: (p) => clickAction(p || player),
   tryWork: (p) => tryWork(p || player),
   workTarget: (p) => workTarget(p || player),
   tryDodge: (p) => tryDodge(p || player),
   // status effects (js/actions.js): the one blow every kind of unit takes,
   // every state one can be put under, and the two lists an area effect
-  // sweeps. `e` defaults to the local slot wherever it is the last argument.
+  // sweeps. `e` defaults to the local player wherever it is the last argument.
   hurtUnit, unitsNear, unitsHit, unitMoveMul, unitFoe, unitAlive, sideOf, clearUnitStatus,
   rootUnit: (t, e) => rootUnit(e || player, t),
   slowUnit: (t, mul, e) => slowUnit(e || player, t, mul),
@@ -1487,7 +1487,7 @@ window.DBG = {
   rollDmg: (sp, p) => rollDmg(p || player, sp),
   rollSweep: (p) => rollSweep(p || player),
   ROLL_HIT_R, ROLL_FAST, ROLL_DMG, ROLL_STUN, TACKLE_STUN, TACKLE_SELF, TACKLE_MIN,
-  // prone: the burrow toggle, how buried a slot reads to anything hunting it,
+  // prone: the burrow toggle, how buried a player reads to anything hunting it,
   // and a way to stage a fully covered body without lying in the snow for 1.5s
   tryProne: (p) => tryProne(p || player),
   risePlayer: (p) => risePlayer(p || player),

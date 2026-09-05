@@ -2,7 +2,7 @@
 // The bot brain: a priority ladder re-picked a few times a second, writing
 // the same input struct a human fills - it can never do what a player cannot.
 // ------------------------------------------------------------ ai
-// Bot slots. A bot only ever writes the same input struct a human fills in -
+// Bots. A bot only ever writes the same input struct a human fills in -
 // movement axis, aim point, fire / work / slide / dodge and the odd build
 // order - so it can never do anything a player couldn't. The brain is a small
 // priority ladder, re-picked a few times a second: eat, fight, wolves, defend
@@ -90,7 +90,7 @@ function aiOwnEagle(p) { const e = state.drop && state.drop.eagles[p.team]; retu
 // each roosts, how its nerve stands, when it was last hit, and who is AT it:
 // the rivals standing off it (each through seenAt, so a buried archer is
 // buried for the whole side) and the friends already there. Read once per
-// sim step and shared by all ten slots, so a hit on a roost is news on the
+// sim step and shared by all ten players, so a hit on a roost is news on the
 // far side of the map the same tick - a bird under attack is answered from
 // anywhere, and a bird that is winning the race is not abandoned for one
 // that is losing it. `threat` is the one word the ladder asks.
@@ -125,7 +125,7 @@ function aiSituation() {
   });
   return aiSit;
 }
-// p's place among its side's living AI slots (the human is never counted):
+// p's place among its side's living bots (the human is never counted):
 // the profile's push.n lowest go for the rival bird, the guard next stand by
 // their own, and the rest farm, build and (allies) escort
 function aiRank(p) {
@@ -201,7 +201,7 @@ function aiEagleTile(e, p) {
   return best;
 }
 
-// the side's escorts: the two lowest AI slots on the human's team
+// the side's escorts: the two lowest bots on the human's team
 function aiEscorts(p) {
   let n = 0;
   for (const q of players) {
@@ -564,7 +564,7 @@ function updateAI(p, dt) {
   }
 
   // 5d. an ally's escort: with the human on the ground and within reach, it
-  //     keeps AI_ESCORT of them - the two lowest allied slots, so the rest
+  //     keeps AI_ESCORT of them - the two lowest allied players, so the rest
   //     of the side still farms and builds. Inside that it goes on down the
   //     ladder, working what is near, and comes back when they walk off.
   if (ward && aiEscorts(p)) {

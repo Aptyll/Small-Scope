@@ -9,7 +9,7 @@
 
 // The three infinite SWING tools - what E has in hand, never what the button
 // fires. Not player-selectable: E auto-swaps to the axe / pick for whatever is
-// under the cursor, and the slot's weapon comes back the moment the swing ends.
+// under the cursor, and the player's weapon comes back the moment the swing ends.
 // The player-selectable weapons are the four slots in TOOLS (js/tools.js).
 const SWING_TOOLS = [
   // the 'bow' row is the AT REST state, not a thing that draws: drawHeldTool
@@ -65,7 +65,7 @@ const WORK_REACH = 1;     // E works tiles within this many tiles (Chebyshev) of
 const STRUCT_HIT_DMG = 10; // axe damage per E swing against an ENEMY building (own ones are demolished from the wheel)
 
 // The roll as a weapon. A dash goes *through* anything small - rabbits,
-// wolves, robots, other slots - swiping each of them once per roll and
+// wolves, robots, other players - swiping each of them once per roll and
 // leaving them seeing stars; anything too big to go through (a deer, a tree,
 // a rock, a building) is a tackle instead, which hurts and stuns both sides
 // and ends the roll where it hit. Everything scales off the speed the roll is
@@ -334,7 +334,7 @@ function tryProne(p) {
 
 // Back on your feet, whatever put you there - the ambush shot, a hit, an E
 // swing, a roll, or the snow cover key again. The cover goes with the body and is not
-// allowed to linger: a slot that is visibly standing must be visibly findable,
+// allowed to linger: a player that is visibly standing must be visibly findable,
 // so `hide` is zeroed here and the snow it stood for is spent as particles.
 function risePlayer(p) {
   if (!p.prone) return;
@@ -596,7 +596,7 @@ function destroyStructure(o, refund, p) {
 }
 
 // ------------------------------------------------------------ status effects
-// Three kinds of thing walk this world - a player slot, an animal, a worker
+// Three kinds of thing walk this world - a player, an animal, a worker
 // bot - and ANYTHING that hurts one is allowed to hurt all three the same way.
 // These are the funnels that make that true: `hurtUnit` is the one blow, the
 // setters beside it are the one place each state is written, and
@@ -660,7 +660,7 @@ function unitFoe(src, e) {
   return !PVP || t !== src.team;
 }
 // Every living thing inside a circle that `src` is allowed to touch, in ONE
-// list: slots, animals and worker bots together. An area effect walks this
+// list: players, animals and worker bots together. An area effect walks this
 // rather than a loop per kind - which is the whole reason a stomp can no
 // longer quietly forget the wildlife.
 function unitsNear(src, x, y, r) {
@@ -682,7 +682,7 @@ function unitsHit(src, x, y, r) {
 // ---- the one blow --------------------------------------------------------
 // `src` is the player who dealt it (kill credit and the feed line) or null for
 // the world. `o` carries the rest: `type` (a DMG_TYPES key), `kb` px/s of shove
-// for an animal or a bot (a slot's shove is damagePlayer's own, so the callers
+// for an animal or a bot (a player's shove is damagePlayer's own, so the callers
 // that want a particular one add it themselves), `cause` for the feed line,
 // `ambush`, `crit`, and `burn`/`burnDps` for a shot that names its own fire -
 // otherwise the type's own. Everything an ability or a tool lands comes
@@ -692,7 +692,7 @@ function unitsHit(src, x, y, r) {
 // KNOCKBACK is the one number written in TWO ways, because the callers mean
 // two different things by it. `kb` is an absolute px/s an ability picks for a
 // particular blow; `kbMul` is a MULTIPLIER on whatever shove that kind takes
-// anyway - a slot's HIT_KB, a worker's ROBOT_KB, an animal's own curve - and
+// anyway - a player's HIT_KB, a worker's ROBOT_KB, an animal's own curve - and
 // it is what a projectile bit's `kb` field rides in on (js/tools.js), so one
 // number on a bit means the same thing thrown at any of the three.
 function hurtUnit(e, dmg, nx, ny, src, o) {
@@ -748,7 +748,7 @@ function stunUnit(e, t) {
   burst(e.x, unitMidY(e) - 3, '#ffe9a8', 4, 26, 0.4, true);
 }
 
-// Rooted: pinned where you stand, and nothing that moves you will fire. A slot
+// Rooted: pinned where you stand, and nothing that moves you will fire. A player
 // reads it through abilityMoveMul, an animal or a bot through unitMoveMul -
 // both end at zero, so a snared deer stands in the jaws exactly as long as a
 // snared rival does.
@@ -772,7 +772,7 @@ function netUnit(e, t, mul) {
   slowUnit(e, t, mul);
   e.netT = Math.max(e.netT || 0, t);
 }
-// Marked: revealed. On a slot seenAt() returns its full range and both maps
+// Marked: revealed. On a player seenAt() returns its full range and both maps
 // keep drawing them; an animal or a bot has no cover to strip, so it is the
 // gold chevrons alone - the falcon still says "I have found this".
 function markUnit(e, t) {
@@ -802,7 +802,7 @@ function igniteUnit(e, t, dps, src) {
   }
 }
 // The burn's own clock, run once per sim step for every kind of unit that has
-// one - updateAbilities for a slot, updateUnitStatus for everything else.
+// one - updateAbilities for a player, updateUnitStatus for everything else.
 function updateBurn(e, dt) {
   if (!(e.burnT > 0)) return;
   e.burnT = Math.max(0, e.burnT - dt);
@@ -831,7 +831,7 @@ function updateBurn(e, dt) {
 function douseUnit(e) { e.burnT = 0; e.burnDps = 0; e.burnTick = 0; e.burnBy = -1; e.burnFxT = 0; }
 
 // ---- the clock every non-player unit runs --------------------------------
-// A slot ages these inside updateAbilities, which owns most of them; an animal
+// A player ages these inside updateAbilities, which owns most of them; an animal
 // and a worker bot call this from their own update, so the two halves of the
 // world can never drift on how long a net holds.
 function updateUnitStatus(e, dt) {
@@ -843,7 +843,7 @@ function updateUnitStatus(e, dt) {
   updateBurn(e, dt);
 }
 // What is left of a non-player unit's speed - the same root/slow fold
-// abilityMoveMul does for a slot. navStep multiplies its speed by this, so
+// abilityMoveMul does for a player. navStep multiplies its speed by this, so
 // every animal and every worker in the game is slowed by one edit; the two
 // movers that steer themselves instead of routing (a bot loitering, a bird in
 // flight) multiply it in by hand.

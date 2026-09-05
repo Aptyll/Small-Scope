@@ -23,7 +23,7 @@ anything that must stay stable per tile.
   the treeline — the old spawn camps. Nobody starts there any more (players land from the eagles,
   see [multiplayer.md](multiplayer.md#where-players-start)) and no pocket is carved, but the river
   spokes and the keep-clear rules still hang off them — which is exactly why `RING_N` is frozen at
-  six instead of tracking `MAX_PLAYER_SLOTS`: the roster growing to ten must not reshape terrain.
+  six instead of tracking `MAX_PLAYERS`: the roster growing to ten must not reshape terrain.
 - `ground` — `Uint8Array(WORLD²)`: `0` snow, `1` ice, `2` open-water hole (runtime-only, see
   [Ice holes and fishing](#ice-holes-and-fishing)). Ice is **mechanically slippery** (see
   [Momentum movement](gameplay.md#momentum-movement-players-only)), and worldgen carves it as a travel
@@ -173,7 +173,7 @@ returns the landmark a world position stands in; `updatePlay` feeds it `state.lo
 [rendering.md](rendering.md#landmarks-on-the-maps).
 
 `DBG` exposes `landmarks`, `LANDMARKS`, `landmarkAt`, `stockLandmarks`, `flushBirds` and
-`warp(tx, ty, p?)` — warping a slot onto a site is how to stage one.
+`warp(tx, ty, p?)` — warping a player onto a site is how to stage one.
 
 ## The practice arena
 
@@ -342,7 +342,7 @@ on a frost plate over the bell (`drawAgame`). **BEST is the profile's all-time r
 (`PROFILE.bestRange()`/`setBestRange` — whole points, only a strictly higher score writes), the
 lap record's twin and the second of the only two things practice ever writes.
 
-Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local slot is
+Practice is not a match, and everything with stakes is guarded on `PRACTICE`: the local player is
 the only active one (js/boot.js parks the other nine as `control: 'none'` in the corner
 forest), `die()` becomes `practiceRevive()` (full pool, spawn tile `PR_SPAWN`, a beat of
 grace), `checkLastStanding()` never fires, and the profile is never written — `gainGold` skips
@@ -413,7 +413,7 @@ The visual half is a **colour**, not a darkness — a blue multiply over the fin
 stars reflected in the ice under it, and nothing to carry a lamp for
 ([rendering.md](rendering.md#light-and-weather)). What else keys off the cycle:
 
-- `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every slot.
+- `darkness < 0.3` gates the only passive heal: slow daylight HP regen in `updatePlayer()`, for every player.
   (There is no cold/warmth system — it was removed along with placeable campfires.)
 - **The wind dies with the light.** `windAmp()` squares `1 - darkness`, so the snow stops blowing
   sideways and every pine goes still over the twelve seconds of dusk and stays still until dawn

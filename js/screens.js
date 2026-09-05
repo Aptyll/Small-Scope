@@ -99,7 +99,7 @@ function rpEnsure(w, h) {
   rpAt = cv; rpAtx = cx; rpSW = nw; rpSH = nh;
 }
 
-// Recording runs exactly while the local slot is alive and the sim is
+// Recording runs exactly while the local player is alive and the sim is
 // stepping - the same condition update() plays on. The overlays that freeze
 // the sim would otherwise pack the ring with copies of one still frame, and
 // death freezes the strip on the four seconds that led to it. The map does
@@ -253,7 +253,7 @@ function renderReplay() {
 }
 
 // ------------------------------------------------------------ death & spectate
-// The local slot's ELIMINATION ('lost') - or a respawn-pending death
+// The local player's ELIMINATION ('lost') - or a respawn-pending death
 // ('respawning', see die()/updateRespawns) - or its win, once every RIVAL
 // TEAM is gone (teams win together, see checkLastStanding) - puts the game
 // in mode 'dead' with the match running on underneath. 'lost' dims the
@@ -267,7 +267,7 @@ function renderReplay() {
 // defeat banner - the loss's own summary, the mirror of the victory screen -
 // and that screen's single plank is what leaves. A match you lost still ends
 // on its numbers, and it ends when you are done watching rather than the
-// instant you went down. SPECTATE follows a living slot through a
+// instant you went down. SPECTATE follows a living player through a
 // top-centre control: two pixel arrows around the name, clickable, the arrow
 // keys do the same, ESC comes back (no hint text: the arrows are the
 // explanation). LOBBY fades out and reloads into the title screen on the same seed. viewPlayer() is who the camera and minimap
@@ -333,7 +333,7 @@ function openDefeat() {
 }
 
 // the spectate control, top centre: [<] NAME [>]. Arrow boxes are SPEC_AW
-// wide; the name plate between them is sized to the widest slot name so the
+// wide; the name plate between them is sized to the widest player name so the
 // arrows never jump as the target changes.
 const SPEC_Y = 6, SPEC_H = 13, SPEC_AW = 11;
 function specLayout() {
@@ -376,12 +376,12 @@ function deadActivate(i) {
   else if (label === 'KEEP PLAYING') { state.mode = 'play'; }
 }
 
-// who can be watched: any living slot after an elimination, only the side's
+// who can be watched: any living player after an elimination, only the side's
 // own while a respawn wait runs - the wait is not a scouting window
 function specOk(q) {
   return q !== player && q.active && !q.dead && (state.over !== 'respawning' || q.team === player.team);
 }
-// follow the next watchable slot in slot order (dir -1 for the previous one)
+// follow the next watchable player in player order (dir -1 for the previous one)
 function specNext(dir) {
   const n = players.length;
   let i = state.spec;
@@ -540,7 +540,7 @@ const WIN_T = {
 };
 const WIN_SLIDE = 0.32; // the planks' slide, finishing exactly on WIN_T.menu
 // the side on its stage: every body at 3x (WIN_BODY px square), the local
-// slot in the middle on a block WIN_TIER px above the mates either side of it
+// player in the middle on a block WIN_TIER px above the mates either side of it
 const WIN_BODY = 48, WIN_TIER = 8;
 const WIN_BANNER_W = 36, WIN_BANNER_H = 96; // the cloth; the rail hangs above it
 
@@ -567,7 +567,7 @@ function winLayout() {
 }
 
 // Where each body of the side stands: the roster's first entry (the local
-// slot) in the middle, tier px up (the win's raised block; the loss has
+// player) in the middle, tier px up (the win's raised block; the loss has
 // none), the rest fanning out a rank at a time to the right and the left of
 // it, so the line is mirrored whatever order the roster came in. y is the
 // top of the 3x body box, feet sunk two rows into the snow. Both endings
@@ -925,7 +925,7 @@ function drawWinBrazier(cx, baseY, now, a) {
 }
 
 // the stage: three snow-capped tiers of coursed stone - a raised block in
-// the middle for the local slot, the wide step the whole side stands on (hw
+// the middle for the local player, the wide step the whole side stands on (hw
 // is its half width) and a base a step wider again that carries a gold inlay
 // with the team's diamond, icicles under its lip. top is the middle step's
 // cap; the block rises WIN_TIER above it.
@@ -1049,9 +1049,9 @@ function renderVictory(now) {
     const stands = winStands(L, ws, WIN_TIER);
     const ranks = stands.length >> 1;
     drawWinDais(L.cx, L.stageY + lift, ranks * (WIN_BODY + L.gap) + (WIN_BODY >> 1) + 8, tm, rise);
-    // every body of the side, outer ranks first and the local slot last: 3x,
+    // every body of the side, outer ranks first and the local player last: 3x,
     // each breathing on its own beat, wearing the gear it finished in, its
-    // name over its head - the local slot's a row higher, clear of its crown
+    // name over its head - the local player's a row higher, clear of its crown
     let bobMe = 0;
     for (let k = stands.length - 1; k >= 0; k--) {
       const s = stands[k];
@@ -1067,7 +1067,7 @@ function renderVictory(now) {
       drawPixelTextOutline(ctx, s.m.name, centreTextX(s.x + (WIN_BODY >> 1), s.m.name), by - (k ? 8 : 13), tm.mark, '#0f1632');
       ctx.globalAlpha = 1;
     }
-    // the crown, dropped onto the local slot's head
+    // the crown, dropped onto the local player's head
     const ct = (t - WIN_T.crown) / (WIN_T.crownLand - WIN_T.crown);
     if (ct > 0) {
       const e = Math.min(1, ct);
@@ -1140,7 +1140,7 @@ function renderVictory(now) {
 // instead of dropping in, the rule is frost instead of gold, the banners
 // are cold and moth-eaten, the braziers are out, no block and no crown, and
 // the side stands knee-deep in a drift where the dais stood with the local
-// slot face down in the middle of it. state.defeatT is the clock:
+// player face down in the middle of it. state.defeatT is the clock:
 // state.deadTimer has been running since the body fell, which may have been
 // minutes ago.
 const DEF_T = {
@@ -1153,11 +1153,11 @@ const DEF_T = {
 };
 const DEF_SLIDE = 0.32; // the plank's slide, finishing exactly on DEF_T.menu
 
-// Where the local slot finished, and what it earned getting there: the four
+// Where the local player finished, and what it earned getting there: the four
 // columns the win prints, with the placing in front of them. That number is
 // the one thing a loss has to say that a win does not - "4/6" and not a word
 // of it, because the podium glyph beside it is the label. Who put the local
-// slot down is the event feed's line, not this screen's: the side lost.
+// player down is the event feed's line, not this screen's: the side lost.
 const DEF_STATS = [
   { icon: 'place', roll: false, val: (w) => w.place + '/' + w.of },
   { icon: 'gold', roll: true, val: (w) => String(w.gold) },
@@ -1277,7 +1277,7 @@ function renderDefeat(now) {
       drawPixelTextOutline(ctx, s.m.name, centreTextX(s.x + (WIN_BODY >> 1), s.m.name), by - 8, tm.mark, '#0f1632');
       ctx.globalAlpha = 1;
     }
-    // ...and the local slot face down among them, SIDE-ON: a body lying
+    // ...and the local player face down among them, SIDE-ON: a body lying
     // across the frame is the one pose that cannot be misread as standing.
     // No gear marks - those sit on the standing body plan (see drawPlayer).
     // The name sits over the body's top row (row 7 of the prone grid).

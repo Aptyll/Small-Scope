@@ -150,7 +150,7 @@ slide grooves, skate scratches and belly-crawl furrows all share the one `footpr
 branching on `f.k`) → flat objects
 (stumps, and **fish nets** via `drawNet`) → item drops → **y-sorted
 `draws` array** (tall objects + every live player + animals + robots, sorted by feet Y; empty
-slots draw as team-tinted silhouettes via `drawGhost`) →
+players draw as team-tinted silhouettes via `drawGhost`) →
 selection brackets (`drawSelection`: white pulsing corners with a dark shadow over the hovered
 stump / open ice hole / finished structure, or the wheel's target) → the E work prompt (`drawWorkHint`) → the
 fish brackets + click prompt (`drawFishHint`) → the parkour's lap clock and BEST/LAST plate
@@ -168,7 +168,7 @@ sits here, not at the end of `render()`, so the strip holds no HUD, no dim and n
 itself) → `renderUI` (skipped in `title` and `drop`) → `renderDropUI` (mode `drop` only:
 the flight bar, keybind indicators) → `drawDropBrief` (mode `play`,
 only while [the drop brief](#the-drop-brief) holds a roost) or `drawHopPrompt` (mode `play`, the
-local slot still seated on its roost: the E - HOP OFF key cap) → `renderWheel` (radial menu, above the UI) →
+local player still seated on its roost: the E - HOP OFF key cap) → `renderWheel` (radial menu, above the UI) →
 map/settings overlays (the M map also in mode `drop`) → `renderTitle` (the main menu, also during the play intro) → the end-of-match
 overlay (`renderDead`: the death dim and its planks, or `renderVictory` / `renderDefeat` — see
 [The end screens](#the-end-screens)) →
@@ -292,9 +292,9 @@ pass blits one image and then owns every well on top of it. Its size is constant
 The map panel's bake keeps a fixed 192×192 map slot; the world is bigger than that, so
 `renderWorldMap()` blits `mapCv` scaled by `MAP_S = MAP_W / WORLD` and every tile-space
 position drawn on top (grid lines, camera rect, player marker) must be multiplied by `MAP_S`.
-The sim keeps stepping under it and the local slot keeps walking
+The sim keeps stepping under it and the local player keeps walking
 ([the M map does not pause](gameplay.md#the-m-map-does-not-pause)), so every one of those live
-parts — the camera rect, the slot markers, the player's own diamond — moves while the chart is
+parts — the camera rect, the player markers, the player's own diamond — moves while the chart is
 open, and `buildWorldMapImg()` re-inks the terrain each frame so a wall built or a tree felled
 behind the parchment shows up on it.
 The minimap is a scrolling viewport, not a whole-world view: `renderMinimap()` blits a
@@ -304,7 +304,7 @@ index 5 = the 1:1 baseline) on the same `ZOOM_EASE` the camera uses, so both zoo
 hand feel like one control. A save written before `settings.v` indexes the old six-rung ladder
 and is carried across by `MM_MIGRATE` on load. Stepped by the
 scroll wheel while `overMinimap()` (pointer inside the disc + ring), which pre-empts the camera
-zoom in the wheel handler and is saved with the settings. Every marker drawn over it (slots,
+zoom in the wheel handler and is saved with the settings. Every marker drawn over it (players,
 landmark glyphs, your side's [worker flags](gameplay.md#worker-flags)) multiplies its tile
 offset by `s`. The disc sits on an opaque `#0f1632`
 backing with a pale 1 px outer rim that brightens while hovered — the hover state is the whole
@@ -381,7 +381,7 @@ and the feed line can never disagree about which way a price went.
 
 `noteRect(k)` places slot `k` off `MM_*` — right edge flush with the disc's own, `NOTE_GAP` (18 px)
 under its rim, so the column follows the minimap wherever the size dial and the view put it and
-never lands on the alive/clock row. **The newest plate is slot 0**, hard under the disc, and its
+never lands on the alive/clock row. **The newest plate is player 0**, hard under the disc, and its
 arrival pushes the stack down: it flies in `NOTE_SLIDE` (30 px) off the right edge over `NOTE_IN`
 (0.55 s) while the plates below ease down a whole `NOTE_PITCH` on that same curve. They are drawn
 **oldest first** so the newest lands on top of the stack it is shoving.
@@ -739,8 +739,8 @@ disagree).
 Beside the bar sits the other thing drawn on every body alike: **`drawUnitStates(e, px, py, w, h,
 now)`** ([js/abilities.js](../../js/abilities.js)) paints the net drape, the root's sprung jaws,
 the fire and the mark's gold chevrons over whatever sprite is wearing them, taking the sprite's own box so
-a rabbit, a worker bot and a player slot get the same four tells at their own size. `drawPlayer`
-reaches it through `drawAbilityOnPlayer` (which adds the two a slot alone can show — a raised
+a rabbit, a worker bot and a player get the same four tells at their own size. `drawPlayer`
+reaches it through `drawAbilityOnPlayer` (which adds the two a player alone can show — a raised
 shield, the juggernaut's rim); `drawAnimal`, `drawBird` and `drawRobot` call it directly. **The
 fire never washes over the body** — tongues off the crown and a lit row under the feet — because a
 burning rival still has to read as the rival it is; the embers themselves are particles, thrown by
@@ -787,11 +787,11 @@ left to right while a meal is being chewed (`FOOD_EAT`, [Food](gameplay.md#food-
 All three are drawn for **everyone**, because each is a tell somebody can act on — a shot is
 coming, a shot is not coming, a heal is coming and hitting them takes it away. The overhead stack
 floats clear of the sprite: stamina plate at `py - 4` (white, `STAM_COL`, on every side — the one
-bar with no side to it; every slot, since the level badge spans both
+bar with no side to it; every player, since the level badge spans both
 bars), health at `py - 7`, that meter at
 `py - 10` (inside the same frame, directly above the hp bar with a track-grey gap row, the mirror of
-the stamina bar), and the slot's name tag in team colour at `py - 18`, a clear row above the meter's
-frame — **every** slot, the local one included: the name is the profile's
+the stamina bar), and the player's name tag in team colour at `py - 18`, a clear row above the meter's
+frame — **every** player, the local one included: the name is the profile's
 ([architecture.md](architecture.md#profilejs)), and yours is what the rest of the table reads over
 your head, so hiding it from you alone would make it the one label in the game you cannot check. The backings are translucent, so each plate paints only its own rows - no overlap.
 
@@ -931,7 +931,7 @@ ground and a body stands on it. It draws the **plan, not the walk** — the line
 runs through the waypoints it has left (`nav.i` onward), and ends in a box on `nav.gtx`/`nav.gty`,
 the tile the unit decided to go to, which is the answer to *why is it walking over there*. The leg
 it is on now is solid and the legs beyond it are dotted, so a route being followed reads
-differently from one being replanned. One colour per kind of walker, as on the minimap: slots
+differently from one being replanned. One colour per kind of walker, as on the minimap: players
 gold, a wolf red, the rest of the wildlife green, a worker bot blue.
 
 Most routes are one leg: `navTo` takes the straight line whenever `navLineClear` allows it and
@@ -968,7 +968,7 @@ so the same glyph reads on parchment, on snow and over forest.
 - **The M map** (`renderWorldMap`) draws the glyph plus the name in map ink under it, clamped
   to the map rect so a landmark near the edge keeps its label. It opens mid-flight too (M in
   mode `drop`), where choosing between landmarks is the whole jump decision.
-- **Arrival** — `updatePlay` keeps `state.loc` (`{ L, t }`) for the local slot from
+- **Arrival** — `updatePlay` keeps `state.loc` (`{ L, t }`) for the local player from
   `landmarkAt(player.x, player.y)`, and `renderUI` shows a toast top centre for ~3.5 s whenever it
   changes: a dark plate ruled in the spec's `mark`, the glyph, the name at 2× and the `tag` under
   it. It fades in and out, so it uses `drawPixelTextShadow` (see
@@ -1007,11 +1007,11 @@ beat calls `endSkip()`, which jumps the relevant clock to the end.
 
 - **Victory**: white bloom → **VICTORY** dropping in a letter at a time (each landing white, then
   gold, kicking up snow) → the gold rule sweeping out → the stage rising: braziers, the two crested
-  team banners, the three-tier dais and **the whole winning side** on it — every active slot of the
-  team at 3× in a mirrored line (`winStands`: the local slot in the middle on the raised block,
+  team banners, the three-tier dais and **the whole winning side** on it — every active player of the
+  team at 3× in a mirrored line (`winStands`: the local player in the middle on the raised block,
   mates fanning out a rank at a time to the right and the left, each rank a beat after the last),
   wearing the gear it finished in, its name over its head in the team's mark → a crown falling onto
-  the local slot's head → four stat plates popping in with their numbers climbing from zero → the
+  the local player's head → four stat plates popping in with their numbers climbing from zero → the
   planks sliding up. Nothing is written under the rule: the stage is the headline.
 - **Defeat**: the same beats inverted. A colder, heavier wash → **DEFEAT** *falling* in a letter at
   a time on an ease-**in** (it drops, it does not spring), flashing cold rather than white → a
@@ -1020,15 +1020,15 @@ beat calls `endSkip()`, which jumps the relevant clock to the end.
   of smoke), the same two banners **cold** (`winBannerCv`'s `cold`: the cloth chilled halfway to the
   wash through `mixHex`, gold gone to frost, moth holes bitten out of the alpha, frayed where the
   tassels were), a snow bank where the dais stood and **the whole losing side** standing knee-deep
-  in it on the win's stands — no raised block — with the local slot **prone and side-on** in the
+  in it on the win's stands — no raised block — with the local player **prone and side-on** in the
   middle at the same 3×, an arrow planted beside it where the crown would be → five stat plates →
   one plank. Nothing under the rule here either: who put you down is the event feed's line, and
   this screen is the side's loss, not yours.
 
 **What they print** is one frozen object either way — `endSnapshot()` on `state.end`, taken in
 `endMatch` because the match keeps running underneath and a total that climbs behind a tally which
-already counted it reads as a bug. Its `roster` is the whole side, the local slot first — name,
-class and kit per slot, a mate who is down at the whistle included — and is what both stages
+already counted it reads as a bug. Its `roster` is the whole side, the local player first — name,
+class and kit per player, a mate who is down at the whistle included — and is what both stages
 stand. The four shared columns are gold / kills / level / clock; the loss puts its **placing**
 (`4/6`, off `place`/`of`) in front of them. `drawEndTally` / `drawEndStatPlate` / `drawEndPlanks`
 are the shared passes: each takes the ending's timeline and its accent pair (`WIN_ACCENT` gold,
@@ -1049,7 +1049,7 @@ pale chief, the `WIN_CREST` eagle displayed stamped at 2×, the team's diamond b
 rules, a gold chevron down the hang and a fringed swallowtail cut into the alpha, mirrored with
 `flip` so both lit folds face the stage — then hung from a finialed iron rail a row at a time
 under a ripple pinned at the rail), `drawBrazierIron` + `drawWinBrazier` / `drawDeadBrazier`,
-`drawWinDais` (three tiers: the raised block the local slot stands on, the side's step, the
+`drawWinDais` (three tiers: the raised block the local player stands on, the side's step, the
 inlaid base with its icicles) and `drawDefeatDrift`. The drift's profile is a
 cosine under a flattening root: a plain cosine domes, and a dome leaves the ends of a body lying on
 it up in the air. It is drawn twice, once behind the body and once in front, so the champion lies
@@ -1100,7 +1100,7 @@ whatever element goes fullscreen.
 
 **The ring.** `replayTick(now)` runs once per frame from the pass order above and owns the clock
 (one `Math.min(0.05, …)` delta feeds both the capture cadence and the playhead). While
-`replayLive()` — mode `play`, the local slot alive, and no overlay freezing the sim, i.e. exactly
+`replayLive()` — mode `play`, the local player alive, and no overlay freezing the sim, i.e. exactly
 the condition `update()` steps on — it blits the finished canvas into slot `rpHead` of one atlas
 canvas every `1/RP_FPS` s and wraps. `RP_SECS` 4 × `RP_FPS` 30 = `RP_N` 120 slots, `RP_COLS` 12
 across; `RP_RATE` 0.5 is the playback speed.
@@ -1156,7 +1156,7 @@ them — and both duck under the map/settings panels. The feed also stands down 
 newest along the bottom. It has that corner to itself now the gear row lives in the
 [backpack](#the-backpack-and-gear-widget), and shares it only with the
 [replay window](#replay-the-last-four-seconds), stepping up by `replayLift()` px for as long as
-that window is open *in the corner* (the wait's big window sits clear of it). `logEvent(txt, p)` pushes one; `p` is the slot the line is *about* and
+that window is open *in the corner* (the wait's big window sits clear of it). `logEvent(txt, p)` pushes one; `p` is the player the line is *about* and
 supplies both colours — plate in the team's dark `coatD` over an opaque dark base (a bright plate
 on snow leaves the text nothing to sit on), a 1 px edge in the team's bright `mark`, and the ink
 in `playerTint(p)` so two players on one team read as two people. `updateFx()` ages every line on
@@ -1168,13 +1168,13 @@ edge and takes a white wash that decays quadratically. What gets logged lives in
 
 **The scoreboard** is held-TAB (`scoreboardOpen()`: `keys['tab']`, any mode but `title`, so it
 works while dead and while riding the eagle) and is drawn per frame, not baked — every number on
-it is live. `scoreGroups()` is the ordering: slots grouped by team, teams ranked by their total
-`scoreOf(p)` and players inside a team by their own, ties broken by team then slot id. `scoreOf`
+it is live. `scoreGroups()` is the ordering: players grouped by team, teams ranked by their total
+`scoreOf(p)` and players inside a team by their own, ties broken by team then player id. `scoreOf`
 is **lifetime gold earned** (`p.xp`), not the purse — spending gold on a building is progress, and
-it is the number levels already run on — while the GOLD column shows the purse, so a slot that has
+it is the number levels already run on — while the GOLD column shows the purse, so a player that has
 spent can sit above one showing more gold (its LVL column is the visible tell). A team stripe in
 `TEAMS[team].mark` runs down each group, each row carries a faint team wash (stronger for the
-local slot, which also gets a gold `>`), dead slots dim to 0.55 and gain an `OUT` tag. The panel
+local player, which also gets a gold `>`), dead players dim to 0.55 and gain an `OUT` tag. The panel
 is `SB_W` (168) wide, its height follows the row count, and it is centred on `VIEW_W`/`VIEW_H`
 every frame — no `relayout()` anchors, so it needs nothing on a resize.
 
@@ -1307,7 +1307,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   drawn, the DONE plank dims while the buffer would be refused, and Enter on a refused one rattles
   the field red instead of printing a reason. Under the rule, the three lifetime stats read as a
   ledger — icon, labelled row (WINS / GOLD EARNED / DAYS PLAYED, a deliberate text carve-out),
-  dotted leader, number right-aligned with a thousands comma. WINS is matches the local slot
+  dotted leader, number right-aligned with a thousands comma. WINS is matches the local player
   was standing for when `endMatch('won')` fired; DAYS PLAYED is days begun (takeoff plus each
   dawn still in the match); GOLD EARNED is the lifetime `addGold` total. The second plank is a
   plain CANCEL that leaves the stored name alone.
@@ -1319,8 +1319,8 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
   backdrop), laid out **the way a League lobby is**. `selectLayout()`/`selectHit()` are the rect
   source for both drawing and the mouse. Down the **left** run your side's five **roster cards**
   and down the **right** the rivals' (`drawSelectRosters`/`drawSelectCard`, `SEL_ROST_X` from
-  centre, one `SEL_CARD` well per slot in slot order under a rule in the side's paint): the
-  slot's 16×16 class sprite in `skin(team)` paint with its name beside it — names are text's
+  centre, one `SEL_CARD` well per player in player order under a rule in the side's paint): the
+  player's 16×16 class sprite in `skin(team)` paint with its name beside it — names are text's
   job — yours gold-rimmed and wearing the class on stage before it is locked, a rival's
   **face-down** (the body as one flat shade through the scratch canvas) until the countdown turns
   it. Over the rivals' column sits their **difficulty meter**: three notches filled up to
@@ -1389,7 +1389,7 @@ driven by `titleCamTarget()` — a slow lissajous drift around the open interior
 ## Eagle drop (mode `drop`)
 
 Everything in the `eagle drop` banner. `beginDrop()` (from `lockIn`, or `startGame`/`DBG.beginDrop`)
-puts every active slot aboard **its team's bird** (`p.aboard`) and builds
+puts every active player aboard **its team's bird** (`p.aboard`) and builds
 `state.drop = { eagles: [red, blue] }` via `makeEagles()`: one base line from `makeEagleRoute()` —
 **the map's diagonal, fixed for every match and seed**: RED (team 0) flies it from the top-right
 corner down to roost in the **bottom-left** woods, BLUE the reverse to the **top-right**. Each end
@@ -1415,7 +1415,7 @@ on the line still over open ground (`borderDepth` + `DROP_EDGE_MARGIN` tiles cle
 drop never lands in the treeline**; `e.jumpOpen` is the lock's fraction, clamped under it.
 `updateDrop` (called from `updatePlay`, so pause stops it) runs
 `updateEagle` per bird, keeps every rider glued to its seat (`seatPos` at `eagleScale(e)`, the
-bird's drawn size — 3× in flight, 2× on the ground), and force-drops each **AI** slot at its
+bird's drawn size — 3× in flight, 2× on the ground), and force-drops each **AI** player at its
 `p.dropU`, a hashed fraction of the jump window (scattered ±4 tiles off the line). **A human is
 never force-dropped**: press Space/Enter/E/click inside the window and you jump (`dropJump` —
 the fall starts **from the seat**, so the leap visibly leaves the wing); never press it and you
@@ -1430,7 +1430,7 @@ indicator (a key cap bobbing over the bird, one word under it); `p.input.work` w
 faller's arc reads `p.dropAlt`), steerable like any fall, landing on the nearest open tile beside
 the roost. A profile that has **never jumped**
 (`PROFILE.hasDropped()`, the drop-side gate of the `state.drop.firstFlight` flag) gets exactly
-that ride with the jump refused — `dropJump` denies the local slot's manual leap outright, so a
+that ride with the jump refused — `dropJump` denies the local player's manual leap outright, so a
 new player's first ground is the roost, beside the merchant and the gate, and the brief is always
 the lesson. The first hop or any real jump (`PROFILE.markDropped`) retires the refusal for good.
 A jumper free-falls for `FALL_T` (1.3 s), steering with WASD/arrows at
@@ -1444,7 +1444,7 @@ landing intro above.
 
 ### The drop brief
 
-A local slot that **rode the landing** — the scripted first flight always, or a veteran who
+A local player that **rode the landing** — the scripted first flight always, or a veteran who
 never jumped (a real jump is the opt-out) — sits through a camera tour of the two objectives
 before the hop. `landAboard` (from `eagleCrash`) sets `state.dropBrief` (`{ ph, t, total }`),
 and `updateDrop` runs the phases, rival first and your own last so the final word lands where
@@ -1560,7 +1560,7 @@ rather than stands, the hem meeting the feathers at the seat point, lifted a pix
 downstroke; **world-sized** — `riderScale(e)` is the bird's own perspective, `eagleScale / 2`:
 1× on the roosting bird, 1.5× in flight because the bird itself is 1.5× bigger up there, so a
 body never changes size against the feathers under it; the merchant on the neck the same way; the
-local slot drawn last), and a pulsing gold landing ring
+local player drawn last), and a pulsing gold landing ring
 under the human's own bird — only while the jump window is open, so the ring never promises a jump
 the lock refuses — then every faller: a `sin` **hop** off the wing
 over the first quarter of the fall, then the shrink from `p.dropSc` (the seat's size as it left)
@@ -1590,7 +1590,7 @@ handled in input.js's drop branch, the map swallows the jump click, and the sim 
 under it). Text scale follows the view (2× when tall). Once `down`, both objectives are marked on
 the minimap disc and the M map as the same bird diamond in team colour.
 
-Airborne slots (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
+Airborne players (`inAir(p)`: aboard or `dropT > 0`) are skipped by `updatePlayer`/`updateAI`, arrows,
 drops, wildlife scares, `enemyOf`, the y-sorted draws, the minimap and the M map.
 
 ## Light and weather
