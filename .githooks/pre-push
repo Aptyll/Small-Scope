@@ -1,0 +1,14 @@
+#!/bin/sh
+git fetch origin main -q
+branch=$(git rev-parse --abbrev-ref HEAD)
+block=0
+[ "$branch" = "main" ] && block=1
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] && block=1
+done
+git merge-base --is-ancestor origin/main HEAD || block=1
+if [ "$block" = 1 ]; then
+  echo "pre-push: blocked - run /sync" >&2
+  exit 1
+fi
+exit 0
