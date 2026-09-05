@@ -98,3 +98,7 @@ Softfall is a cozy survival game and a war at the same time. The snowfield is qu
 | **Publisher** | Softfall |
 | **Support** | softfallbusiness@gmail.com |
 | **Languages** | English |
+
+## Contributing
+
+Run `sh scripts/setup-hooks.sh` once after cloning.

@@ -71,11 +71,10 @@ The game code is organized only by `// ------ name` banners inside its twenty-tw
 
 ## Versioning
 
-**Every commit pushed to main bumps the patch by 0.01** — `PATCH_TXT` in [js/menu.js](js/menu.js),
-same commit, before the push; it prints bottom-right of the title screen, so a screenshot carries
-its build. That commit also tops `PATCH_NOTES` with **one sentence**: plain English, uppercase.
-**The commit message begins with the patch name** — `PATCH 2.11 — ...` as the first thing on the
-first line, so `git log --oneline` reads as a build history.
+**Never commit to main.** Branch as `<name>/<topic>`, run `/sync` before every push, merge via PR.
+The PR's last commit bumps `PATCH_TXT` ([js/menu.js](js/menu.js)) by 0.01 over origin/main and tops
+`PATCH_NOTES` with one uppercase sentence; the commit message begins with the patch name
+(`PATCH 2.11 — ...`), so `git log --oneline` reads as a build history.
 
 ## UI rule: show, don't label
 
