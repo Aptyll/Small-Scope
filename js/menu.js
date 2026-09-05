@@ -36,9 +36,10 @@ const MENU_SLAB_PAD = 22; // slab hangs this many px past each side of the plank
 // leave (iceMarks) join it; the break clears them and the flaw goes with the
 // glaze.
 const ICE_FLAW = { x: 128, y: 3, seed: 41, steps: 8 };
-const PATCH_TXT = 'PATCH 3.08'; // printed bottom-right of the title screen; click it for the notes
+const PATCH_TXT = 'PATCH 3.09'; // printed bottom-right of the title screen; click it for the notes
 // one sentence per patch, newest first - the biggest change only, in plain english
 const PATCH_NOTES = [
+  ['3.09', 'THE PRE-PUSH HOOK LETS A BRANCH BE DELETED ON GITHUB INSTEAD OF BLOCKING IT.'],
   ['3.08', 'THE REPO MOVES TO BRANCHES, A SYNC COMMAND AND PULL REQUESTS; NOBODY COMMITS TO MAIN.'],
   ['3.07', 'THE DOCS AND CODE COMMENTS SAY PLAYERS AND BOTS NOW, NOT SLOTS - THE WORD ONLY EVER MEANT A PERSON IN THE MATCH.'],
   ['3.06', 'THE CAMERA ZOOMS ABOUT THE CENTRE OF THE SCREEN INSTEAD OF SLIDING OFF TOWARD A CORNER AND DRIFTING BACK.'],

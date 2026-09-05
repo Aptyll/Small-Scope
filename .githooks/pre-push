@@ -1,12 +1,11 @@
 #!/bin/sh
 git fetch origin main -q
-branch=$(git rev-parse --abbrev-ref HEAD)
 block=0
-[ "$branch" = "main" ] && block=1
 while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac
   [ "$remote_ref" = "refs/heads/main" ] && block=1
+  git merge-base --is-ancestor origin/main "$local_sha" || block=1
 done
-git merge-base --is-ancestor origin/main HEAD || block=1
 if [ "$block" = 1 ]; then
   echo "pre-push: blocked - run /sync" >&2
   exit 1
